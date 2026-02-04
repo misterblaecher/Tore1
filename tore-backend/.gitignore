@@ -1,0 +1,14 @@
+﻿# python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite
+*.db
+
+# local data
+data/
+
+# windows crap
+-ContentType

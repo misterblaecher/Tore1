@@ -1,0 +1,9 @@
+fastapi==0.115.6
+uvicorn[standard]==0.30.6
+SQLAlchemy==2.0.36
+pydantic==2.9.2
+python-multipart==0.0.12
+PyJWT==2.9.0
+passlib[bcrypt]==1.7.4
+psycopg2-binary==2.9.9
+bcrypt==4.1.2
