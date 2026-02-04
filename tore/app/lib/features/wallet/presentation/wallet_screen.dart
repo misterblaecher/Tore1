@@ -1,0 +1,240 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../state.dart';
+import '../../../shared/utils/user_display.dart';
+import '../../../core/network/error_mapper.dart';
+import 'package:flutter/foundation.dart';
+import '../wallet_providers.dart';
+import '../wallet_models.dart';
+
+class WalletScreen extends ConsumerStatefulWidget {
+  const WalletScreen({super.key, required this.eventId});
+  final int eventId;
+
+  @override
+  ConsumerState<WalletScreen> createState() => _WalletScreenState();
+}
+
+class _WalletScreenState extends ConsumerState<WalletScreen> {
+  late Future<Map<String, dynamic>> _future;
+
+  bool _didLoadWithUser = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() {
+    final api = ref.read(apiProvider);
+    final userId = ref.read(userIdProvider);
+
+    if (userId == null) {
+      return Future.value(const <String, dynamic>{});
+    }
+
+    return api.ticketBalance(eventId: widget.eventId, userId: userId);
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // déclenche auth/token + permet un label propre
+    final meAsync = ref.watch(meProvider);
+    final api = ref.watch(apiProvider);
+    final userId = ref.watch(userIdProvider);
+
+    // tant que userId null => loader simple
+    if (userId == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final userLabel = meAsync.maybeWhen(
+      data: (me) => UserDisplay.labelWithCode(me),
+      orElse: () => 'Invité #${UserDisplay.shortCode(userId)}',
+    );
+
+    // Dès que userId devient dispo, on recharge UNE fois (car initState a peut-être chargé vide)
+    if (!_didLoadWithUser) {
+      _didLoadWithUser = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Portefeuille')),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _refresh();
+          ref.invalidate(walletHistoryProvider(
+            WalletHistoryArgs(eventId: widget.eventId, userId: userId),
+          ));
+        },
+        child: FutureBuilder<Map<String, dynamic>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return ListView(
+              children: const [
+                SizedBox(height: 240),
+                Center(child: CircularProgressIndicator()),
+              ],
+            );
+          }
+          if (snap.hasError) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Center(child: Text(ErrorMapper.message(snap.error as Object))),
+              ],
+            );
+          }
+
+          final data = snap.data ?? const {};
+          final balanceValue =
+              data['balance'] ?? data['tickets'] ?? data['amount'] ?? data['value'] ?? 0;
+          final balance = balanceValue.toString();
+
+          final historyAsync = ref.watch(
+            walletHistoryProvider(WalletHistoryArgs(eventId: widget.eventId, userId: userId)),
+          );
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+                Text(
+                  'Tickets: $balance',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Event: #${widget.eventId}\nUtilisateur: $userLabel',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+
+                if (kDebugMode)
+                  ElevatedButton(
+                    onPressed: () async {
+                    try {
+                      await api.creditTickets(
+                        eventId: widget.eventId,
+                        userId: userId,
+                        delta: 10,
+                      );
+
+                      if (!context.mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('✅ +10 tickets crédités')),
+                      );
+
+                      _refresh();
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Erreur crédit: ${ErrorMapper.message(e)}')),
+                      );
+                    }
+                    },
+                    child: const Text('Ajouter 10 tickets'),
+                  ),
+
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: _refresh,
+                  child: const Text('Rafraîchir'),
+                ),
+
+                const SizedBox(height: 18),
+                Text(
+                  'Historique',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+
+                historyAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (e, _) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'Historique indisponible: ${ErrorMapper.message(e)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  data: (entries) {
+                    if (entries.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Text('Aucun mouvement pour l’instant.'),
+                      );
+                    }
+                    return Column(
+                      children: entries.take(50).map((e) => _HistoryTile(entry: e)).toList(),
+                    );
+                  },
+                ),
+              ],
+            );
+        },
+      ),
+    ),
+    );
+  }
+}
+
+class _HistoryTile extends StatelessWidget {
+  final WalletHistoryEntry entry;
+  const _HistoryTile({required this.entry});
+
+  String _fmtTs(BuildContext context, DateTime ts) {
+    final t = TimeOfDay.fromDateTime(ts).format(context);
+    return '${ts.day.toString().padLeft(2, '0')}/${ts.month.toString().padLeft(2, '0')} $t';
+  }
+
+  IconData _icon(String type, int delta) {
+    switch (type) {
+      case 'order':
+        return Icons.shopping_bag_outlined;
+      case 'checkin':
+        return Icons.qr_code_scanner_outlined;
+      case 'admin_credit':
+      case 'credit':
+        return Icons.add_circle_outline;
+      case 'debit':
+        return Icons.remove_circle_outline;
+      default:
+        return delta >= 0 ? Icons.add_circle_outline : Icons.remove_circle_outline;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final delta = entry.delta;
+    final sign = delta >= 0 ? '+' : '';
+    final time = _fmtTs(context, entry.ts);
+    final subtitle = entry.note ?? entry.type;
+    final trailing = entry.balanceAfter == null
+        ? '$sign$delta'
+        : '$sign$delta  →  ${entry.balanceAfter}';
+
+    return Card(
+      child: ListTile(
+        leading: Icon(_icon(entry.type, delta)),
+        title: Text(trailing, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text('$subtitle\n$time'),
+        isThreeLine: true,
+      ),
+    );
+  }
+}

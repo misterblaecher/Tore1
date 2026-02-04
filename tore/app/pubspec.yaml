@@ -1,0 +1,33 @@
+name: tore
+description: Tore app
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  shared_preferences: ^2.2.3
+  flutter_secure_storage: ^9.2.2
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Network
+  dio: ^5.9.1
+  dio_web_adapter: ^2.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/da/
