@@ -7,6 +7,7 @@ import string
 import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
+from urllib.parse import urlparse, parse_qs
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends
@@ -26,6 +27,7 @@ from models import (
     TicketBalance,
     Ban,
     Entry,
+    EventStaff,
     Order,
     OrderItem,
     Beer,
@@ -299,6 +301,56 @@ def get_or_create_balance(s: Session, event_id: int, user_id: str) -> TicketBala
     return b
 
 
+def resolve_qr_payload(raw: str) -> Dict[str, Any]:
+    trimmed = (raw or "").strip()
+    if not trimmed:
+        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+
+    parsed = urlparse(trimmed)
+    if parsed.scheme.lower() != "tore":
+        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+
+    qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
+    if qr_type not in {"join", "menu", "entry"}:
+        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+
+    params = parse_qs(parsed.query)
+    raw_event_id = (params.get("event_id") or [None])[0]
+    try:
+        event_id = int(raw_event_id) if raw_event_id is not None else None
+    except (TypeError, ValueError):
+        event_id = None
+
+    if event_id is None:
+        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+
+    return {"valid": True, "type": qr_type, "event_id": event_id, "reason": None}
+
+
+def _role_rank(role: str) -> int:
+    if role == "admin":
+        return 3
+    if role == "entry":
+        return 2
+    return 1
+
+
+def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
+    staff = (
+        db.query(EventStaff)
+        .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
+        .first()
+    )
+    if not staff:
+        return "guest"
+    role = (staff.role or "").lower()
+    if role == "admin":
+        return "admin"
+    if role == "entry":
+        return "entry"
+    return "guest"
+
+
 # ---------------------------------------------------------------------
 # API schemas
 # ---------------------------------------------------------------------
@@ -378,6 +430,19 @@ class CreateCheckinIn(BaseModel):
     beer_id: int
     rating: float = Field(ge=0, le=5)
     comment: str = ""
+
+
+class QrResolveIn(BaseModel):
+    raw: str
+
+
+class QrResolveOut(BaseModel):
+    valid: bool
+    type: str
+    event_id: Optional[int] = None
+    reason: Optional[str] = None
+    required_role: Optional[str] = None
+    granted_role: Optional[str] = None
 
 
 class CreateBattleIn(BaseModel):
@@ -511,6 +576,48 @@ def auth_guest(payload: GuestIn):
         }
     finally:
         s.close()
+
+
+@app.post("/qr/resolve", response_model=QrResolveOut)
+def qr_resolve(
+    payload: QrResolveIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    base = resolve_qr_payload(payload.raw)
+    if not base.get("valid"):
+        return {
+            "valid": False,
+            "type": "unknown",
+            "event_id": None,
+            "reason": base.get("reason"),
+            "required_role": None,
+            "granted_role": "guest",
+        }
+
+    event_id = base.get("event_id")
+    qr_type = base.get("type")
+    required_role = "entry" if qr_type == "entry" else "guest"
+    granted_role = resolve_event_role(db, user.id, event_id)
+
+    if _role_rank(granted_role) < _role_rank(required_role):
+        return {
+            "valid": False,
+            "type": "unknown",
+            "event_id": None,
+            "reason": "forbidden",
+            "required_role": required_role,
+            "granted_role": granted_role,
+        }
+
+    return {
+        "valid": True,
+        "type": qr_type,
+        "event_id": event_id,
+        "reason": None,
+        "required_role": required_role,
+        "granted_role": granted_role,
+    }
 
 
 @app.get("/auth/me")

@@ -113,6 +113,18 @@ class Entry(Base):
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class EventStaff(Base):
+    __tablename__ = "event_staff"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_staff_event_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    role: Mapped[str] = mapped_column(String, default="entry")
+
+
 class Order(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -312,4 +324,3 @@ class AppToken(Base):
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["AppUser"] = relationship(back_populates="tokens")
-

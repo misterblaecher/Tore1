@@ -5,6 +5,7 @@ import '../../../core/app_context/app_context.dart';
 import '../../bars/presentation/bars_screen.dart';
 import '../../menu_market/presentation/menu_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
+import '../../qr/presentation/qr_scanner_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -16,10 +17,32 @@ class HomeHubScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TORÈ'),
+        actions: [
+          IconButton(
+            tooltip: 'Scanner QR',
+            icon: const Icon(Icons.qr_code_scanner_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _CardLink(
+            icon: Icons.qr_code_scanner_outlined,
+            title: 'Scanner',
+            subtitle: 'Scanner un QR pour rejoindre un event, menu ou entrée',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           _CardLink(
             icon: Icons.near_me_outlined,
             title: 'Bars à proximité',
