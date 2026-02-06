@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     UniqueConstraint,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,7 +39,9 @@ class Bar(Base):
 class Event(Base):
     __tablename__ = "events"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bars.id"), index=True, nullable=True
+    )
     name: Mapped[str] = mapped_column(String, default="")
     starts_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     ends_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc() + timedelta(hours=6))
@@ -111,6 +114,44 @@ class Entry(Base):
     issued_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class EventStaff(Base):
+    __tablename__ = "event_staff"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_staff_event_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    role: Mapped[str] = mapped_column(String, default="entry")
+
+
+class EventConfig(Base):
+    __tablename__ = "event_configs"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_config_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    menu_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    wallet_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    entry_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    checkin_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    battles_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    hunt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class EventConfigLog(Base):
+    __tablename__ = "event_config_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    changed_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    changes_json: Mapped[str] = mapped_column(Text, default="{}")
 
 
 class Order(Base):
@@ -312,4 +353,3 @@ class AppToken(Base):
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["AppUser"] = relationship(back_populates="tokens")
-

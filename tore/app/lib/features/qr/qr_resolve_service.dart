@@ -48,4 +48,8 @@ class QrResolveService {
 final qrResolveServiceProvider = Provider<QrResolveService>((ref) {
   final client = ref.watch(apiClientProvider);
   return QrResolveService(client);
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf

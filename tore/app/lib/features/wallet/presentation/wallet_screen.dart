@@ -6,6 +6,8 @@ import '../../../core/network/error_mapper.dart';
 import 'package:flutter/foundation.dart';
 import '../wallet_providers.dart';
 import '../wallet_models.dart';
+import '../../events/presentation/event_config_providers.dart';
+import '../../qr/presentation/qr_feature_disabled_screen.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key, required this.eventId});
@@ -49,6 +51,15 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final meAsync = ref.watch(meProvider);
     final api = ref.watch(apiProvider);
     final userId = ref.watch(userIdProvider);
+    final configAsync = ref.watch(eventConfigProvider(widget.eventId));
+    final config = configAsync.maybeWhen(
+      data: (value) => value,
+      orElse: () => null,
+    );
+
+    if (config != null && !config.walletEnabled) {
+      return const QrFeatureDisabledScreen(featureLabel: 'Wallet');
+    }
 
     // tant que userId null => loader simple
     if (userId == null) {

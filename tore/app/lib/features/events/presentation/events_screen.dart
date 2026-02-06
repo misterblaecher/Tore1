@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
+import 'event_config_providers.dart';
 import '../../menu_market/presentation/menu_screen.dart';
 
 class EventsScreen extends ConsumerWidget {
@@ -105,6 +106,7 @@ class EventsScreen extends ConsumerWidget {
                     eventId: id,
                     eventName: rawName,
                   );
+                  ref.read(eventConfigProvider(id).future);
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => MenuScreen(eventId: id)),
                   );

@@ -20,6 +20,8 @@ dependencies:
   # Network
   dio: ^5.9.1
   dio_web_adapter: ^2.1.1
+  mobile_scanner: ^5.1.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

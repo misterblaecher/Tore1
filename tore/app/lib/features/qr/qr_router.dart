@@ -7,7 +7,14 @@ import '../navigation/presentation/checkin_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
 import '../qr/presentation/qr_placeholders.dart';
 import '../qr/presentation/qr_forbidden_screen.dart';
+<<<<<<< HEAD
 import '../qr/qr_resolve_service.dart';
+=======
+import '../qr/presentation/qr_feature_disabled_screen.dart';
+import '../qr/qr_resolve_service.dart';
+import '../events/presentation/event_config_providers.dart';
+import '../../shared/models/event_config.dart';
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
 
 Future<void> handleQr({
   required BuildContext context,
@@ -59,6 +66,45 @@ Future<void> handleQr({
     return;
   }
 
+<<<<<<< HEAD
+=======
+  if (result.type == 'admin_config' &&
+      !_isRoleAllowed(result.grantedRole, 'admin')) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const QrForbiddenScreen(
+          roleRequired: 'admin',
+        ),
+      ),
+    );
+    return;
+  }
+
+  if (result.type == 'staff_entry' &&
+      !_isRoleAllowed(result.grantedRole, 'entry')) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const QrForbiddenScreen(
+          roleRequired: 'entry',
+        ),
+      ),
+    );
+    return;
+  }
+
+  final config = await _fetchConfigSafe(ref, result.eventId!);
+  if (!_isFeatureEnabled(config, result.type)) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => QrFeatureDisabledScreen(
+          featureLabel: _featureLabel(result.type),
+        ),
+      ),
+    );
+    return;
+  }
+
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
   switch (result.type) {
     case 'join':
       ref.read(appContextProvider.notifier).enterEvent(
@@ -90,6 +136,39 @@ Future<void> handleQr({
         MaterialPageRoute(builder: (_) => const CheckinScreen()),
       );
       return;
+<<<<<<< HEAD
+=======
+    case 'admin_config':
+      ref.read(appContextProvider.notifier).enterEvent(
+            eventId: result.eventId!,
+            eventName: 'Event #${result.eventId}',
+          );
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AdminConfigPlaceholder(eventId: result.eventId!),
+        ),
+      );
+      return;
+    case 'staff_entry':
+      ref.read(appContextProvider.notifier).enterEvent(
+            eventId: result.eventId!,
+            eventName: 'Event #${result.eventId}',
+          );
+
+      final modeLabel = _isRoleAllowed(result.grantedRole, 'admin')
+          ? 'Gestion staff'
+          : 'Entrée staff';
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => StaffEntryPlaceholder(
+            eventId: result.eventId!,
+            modeLabel: modeLabel,
+          ),
+        ),
+      );
+      return;
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
     default:
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -102,6 +181,45 @@ Future<void> handleQr({
   }
 }
 
+<<<<<<< HEAD
+=======
+Future<EventConfig?> _fetchConfigSafe(WidgetRef ref, int eventId) async {
+  try {
+    return await ref.read(eventConfigProvider(eventId).future);
+  } catch (_) {
+    return null;
+  }
+}
+
+bool _isFeatureEnabled(EventConfig? config, String type) {
+  if (config == null) return true;
+  switch (type) {
+    case 'menu':
+      return config.menuEnabled;
+    case 'entry':
+      return config.entryEnabled;
+    case 'admin_config':
+    case 'staff_entry':
+      return true;
+    case 'join':
+    default:
+      return true;
+  }
+}
+
+String _featureLabel(String type) {
+  switch (type) {
+    case 'menu':
+      return 'Menu';
+    case 'entry':
+      return 'Entrée';
+    case 'join':
+    default:
+      return 'Fonction';
+  }
+}
+
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
 QrResolveResult _localResolve(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
@@ -151,7 +269,15 @@ QrResolveResult _localResolve(String raw) {
     );
   }
 
+<<<<<<< HEAD
   if (type != 'menu' && type != 'join' && type != 'entry') {
+=======
+  if (type != 'menu' &&
+      type != 'join' &&
+      type != 'entry' &&
+      type != 'admin_config' &&
+      type != 'staff_entry') {
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
     return const QrResolveResult(
       valid: false,
       type: 'unknown',
@@ -167,7 +293,17 @@ QrResolveResult _localResolve(String raw) {
     type: type,
     eventId: eventId,
     reason: null,
+<<<<<<< HEAD
     requiredRole: type == 'entry' ? 'entry' : 'guest',
+=======
+    requiredRole: type == 'entry'
+        ? 'entry'
+        : type == 'admin_config'
+            ? 'admin'
+            : type == 'staff_entry'
+                ? 'entry'
+                : 'guest',
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
     grantedRole: 'guest',
   );
 }
@@ -199,4 +335,8 @@ int _roleRank(String? role) {
     default:
       return 1;
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf

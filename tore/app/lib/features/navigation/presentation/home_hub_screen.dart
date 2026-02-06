@@ -5,6 +5,11 @@ import '../../../core/app_context/app_context.dart';
 import '../../bars/presentation/bars_screen.dart';
 import '../../menu_market/presentation/menu_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
+import '../../qr/presentation/qr_scanner_screen.dart';
+import '../../events/presentation/event_config_providers.dart';
+import '../../events/presentation/create_event_screen.dart';
+import '../../events/presentation/qr_pack_screen.dart';
+import 'checkin_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -12,14 +17,58 @@ class HomeHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctx = ref.watch(appContextProvider);
+    final configAsync = ctx.hasActiveEvent
+        ? ref.watch(eventConfigProvider(ctx.activeEventId!))
+        : null;
+    final config = configAsync?.maybeWhen(
+      data: (value) => value,
+      orElse: () => null,
+    );
+    final menuEnabled = config?.menuEnabled ?? true;
+    final walletEnabled = config?.walletEnabled ?? true;
+    final entryEnabled = config?.entryEnabled ?? false;
+    final checkinEnabled = config?.checkinEnabled ?? false;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('TORÈ'),
+        actions: [
+          IconButton(
+            tooltip: 'Scanner QR',
+            icon: const Icon(Icons.qr_code_scanner_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _CardLink(
+            icon: Icons.qr_code_scanner_outlined,
+            title: 'Scanner',
+            subtitle: 'Scanner un QR pour rejoindre un event, menu ou entrée',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          _CardLink(
+            icon: Icons.event_available_outlined,
+            title: 'Créer un event',
+            subtitle: 'Nouveau event + QR Pack officiel',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CreateEventScreen()),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           _CardLink(
             icon: Icons.near_me_outlined,
             title: 'Bars à proximité',
@@ -53,17 +102,6 @@ class HomeHubScreen extends ConsumerWidget {
               );
             },
           ),
-          const SizedBox(height: 12),
-          _CardLink(
-            icon: Icons.qr_code_scanner_outlined,
-            title: 'Check-in',
-            subtitle: 'Ajouter une conso (hors bar possible)',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Check-in: à brancher (V1)')),
-              );
-            },
-          ),
 
           const SizedBox(height: 20),
           if (ctx.hasActiveEvent) ...[
@@ -73,26 +111,68 @@ class HomeHubScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             _CardLink(
-              icon: Icons.restaurant_menu_outlined,
-              title: 'Menu Event',
-              subtitle: 'Commander dans l’event actif',
+              icon: Icons.qr_code_2_outlined,
+              title: 'QR Pack',
+              subtitle: 'Accéder aux QR officiels',
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => MenuScreen(eventId: ctx.activeEventId!)),
+                  MaterialPageRoute(
+                    builder: (_) => QrPackScreen(eventId: ctx.activeEventId!),
+                  ),
                 );
               },
             ),
             const SizedBox(height: 12),
-            _CardLink(
-              icon: Icons.account_balance_wallet_outlined,
-              title: 'Wallet / Tickets',
-              subtitle: 'Solde tickets + historique',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => WalletScreen(eventId: ctx.activeEventId!)),
-                );
-              },
-            ),
+            if (menuEnabled) ...[
+              _CardLink(
+                icon: Icons.restaurant_menu_outlined,
+                title: 'Menu Event',
+                subtitle: 'Commander dans l’event actif',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => MenuScreen(eventId: ctx.activeEventId!)),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (walletEnabled) ...[
+              _CardLink(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Wallet / Tickets',
+                subtitle: 'Solde tickets + historique',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => WalletScreen(eventId: ctx.activeEventId!)),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (entryEnabled) ...[
+              _CardLink(
+                icon: Icons.qr_code_scanner_outlined,
+                title: 'Entrée',
+                subtitle: 'Scanner des accès pour l’event',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (checkinEnabled)
+              _CardLink(
+                icon: Icons.qr_code_scanner_outlined,
+                title: 'Check-in',
+                subtitle: 'Ajouter une conso',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CheckinScreen()),
+                  );
+                },
+              ),
           ] else ...[
             Text(
               'Mode Libre',

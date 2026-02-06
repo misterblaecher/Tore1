@@ -9,6 +9,8 @@ import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
 import '../../leaderboard/presentation/leaderboard_screen.dart';
+import '../../events/presentation/event_config_providers.dart';
+import '../../qr/presentation/qr_feature_disabled_screen.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key, required this.eventId});
@@ -107,6 +109,15 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     ref.watch(meProvider);
     final api = ref.read(apiProvider);
     final userId = ref.watch(userIdProvider);
+    final configAsync = ref.watch(eventConfigProvider(widget.eventId));
+    final config = configAsync.maybeWhen(
+      data: (value) => value,
+      orElse: () => null,
+    );
+
+    if (config != null && !config.menuEnabled) {
+      return const QrFeatureDisabledScreen(featureLabel: 'Menu');
+    }
 
     // Si initState a chargé sans userId, on recharge une fois dès que le user arrive.
     if (userId != null && !_didLoadWithUser) {
