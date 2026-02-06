@@ -116,6 +116,23 @@ class Entry(Base):
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class EntryLog(Base):
+    __tablename__ = "entry_logs"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_entry_logs_event_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    delta: Mapped[int] = mapped_column(Integer, default=1)
+    source: Mapped[str] = mapped_column(String, default="scan")
+    staff_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    device_id: Mapped[str] = mapped_column(String, default="")
+    idempotency_key: Mapped[str] = mapped_column(String, default="")
+    raw_qr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class EventStaff(Base):
     __tablename__ = "event_staff"
     __table_args__ = (
