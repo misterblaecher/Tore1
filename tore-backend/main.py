@@ -29,6 +29,8 @@ from models import (
     Ban,
     Entry,
     EventStaff,
+    StaffInviteToken,
+    EventAuditLog,
     EventConfig,
     EventConfigLog,
     Order,
@@ -314,7 +316,7 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
-    if qr_type not in {"join", "menu", "entry", "admin_config", "staff_entry"}:
+    if qr_type not in {"join", "menu", "entry", "admin_config", "staff_entry", "staff_invite"}:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     params = parse_qs(parsed.query)
@@ -327,7 +329,13 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
     if event_id is None:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
-    return {"valid": True, "type": qr_type, "event_id": event_id, "reason": None}
+    token = None
+    if qr_type == "staff_invite":
+        token = (params.get("token") or [None])[0]
+        if not token:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+
+    return {"valid": True, "type": qr_type, "event_id": event_id, "token": token, "reason": None}
 
 
 def _role_rank(role: str) -> int:
@@ -344,7 +352,7 @@ def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
         .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
         .first()
     )
-    if not staff:
+    if not staff or not staff.is_active:
         return "guest"
     role = (staff.role or "").lower()
     if role == "admin":
@@ -397,6 +405,31 @@ def require_feature(db: Session, event_id: int, feature: str) -> EventConfig:
             detail={"error": "feature_disabled", "feature": feature},
         )
     return cfg
+
+
+def log_event_action(
+    db: Session,
+    event_id: int,
+    actor_user_id: Optional[str],
+    action: str,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    entry = EventAuditLog(
+        event_id=event_id,
+        actor_user_id=actor_user_id,
+        action=action,
+        payload_json=json.dumps(payload or {}, ensure_ascii=False),
+    )
+    db.add(entry)
+
+
+def generate_staff_invite_token(db: Session) -> str:
+    for _ in range(5):
+        token = secrets.token_urlsafe(32)
+        exists = db.query(StaffInviteToken).filter(StaffInviteToken.token == token).first()
+        if not exists:
+            return token
+    raise HTTPException(status_code=500, detail="token_generation_failed")
 
 
 # ---------------------------------------------------------------------
@@ -488,9 +521,44 @@ class QrResolveOut(BaseModel):
     valid: bool
     type: str
     event_id: Optional[int] = None
+    token: Optional[str] = None
     reason: Optional[str] = None
     required_role: Optional[str] = None
     granted_role: Optional[str] = None
+
+
+class StaffInviteIn(BaseModel):
+    role: str = "entry"
+    max_uses: int = Field(default=1, ge=1, le=50)
+    expires_in_hours: int = Field(default=24, ge=1, le=168)
+
+
+class StaffInviteOut(BaseModel):
+    event_id: int
+    role: str
+    token: str
+    invite_qr: str
+    expires_at: Optional[str] = None
+
+
+class StaffAcceptIn(BaseModel):
+    token: str
+
+
+class StaffAcceptOut(BaseModel):
+    ok: bool
+    role_granted: str
+
+
+class StaffMemberOut(BaseModel):
+    user_id: str
+    display_name: Optional[str] = None
+    role: str
+    is_active: bool
+    created_at: Optional[str] = None
+    created_by_user_id: Optional[str] = None
+    revoked_at: Optional[str] = None
+    revoked_by_user_id: Optional[str] = None
 
 
 class EventConfigOut(BaseModel):
@@ -681,6 +749,7 @@ def qr_resolve(
             "valid": False,
             "type": "unknown",
             "event_id": None,
+            "token": None,
             "reason": base.get("reason"),
             "required_role": None,
             "granted_role": "guest",
@@ -688,12 +757,14 @@ def qr_resolve(
 
     event_id = base.get("event_id")
     qr_type = base.get("type")
+    token = base.get("token")
     role_map = {
         "join": "guest",
         "menu": "guest",
         "entry": "entry",
         "admin_config": "admin",
         "staff_entry": "entry",
+        "staff_invite": "guest",
     }
     required_role = role_map.get(qr_type, "guest")
     granted_role = resolve_event_role(db, user.id, event_id)
@@ -703,6 +774,7 @@ def qr_resolve(
             "valid": False,
             "type": "unknown",
             "event_id": None,
+            "token": None,
             "reason": "forbidden",
             "required_role": required_role,
             "granted_role": granted_role,
@@ -712,6 +784,7 @@ def qr_resolve(
         "valid": True,
         "type": qr_type,
         "event_id": event_id,
+        "token": token,
         "reason": None,
         "required_role": required_role,
         "granted_role": granted_role,
@@ -876,7 +949,16 @@ def create_event(
     db.flush()
 
     get_or_create_event_config(db, event.id)
-    db.add(EventStaff(event_id=event.id, user_id=user.id, role="admin"))
+    db.add(
+        EventStaff(
+            event_id=event.id,
+            user_id=user.id,
+            role="admin",
+            is_active=True,
+            created_at=now_utc(),
+            created_by_user_id=user.id,
+        )
+    )
     db.commit()
 
     return {
@@ -995,6 +1077,191 @@ def patch_event_config(
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,
     }
+
+
+@app.post("/events/{event_id}/staff/invite", response_model=StaffInviteOut)
+def invite_staff(
+    event_id: int,
+    payload: StaffInviteIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+
+    role = (payload.role or "").lower()
+    if role != "entry":
+        raise HTTPException(status_code=400, detail={"error": "invalid_role"})
+
+    token_value = generate_staff_invite_token(db)
+    expires_at = now_utc() + timedelta(hours=payload.expires_in_hours)
+    invite = StaffInviteToken(
+        event_id=event_id,
+        role=role,
+        token=token_value,
+        max_uses=payload.max_uses,
+        used_count=0,
+        expires_at=expires_at,
+        is_revoked=False,
+        created_at=now_utc(),
+        created_by_user_id=user.id,
+    )
+    db.add(invite)
+    db.flush()
+    log_event_action(
+        db,
+        event_id=event_id,
+        actor_user_id=user.id,
+        action="staff_invite_created",
+        payload={
+            "role": role,
+            "max_uses": payload.max_uses,
+            "expires_at": expires_at.isoformat(),
+            "token_id": invite.id,
+        },
+    )
+    db.commit()
+
+    return {
+        "event_id": event_id,
+        "role": role,
+        "token": token_value,
+        "invite_qr": f"tore://staff_invite?event_id={event_id}&token={token_value}",
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+@app.post("/events/{event_id}/staff/accept", response_model=StaffAcceptOut)
+def accept_staff_invite(
+    event_id: int,
+    payload: StaffAcceptIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invite = (
+        db.query(StaffInviteToken)
+        .filter(StaffInviteToken.event_id == event_id, StaffInviteToken.token == payload.token)
+        .first()
+    )
+    if not invite or invite.is_revoked:
+        raise HTTPException(status_code=400, detail={"error": "invalid_token"})
+
+    if invite.expires_at and now_utc() > invite.expires_at:
+        raise HTTPException(status_code=400, detail={"error": "expired_token"})
+
+    if invite.used_count >= invite.max_uses:
+        raise HTTPException(status_code=400, detail={"error": "max_uses_reached"})
+
+    staff = (
+        db.query(EventStaff)
+        .filter(EventStaff.event_id == event_id, EventStaff.user_id == user.id)
+        .first()
+    )
+    role_granted = invite.role
+    if staff:
+        if (staff.role or "").lower() == "admin":
+            role_granted = "admin"
+        else:
+            staff.role = invite.role
+        staff.is_active = True
+        staff.revoked_at = None
+        staff.revoked_by_user_id = None
+    else:
+        staff = EventStaff(
+            event_id=event_id,
+            user_id=user.id,
+            role=invite.role,
+            is_active=True,
+            created_at=now_utc(),
+            created_by_user_id=invite.created_by_user_id,
+        )
+        db.add(staff)
+
+    invite.used_count += 1
+    log_event_action(
+        db,
+        event_id=event_id,
+        actor_user_id=user.id,
+        action="staff_invite_accepted",
+        payload={"role": role_granted, "token_id": invite.id, "user_id": user.id},
+    )
+    db.commit()
+
+    return {"ok": True, "role_granted": role_granted}
+
+
+@app.get("/events/{event_id}/staff", response_model=List[StaffMemberOut])
+def list_staff(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+
+    rows = (
+        db.query(EventStaff, AppUser)
+        .outerjoin(AppUser, AppUser.id == EventStaff.user_id)
+        .filter(EventStaff.event_id == event_id)
+        .order_by(EventStaff.created_at.desc())
+        .all()
+    )
+    result = []
+    for staff, staff_user in rows:
+        result.append(
+            {
+                "user_id": staff.user_id,
+                "display_name": staff_user.display_name if staff_user else None,
+                "role": staff.role,
+                "is_active": staff.is_active,
+                "created_at": staff.created_at.isoformat() if staff.created_at else None,
+                "created_by_user_id": staff.created_by_user_id,
+                "revoked_at": staff.revoked_at.isoformat() if staff.revoked_at else None,
+                "revoked_by_user_id": staff.revoked_by_user_id,
+            }
+        )
+    return result
+
+
+@app.patch("/events/{event_id}/staff/{user_id}/revoke")
+def revoke_staff(
+    event_id: int,
+    user_id: str,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+
+    staff = (
+        db.query(EventStaff)
+        .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
+        .first()
+    )
+    if not staff:
+        raise HTTPException(404, "Staff not found")
+
+    staff.is_active = False
+    staff.revoked_at = now_utc()
+    staff.revoked_by_user_id = user.id
+    log_event_action(
+        db,
+        event_id=event_id,
+        actor_user_id=user.id,
+        action="staff_revoked",
+        payload={"user_id": user_id, "role": staff.role},
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/events/{event_id}/menu")

@@ -38,8 +38,4 @@ class QrForbiddenScreen extends StatelessWidget {
       ),
     );
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
