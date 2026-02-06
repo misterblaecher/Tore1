@@ -85,3 +85,16 @@ def test_delta_negative_decrements():
     assert stats.json()["total"] == 0
 
     app.dependency_overrides.clear()
+
+
+def test_wallet_history_stub_returns_empty_list():
+    event_id, user = _seed_event()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    client = TestClient(app)
+
+    res = client.get(f"/events/{event_id}/wallet/history", params={"user_id": user.id})
+    assert res.status_code == 200
+    assert res.json() == []
+
+    app.dependency_overrides.clear()

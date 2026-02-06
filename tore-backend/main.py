@@ -1775,6 +1775,22 @@ def ticket_balance(event_id: int = Query(...), user_id: str = Query(...)):
         s.close()
 
 
+@app.get("/events/{event_id}/wallet/history")
+def wallet_history(
+    event_id: int,
+    user_id: str = Query(...),
+    limit: int = Query(50, ge=1, le=200),
+    cursor: Optional[str] = None,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "wallet_enabled")
+    return []
+
+
 @app.post("/tickets/credit")
 def credit_tickets(payload: CreditTicketsIn):
     s = get_session()

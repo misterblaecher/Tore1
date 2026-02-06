@@ -179,7 +179,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   error: (e, _) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text(
-                      'Historique indisponible: ${ErrorMapper.message(e)}',
+                      ErrorMapper.isNotFound(e)
+                          ? 'Historique indisponible.'
+                          : 'Historique indisponible: ${ErrorMapper.message(e)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
