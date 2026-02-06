@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state.dart';
 import '../../../shared/widgets/api_status_badge.dart';
 import '../../../core/network/error_mapper.dart';
+import '../../../shared/cache/offline_no_cache_exception.dart';
+import '../../../shared/widgets/offline_fallback_screen.dart';
 import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
@@ -36,18 +38,24 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final userId = ref.read(userIdProvider);
 
     // Menu peut être consulté même si auth pas encore prête
-    final menuRaw = await api.menu(widget.eventId);
-    final items = (menuRaw).cast<Map<String, dynamic>>();
+    final menuResult = await api.menuWithCacheStatus(widget.eventId);
+    final items = (menuResult.items).cast<Map<String, dynamic>>();
+    var isOffline = menuResult.fromCache;
 
     if (userId == null) {
-      return _MenuData(items: items, tickets: null);
+      return _MenuData(items: items, tickets: null, isOffline: isOffline);
     }
 
-    final bal = await api.ticketBalance(eventId: widget.eventId, userId: userId);
-    final ticketsValue = bal['balance'] ?? bal['tickets'] ?? bal['amount'] ?? bal['value'] ?? 0;
-    final tickets = (ticketsValue is num) ? ticketsValue.toInt() : int.tryParse(ticketsValue.toString()) ?? 0;
+    int? tickets;
+    try {
+      final bal = await api.ticketBalance(eventId: widget.eventId, userId: userId);
+      final ticketsValue = bal['balance'] ?? bal['tickets'] ?? bal['amount'] ?? bal['value'] ?? 0;
+      tickets = (ticketsValue is num) ? ticketsValue.toInt() : int.tryParse(ticketsValue.toString()) ?? 0;
+    } catch (_) {
+      isOffline = true;
+    }
 
-    return _MenuData(items: items, tickets: tickets);
+    return _MenuData(items: items, tickets: tickets, isOffline: isOffline);
   }
 
   void _refresh() {
@@ -113,6 +121,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final config = configAsync.maybeWhen(
       data: (value) => value,
       orElse: () => null,
+    );
+    final configOfflineLimited = configAsync.maybeWhen(
+      error: (err, _) => err is OfflineNoCacheException,
+      orElse: () => false,
     );
 
     if (config != null && !config.menuEnabled) {
@@ -187,12 +199,21 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           }
 
           if (snap.hasError) {
-            return Center(child: Text(ErrorMapper.message(snap.error as Object)));
+            final err = snap.error;
+            if (err is OfflineNoCacheException) {
+              return OfflineFallbackScreen(
+                title: 'Hors-ligne',
+                message: 'Impossible de charger le menu sans réseau ni cache.',
+                onRetry: _refresh,
+              );
+            }
+            return Center(child: Text(ErrorMapper.message(err as Object)));
           }
 
-          final data = snap.data ?? const _MenuData(items: [], tickets: null);
+          final data = snap.data ?? const _MenuData(items: [], tickets: null, isOffline: false);
           final items = data.items;
           final tickets = data.tickets;
+          final isOffline = data.isOffline;
 
           final top = Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -213,6 +234,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           if (items.isEmpty) {
             return Column(
               children: [
+                if (configOfflineLimited)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _LimitedModeBanner(),
+                  ),
+                if (isOffline)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _OfflineOrdersBanner(),
+                  ),
                 top,
                 const Expanded(child: Center(child: Text('Menu vide'))),
               ],
@@ -221,6 +252,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
           return Column(
             children: [
+              if (configOfflineLimited)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: _LimitedModeBanner(),
+                ),
+              if (isOffline)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: _OfflineOrdersBanner(),
+                ),
               top,
               Expanded(
                 child: ListView.separated(
@@ -242,6 +283,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     final hasEnoughTickets = tickets == null ? true : tickets >= requiredTickets;
 
                     final disabledBecauseAuth = userId == null;
+                    final disabledBecauseOffline = isOffline;
                     final isBusy = _ordering[drinkId] == true;
 
                     return ListTile(
@@ -250,7 +292,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       trailing: SizedBox(
                         width: 130,
                         child: ElevatedButton(
-                          onPressed: (drinkId == 0 || disabledBecauseAuth || !hasEnoughTickets || isBusy)
+                          onPressed: (drinkId == 0 ||
+                                  disabledBecauseAuth ||
+                                  disabledBecauseOffline ||
+                                  !hasEnoughTickets ||
+                                  isBusy)
                               ? null
                               : () async {
                                   try {
@@ -306,9 +352,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                           child: Text(
                             disabledBecauseAuth
                                 ? 'Auth...'
-                                : (isBusy
-                                    ? '...'
-                                    : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Commander')),
+                                : (disabledBecauseOffline
+                                    ? 'Hors-ligne'
+                                    : (isBusy
+                                        ? '...'
+                                        : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Commander'))),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -329,6 +377,65 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 class _MenuData {
   final List<Map<String, dynamic>> items;
   final int? tickets;
+  final bool isOffline;
 
-  const _MenuData({required this.items, required this.tickets});
+  const _MenuData({
+    required this.items,
+    required this.tickets,
+    required this.isOffline,
+  });
+}
+
+class _OfflineOrdersBanner extends StatelessWidget {
+  const _OfflineOrdersBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.orange.shade100,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_outlined),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Hors-ligne : commandes désactivées.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LimitedModeBanner extends StatelessWidget {
+  const _LimitedModeBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.blueGrey.shade100,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Mode limité : configuration indisponible.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
