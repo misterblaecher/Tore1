@@ -5,6 +5,7 @@ import logging
 import secrets
 import string
 import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from urllib.parse import urlparse, parse_qs
@@ -28,6 +29,8 @@ from models import (
     Ban,
     Entry,
     EventStaff,
+    EventConfig,
+    EventConfigLog,
     Order,
     OrderItem,
     Beer,
@@ -351,6 +354,51 @@ def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
     return "guest"
 
 
+def default_event_config_payload() -> Dict[str, Any]:
+    return {
+        "menu_enabled": True,
+        "wallet_enabled": True,
+        "entry_enabled": False,
+        "checkin_enabled": False,
+        "battles_enabled": False,
+        "hunt_enabled": False,
+    }
+
+
+def get_or_create_event_config(db: Session, event_id: int, commit: bool = False) -> EventConfig:
+    cfg = db.query(EventConfig).filter(EventConfig.event_id == event_id).first()
+    if cfg:
+        return cfg
+    defaults = default_event_config_payload()
+    cfg = EventConfig(event_id=event_id, **defaults, updated_at=now_utc())
+    db.add(cfg)
+    db.flush()
+    if commit:
+        db.commit()
+    return cfg
+
+
+def require_role_for_event(db: Session, user_id: str, event_id: int, required_role: str) -> str:
+    granted = resolve_event_role(db, user_id, event_id)
+    if _role_rank(granted) < _role_rank(required_role):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "required_role": required_role},
+        )
+    return granted
+
+
+def require_feature(db: Session, event_id: int, feature: str) -> EventConfig:
+    cfg = get_or_create_event_config(db, event_id, commit=True)
+    enabled = getattr(cfg, feature, None)
+    if enabled is not True:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "feature_disabled", "feature": feature},
+        )
+    return cfg
+
+
 # ---------------------------------------------------------------------
 # API schemas
 # ---------------------------------------------------------------------
@@ -443,6 +491,28 @@ class QrResolveOut(BaseModel):
     reason: Optional[str] = None
     required_role: Optional[str] = None
     granted_role: Optional[str] = None
+
+
+class EventConfigOut(BaseModel):
+    event_id: int
+    menu_enabled: bool
+    wallet_enabled: bool
+    entry_enabled: bool
+    checkin_enabled: bool
+    battles_enabled: bool
+    hunt_enabled: bool
+    updated_at: Optional[str] = None
+    updated_by_user_id: Optional[str] = None
+    role: Optional[str] = None
+
+
+class EventConfigPatchIn(BaseModel):
+    menu_enabled: Optional[bool] = None
+    wallet_enabled: Optional[bool] = None
+    entry_enabled: Optional[bool] = None
+    checkin_enabled: Optional[bool] = None
+    battles_enabled: Optional[bool] = None
+    hunt_enabled: Optional[bool] = None
 
 
 class CreateBattleIn(BaseModel):
@@ -757,6 +827,91 @@ def get_event(event_id: int):
         s.close()
 
 
+@app.get("/events/{event_id}/config", response_model=EventConfigOut)
+def get_event_config(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    e = db.get(Event, event_id)
+    if not e:
+        raise HTTPException(404, "Event not found")
+    cfg = get_or_create_event_config(db, event_id, commit=True)
+    role = resolve_event_role(db, user.id, event_id)
+    db.commit()
+    return {
+        "event_id": event_id,
+        "menu_enabled": cfg.menu_enabled,
+        "wallet_enabled": cfg.wallet_enabled,
+        "entry_enabled": cfg.entry_enabled,
+        "checkin_enabled": cfg.checkin_enabled,
+        "battles_enabled": cfg.battles_enabled,
+        "hunt_enabled": cfg.hunt_enabled,
+        "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
+        "updated_by_user_id": cfg.updated_by_user_id,
+        "role": role,
+    }
+
+
+@app.patch("/events/{event_id}/config", response_model=EventConfigOut)
+def patch_event_config(
+    event_id: int,
+    payload: EventConfigPatchIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    e = db.get(Event, event_id)
+    if not e:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+
+    cfg = get_or_create_event_config(db, event_id)
+    changes: Dict[str, Any] = {}
+    for field in [
+        "menu_enabled",
+        "wallet_enabled",
+        "entry_enabled",
+        "checkin_enabled",
+        "battles_enabled",
+        "hunt_enabled",
+    ]:
+        value = getattr(payload, field)
+        if value is None:
+            continue
+        current = getattr(cfg, field)
+        if current != value:
+            setattr(cfg, field, value)
+            changes[field] = {"from": current, "to": value}
+
+    if changes:
+        cfg.updated_at = now_utc()
+        cfg.updated_by_user_id = user.id
+        log = EventConfigLog(
+            event_id=event_id,
+            changed_by_user_id=user.id,
+            changes_json=json.dumps(changes, ensure_ascii=False),
+        )
+        db.add(log)
+
+    db.add(cfg)
+    db.commit()
+
+    role = resolve_event_role(db, user.id, event_id)
+    return {
+        "event_id": event_id,
+        "menu_enabled": cfg.menu_enabled,
+        "wallet_enabled": cfg.wallet_enabled,
+        "entry_enabled": cfg.entry_enabled,
+        "checkin_enabled": cfg.checkin_enabled,
+        "battles_enabled": cfg.battles_enabled,
+        "hunt_enabled": cfg.hunt_enabled,
+        "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
+        "updated_by_user_id": cfg.updated_by_user_id,
+        "role": role,
+    }
+
+
 @app.get("/events/{event_id}/menu")
 def event_menu(event_id: int):
     s = get_session()
@@ -764,6 +919,7 @@ def event_menu(event_id: int):
         e = s.get(Event, event_id)
         if not e:
             raise HTTPException(404, "Event not found")
+        require_feature(s, event_id, "menu_enabled")
         apply_decay(s, event_id)
 
         rows = s.scalars(select(EventDrink).where(EventDrink.event_id == event_id)).all()
@@ -856,6 +1012,7 @@ def issue_entry(event_id: int, payload: IssueEntryIn):
         e = s.get(Event, event_id)
         if not e:
             raise HTTPException(404, "Event not found")
+        require_feature(s, event_id, "entry_enabled")
         if is_banned(s, event_id, payload.user_id):
             raise HTTPException(403, "User banned")
 
@@ -884,6 +1041,7 @@ def issue_entry(event_id: int, payload: IssueEntryIn):
 def ticket_balance(event_id: int = Query(...), user_id: str = Query(...)):
     s = get_session()
     try:
+        require_feature(s, event_id, "wallet_enabled")
         b = get_or_create_balance(s, event_id, user_id)
         s.commit()
         return {"event_id": event_id, "user_id": user_id, "balance": b.balance}
@@ -898,6 +1056,7 @@ def credit_tickets(payload: CreditTicketsIn):
         e = s.get(Event, payload.event_id)
         if not e:
             raise HTTPException(404, "Event not found")
+        require_feature(s, payload.event_id, "wallet_enabled")
         if not e.allow_self_ticket_adjust:
             raise HTTPException(403, "Ticket adjust disabled for this event")
 
@@ -917,6 +1076,12 @@ def create_order(payload: CreateOrderIn):
         e = s.get(Event, payload.event_id)
         if not e:
             raise HTTPException(404, "Event not found")
+        if payload.pay_mode in {"checkin", "checkin_staff"}:
+            require_feature(s, payload.event_id, "checkin_enabled")
+        else:
+            require_feature(s, payload.event_id, "menu_enabled")
+        if payload.pay_mode == "tickets":
+            require_feature(s, payload.event_id, "wallet_enabled")
         if is_banned(s, payload.event_id, payload.user_id):
             raise HTTPException(403, "User banned")
         if not payload.items:
@@ -1293,6 +1458,7 @@ def admin_scan_entry(event_id: int, payload: ScanEntryIn):
 
     s = get_session()
     try:
+        require_feature(s, event_id, "entry_enabled")
         if is_banned(s, event_id, user_id):
             return {"ok": False, "message": "Utilisateur banni"}
         entry = s.get(Entry, entry_id)

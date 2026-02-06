@@ -7,7 +7,10 @@ import '../navigation/presentation/checkin_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
 import '../qr/presentation/qr_placeholders.dart';
 import '../qr/presentation/qr_forbidden_screen.dart';
+import '../qr/presentation/qr_feature_disabled_screen.dart';
 import '../qr/qr_resolve_service.dart';
+import '../events/presentation/event_config_providers.dart';
+import '../../shared/models/event_config.dart';
 
 Future<void> handleQr({
   required BuildContext context,
@@ -59,6 +62,18 @@ Future<void> handleQr({
     return;
   }
 
+  final config = await _fetchConfigSafe(ref, result.eventId!);
+  if (!_isFeatureEnabled(config, result.type)) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => QrFeatureDisabledScreen(
+          featureLabel: _featureLabel(result.type),
+        ),
+      ),
+    );
+    return;
+  }
+
   switch (result.type) {
     case 'join':
       ref.read(appContextProvider.notifier).enterEvent(
@@ -99,6 +114,39 @@ Future<void> handleQr({
           ),
         ),
       );
+  }
+}
+
+Future<EventConfig?> _fetchConfigSafe(WidgetRef ref, int eventId) async {
+  try {
+    return await ref.read(eventConfigProvider(eventId).future);
+  } catch (_) {
+    return null;
+  }
+}
+
+bool _isFeatureEnabled(EventConfig? config, String type) {
+  if (config == null) return true;
+  switch (type) {
+    case 'menu':
+      return config.menuEnabled;
+    case 'entry':
+      return config.entryEnabled;
+    case 'join':
+    default:
+      return true;
+  }
+}
+
+String _featureLabel(String type) {
+  switch (type) {
+    case 'menu':
+      return 'Menu';
+    case 'entry':
+      return 'Entrée';
+    case 'join':
+    default:
+      return 'Fonction';
   }
 }
 

@@ -6,6 +6,8 @@ import '../../../core/network/error_mapper.dart';
 import '../../../state.dart';
 import '../../charts/chart_models.dart';
 import '../../charts/chart_providers.dart';
+import '../../events/presentation/event_config_providers.dart';
+import '../../qr/presentation/qr_feature_disabled_screen.dart';
 
 class CheckinScreen extends ConsumerStatefulWidget {
   const CheckinScreen({super.key});
@@ -113,6 +115,16 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         appBar: AppBar(title: const Text('Check-in')),
         body: const Center(child: Text('Sélectionne un event pour faire un check-in.')),
       );
+    }
+
+    final configAsync = ref.watch(eventConfigProvider(eventId));
+    final config = configAsync.maybeWhen(
+      data: (value) => value,
+      orElse: () => null,
+    );
+
+    if (config != null && !config.checkinEnabled) {
+      return const QrFeatureDisabledScreen(featureLabel: 'Check-in');
     }
 
     final drinksAsync = ref.watch(eventMenuDrinksProvider(eventId));
