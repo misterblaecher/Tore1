@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setToken } from '../lib/auth'
 import { API_BASE } from '../lib/api'
+import { isApiUnavailable } from '../lib/errors'
+import ApiUnavailable from '../ui/ApiUnavailable'
 
 type AuthOut = {
   token: string
@@ -40,10 +42,26 @@ export default function Login() {
       setToken(data.token)
       nav('/')
     } catch (err: any) {
-      setError(err?.message ?? 'Erreur de connexion')
+      if (isApiUnavailable(err)) {
+        setError('API indisponible. Vérifie la connexion.')
+      } else {
+        setError(err?.message ?? 'Erreur de connexion')
+      }
     } finally {
       setLoading(false)
     }
+  }
+
+  const apiDown = error ? isApiUnavailable(new Error(error)) : false
+
+  if (apiDown) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0b0b0f', color: '#fff' }}>
+        <div style={{ width: 'min(560px, 92vw)' }}>
+          <ApiUnavailable />
+        </div>
+      </div>
+    )
   }
 
   return (

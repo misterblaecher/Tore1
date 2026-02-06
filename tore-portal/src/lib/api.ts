@@ -13,7 +13,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  } catch {
+    throw new Error('API indisponible. Vérifie la connexion.')
+  }
   if (res.status === 401) {
     clearToken()
   }

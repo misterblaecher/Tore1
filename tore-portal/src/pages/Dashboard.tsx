@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { api } from '../lib/api'
+import { isApiUnavailable } from '../lib/errors'
+import ApiUnavailable from '../ui/ApiUnavailable'
 
 type BarOut = {
   id: number
@@ -42,6 +44,16 @@ export default function Dashboard() {
       }
     })()
   }, [])
+
+  const apiDown = error ? isApiUnavailable(new Error(error)) : false
+
+  if (apiDown) {
+    return (
+      <Layout title="Dashboard">
+        <ApiUnavailable />
+      </Layout>
+    )
+  }
 
   return (
     <Layout title="Dashboard">

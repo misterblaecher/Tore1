@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { api } from '../lib/api'
+import { isApiUnavailable } from '../lib/errors'
+import ApiUnavailable from '../ui/ApiUnavailable'
 
 type EventOut = {
   id: number
@@ -89,6 +91,16 @@ export default function EventDetail() {
     } catch (e: any) {
       setError(e?.message ?? 'Erreur')
     }
+  }
+
+  const apiDown = error ? isApiUnavailable(new Error(error)) : false
+
+  if (apiDown) {
+    return (
+      <Layout title="Event">
+        <ApiUnavailable />
+      </Layout>
+    )
   }
 
   return (

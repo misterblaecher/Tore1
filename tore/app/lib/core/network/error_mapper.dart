@@ -42,4 +42,19 @@ class ErrorMapper {
 
     return 'Une erreur est survenue.';
   }
+
+  static bool isNotFound(Object e) {
+    final code = _statusCode(e);
+    return code == 404;
+  }
+
+  static int? _statusCode(Object e) {
+    if (e is ApiException) return e.statusCode;
+    if (e is DioException) {
+      final wrapped = e.error;
+      if (wrapped is ApiException) return wrapped.statusCode;
+      return e.response?.statusCode;
+    }
+    return null;
+  }
 }
