@@ -33,6 +33,7 @@ from models import (
     EventAuditLog,
     EventConfig,
     EventConfigLog,
+    EventCost,
     Order,
     OrderItem,
     Beer,
@@ -370,6 +371,7 @@ def default_event_config_payload() -> Dict[str, Any]:
         "checkin_enabled": False,
         "battles_enabled": False,
         "hunt_enabled": False,
+        "report_enabled": True,
     }
 
 
@@ -569,6 +571,7 @@ class EventConfigOut(BaseModel):
     checkin_enabled: bool
     battles_enabled: bool
     hunt_enabled: bool
+    report_enabled: bool
     updated_at: Optional[str] = None
     updated_by_user_id: Optional[str] = None
     role: Optional[str] = None
@@ -581,6 +584,23 @@ class EventConfigPatchIn(BaseModel):
     checkin_enabled: Optional[bool] = None
     battles_enabled: Optional[bool] = None
     hunt_enabled: Optional[bool] = None
+    report_enabled: Optional[bool] = None
+
+
+class EventCostIn(BaseModel):
+    label: str
+    amount_cents: int = Field(ge=0)
+    category: str
+
+
+class EventCostOut(BaseModel):
+    id: int
+    event_id: int
+    label: str
+    amount_cents: int
+    category: str
+    created_at: Optional[str] = None
+    created_by_user_id: Optional[str] = None
 
 
 class CreateEventIn(BaseModel):
@@ -1014,6 +1034,7 @@ def get_event_config(
         "checkin_enabled": cfg.checkin_enabled,
         "battles_enabled": cfg.battles_enabled,
         "hunt_enabled": cfg.hunt_enabled,
+        "report_enabled": cfg.report_enabled,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,
@@ -1042,6 +1063,7 @@ def patch_event_config(
         "checkin_enabled",
         "battles_enabled",
         "hunt_enabled",
+        "report_enabled",
     ]:
         value = getattr(payload, field)
         if value is None:
@@ -1073,9 +1095,221 @@ def patch_event_config(
         "checkin_enabled": cfg.checkin_enabled,
         "battles_enabled": cfg.battles_enabled,
         "hunt_enabled": cfg.hunt_enabled,
+        "report_enabled": cfg.report_enabled,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,
+    }
+
+
+ALLOWED_COST_CATEGORIES = {"stock", "location", "staff", "other"}
+
+
+@app.get("/events/{event_id}/costs", response_model=List[EventCostOut])
+def list_event_costs(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    rows = (
+        db.query(EventCost)
+        .filter(EventCost.event_id == event_id)
+        .order_by(EventCost.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": cost.id,
+            "event_id": cost.event_id,
+            "label": cost.label,
+            "amount_cents": cost.amount_cents,
+            "category": cost.category,
+            "created_at": cost.created_at.isoformat() if cost.created_at else None,
+            "created_by_user_id": cost.created_by_user_id,
+        }
+        for cost in rows
+    ]
+
+
+@app.post("/events/{event_id}/costs", response_model=EventCostOut)
+def create_event_cost(
+    event_id: int,
+    payload: EventCostIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    category = (payload.category or "").strip().lower()
+    if category not in ALLOWED_COST_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_category", "allowed": sorted(ALLOWED_COST_CATEGORIES)},
+        )
+
+    cost = EventCost(
+        event_id=event_id,
+        label=payload.label.strip(),
+        amount_cents=payload.amount_cents,
+        category=category,
+        created_at=now_utc(),
+        created_by_user_id=user.id,
+    )
+    db.add(cost)
+    db.commit()
+    db.refresh(cost)
+    return {
+        "id": cost.id,
+        "event_id": cost.event_id,
+        "label": cost.label,
+        "amount_cents": cost.amount_cents,
+        "category": cost.category,
+        "created_at": cost.created_at.isoformat() if cost.created_at else None,
+        "created_by_user_id": cost.created_by_user_id,
+    }
+
+
+@app.delete("/events/{event_id}/costs/{cost_id}")
+def delete_event_cost(
+    event_id: int,
+    cost_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    cost = db.get(EventCost, cost_id)
+    if not cost or cost.event_id != event_id:
+        raise HTTPException(404, "Cost not found")
+    db.delete(cost)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/events/{event_id}/report")
+def get_event_report(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    total_orders = (
+        db.scalar(select(func.count()).select_from(Order).where(Order.event_id == event_id)) or 0
+    )
+    gross_revenue_cents = (
+        db.scalar(
+            select(func.coalesce(func.sum(Order.total_cents), 0)).where(Order.event_id == event_id)
+        )
+        or 0
+    )
+
+    item_rows = db.execute(
+        select(
+            OrderItem.drink_id,
+            Drink.name,
+            Drink.type,
+            func.coalesce(func.sum(OrderItem.qty), 0).label("qty"),
+            func.coalesce(func.sum(OrderItem.qty * OrderItem.unit_price_cents), 0).label(
+                "revenue_cents"
+            ),
+        )
+        .select_from(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Drink, Drink.id == OrderItem.drink_id, isouter=True)
+        .where(Order.event_id == event_id)
+        .group_by(OrderItem.drink_id, Drink.name, Drink.type)
+        .order_by(func.sum(OrderItem.qty * OrderItem.unit_price_cents).desc())
+    ).all()
+
+    by_item = []
+    for row in item_rows:
+        by_item.append(
+            {
+                "item_id": row.drink_id,
+                "name": row.name or "Unknown",
+                "qty": int(row.qty or 0),
+                "revenue_cents": int(row.revenue_cents or 0),
+            }
+        )
+
+    category_rows = db.execute(
+        select(
+            Drink.type,
+            func.coalesce(func.sum(OrderItem.qty), 0).label("qty"),
+            func.coalesce(func.sum(OrderItem.qty * OrderItem.unit_price_cents), 0).label(
+                "revenue_cents"
+            ),
+        )
+        .select_from(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Drink, Drink.id == OrderItem.drink_id, isouter=True)
+        .where(Order.event_id == event_id)
+        .group_by(Drink.type)
+        .order_by(func.sum(OrderItem.qty * OrderItem.unit_price_cents).desc())
+    ).all()
+
+    by_category = []
+    for row in category_rows:
+        category = (row.type or "").strip().lower() or "unknown"
+        by_category.append(
+            {
+                "category": category,
+                "qty": int(row.qty or 0),
+                "revenue_cents": int(row.revenue_cents or 0),
+            }
+        )
+
+    cost_rows = (
+        db.query(EventCost)
+        .filter(EventCost.event_id == event_id)
+        .order_by(EventCost.created_at.desc())
+        .all()
+    )
+    cost_lines = [
+        {
+            "id": cost.id,
+            "label": cost.label,
+            "amount_cents": cost.amount_cents,
+            "category": cost.category,
+        }
+        for cost in cost_rows
+    ]
+    total_cost_cents = sum(cost.amount_cents for cost in cost_rows)
+
+    return {
+        "event_id": event_id,
+        "generated_at": now_utc().isoformat(),
+        "sales": {
+            "total_orders": int(total_orders),
+            "gross_revenue_cents": int(gross_revenue_cents),
+            "by_item": by_item,
+            "by_category": by_category,
+        },
+        "costs": {"total_cost_cents": int(total_cost_cents), "lines": cost_lines},
+        "profit": {"gross_profit_cents": int(gross_revenue_cents) - int(total_cost_cents)},
     }
 
 

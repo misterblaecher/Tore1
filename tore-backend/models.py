@@ -171,6 +171,7 @@ class EventConfig(Base):
     checkin_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     battles_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     hunt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    report_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     updated_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
@@ -183,6 +184,18 @@ class EventConfigLog(Base):
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     changed_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     changes_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class EventCost(Base):
+    __tablename__ = "event_costs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    label: Mapped[str] = mapped_column(String, default="")
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    category: Mapped[str] = mapped_column(String, default="other")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class Order(Base):
