@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
@@ -28,11 +29,13 @@ from models import (
     TicketBalance,
     Ban,
     Entry,
+    EntryLog,
     EventStaff,
     StaffInviteToken,
     EventAuditLog,
     EventConfig,
     EventConfigLog,
+    EventCost,
     Order,
     OrderItem,
     Beer,
@@ -352,7 +355,7 @@ def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
         .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
         .first()
     )
-    if not staff or not staff.is_active:
+    if not staff or staff.is_active is False:
         return "guest"
     role = (staff.role or "").lower()
     if role == "admin":
@@ -370,6 +373,7 @@ def default_event_config_payload() -> Dict[str, Any]:
         "checkin_enabled": False,
         "battles_enabled": False,
         "hunt_enabled": False,
+        "report_enabled": True,
     }
 
 
@@ -405,6 +409,20 @@ def require_feature(db: Session, event_id: int, feature: str) -> EventConfig:
             detail={"error": "feature_disabled", "feature": feature},
         )
     return cfg
+
+
+def entry_stats(db: Session, event_id: int) -> Dict[str, int]:
+    total = db.scalar(
+        select(func.coalesce(func.sum(EntryLog.delta), 0)).where(EntryLog.event_id == event_id)
+    ) or 0
+    since = now_utc() - timedelta(hours=1)
+    last_hour = db.scalar(
+        select(func.coalesce(func.sum(EntryLog.delta), 0)).where(
+            EntryLog.event_id == event_id,
+            EntryLog.created_at >= since,
+        )
+    ) or 0
+    return {"total": int(total), "last_hour": int(last_hour)}
 
 
 def log_event_action(
@@ -494,6 +512,31 @@ class ScanEntryIn(BaseModel):
     qr_payload: str
 
 
+class EntryScanIn(BaseModel):
+    delta: int = Field(..., description="+1 ou -1")
+    source: str = Field(..., description="scan|manual")
+    device_id: str
+    idempotency_key: str
+    raw_qr: Optional[str] = None
+
+
+class EntryStatsOut(BaseModel):
+    total: int
+    last_hour: int
+
+
+class EntryLogOut(BaseModel):
+    id: int
+    event_id: int
+    created_at: datetime
+    delta: int
+    source: str
+    staff_id: Optional[str]
+    device_id: str
+    idempotency_key: str
+    raw_qr: Optional[str]
+
+
 class BanIn(BaseModel):
     user_id: str
     reason: str = "reason"
@@ -569,6 +612,7 @@ class EventConfigOut(BaseModel):
     checkin_enabled: bool
     battles_enabled: bool
     hunt_enabled: bool
+    report_enabled: bool
     updated_at: Optional[str] = None
     updated_by_user_id: Optional[str] = None
     role: Optional[str] = None
@@ -581,6 +625,23 @@ class EventConfigPatchIn(BaseModel):
     checkin_enabled: Optional[bool] = None
     battles_enabled: Optional[bool] = None
     hunt_enabled: Optional[bool] = None
+    report_enabled: Optional[bool] = None
+
+
+class EventCostIn(BaseModel):
+    label: str
+    amount_cents: int = Field(ge=0)
+    category: str
+
+
+class EventCostOut(BaseModel):
+    id: int
+    event_id: int
+    label: str
+    amount_cents: int
+    category: str
+    created_at: Optional[str] = None
+    created_by_user_id: Optional[str] = None
 
 
 class CreateEventIn(BaseModel):
@@ -1014,6 +1075,7 @@ def get_event_config(
         "checkin_enabled": cfg.checkin_enabled,
         "battles_enabled": cfg.battles_enabled,
         "hunt_enabled": cfg.hunt_enabled,
+        "report_enabled": cfg.report_enabled,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,
@@ -1042,6 +1104,7 @@ def patch_event_config(
         "checkin_enabled",
         "battles_enabled",
         "hunt_enabled",
+        "report_enabled",
     ]:
         value = getattr(payload, field)
         if value is None:
@@ -1073,9 +1136,221 @@ def patch_event_config(
         "checkin_enabled": cfg.checkin_enabled,
         "battles_enabled": cfg.battles_enabled,
         "hunt_enabled": cfg.hunt_enabled,
+        "report_enabled": cfg.report_enabled,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,
+    }
+
+
+ALLOWED_COST_CATEGORIES = {"stock", "location", "staff", "other"}
+
+
+@app.get("/events/{event_id}/costs", response_model=List[EventCostOut])
+def list_event_costs(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    rows = (
+        db.query(EventCost)
+        .filter(EventCost.event_id == event_id)
+        .order_by(EventCost.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": cost.id,
+            "event_id": cost.event_id,
+            "label": cost.label,
+            "amount_cents": cost.amount_cents,
+            "category": cost.category,
+            "created_at": cost.created_at.isoformat() if cost.created_at else None,
+            "created_by_user_id": cost.created_by_user_id,
+        }
+        for cost in rows
+    ]
+
+
+@app.post("/events/{event_id}/costs", response_model=EventCostOut)
+def create_event_cost(
+    event_id: int,
+    payload: EventCostIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    category = (payload.category or "").strip().lower()
+    if category not in ALLOWED_COST_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_category", "allowed": sorted(ALLOWED_COST_CATEGORIES)},
+        )
+
+    cost = EventCost(
+        event_id=event_id,
+        label=payload.label.strip(),
+        amount_cents=payload.amount_cents,
+        category=category,
+        created_at=now_utc(),
+        created_by_user_id=user.id,
+    )
+    db.add(cost)
+    db.commit()
+    db.refresh(cost)
+    return {
+        "id": cost.id,
+        "event_id": cost.event_id,
+        "label": cost.label,
+        "amount_cents": cost.amount_cents,
+        "category": cost.category,
+        "created_at": cost.created_at.isoformat() if cost.created_at else None,
+        "created_by_user_id": cost.created_by_user_id,
+    }
+
+
+@app.delete("/events/{event_id}/costs/{cost_id}")
+def delete_event_cost(
+    event_id: int,
+    cost_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    cost = db.get(EventCost, cost_id)
+    if not cost or cost.event_id != event_id:
+        raise HTTPException(404, "Cost not found")
+    db.delete(cost)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/events/{event_id}/report")
+def get_event_report(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    total_orders = (
+        db.scalar(select(func.count()).select_from(Order).where(Order.event_id == event_id)) or 0
+    )
+    gross_revenue_cents = (
+        db.scalar(
+            select(func.coalesce(func.sum(Order.total_cents), 0)).where(Order.event_id == event_id)
+        )
+        or 0
+    )
+
+    item_rows = db.execute(
+        select(
+            OrderItem.drink_id,
+            Drink.name,
+            Drink.type,
+            func.coalesce(func.sum(OrderItem.qty), 0).label("qty"),
+            func.coalesce(func.sum(OrderItem.qty * OrderItem.unit_price_cents), 0).label(
+                "revenue_cents"
+            ),
+        )
+        .select_from(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Drink, Drink.id == OrderItem.drink_id, isouter=True)
+        .where(Order.event_id == event_id)
+        .group_by(OrderItem.drink_id, Drink.name, Drink.type)
+        .order_by(func.sum(OrderItem.qty * OrderItem.unit_price_cents).desc())
+    ).all()
+
+    by_item = []
+    for row in item_rows:
+        by_item.append(
+            {
+                "item_id": row.drink_id,
+                "name": row.name or "Unknown",
+                "qty": int(row.qty or 0),
+                "revenue_cents": int(row.revenue_cents or 0),
+            }
+        )
+
+    category_rows = db.execute(
+        select(
+            Drink.type,
+            func.coalesce(func.sum(OrderItem.qty), 0).label("qty"),
+            func.coalesce(func.sum(OrderItem.qty * OrderItem.unit_price_cents), 0).label(
+                "revenue_cents"
+            ),
+        )
+        .select_from(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Drink, Drink.id == OrderItem.drink_id, isouter=True)
+        .where(Order.event_id == event_id)
+        .group_by(Drink.type)
+        .order_by(func.sum(OrderItem.qty * OrderItem.unit_price_cents).desc())
+    ).all()
+
+    by_category = []
+    for row in category_rows:
+        category = (row.type or "").strip().lower() or "unknown"
+        by_category.append(
+            {
+                "category": category,
+                "qty": int(row.qty or 0),
+                "revenue_cents": int(row.revenue_cents or 0),
+            }
+        )
+
+    cost_rows = (
+        db.query(EventCost)
+        .filter(EventCost.event_id == event_id)
+        .order_by(EventCost.created_at.desc())
+        .all()
+    )
+    cost_lines = [
+        {
+            "id": cost.id,
+            "label": cost.label,
+            "amount_cents": cost.amount_cents,
+            "category": cost.category,
+        }
+        for cost in cost_rows
+    ]
+    total_cost_cents = sum(cost.amount_cents for cost in cost_rows)
+
+    return {
+        "event_id": event_id,
+        "generated_at": now_utc().isoformat(),
+        "sales": {
+            "total_orders": int(total_orders),
+            "gross_revenue_cents": int(gross_revenue_cents),
+            "by_item": by_item,
+            "by_category": by_category,
+        },
+        "costs": {"total_cost_cents": int(total_cost_cents), "lines": cost_lines},
+        "profit": {"gross_profit_cents": int(gross_revenue_cents) - int(total_cost_cents)},
     }
 
 
@@ -1387,6 +1662,105 @@ def issue_entry(event_id: int, payload: IssueEntryIn):
         return {"entry_id": entry.id, "qr_payload": token}
     finally:
         s.close()
+
+
+@app.post("/events/{event_id}/entry/scans", response_model=EntryStatsOut)
+def record_entry_scan(
+    event_id: int,
+    payload: EntryScanIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "entry_enabled")
+    require_role_for_event(db, user.id, event_id, "entry")
+
+    if payload.delta not in (-1, 1):
+        raise HTTPException(400, "delta must be +1 or -1")
+    if payload.source not in {"scan", "manual"}:
+        raise HTTPException(400, "source must be scan or manual")
+    if not payload.device_id or not payload.idempotency_key:
+        raise HTTPException(400, "device_id and idempotency_key are required")
+
+    existing = (
+        db.query(EntryLog)
+        .filter(
+            EntryLog.event_id == event_id,
+            EntryLog.idempotency_key == payload.idempotency_key,
+        )
+        .first()
+    )
+    if existing:
+        return entry_stats(db, event_id)
+
+    log = EntryLog(
+        event_id=event_id,
+        created_at=now_utc(),
+        delta=payload.delta,
+        source=payload.source,
+        staff_id=user.id,
+        device_id=payload.device_id,
+        idempotency_key=payload.idempotency_key,
+        raw_qr=payload.raw_qr,
+    )
+    db.add(log)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return entry_stats(db, event_id)
+    return entry_stats(db, event_id)
+
+
+@app.get("/events/{event_id}/entry/stats", response_model=EntryStatsOut)
+def get_entry_stats(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "entry_enabled")
+    require_role_for_event(db, user.id, event_id, "entry")
+    return entry_stats(db, event_id)
+
+
+@app.get("/events/{event_id}/entry/logs", response_model=List[EntryLogOut])
+def get_entry_logs(
+    event_id: int,
+    limit: int = Query(200, ge=1, le=200),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "entry_enabled")
+    require_role_for_event(db, user.id, event_id, "entry")
+    rows = (
+        db.query(EntryLog)
+        .filter(EntryLog.event_id == event_id)
+        .order_by(EntryLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        EntryLogOut(
+            id=row.id,
+            event_id=row.event_id,
+            created_at=row.created_at,
+            delta=row.delta,
+            source=row.source,
+            staff_id=row.staff_id,
+            device_id=row.device_id,
+            idempotency_key=row.idempotency_key,
+            raw_qr=row.raw_qr,
+        )
+        for row in rows
+    ]
 
 
 @app.get("/tickets/balance")
