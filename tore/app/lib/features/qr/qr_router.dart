@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_context/app_context.dart';
 import '../../shared/models/event_config.dart';
 import '../events/presentation/event_config_providers.dart';
+import '../entry/presentation/entry_mode_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
-import '../navigation/presentation/checkin_screen.dart';
 import '../qr/presentation/qr_feature_disabled_screen.dart';
 import '../qr/presentation/qr_forbidden_screen.dart';
 import '../qr/presentation/qr_placeholders.dart';
@@ -157,7 +157,7 @@ Future<void> handleQr({
           );
 
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const CheckinScreen()),
+        MaterialPageRoute(builder: (_) => EntryModeScreen(eventId: result.eventId)),
       );
       return;
     case 'admin_config':
@@ -188,7 +188,7 @@ Future<void> handleQr({
       }
 
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const CheckinScreen()),
+        MaterialPageRoute(builder: (_) => EntryModeScreen(eventId: result.eventId)),
       );
       return;
     case 'staff_invite':

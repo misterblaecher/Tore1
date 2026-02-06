@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
@@ -28,6 +29,7 @@ from models import (
     TicketBalance,
     Ban,
     Entry,
+    EntryLog,
     EventStaff,
     StaffInviteToken,
     EventAuditLog,
@@ -409,6 +411,20 @@ def require_feature(db: Session, event_id: int, feature: str) -> EventConfig:
     return cfg
 
 
+def entry_stats(db: Session, event_id: int) -> Dict[str, int]:
+    total = db.scalar(
+        select(func.coalesce(func.sum(EntryLog.delta), 0)).where(EntryLog.event_id == event_id)
+    ) or 0
+    since = now_utc() - timedelta(hours=1)
+    last_hour = db.scalar(
+        select(func.coalesce(func.sum(EntryLog.delta), 0)).where(
+            EntryLog.event_id == event_id,
+            EntryLog.created_at >= since,
+        )
+    ) or 0
+    return {"total": int(total), "last_hour": int(last_hour)}
+
+
 def log_event_action(
     db: Session,
     event_id: int,
@@ -494,6 +510,31 @@ class CrashIn(BaseModel):
 
 class ScanEntryIn(BaseModel):
     qr_payload: str
+
+
+class EntryScanIn(BaseModel):
+    delta: int = Field(..., description="+1 ou -1")
+    source: str = Field(..., description="scan|manual")
+    device_id: str
+    idempotency_key: str
+    raw_qr: Optional[str] = None
+
+
+class EntryStatsOut(BaseModel):
+    total: int
+    last_hour: int
+
+
+class EntryLogOut(BaseModel):
+    id: int
+    event_id: int
+    created_at: datetime
+    delta: int
+    source: str
+    staff_id: Optional[str]
+    device_id: str
+    idempotency_key: str
+    raw_qr: Optional[str]
 
 
 class BanIn(BaseModel):
@@ -1621,6 +1662,105 @@ def issue_entry(event_id: int, payload: IssueEntryIn):
         return {"entry_id": entry.id, "qr_payload": token}
     finally:
         s.close()
+
+
+@app.post("/events/{event_id}/entry/scans", response_model=EntryStatsOut)
+def record_entry_scan(
+    event_id: int,
+    payload: EntryScanIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "entry_enabled")
+    require_role_for_event(db, user.id, event_id, "entry")
+
+    if payload.delta not in (-1, 1):
+        raise HTTPException(400, "delta must be +1 or -1")
+    if payload.source not in {"scan", "manual"}:
+        raise HTTPException(400, "source must be scan or manual")
+    if not payload.device_id or not payload.idempotency_key:
+        raise HTTPException(400, "device_id and idempotency_key are required")
+
+    existing = (
+        db.query(EntryLog)
+        .filter(
+            EntryLog.event_id == event_id,
+            EntryLog.idempotency_key == payload.idempotency_key,
+        )
+        .first()
+    )
+    if existing:
+        return entry_stats(db, event_id)
+
+    log = EntryLog(
+        event_id=event_id,
+        created_at=now_utc(),
+        delta=payload.delta,
+        source=payload.source,
+        staff_id=user.id,
+        device_id=payload.device_id,
+        idempotency_key=payload.idempotency_key,
+        raw_qr=payload.raw_qr,
+    )
+    db.add(log)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return entry_stats(db, event_id)
+    return entry_stats(db, event_id)
+
+
+@app.get("/events/{event_id}/entry/stats", response_model=EntryStatsOut)
+def get_entry_stats(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "entry_enabled")
+    require_role_for_event(db, user.id, event_id, "entry")
+    return entry_stats(db, event_id)
+
+
+@app.get("/events/{event_id}/entry/logs", response_model=List[EntryLogOut])
+def get_entry_logs(
+    event_id: int,
+    limit: int = Query(200, ge=1, le=200),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_feature(db, event_id, "entry_enabled")
+    require_role_for_event(db, user.id, event_id, "entry")
+    rows = (
+        db.query(EntryLog)
+        .filter(EntryLog.event_id == event_id)
+        .order_by(EntryLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        EntryLogOut(
+            id=row.id,
+            event_id=row.event_id,
+            created_at=row.created_at,
+            delta=row.delta,
+            source=row.source,
+            staff_id=row.staff_id,
+            device_id=row.device_id,
+            idempotency_key=row.idempotency_key,
+            raw_qr=row.raw_qr,
+        )
+        for row in rows
+    ]
 
 
 @app.get("/tickets/balance")
