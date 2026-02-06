@@ -314,7 +314,7 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
-    if qr_type not in {"join", "menu", "entry"}:
+    if qr_type not in {"join", "menu", "entry", "admin_config", "staff_entry"}:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     params = parse_qs(parsed.query)
@@ -515,6 +515,27 @@ class EventConfigPatchIn(BaseModel):
     hunt_enabled: Optional[bool] = None
 
 
+class CreateEventIn(BaseModel):
+    name: str
+    starts_at: datetime
+    ends_at: datetime
+    bar_id: Optional[int] = None
+    city: Optional[str] = None
+
+
+class CreateEventOut(BaseModel):
+    event_id: int
+    name: str
+    starts_at: str
+    ends_at: str
+    bar_id: Optional[int] = None
+
+
+class QrPackOut(BaseModel):
+    event_id: int
+    qrs: Dict[str, str]
+
+
 class CreateBattleIn(BaseModel):
     user_id: str
     title: str = "Battle"
@@ -667,7 +688,14 @@ def qr_resolve(
 
     event_id = base.get("event_id")
     qr_type = base.get("type")
-    required_role = "entry" if qr_type == "entry" else "guest"
+    role_map = {
+        "join": "guest",
+        "menu": "guest",
+        "entry": "entry",
+        "admin_config": "admin",
+        "staff_entry": "entry",
+    }
+    required_role = role_map.get(qr_type, "guest")
     granted_role = resolve_event_role(db, user.id, event_id)
 
     if _role_rank(granted_role) < _role_rank(required_role):
@@ -825,6 +853,63 @@ def get_event(event_id: int):
         }
     finally:
         s.close()
+
+
+@app.post("/events", response_model=CreateEventOut)
+def create_event(
+    payload: CreateEventIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.bar_id is not None:
+        bar = db.get(Bar, payload.bar_id)
+        if not bar:
+            raise HTTPException(404, "Bar not found")
+
+    event = Event(
+        bar_id=payload.bar_id,
+        name=payload.name,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
+    db.add(event)
+    db.flush()
+
+    get_or_create_event_config(db, event.id)
+    db.add(EventStaff(event_id=event.id, user_id=user.id, role="admin"))
+    db.commit()
+
+    return {
+        "event_id": event.id,
+        "name": event.name,
+        "starts_at": event.starts_at.isoformat(),
+        "ends_at": event.ends_at.isoformat(),
+        "bar_id": event.bar_id,
+    }
+
+
+@app.get("/events/{event_id}/qr-pack", response_model=QrPackOut)
+def get_event_qr_pack(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+
+    return {
+        "event_id": event_id,
+        "qrs": {
+            "join": f"tore://join?event_id={event_id}",
+            "menu": f"tore://menu?event_id={event_id}",
+            "entry": f"tore://entry?event_id={event_id}",
+            "admin_config": f"tore://admin_config?event_id={event_id}",
+            "staff_entry": f"tore://staff_entry?event_id={event_id}",
+        },
+    }
 
 
 @app.get("/events/{event_id}/config", response_model=EventConfigOut)

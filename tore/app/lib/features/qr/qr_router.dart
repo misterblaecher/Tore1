@@ -62,6 +62,30 @@ Future<void> handleQr({
     return;
   }
 
+  if (result.type == 'admin_config' &&
+      !_isRoleAllowed(result.grantedRole, 'admin')) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const QrForbiddenScreen(
+          roleRequired: 'admin',
+        ),
+      ),
+    );
+    return;
+  }
+
+  if (result.type == 'staff_entry' &&
+      !_isRoleAllowed(result.grantedRole, 'entry')) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const QrForbiddenScreen(
+          roleRequired: 'entry',
+        ),
+      ),
+    );
+    return;
+  }
+
   final config = await _fetchConfigSafe(ref, result.eventId!);
   if (!_isFeatureEnabled(config, result.type)) {
     await Navigator.of(context).push(
@@ -105,6 +129,36 @@ Future<void> handleQr({
         MaterialPageRoute(builder: (_) => const CheckinScreen()),
       );
       return;
+    case 'admin_config':
+      ref.read(appContextProvider.notifier).enterEvent(
+            eventId: result.eventId!,
+            eventName: 'Event #${result.eventId}',
+          );
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AdminConfigPlaceholder(eventId: result.eventId!),
+        ),
+      );
+      return;
+    case 'staff_entry':
+      ref.read(appContextProvider.notifier).enterEvent(
+            eventId: result.eventId!,
+            eventName: 'Event #${result.eventId}',
+          );
+
+      final modeLabel = _isRoleAllowed(result.grantedRole, 'admin')
+          ? 'Gestion staff'
+          : 'Entrée staff';
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => StaffEntryPlaceholder(
+            eventId: result.eventId!,
+            modeLabel: modeLabel,
+          ),
+        ),
+      );
+      return;
     default:
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -132,6 +186,9 @@ bool _isFeatureEnabled(EventConfig? config, String type) {
       return config.menuEnabled;
     case 'entry':
       return config.entryEnabled;
+    case 'admin_config':
+    case 'staff_entry':
+      return true;
     case 'join':
     default:
       return true;
@@ -199,7 +256,11 @@ QrResolveResult _localResolve(String raw) {
     );
   }
 
-  if (type != 'menu' && type != 'join' && type != 'entry') {
+  if (type != 'menu' &&
+      type != 'join' &&
+      type != 'entry' &&
+      type != 'admin_config' &&
+      type != 'staff_entry') {
     return const QrResolveResult(
       valid: false,
       type: 'unknown',
@@ -215,7 +276,13 @@ QrResolveResult _localResolve(String raw) {
     type: type,
     eventId: eventId,
     reason: null,
-    requiredRole: type == 'entry' ? 'entry' : 'guest',
+    requiredRole: type == 'entry'
+        ? 'entry'
+        : type == 'admin_config'
+            ? 'admin'
+            : type == 'staff_entry'
+                ? 'entry'
+                : 'guest',
     grantedRole: 'guest',
   );
 }
