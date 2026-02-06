@@ -39,7 +39,9 @@ class Bar(Base):
 class Event(Base):
     __tablename__ = "events"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bars.id"), index=True, nullable=True
+    )
     name: Mapped[str] = mapped_column(String, default="")
     starts_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     ends_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc() + timedelta(hours=6))

@@ -42,6 +42,39 @@ class EntryPlaceholder extends StatelessWidget {
   }
 }
 
+class AdminConfigPlaceholder extends StatelessWidget {
+  const AdminConfigPlaceholder({super.key, required this.eventId});
+
+  final int eventId;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PlaceholderScaffold(
+      title: 'Admin Config',
+      eventId: eventId,
+    );
+  }
+}
+
+class StaffEntryPlaceholder extends StatelessWidget {
+  const StaffEntryPlaceholder({
+    super.key,
+    required this.eventId,
+    required this.modeLabel,
+  });
+
+  final int eventId;
+  final String modeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PlaceholderScaffold(
+      title: modeLabel,
+      eventId: eventId,
+    );
+  }
+}
+
 class _PlaceholderScaffold extends StatelessWidget {
   const _PlaceholderScaffold({required this.title, required this.eventId});
 

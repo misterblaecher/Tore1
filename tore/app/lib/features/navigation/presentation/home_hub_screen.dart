@@ -7,6 +7,8 @@ import '../../menu_market/presentation/menu_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
+import '../../events/presentation/create_event_screen.dart';
+import '../../events/presentation/qr_pack_screen.dart';
 import 'checkin_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
@@ -57,6 +59,17 @@ class HomeHubScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _CardLink(
+            icon: Icons.event_available_outlined,
+            title: 'Créer un event',
+            subtitle: 'Nouveau event + QR Pack officiel',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CreateEventScreen()),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          _CardLink(
             icon: Icons.near_me_outlined,
             title: 'Bars à proximité',
             subtitle: 'Trouver des bars autour de toi',
@@ -97,6 +110,19 @@ class HomeHubScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
+            _CardLink(
+              icon: Icons.qr_code_2_outlined,
+              title: 'QR Pack',
+              subtitle: 'Accéder aux QR officiels',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => QrPackScreen(eventId: ctx.activeEventId!),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
             if (menuEnabled) ...[
               _CardLink(
                 icon: Icons.restaurant_menu_outlined,
