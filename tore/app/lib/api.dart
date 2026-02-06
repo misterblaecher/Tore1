@@ -1,12 +1,27 @@
+import 'package:dio/dio.dart';
+
 import 'core/network/api_client.dart';
+import 'shared/cache/cache_store.dart';
+import 'shared/cache/offline_no_cache_exception.dart';
+
+class MenuFetchResult {
+  final List<dynamic> items;
+  final bool fromCache;
+
+  const MenuFetchResult({required this.items, required this.fromCache});
+}
 
 class Api {
   final ApiClient _client;
+  final CacheStore _cache;
 
-  Api.fromClient(this._client);
+  Api.fromClient(this._client, {CacheStore? cacheStore})
+      : _cache = cacheStore ?? CacheStore();
 
   // Si tu veux garder l'ancien constructeur temporairement :
-  Api(String baseUrl) : _client = ApiClient.create(baseUrl: baseUrl);
+  Api(String baseUrl)
+      : _client = ApiClient.create(baseUrl: baseUrl),
+        _cache = CacheStore();
 
   Future<List<dynamic>> bars() async =>
       (await _client.dio.get('/bars')).data as List<dynamic>;
@@ -19,8 +34,38 @@ class Api {
         (await _client.dio.get('/events/$eventId')).data as Map,
       );
 
-  Future<List<dynamic>> menu(int eventId) async =>
-      (await _client.dio.get('/events/$eventId/menu')).data as List<dynamic>;
+  Future<List<dynamic>> menu(int eventId) async {
+    final result = await menuWithCacheStatus(eventId);
+    return result.items;
+  }
+
+  Future<MenuFetchResult> menuWithCacheStatus(int eventId) async {
+    final cacheKey = 'event_menu_$eventId';
+    try {
+      final res = await _client.dio.get(
+        '/events/$eventId/menu',
+        options: Options(
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+          sendTimeout: const Duration(seconds: 5),
+        ),
+      );
+      final data = (res.data as List<dynamic>).cast<dynamic>();
+      await _cache.setJson(
+        cacheKey,
+        <String, dynamic>{'items': data},
+        ttl: const Duration(minutes: 30),
+      );
+      return MenuFetchResult(items: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      final items = cached?['items'];
+      if (items is List<dynamic>) {
+        return MenuFetchResult(items: items, fromCache: true);
+      }
+      throw const OfflineNoCacheException('menu');
+    }
+  }
 
   Future<List<dynamic>> leaderboard({int? eventId}) async {
     final res = await _client.dio.get(

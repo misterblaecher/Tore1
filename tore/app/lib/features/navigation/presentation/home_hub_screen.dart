@@ -9,6 +9,7 @@ import '../../qr/presentation/qr_scanner_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../events/presentation/create_event_screen.dart';
 import '../../events/presentation/qr_pack_screen.dart';
+import '../../../shared/cache/offline_no_cache_exception.dart';
 import 'checkin_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
@@ -24,10 +25,16 @@ class HomeHubScreen extends ConsumerWidget {
       data: (value) => value,
       orElse: () => null,
     );
-    final menuEnabled = config?.menuEnabled ?? true;
-    final walletEnabled = config?.walletEnabled ?? true;
-    final entryEnabled = config?.entryEnabled ?? false;
-    final checkinEnabled = config?.checkinEnabled ?? false;
+    final configOfflineLimited = configAsync?.maybeWhen(
+          error: (err, _) => err is OfflineNoCacheException,
+          orElse: () => false,
+        ) ??
+        false;
+
+    final menuEnabled = configOfflineLimited ? true : (config?.menuEnabled ?? true);
+    final walletEnabled = configOfflineLimited ? false : (config?.walletEnabled ?? true);
+    final entryEnabled = configOfflineLimited ? false : (config?.entryEnabled ?? false);
+    final checkinEnabled = configOfflineLimited ? false : (config?.checkinEnabled ?? false);
 
     return Scaffold(
       appBar: AppBar(
@@ -110,6 +117,10 @@ class HomeHubScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
+            if (configOfflineLimited) ...[
+              const _LimitedModeNotice(),
+              const SizedBox(height: 12),
+            ],
             _CardLink(
               icon: Icons.qr_code_2_outlined,
               title: 'QR Pack',
@@ -227,6 +238,33 @@ class _CardLink extends StatelessWidget {
               const Icon(Icons.chevron_right),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LimitedModeNotice extends StatelessWidget {
+  const _LimitedModeNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.blueGrey.shade100,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Mode limité : configuration indisponible hors-ligne.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
         ),
       ),
     );

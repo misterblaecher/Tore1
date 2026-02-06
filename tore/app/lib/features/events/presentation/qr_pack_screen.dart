@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/models/qr_pack.dart';
+import '../../../shared/widgets/offline_fallback_screen.dart';
 import 'events_providers.dart';
 
 class QrPackScreen extends ConsumerWidget {
@@ -22,7 +24,16 @@ class QrPackScreen extends ConsumerWidget {
       body: packAsync.when(
         data: (pack) => _QrPackBody(pack: pack),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Impossible de charger le QR pack.')),
+        error: (err, _) {
+          if (err is OfflineNoCacheException) {
+            return OfflineFallbackScreen(
+              title: 'Hors-ligne',
+              message: 'Impossible de charger le QR pack sans réseau ni cache.',
+              onRetry: () => ref.invalidate(qrPackProvider(eventId)),
+            );
+          }
+          return const Center(child: Text('Impossible de charger le QR pack.'));
+        },
       ),
     );
   }

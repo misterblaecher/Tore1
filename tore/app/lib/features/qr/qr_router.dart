@@ -13,6 +13,7 @@ import '../qr/presentation/qr_unknown_screen.dart';
 import '../qr/qr_resolve_service.dart';
 import '../staff/presentation/staff_invite_accept_screen.dart';
 import '../staff/presentation/staff_management_screen.dart';
+import '../../shared/widgets/offline_fallback_screen.dart';
 
 Future<void> handleQr({
   required BuildContext context,
@@ -22,10 +23,12 @@ Future<void> handleQr({
   final trimmed = raw.trim();
   final resolver = ref.read(qrResolveServiceProvider);
   QrResolveResult result;
+  var resolvedFromFallback = false;
 
   try {
     result = await resolver.resolve(trimmed);
   } catch (_) {
+    resolvedFromFallback = true;
     result = _localResolve(trimmed);
   }
 
@@ -46,6 +49,28 @@ Future<void> handleQr({
         builder: (_) => QrUnknownScreen(
           raw: trimmed,
           reason: _reasonMessage(result.reason),
+        ),
+      ),
+    );
+    return;
+  }
+
+  if (resolvedFromFallback &&
+      (result.type == 'staff_invite' ||
+          result.type == 'admin_config' ||
+          result.type == 'staff_entry')) {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Hors-ligne')),
+          body: OfflineFallbackScreen(
+            title: 'Hors-ligne',
+            message: 'Action indisponible hors-ligne.',
+            onRetry: () {
+              Navigator.of(context).pop();
+              handleQr(context: context, ref: ref, raw: raw);
+            },
+          ),
         ),
       ),
     );

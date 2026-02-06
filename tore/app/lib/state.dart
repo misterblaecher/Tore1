@@ -3,10 +3,12 @@ import 'api.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_models.dart';
 import 'core/network/providers.dart';
+import 'shared/cache/cache_providers.dart';
 
 final apiProvider = Provider<Api>((ref) {
   final client = ref.watch(apiClientProvider);
-  return Api.fromClient(client);
+  final cache = ref.watch(cacheStoreProvider);
+  return Api.fromClient(client, cacheStore: cache);
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
