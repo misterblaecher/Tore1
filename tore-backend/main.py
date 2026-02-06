@@ -353,7 +353,7 @@ def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
         .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
         .first()
     )
-    if not staff or not staff.is_active:
+    if not staff or staff.is_active is False:
         return "guest"
     role = (staff.role or "").lower()
     if role == "admin":
