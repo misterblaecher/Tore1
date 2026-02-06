@@ -6,6 +6,7 @@ class EventConfig {
   final bool checkinEnabled;
   final bool battlesEnabled;
   final bool huntEnabled;
+  final bool reportEnabled;
   final String? updatedAt;
   final String? updatedByUserId;
   final String? role;
@@ -18,6 +19,7 @@ class EventConfig {
     required this.checkinEnabled,
     required this.battlesEnabled,
     required this.huntEnabled,
+    required this.reportEnabled,
     required this.updatedAt,
     required this.updatedByUserId,
     required this.role,
@@ -32,6 +34,7 @@ class EventConfig {
       checkinEnabled: json['checkin_enabled'] == true,
       battlesEnabled: json['battles_enabled'] == true,
       huntEnabled: json['hunt_enabled'] == true,
+      reportEnabled: json['report_enabled'] == true,
       updatedAt: json['updated_at']?.toString(),
       updatedByUserId: json['updated_by_user_id']?.toString(),
       role: json['role']?.toString(),
@@ -47,6 +50,7 @@ class EventConfig {
       checkinEnabled: false,
       battlesEnabled: false,
       huntEnabled: false,
+      reportEnabled: false,
       updatedAt: null,
       updatedByUserId: null,
       role: null,

@@ -9,6 +9,7 @@ import '../../qr/presentation/qr_scanner_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../events/presentation/create_event_screen.dart';
 import '../../events/presentation/qr_pack_screen.dart';
+import '../../reports/presentation/report_screen.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import 'checkin_screen.dart';
 
@@ -35,6 +36,8 @@ class HomeHubScreen extends ConsumerWidget {
     final walletEnabled = configOfflineLimited ? false : (config?.walletEnabled ?? true);
     final entryEnabled = configOfflineLimited ? false : (config?.entryEnabled ?? false);
     final checkinEnabled = configOfflineLimited ? false : (config?.checkinEnabled ?? false);
+    final reportEnabled = configOfflineLimited ? false : (config?.reportEnabled ?? false);
+    final isAdmin = (config?.role ?? '') == 'admin';
 
     return Scaffold(
       appBar: AppBar(
@@ -134,6 +137,21 @@ class HomeHubScreen extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 12),
+            if (reportEnabled && isAdmin) ...[
+              _CardLink(
+                icon: Icons.insert_chart_outlined,
+                title: 'Rapport soirée',
+                subtitle: 'Bilan ventes, coûts et export',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReportScreen(eventId: ctx.activeEventId!),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
             if (menuEnabled) ...[
               _CardLink(
                 icon: Icons.restaurant_menu_outlined,
