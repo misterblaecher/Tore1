@@ -42,8 +42,6 @@ class EntryPlaceholder extends StatelessWidget {
   }
 }
 
-<<<<<<< HEAD
-=======
 class AdminConfigPlaceholder extends StatelessWidget {
   const AdminConfigPlaceholder({super.key, required this.eventId});
 
@@ -76,8 +74,6 @@ class StaffEntryPlaceholder extends StatelessWidget {
     );
   }
 }
-
->>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf
 class _PlaceholderScaffold extends StatelessWidget {
   const _PlaceholderScaffold({required this.title, required this.eventId});
 
@@ -111,8 +107,4 @@ class _PlaceholderScaffold extends StatelessWidget {
       ),
     );
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> cccfa9d6d4f0e1ae9c1d17452eb3be68653b49bf

@@ -126,6 +126,37 @@ class EventStaff(Base):
     event_id: Mapped[int] = mapped_column(Integer, index=True)
     user_id: Mapped[str] = mapped_column(String, index=True)
     role: Mapped[str] = mapped_column(String, default="entry")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class StaffInviteToken(Base):
+    __tablename__ = "staff_invite_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    role: Mapped[str] = mapped_column(String, default="entry")
+    token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    max_uses: Mapped[int] = mapped_column(Integer, default=1)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class EventAuditLog(Base):
+    __tablename__ = "event_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    action: Mapped[str] = mapped_column(String, default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
 
 class EventConfig(Base):
