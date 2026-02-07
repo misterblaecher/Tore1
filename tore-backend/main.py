@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 from urllib.parse import urlparse, parse_qs
 
 import jwt
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -44,8 +44,9 @@ from models import (
     BattleParticipant,
     AppUser,
     AppToken,
+    PartnerMembership,
 )
-from partner_auth import router as partner_auth_router
+from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
 
 
 # ---------------------------------------------------------------------
@@ -207,6 +208,54 @@ def _hash_token(raw: str) -> str:
 
 
 security = HTTPBearer(auto_error=False)
+
+
+def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    raw = authorization.strip()
+    if raw.lower().startswith("bearer "):
+        raw = raw[7:].strip()
+    raw = raw.strip().strip('"').strip("'").strip()
+    return raw or None
+
+
+def _resolve_app_user_from_token(raw: str, db: Session) -> Optional[AppUser]:
+    token_hash = _hash_token(raw)
+    tok = (
+        db.query(AppToken)
+        .filter(AppToken.token_hash == token_hash, AppToken.revoked_at.is_(None))
+        .first()
+    )
+    if not tok:
+        return None
+    return db.get(AppUser, tok.user_id)
+
+
+def _resolve_partner_identity_from_token(raw: str, db: Session) -> Optional[Dict[str, Any]]:
+    try:
+        payload = jwt.decode(raw, JWT_SECRET, algorithms=[JWT_ALG])
+    except jwt.PyJWTError:
+        return None
+
+    try:
+        user_id = int(payload.get("sub"))
+        bar_id = int(payload.get("bar_id"))
+    except (TypeError, ValueError):
+        return None
+
+    role = payload.get("role")
+    name = payload.get("name")
+
+    m = (
+        db.query(PartnerMembership)
+        .filter(PartnerMembership.user_id == user_id, PartnerMembership.bar_id == bar_id)
+        .first()
+    )
+    if not m:
+        return None
+
+    return {"user_id": user_id, "bar_id": bar_id, "role": role, "display_name": name}
 
 
 def get_current_user(
@@ -660,6 +709,25 @@ class CreateEventOut(BaseModel):
     bar_id: Optional[int] = None
 
 
+class EventSummaryOut(BaseModel):
+    id: int
+    bar_id: Optional[int] = None
+    name: str
+    starts_at: datetime
+    ends_at: datetime
+    entry_price_cents: int
+    ticket_mode: bool
+    ticket_value_cents: int
+
+
+class PartnerBarOut(BaseModel):
+    id: int
+    name: str
+    city: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
 class QrPackOut(BaseModel):
     event_id: int
     qrs: Dict[str, str]
@@ -706,6 +774,49 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     ensure_seed()
+
+
+@app.get("/partner/portal/bar", response_model=PartnerBarOut)
+def partner_portal_bar(
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    bar = db.get(Bar, identity["bar_id"])
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+    return PartnerBarOut(
+        id=bar.id,
+        name=bar.name,
+        city=bar.city,
+        lat=bar.lat,
+        lng=bar.lng,
+    )
+
+
+@app.get("/partner/portal/events", response_model=List[EventSummaryOut])
+def partner_portal_events(
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Event)
+        .filter(Event.bar_id == identity["bar_id"])
+        .order_by(Event.starts_at.desc())
+        .all()
+    )
+    return [
+        EventSummaryOut(
+            id=row.id,
+            bar_id=row.bar_id,
+            name=row.name,
+            starts_at=row.starts_at,
+            ends_at=row.ends_at,
+            entry_price_cents=row.entry_price_cents,
+            ticket_mode=row.ticket_mode,
+            ticket_value_cents=row.ticket_value_cents,
+        )
+        for row in rows
+    ]
 
 
 # ---------------------------------------------------------------------
@@ -965,6 +1076,27 @@ def list_events(bar_id: int):
         ]
     finally:
         s.close()
+
+
+@app.get("/events", response_model=List[EventSummaryOut])
+def list_all_events(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(Event).order_by(Event.starts_at.desc()).limit(limit).all()
+    return [
+        EventSummaryOut(
+            id=row.id,
+            bar_id=row.bar_id,
+            name=row.name,
+            starts_at=row.starts_at,
+            ends_at=row.ends_at,
+            entry_price_cents=row.entry_price_cents,
+            ticket_mode=row.ticket_mode,
+            ticket_value_cents=row.ticket_value_cents,
+        )
+        for row in rows
+    ]
 
 
 @app.get("/events/{event_id}")
@@ -1717,15 +1849,30 @@ def record_entry_scan(
 @app.get("/events/{event_id}/entry/stats", response_model=EntryStatsOut)
 def get_entry_stats(
     event_id: int,
-    user: AppUser = Depends(get_current_user),
+    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
-    require_feature(db, event_id, "entry_enabled")
-    require_role_for_event(db, user.id, event_id, "entry")
-    return entry_stats(db, event_id)
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    user = _resolve_app_user_from_token(raw, db)
+    if user:
+        require_feature(db, event_id, "entry_enabled")
+        require_role_for_event(db, user.id, event_id, "entry")
+        return entry_stats(db, event_id)
+
+    identity = _resolve_partner_identity_from_token(raw, db)
+    if identity:
+        if event.bar_id != identity["bar_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        require_feature(db, event_id, "entry_enabled")
+        return entry_stats(db, event_id)
+
+    raise HTTPException(status_code=401, detail="Invalid token")
 
 
 @app.get("/events/{event_id}/entry/logs", response_model=List[EntryLogOut])

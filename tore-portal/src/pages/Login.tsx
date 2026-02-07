@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { setToken } from '../lib/auth'
+import { getSession, setSession, setToken } from '../lib/auth'
 import { API_BASE } from '../lib/api'
 import { isApiUnavailable } from '../lib/errors'
 import ApiUnavailable from '../ui/ApiUnavailable'
@@ -14,15 +14,18 @@ type AuthOut = {
 
 export default function Login() {
   const nav = useNavigate()
-  const [barId, setBarId] = useState<string>('')
-  const [name, setName] = useState<string>('')
-  const [pin, setPin] = useState<string>('')
+  const session = getSession()
+  const [barId, setBarId] = useState<string>(session?.bar_id ? String(session.bar_id) : '')
+  const [name, setName] = useState<string>(session?.display_name ?? '')
+  const [pin, setPin] = useState<string>(session?.pin ?? '')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [apiDown, setApiDown] = useState(false)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setApiDown(false)
     setLoading(true)
     try {
       const res = await fetch(`${API_BASE}/partner/auth/login`, {
@@ -40,19 +43,18 @@ export default function Login() {
       }
       const data = (await res.json()) as AuthOut
       setToken(data.token)
+      setSession({ bar_id: data.bar_id, display_name: data.display_name, pin, role: data.role })
       nav('/')
     } catch (err: any) {
       if (isApiUnavailable(err)) {
-        setError('API indisponible. Vérifie la connexion.')
+        setApiDown(true)
       } else {
-        setError(err?.message ?? 'Erreur de connexion')
+        setError('Impossible de se connecter. Vérifie le bar ID, le nom et le PIN.')
       }
     } finally {
       setLoading(false)
     }
   }
-
-  const apiDown = error ? isApiUnavailable(new Error(error)) : false
 
   if (apiDown) {
     return (
@@ -84,7 +86,7 @@ export default function Login() {
             <span style={{ opacity: 0.85 }}>Bar ID</span>
             <input
               value={barId}
-              onChange={(e) => setBarId(e.target.value)}
+              onChange={(e) => setBarId(e.target.value.replace(/\D/g, ''))}
               inputMode="numeric"
               required
               style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
@@ -105,10 +107,11 @@ export default function Login() {
             <span style={{ opacity: 0.85 }}>PIN (4 chiffres)</span>
             <input
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
               inputMode="numeric"
               required
               maxLength={4}
+              pattern="\d{4}"
               style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
             />
           </label>

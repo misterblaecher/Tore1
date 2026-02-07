@@ -15,7 +15,7 @@ export default function ApiUnavailable() {
     >
       <div style={{ fontSize: 22, fontWeight: 800 }}>API indisponible</div>
       <div style={{ opacity: 0.85 }}>
-        Impossible de joindre le serveur. Vérifie la connexion réseau ou la variable <code>VITE_API_BASE_URL</code>.
+        Impossible de joindre le serveur pour le moment. Vérifie la connexion et réessaie dans un instant.
       </div>
       <div style={{ opacity: 0.7, fontSize: 13 }}>API: {API_BASE}</div>
       <button
