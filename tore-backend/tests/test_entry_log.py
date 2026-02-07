@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session, now_utc
-from main import app, get_current_user
-from models import Bar, Event, EventConfig, EventStaff, AppUser
+from main import app, get_current_user, _hash_token
+from models import Bar, Event, EventConfig, EventStaff, AppUser, AppToken
 
 
 def _seed_event():
@@ -25,14 +25,17 @@ def _seed_event():
         s.add(user)
         staff = EventStaff(event_id=event.id, user_id=user.id, role="entry")
         s.add(staff)
+        raw_token = f"test-token-{event.id}"
+        token = AppToken(user_id=user.id, token_hash=_hash_token(raw_token))
+        s.add(token)
         s.commit()
-        return event.id, user
+        return event.id, user, raw_token
     finally:
         s.close()
 
 
 def test_idempotency_same_key_counts_once():
-    event_id, user = _seed_event()
+    event_id, user, raw_token = _seed_event()
 
     app.dependency_overrides[get_current_user] = lambda: user
     client = TestClient(app)
@@ -56,7 +59,7 @@ def test_idempotency_same_key_counts_once():
 
 
 def test_delta_negative_decrements():
-    event_id, user = _seed_event()
+    event_id, user, raw_token = _seed_event()
 
     app.dependency_overrides[get_current_user] = lambda: user
     client = TestClient(app)
@@ -80,7 +83,10 @@ def test_delta_negative_decrements():
         },
     )
 
-    stats = client.get(f"/events/{event_id}/entry/stats")
+    stats = client.get(
+        f"/events/{event_id}/entry/stats",
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
     assert stats.status_code == 200
     assert stats.json()["total"] == 0
 
@@ -88,12 +94,16 @@ def test_delta_negative_decrements():
 
 
 def test_wallet_history_stub_returns_empty_list():
-    event_id, user = _seed_event()
+    event_id, user, raw_token = _seed_event()
 
     app.dependency_overrides[get_current_user] = lambda: user
     client = TestClient(app)
 
-    res = client.get(f"/events/{event_id}/wallet/history", params={"user_id": user.id})
+    res = client.get(
+        f"/events/{event_id}/wallet/history",
+        params={"user_id": user.id},
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
     assert res.status_code == 200
     assert res.json() == []
 

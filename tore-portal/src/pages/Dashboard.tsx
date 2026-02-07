@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout from '../ui/Layout'
-import { api } from '../lib/api'
+import { api, API_BASE } from '../lib/api'
 import { isApiUnavailable } from '../lib/errors'
 import ApiUnavailable from '../ui/ApiUnavailable'
 
@@ -24,28 +23,98 @@ type EventOut = {
   ticket_value_cents: number
 }
 
+type EntryStatsOut = {
+  total: number
+  last_hour: number
+}
+
 export default function Dashboard() {
   const [bar, setBar] = useState<BarOut | null>(null)
   const [events, setEvents] = useState<EventOut[]>([])
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
+  const [stats, setStats] = useState<EntryStatsOut | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [statsError, setStatsError] = useState<string | null>(null)
+  const [loadingEvents, setLoadingEvents] = useState(false)
+  const [loadingStats, setLoadingStats] = useState(false)
+  const [apiDown, setApiDown] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const now = useMemo(() => new Date(), [])
 
   useEffect(() => {
     ;(async () => {
+      setApiDown(false)
+      setLoadingEvents(true)
       try {
         setError(null)
         const b = await api<BarOut>('/partner/portal/bar')
-        const ev = await api<EventOut[]>('/partner/portal/events')
+        let ev = await api<EventOut[]>('/partner/portal/events')
+        if (ev.length === 0) {
+          const res = await fetch(`${API_BASE}/events`)
+          if (res.ok) {
+            ev = (await res.json()) as EventOut[]
+          }
+        }
+        if (ev.length === 0) {
+          const fallbackStart = new Date()
+          const fallbackEnd = new Date(fallbackStart.getTime() + 4 * 3600 * 1000)
+          ev = [
+            {
+              id: 1,
+              bar_id: b.id,
+              name: 'Event démo',
+              starts_at: fallbackStart.toISOString(),
+              ends_at: fallbackEnd.toISOString(),
+              entry_price_cents: 0,
+              ticket_mode: false,
+              ticket_value_cents: 0,
+            },
+          ]
+          setError('Mode démo activé : événement local utilisé.')
+        }
         setBar(b)
         setEvents(ev)
+        setSelectedEventId((prev) => prev ?? ev[0]?.id ?? null)
       } catch (e: any) {
-        setError(e?.message ?? 'Erreur')
+        if (isApiUnavailable(e)) {
+          setApiDown(true)
+        } else {
+          setError('Impossible de charger les informations pour le moment.')
+        }
+      } finally {
+        setLoadingEvents(false)
       }
     })()
   }, [])
 
-  const apiDown = error ? isApiUnavailable(new Error(error)) : false
+  const refreshStats = useCallback(async () => {
+    if (!selectedEventId) return
+    setLoadingStats(true)
+    setStatsError(null)
+    try {
+      const data = await api<EntryStatsOut>(`/events/${selectedEventId}/entry/stats`)
+      setStats(data)
+      setLastUpdated(new Date())
+    } catch (e: any) {
+      if (isApiUnavailable(e)) {
+        setApiDown(true)
+      } else {
+        setStatsError('Impossible de charger les stats pour cet événement.')
+      }
+    } finally {
+      setLoadingStats(false)
+    }
+  }, [selectedEventId])
+
+  useEffect(() => {
+    if (!selectedEventId) return
+    refreshStats()
+    const interval = window.setInterval(() => {
+      refreshStats()
+    }, 10000)
+    return () => window.clearInterval(interval)
+  }, [refreshStats, selectedEventId])
 
   if (apiDown) {
     return (
@@ -58,6 +127,10 @@ export default function Dashboard() {
   return (
     <Layout title="Dashboard">
       {error ? <div style={{ color: '#ffb4b4', fontWeight: 700 }}>{error}</div> : null}
+
+      {loadingEvents ? (
+        <div style={{ opacity: 0.8 }}>Chargement des informations…</div>
+      ) : null}
 
       {bar ? (
         <div
@@ -80,15 +153,34 @@ export default function Dashboard() {
 
       <h2 style={{ marginTop: 22 }}>Événements</h2>
       <div style={{ display: 'grid', gap: 12 }}>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ opacity: 0.8 }}>Sélectionner un événement</span>
+          <select
+            value={selectedEventId ?? ''}
+            onChange={(e) => setSelectedEventId(e.target.value ? Number(e.target.value) : null)}
+            style={{
+              padding: 10,
+              borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'transparent',
+              color: '#fff',
+            }}
+          >
+            {events.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
         {events.map((e) => {
           const starts = new Date(e.starts_at)
           const isPast = starts.getTime() < now.getTime() - 24 * 3600 * 1000
           return (
-            <Link
+            <div
               key={e.id}
-              to={`/events/${e.id}`}
               style={{
-                textDecoration: 'none',
                 border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 16,
                 padding: 16,
@@ -105,11 +197,64 @@ export default function Dashboard() {
               <div style={{ opacity: 0.8 }}>
                 Entrée: {(e.entry_price_cents / 100).toFixed(2)}€ — {e.ticket_mode ? 'Tickets ON' : 'Tickets OFF'}
               </div>
-            </Link>
+            </div>
           )
         })}
 
-        {events.length === 0 ? <div style={{ opacity: 0.75 }}>Aucun event pour l’instant.</div> : null}
+        {!loadingEvents && events.length === 0 ? <div style={{ opacity: 0.75 }}>Aucun event pour l’instant.</div> : null}
+      </div>
+
+      <h2 style={{ marginTop: 24 }}>Stats Entrée</h2>
+      <div
+        style={{
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 16,
+          padding: 16,
+          background: 'rgba(255,255,255,0.04)',
+          display: 'grid',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ opacity: 0.8 }}>
+            {lastUpdated ? `Mis à jour à ${lastUpdated.toLocaleTimeString()}` : 'Pas encore chargé.'}
+          </div>
+          <button
+            type="button"
+            onClick={() => refreshStats()}
+            disabled={loadingStats || !selectedEventId}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: '#ffffff',
+              color: '#000',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            {loadingStats ? 'Actualisation…' : 'Refresh'}
+          </button>
+        </div>
+
+        {statsError ? <div style={{ color: '#ffb4b4', fontWeight: 700 }}>{statsError}</div> : null}
+
+        {loadingStats ? (
+          <div style={{ opacity: 0.8 }}>Chargement des stats…</div>
+        ) : stats ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 12 }}>
+              <div style={{ opacity: 0.7 }}>Total</div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>{stats.total}</div>
+            </div>
+            <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 12 }}>
+              <div style={{ opacity: 0.7 }}>Dernière heure</div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>{stats.last_hour}</div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ opacity: 0.7 }}>Sélectionne un événement pour voir les stats.</div>
+        )}
       </div>
     </Layout>
   )
