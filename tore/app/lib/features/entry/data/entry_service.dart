@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../core/network/api_client.dart';
+import 'package:tore/core/network/providers.dart';
 
 class EntryService {
   EntryService(this._dio);
