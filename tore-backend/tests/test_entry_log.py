@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+import uuid
+
 from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session, now_utc
@@ -12,32 +15,44 @@ def _seed_event():
         bar = Bar(
             name="Test Bar",
             city="Test City",
-            partner_code=f"TEST{int(now_utc().timestamp())}",
+            partner_code=f"TEST{uuid.uuid4().hex[:10]}",
         )
         s.add(bar)
         s.flush()
+
         event = Event(bar_id=bar.id, name="Test Event")
         s.add(event)
         s.flush()
+
         config = EventConfig(event_id=event.id, entry_enabled=True)
         s.add(config)
+
         user = AppUser(id=f"user_{event.id}", display_name="Tester")
         s.add(user)
+
         staff = EventStaff(event_id=event.id, user_id=user.id, role="entry")
         s.add(staff)
+
         raw_token = f"test-token-{event.id}"
         token = AppToken(user_id=user.id, token_hash=_hash_token(raw_token))
         s.add(token)
+
         s.commit()
-        return event.id, user, raw_token
+
+        # ⚠️ Important : lire l'id avant de fermer la session (sinon objet détaché/expiré)
+        user_id = user.id
+
+        return event.id, user_id, raw_token
     finally:
         s.close()
 
 
 def test_idempotency_same_key_counts_once():
-    event_id, user, raw_token = _seed_event()
+    event_id, user_id, raw_token = _seed_event()
 
-    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=user_id, role="entry", bar_id=1
+    )
     client = TestClient(app)
 
     payload = {
@@ -59,9 +74,11 @@ def test_idempotency_same_key_counts_once():
 
 
 def test_delta_negative_decrements():
-    event_id, user, raw_token = _seed_event()
+    event_id, user_id, raw_token = _seed_event()
 
-    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=user_id, role="entry", bar_id=1
+    )
     client = TestClient(app)
 
     client.post(
@@ -94,14 +111,16 @@ def test_delta_negative_decrements():
 
 
 def test_wallet_history_stub_returns_empty_list():
-    event_id, user, raw_token = _seed_event()
+    event_id, user_id, raw_token = _seed_event()
 
-    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=user_id, role="entry", bar_id=1
+    )
     client = TestClient(app)
 
     res = client.get(
         f"/events/{event_id}/wallet/history",
-        params={"user_id": user.id},
+        params={"user_id": user_id},
         headers={"Authorization": f"Bearer {raw_token}"},
     )
     assert res.status_code == 200
