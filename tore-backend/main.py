@@ -720,6 +720,22 @@ class EventSummaryOut(BaseModel):
     ticket_value_cents: int
 
 
+class PartnerEventDrinkOut(BaseModel):
+    drink_id: int
+    name: str
+    type: str
+    base_price_cents: int
+    current_price_cents: int
+    override_price_cents: Optional[int] = None
+
+
+class PartnerEventDrinkIn(BaseModel):
+    name: str
+    type: str
+    base_price_cents: int = Field(ge=0)
+    override_price_cents: Optional[int] = Field(default=None, ge=0)
+
+
 class PartnerBarOut(BaseModel):
     id: int
     name: str
@@ -817,6 +833,145 @@ def partner_portal_events(
         )
         for row in rows
     ]
+
+
+def _get_partner_event(event_id: int, identity: Dict[str, Any], db: Session) -> Event:
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    return event
+
+
+def _require_partner_role(identity: Dict[str, Any], role: str) -> None:
+    if identity.get("role") != role:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@app.get("/partner/portal/events/{event_id}", response_model=EventSummaryOut)
+def partner_portal_event_detail(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    event = _get_partner_event(event_id, identity, db)
+    return EventSummaryOut(
+        id=event.id,
+        bar_id=event.bar_id,
+        name=event.name,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        entry_price_cents=event.entry_price_cents,
+        ticket_mode=event.ticket_mode,
+        ticket_value_cents=event.ticket_value_cents,
+    )
+
+
+@app.get("/partner/portal/events/{event_id}/drinks", response_model=List[PartnerEventDrinkOut])
+def partner_portal_event_drinks(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _get_partner_event(event_id, identity, db)
+    rows = (
+        db.query(EventDrink, Drink)
+        .join(Drink, Drink.id == EventDrink.drink_id)
+        .filter(EventDrink.event_id == event_id)
+        .order_by(Drink.type.asc(), Drink.name.asc())
+        .all()
+    )
+    return [
+        PartnerEventDrinkOut(
+            drink_id=drink.id,
+            name=drink.name,
+            type=drink.type,
+            base_price_cents=event_drink.base_price_cents,
+            current_price_cents=event_drink.current_price_cents,
+            override_price_cents=event_drink.override_price_cents,
+        )
+        for event_drink, drink in rows
+    ]
+
+
+@app.post("/partner/portal/events/{event_id}/drinks", response_model=PartnerEventDrinkOut)
+def partner_portal_event_drink_add(
+    event_id: int,
+    payload: PartnerEventDrinkIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    _get_partner_event(event_id, identity, db)
+
+    drink = (
+        db.query(Drink)
+        .filter(Drink.name == payload.name, Drink.type == payload.type)
+        .first()
+    )
+    if not drink:
+        drink = Drink(name=payload.name, type=payload.type)
+        db.add(drink)
+        db.flush()
+
+    event_drink = db.get(EventDrink, {"event_id": event_id, "drink_id": drink.id})
+    if not event_drink:
+        event_drink = EventDrink(
+            event_id=event_id,
+            drink_id=drink.id,
+            base_price_cents=payload.base_price_cents,
+            current_price_cents=payload.base_price_cents,
+            override_price_cents=payload.override_price_cents,
+            last_price_update=now_utc(),
+        )
+        db.add(event_drink)
+    else:
+        event_drink.base_price_cents = payload.base_price_cents
+        event_drink.current_price_cents = payload.base_price_cents
+        event_drink.override_price_cents = payload.override_price_cents
+        event_drink.last_price_update = now_utc()
+        db.add(event_drink)
+
+    db.add(
+        PriceHistory(
+            event_id=event_id,
+            drink_id=drink.id,
+            price_cents=event_drink.current_price_cents,
+            ts=now_utc(),
+        )
+    )
+    db.commit()
+    return PartnerEventDrinkOut(
+        drink_id=drink.id,
+        name=drink.name,
+        type=drink.type,
+        base_price_cents=event_drink.base_price_cents,
+        current_price_cents=event_drink.current_price_cents,
+        override_price_cents=event_drink.override_price_cents,
+    )
+
+
+@app.delete("/partner/portal/events/{event_id}/drinks/{drink_id}")
+def partner_portal_event_drink_remove(
+    event_id: int,
+    drink_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    _get_partner_event(event_id, identity, db)
+
+    event_drink = db.get(EventDrink, {"event_id": event_id, "drink_id": drink_id})
+    if not event_drink:
+        raise HTTPException(404, "Drink not in this event")
+
+    db.query(PriceHistory).filter(
+        PriceHistory.event_id == event_id, PriceHistory.drink_id == drink_id
+    ).delete(synchronize_session=False)
+    db.delete(event_drink)
+    db.commit()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------
