@@ -1086,7 +1086,85 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
-      <h2>4) Tester les endpoints</h2>
+      <h2>4) Staff onboarding</h2>
+      <div class="grid">
+        <div>
+          <label for="inviteRole">Rôle</label>
+          <select id="inviteRole">
+            <option value="entry" selected>entry</option>
+            <option value="bartender">bartender</option>
+          </select>
+        </div>
+        <div>
+          <label for="inviteMaxUses">Max uses</label>
+          <input id="inviteMaxUses" type="number" min="1" max="1000" value="3" />
+        </div>
+        <div>
+          <label for="inviteExpires">Expire (jours)</label>
+          <input id="inviteExpires" type="number" min="1" max="365" value="14" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="createInviteBtn">Créer invite</button>
+      </div>
+      <div id="inviteStatus" class="status"></div>
+      <h3>Staff join</h3>
+      <div class="grid">
+        <div>
+          <label for="staffJoinCode">Code invite</label>
+          <input id="staffJoinCode" placeholder="Ex: ABC123" />
+        </div>
+        <div>
+          <label for="staffJoinName">Nom d'affichage</label>
+          <input id="staffJoinName" placeholder="Ex: Léa" />
+        </div>
+        <div>
+          <label for="staffJoinPin">PIN (4 chiffres)</label>
+          <input id="staffJoinPin" placeholder="1234" maxlength="4" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="staffJoinBtn" class="secondary">Staff join</button>
+      </div>
+      <div id="staffJoinStatus" class="status"></div>
+      <label for="staffTokenInput">Token staff</label>
+      <textarea id="staffTokenInput" rows="3" placeholder="Token staff..."></textarea>
+      <p class="hint">Le token staff est stocké en localStorage.</p>
+    </div>
+
+    <div class="card">
+      <h2>5) Simuler scans</h2>
+      <div class="grid">
+        <div>
+          <label for="scanEventId">Event ID</label>
+          <input id="scanEventId" placeholder="Ex: 42" />
+        </div>
+        <div>
+          <label for="scanDelta">Delta</label>
+          <select id="scanDelta">
+            <option value="1" selected>+1</option>
+            <option value="-1">-1</option>
+          </select>
+        </div>
+        <div>
+          <label for="scanDeviceId">Device ID</label>
+          <input id="scanDeviceId" placeholder="quickstart-device" />
+        </div>
+        <div>
+          <label for="scanIdempotency">Idempotency key</label>
+          <input id="scanIdempotency" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="scanEntryBtn">POST entry/scans</button>
+        <button id="scanRefreshId" class="secondary">Regénérer clé</button>
+      </div>
+      <div id="scanStatus" class="status"></div>
+      <div id="scanStatsStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>6) Tester les endpoints</h2>
       <div class="row">
         <button id="getBarBtn">Get my bar</button>
         <button class="secondary" id="listEventsBtn">List events</button>
@@ -1095,7 +1173,7 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
-      <h2>5) Créer un event</h2>
+      <h2>7) Créer un event</h2>
       <div class="grid">
         <div>
           <label for="eventName">Nom</label>
@@ -1118,7 +1196,7 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
-      <h2>6) Modifier un event</h2>
+      <h2>8) Modifier un event</h2>
       <div class="grid">
         <div>
           <label for="editEventId">Event ID</label>
@@ -1158,18 +1236,26 @@ def quickstart() -> HTMLResponse:
     endpointList.textContent = [
       `POST ${baseUrl}/partner/auth/manager/signup`,
       `POST ${baseUrl}/partner/auth/login`,
+      `POST ${baseUrl}/partner/auth/invites`,
+      `POST ${baseUrl}/partner/auth/staff/join`,
       `GET  ${baseUrl}/partner/portal/bar`,
       `GET  ${baseUrl}/partner/portal/events`,
       `POST ${baseUrl}/partner/portal/events`,
       `PATCH ${baseUrl}/partner/portal/events/{eventId}`,
+      `POST ${baseUrl}/events/{eventId}/entry/scans`,
       `GET  ${baseUrl}/events/{eventId}/entry/stats`,
       `GET  ${baseUrl}/health`
     ].join("\\n");
 
     const tokenInput = document.getElementById("tokenInput");
+    const staffTokenInput = document.getElementById("staffTokenInput");
     const savedToken = localStorage.getItem("partnerToken");
     if (savedToken) {
       tokenInput.value = savedToken;
+    }
+    const savedStaffToken = localStorage.getItem("staffToken");
+    if (savedStaffToken) {
+      staffTokenInput.value = savedStaffToken;
     }
 
     function setStatus(element, message, ok = true) {
@@ -1228,6 +1314,13 @@ def quickstart() -> HTMLResponse:
       });
       const payload = await res.json().catch(() => ({}));
       return { res, payload };
+    }
+
+    function generateIdempotencyKey() {
+      if (window.crypto && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return `qs-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     }
 
     function normalizeDateTime(value) {
@@ -1305,6 +1398,84 @@ def quickstart() -> HTMLResponse:
       tokenInput.value = "";
       localStorage.removeItem("partnerToken");
       setStatus(document.getElementById("apiStatus"), "Token effacé.");
+    });
+
+    document.getElementById("createInviteBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const body = {
+        role: document.getElementById("inviteRole").value,
+        max_uses: Number(document.getElementById("inviteMaxUses").value || 1),
+        expires_days: Number(document.getElementById("inviteExpires").value || 30),
+      };
+      const { res, payload } = await postJson(`${baseUrl}/partner/auth/invites`, body, token);
+      if (res.ok) {
+        document.getElementById("staffJoinCode").value = payload.code;
+        setStatus(
+          document.getElementById("inviteStatus"),
+          `✅ Invite créée !\\ncode: ${payload.code}\\nrole: ${payload.role}\\nmax_uses: ${payload.max_uses}`
+        );
+      } else {
+        handleError(document.getElementById("inviteStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("staffJoinBtn").addEventListener("click", async () => {
+      const body = {
+        invite_code: document.getElementById("staffJoinCode").value.trim(),
+        display_name: document.getElementById("staffJoinName").value.trim(),
+        pin: document.getElementById("staffJoinPin").value.trim(),
+      };
+      const { res, payload } = await postJson(`${baseUrl}/partner/auth/staff/join`, body);
+      if (res.ok) {
+        staffTokenInput.value = payload.token;
+        localStorage.setItem("staffToken", payload.token);
+        setStatus(
+          document.getElementById("staffJoinStatus"),
+          `✅ Staff connecté !\\nrole: ${payload.role}\\nname: ${payload.display_name}`
+        );
+      } else {
+        handleError(document.getElementById("staffJoinStatus"), res, payload);
+      }
+    });
+
+    const scanIdempotencyInput = document.getElementById("scanIdempotency");
+    scanIdempotencyInput.value = generateIdempotencyKey();
+
+    document.getElementById("scanRefreshId").addEventListener("click", () => {
+      scanIdempotencyInput.value = generateIdempotencyKey();
+      setStatus(document.getElementById("scanStatus"), "Clé régénérée ✅");
+    });
+
+    document.getElementById("scanEntryBtn").addEventListener("click", async () => {
+      const eventId = document.getElementById("scanEventId").value.trim();
+      if (!eventId) {
+        setStatus(document.getElementById("scanStatus"), "Event ID manquant.", false);
+        return;
+      }
+      const token = staffTokenInput.value.trim();
+      if (!token) {
+        setStatus(document.getElementById("scanStatus"), "Token staff manquant.", false);
+        return;
+      }
+      const body = {
+        delta: Number(document.getElementById("scanDelta").value),
+        source: "manual",
+        device_id: document.getElementById("scanDeviceId").value.trim() || "quickstart-device",
+        idempotency_key: scanIdempotencyInput.value.trim(),
+      };
+      const { res, payload } = await postJson(`${baseUrl}/events/${eventId}/entry/scans`, body, token);
+      if (res.ok) {
+        setStatus(document.getElementById("scanStatus"), JSON.stringify(payload, null, 2));
+        scanIdempotencyInput.value = generateIdempotencyKey();
+        const stats = await getJson(`${baseUrl}/events/${eventId}/entry/stats`, token);
+        if (stats.res.ok) {
+          setStatus(document.getElementById("scanStatsStatus"), JSON.stringify(stats.payload, null, 2));
+        } else {
+          handleError(document.getElementById("scanStatsStatus"), stats.res, stats.payload);
+        }
+      } else {
+        handleError(document.getElementById("scanStatus"), res, payload);
+      }
     });
 
     document.getElementById("getBarBtn").addEventListener("click", async () => {
@@ -1440,6 +1611,11 @@ def _partner_event_out(event: Event, config: Optional[EventConfig]) -> PartnerEv
 
 def _require_partner_role(identity: Dict[str, Any], role: str) -> None:
     if identity.get("role") != role:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _require_partner_roles(identity: Dict[str, Any], roles: set[str]) -> None:
+    if identity.get("role") not in roles:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
@@ -2590,14 +2766,31 @@ def issue_entry(event_id: int, payload: IssueEntryIn):
 def record_entry_scan(
     event_id: int,
     payload: EntryScanIn,
-    user: AppUser = Depends(get_current_user),
+    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
-    require_feature(db, event_id, "entry_enabled")
-    require_role_for_event(db, user.id, event_id, "entry")
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    staff_id = None
+    user = _resolve_app_user_from_token(raw, db)
+    if user:
+        require_feature(db, event_id, "entry_enabled")
+        require_role_for_event(db, user.id, event_id, "entry")
+        staff_id = user.id
+    else:
+        identity = _resolve_partner_identity_from_token(raw, db)
+        if not identity:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if event.bar_id != identity["bar_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        require_feature(db, event_id, "entry_enabled")
+        _require_partner_roles(identity, {"entry", "manager"})
+        staff_id = str(identity["user_id"])
 
     if payload.delta not in (-1, 1):
         raise HTTPException(400, "delta must be +1 or -1")
@@ -2622,7 +2815,7 @@ def record_entry_scan(
         created_at=now_utc(),
         delta=payload.delta,
         source=payload.source,
-        staff_id=user.id,
+        staff_id=staff_id,
         device_id=payload.device_id,
         idempotency_key=payload.idempotency_key,
         raw_qr=payload.raw_qr,

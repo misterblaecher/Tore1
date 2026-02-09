@@ -1,10 +1,9 @@
-from types import SimpleNamespace
 import uuid
 
 from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session, now_utc
-from main import app, get_current_user, _hash_token
+from main import app, _hash_token
 from models import Bar, Event, EventConfig, EventStaff, AppUser, AppToken
 
 
@@ -49,10 +48,6 @@ def _seed_event():
 
 def test_idempotency_same_key_counts_once():
     event_id, user_id, raw_token = _seed_event()
-
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        id=user_id, role="entry", bar_id=1
-    )
     client = TestClient(app)
 
     payload = {
@@ -62,23 +57,25 @@ def test_idempotency_same_key_counts_once():
         "idempotency_key": "same-key",
         "raw_qr": "tore://entry?event_id=1",
     }
-    first = client.post(f"/events/{event_id}/entry/scans", json=payload)
+    first = client.post(
+        f"/events/{event_id}/entry/scans",
+        json=payload,
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
     assert first.status_code == 200
     assert first.json()["total"] == 1
 
-    second = client.post(f"/events/{event_id}/entry/scans", json=payload)
+    second = client.post(
+        f"/events/{event_id}/entry/scans",
+        json=payload,
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
     assert second.status_code == 200
     assert second.json()["total"] == 1
-
-    app.dependency_overrides.clear()
 
 
 def test_delta_negative_decrements():
     event_id, user_id, raw_token = _seed_event()
-
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        id=user_id, role="entry", bar_id=1
-    )
     client = TestClient(app)
 
     client.post(
@@ -89,6 +86,7 @@ def test_delta_negative_decrements():
             "device_id": "device-2",
             "idempotency_key": "k1",
         },
+        headers={"Authorization": f"Bearer {raw_token}"},
     )
     client.post(
         f"/events/{event_id}/entry/scans",
@@ -98,6 +96,7 @@ def test_delta_negative_decrements():
             "device_id": "device-2",
             "idempotency_key": "k2",
         },
+        headers={"Authorization": f"Bearer {raw_token}"},
     )
 
     stats = client.get(
@@ -107,15 +106,9 @@ def test_delta_negative_decrements():
     assert stats.status_code == 200
     assert stats.json()["total"] == 0
 
-    app.dependency_overrides.clear()
-
 
 def test_wallet_history_stub_returns_empty_list():
     event_id, user_id, raw_token = _seed_event()
-
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        id=user_id, role="entry", bar_id=1
-    )
     client = TestClient(app)
 
     res = client.get(
@@ -125,5 +118,3 @@ def test_wallet_history_stub_returns_empty_list():
     )
     assert res.status_code == 200
     assert res.json() == []
-
-    app.dependency_overrides.clear()
