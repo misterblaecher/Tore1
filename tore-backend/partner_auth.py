@@ -1,24 +1,25 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import string
 from datetime import datetime, timedelta
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 
 # IMPORTANT: adapte ces imports à ton projet
 # - Base : declarative_base()
 # - get_db : dépendance qui retourne Session
-from db import get_db # <- si ton fichier s'appelle autrement, change ici
+from db import get_db  # <- si ton fichier s'appelle autrement, change ici
 from models import Bar  # <- si ton modèle Bar est dans models.py
-from models import PartnerUser, PartnerMembership, PartnerInvite
+from models import PartnerInvite, PartnerMembership, PartnerUser
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,12 +77,10 @@ class MeOut(BaseModel):
 # HELPERS
 # -----------------------
 
-import re
-
 def _normalize_pin(pin) -> str:
     """
     PIN partenaire = exactement 4 chiffres.
-    On protège ici contre l'erreur classique: passer un objet (payload complet)
+    Protège contre l'erreur classique: passer un objet (payload complet)
     au lieu de data.pin -> str(objet) devient très long -> bcrypt plante (72 bytes).
     """
     if pin is None:
@@ -111,13 +110,10 @@ def _normalize_pin(pin) -> str:
 
 def _hash_pin(pin) -> str:
     pin_str = _normalize_pin(pin)
-    # bcrypt a une limite 72 bytes — ici PIN 4 chiffres donc OK, mais on garde une garde-fou
+    # bcrypt a une limite 72 bytes — ici PIN 4 chiffres donc OK, mais on garde un garde-fou
     if len(pin_str.encode("utf-8")) > 72:
         raise ValueError("PIN too long")
     return pwd_context.hash(pin_str)
-
-
-
 
 
 def _verify_pin(pin, pin_hash: str) -> bool:
@@ -126,6 +122,7 @@ def _verify_pin(pin, pin_hash: str) -> bool:
     except Exception:
         return False
     return pwd_context.verify(pin_str, pin_hash)
+
 
 def _make_token(user_id: int, bar_id: int, role: str, display_name: str) -> str:
     exp = datetime.utcnow() + timedelta(minutes=TOKEN_MINUTES)
@@ -139,18 +136,16 @@ def _make_token(user_id: int, bar_id: int, role: str, display_name: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
+
 def _generate_code(n: int = 6) -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
-def _generate_partner_code(db: Session, prefix: str = "BAR", n: int = 8) -> str:
-    # Exemple: BAR-1A2B3C4D
-    code = f"{prefix}-{_generate_code(n)}"
-    while db.query(Bar).filter(Bar.partner_code == code).first():
-        code = f"{prefix}-{_generate_code(n)}"
-    return code
 
-from fastapi import Header
+def _generate_partner_code(prefix: str = "BAR", n: int = 8) -> str:
+    # Exemple: BAR-1A2B3C4D
+    return f"{prefix}-{_generate_code(n)}"
+
 
 def current_identity(
     authorization: Optional[str] = Header(default=None),
@@ -195,22 +190,44 @@ def require_role(required: str):
 
 @router.post("/manager/signup", response_model=AuthOut)
 def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
+    """
+    Important: partner_code est unique.
+    En cas de signups concurrents, on peut avoir une collision malgré un check pre-insert.
+    On rend donc l'opération robuste en retryant si le commit échoue sur IntegrityError.
+    """
     try:
-        bar = Bar(
-            name=data.bar_name,
-            city=data.city,
-            partner_code=_generate_partner_code(db),
+        # 1) Crée le bar avec retry si collision sur partner_code (unique)
+        bar = None
+        max_attempts = 10
+        for _ in range(max_attempts):
+            try:
+                bar = Bar(
+                    name=data.bar_name,
+                    city=data.city,
+                    partner_code=_generate_partner_code(),
+                )
+                db.add(bar)
+                db.commit()
+                db.refresh(bar)
+                break
+            except IntegrityError:
+                # collision (ex: unique constraint sur partner_code)
+                db.rollback()
+                continue
+
+        if bar is None or getattr(bar, "id", None) is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Impossible de générer un partner_code unique, réessaie.",
             )
 
-        db.add(bar)
-        db.commit()
-        db.refresh(bar)
-
+        # 2) Crée l'utilisateur manager
         user = PartnerUser(display_name=data.manager_name, pin_hash=_hash_pin(data.pin))
         db.add(user)
         db.commit()
         db.refresh(user)
 
+        # 3) Membership manager
         m = PartnerMembership(
             user_id=user.id,
             bar_id=bar.id,
@@ -223,6 +240,9 @@ def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
         token = _make_token(user.id, bar.id, "manager", data.manager_name)
         return AuthOut(token=token, bar_id=bar.id, role="manager", display_name=data.manager_name)
 
+    except HTTPException:
+        db.rollback()
+        raise
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
@@ -282,7 +302,13 @@ def create_invite(
     db.commit()
     db.refresh(inv)
 
-    return {"code": inv.code, "bar_id": inv.bar_id, "role": inv.role, "max_uses": inv.max_uses, "expires_at": inv.expires_at}
+    return {
+        "code": inv.code,
+        "bar_id": inv.bar_id,
+        "role": inv.role,
+        "max_uses": inv.max_uses,
+        "expires_at": inv.expires_at,
+    }
 
 
 @router.post("/staff/join", response_model=AuthOut)
@@ -301,7 +327,10 @@ def staff_join(data: StaffJoinIn, db: Session = Depends(get_db)):
         # Empêche doublon de nom dans le même bar
         existing = (
             db.query(PartnerMembership)
-            .filter(PartnerMembership.bar_id == inv.bar_id, PartnerMembership.display_name == data.display_name)
+            .filter(
+                PartnerMembership.bar_id == inv.bar_id,
+                PartnerMembership.display_name == data.display_name,
+            )
             .first()
         )
         if existing:
@@ -339,7 +368,6 @@ def staff_join(data: StaffJoinIn, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Signup error: {repr(e)}")
-
 
 
 @router.get("/me", response_model=MeOut)

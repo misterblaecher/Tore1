@@ -12,6 +12,7 @@ from urllib.parse import urlparse, parse_qs
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -771,7 +772,15 @@ class WinnerIn(BaseModel):
 # App
 # ---------------------------------------------------------------------
 
-app = FastAPI(title="TORÈ backend", version="0.1.0")
+app = FastAPI(
+    title="TORÈ backend",
+    version="0.1.0",
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+        "docExpansion": "none",
+        "filter": True,
+    },
+)
 
 logging.basicConfig(level=logging.INFO)
 logging.info(f"BOOT commit={os.getenv('RENDER_GIT_COMMIT')} db={DATABASE_URL}")
@@ -833,6 +842,358 @@ def partner_portal_events(
         )
         for row in rows
     ]
+
+
+@app.get("/health")
+def health() -> JSONResponse:
+    return JSONResponse(
+        {
+            "status": "ok",
+            "commit": os.getenv("RENDER_GIT_COMMIT"),
+        }
+    )
+
+
+@app.get("/quickstart", response_class=HTMLResponse)
+def quickstart() -> HTMLResponse:
+    html = """
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TORÈ Partner QuickStart</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0;
+      background: #0f1115;
+      color: #f7f7f7;
+    }
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 6px;
+    }
+    p {
+      line-height: 1.5;
+    }
+    .card {
+      background: #1c1f26;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 16px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    }
+    label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 6px;
+    }
+    input, select, button, textarea {
+      font-size: 1rem;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #2e3440;
+      background: #10131a;
+      color: #f7f7f7;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    input::placeholder {
+      color: #9aa3b2;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .row > * {
+      flex: 1;
+    }
+    button {
+      cursor: pointer;
+      background: #2563eb;
+      border: none;
+      font-weight: 600;
+    }
+    button.secondary {
+      background: #374151;
+    }
+    button.copy {
+      background: #059669;
+      max-width: 160px;
+    }
+    pre {
+      background: #0b0d12;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.9rem;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+    }
+    .status.error {
+      border-color: #ef4444;
+      color: #fecaca;
+    }
+    .status.success {
+      border-color: #22c55e;
+      color: #bbf7d0;
+    }
+    .hint {
+      font-size: 0.9rem;
+      color: #9aa3b2;
+    }
+    a {
+      color: #60a5fa;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>QuickStart Partner — TORÈ</h1>
+    <p>Cette page vous guide pas à pas pour créer un bar, vous connecter et tester les endpoints essentiels.</p>
+    <div class="card">
+      <h2>1) Créer un bar + manager</h2>
+      <div class="grid">
+        <div>
+          <label for="barName">Nom du bar</label>
+          <input id="barName" placeholder="Ex: Le Zinc" />
+        </div>
+        <div>
+          <label for="city">Ville</label>
+          <input id="city" placeholder="Ex: Lille" />
+        </div>
+        <div>
+          <label for="managerName">Nom du manager</label>
+          <input id="managerName" placeholder="Ex: Alex" />
+        </div>
+        <div>
+          <label for="pin">PIN (4 chiffres)</label>
+          <input id="pin" placeholder="1234" maxlength="4" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="signupBtn">Créer le bar</button>
+        <button class="secondary" id="signupFill">Remplir un exemple</button>
+      </div>
+      <div id="signupStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>2) Login</h2>
+      <div class="grid">
+        <div>
+          <label for="loginBarId">Bar ID</label>
+          <input id="loginBarId" placeholder="Ex: 12" />
+        </div>
+        <div>
+          <label for="loginDisplayName">Nom d'affichage</label>
+          <input id="loginDisplayName" placeholder="Ex: Alex" />
+        </div>
+        <div>
+          <label for="loginPin">PIN</label>
+          <input id="loginPin" placeholder="1234" maxlength="4" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="loginBtn">Se connecter</button>
+      </div>
+      <div id="loginStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>3) Token</h2>
+      <label for="tokenInput">Token Bearer</label>
+      <textarea id="tokenInput" rows="3" placeholder="Votre token..."></textarea>
+      <div class="row" style="margin-top: 12px;">
+        <button class="copy" id="copyToken">Copier</button>
+        <button class="secondary" id="saveToken">Sauvegarder</button>
+        <button class="secondary" id="clearToken">Effacer</button>
+      </div>
+      <p class="hint">Le token est stocké en localStorage pour les prochains tests.</p>
+    </div>
+
+    <div class="card">
+      <h2>4) Tester les endpoints</h2>
+      <div class="row">
+        <button id="getBarBtn">Get my bar</button>
+        <button class="secondary" id="listEventsBtn">List events</button>
+      </div>
+      <div id="apiStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Endpoints utiles</h2>
+      <pre id="endpointList"></pre>
+    </div>
+  </main>
+  <script>
+    const baseUrl = window.location.origin;
+    const endpointList = document.getElementById("endpointList");
+    endpointList.textContent = [
+      `POST ${baseUrl}/partner/auth/manager/signup`,
+      `POST ${baseUrl}/partner/auth/login`,
+      `GET  ${baseUrl}/partner/portal/bar`,
+      `GET  ${baseUrl}/partner/portal/events`,
+      `GET  ${baseUrl}/health`
+    ].join("\\n");
+
+    const tokenInput = document.getElementById("tokenInput");
+    const savedToken = localStorage.getItem("partnerToken");
+    if (savedToken) {
+      tokenInput.value = savedToken;
+    }
+
+    function setStatus(element, message, ok = true) {
+      element.textContent = message;
+      element.classList.toggle("error", !ok);
+      element.classList.toggle("success", ok);
+    }
+
+    function handleError(element, res, payload) {
+      let message = "Erreur inconnue.";
+      if (res.status === 401) message = "401 — Token manquant ou invalide.";
+      else if (res.status === 403) message = "403 — Accès interdit pour ce rôle.";
+      else if (res.status === 422) message = "422 — Données invalides (vérifiez les champs).";
+      else if (res.status >= 500) message = "500 — Erreur serveur. Réessayez plus tard.";
+      else if (payload?.detail) message = payload.detail;
+      else message = `Erreur ${res.status}`;
+      setStatus(element, message, false);
+    }
+
+    async function postJson(url, body) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const payload = await res.json().catch(() => ({}));
+      return { res, payload };
+    }
+
+    async function getJson(url, token) {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      const payload = await res.json().catch(() => ({}));
+      return { res, payload };
+    }
+
+    document.getElementById("signupFill").addEventListener("click", () => {
+      document.getElementById("barName").value = "Le Zinc";
+      document.getElementById("city").value = "Lille";
+      document.getElementById("managerName").value = "Alex";
+      document.getElementById("pin").value = "1234";
+    });
+
+    document.getElementById("signupBtn").addEventListener("click", async () => {
+      const body = {
+        bar_name: document.getElementById("barName").value.trim(),
+        city: document.getElementById("city").value.trim(),
+        manager_name: document.getElementById("managerName").value.trim(),
+        pin: document.getElementById("pin").value.trim()
+      };
+      const { res, payload } = await postJson(`${baseUrl}/partner/auth/manager/signup`, body);
+      if (res.ok) {
+        tokenInput.value = payload.token;
+        localStorage.setItem("partnerToken", payload.token);
+        setStatus(
+          document.getElementById("signupStatus"),
+          `✅ Bar créé !\\nbar_id: ${payload.bar_id}\\nrole: ${payload.role}\\nname: ${payload.display_name}`
+        );
+      } else {
+        handleError(document.getElementById("signupStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const body = {
+        bar_id: Number(document.getElementById("loginBarId").value),
+        display_name: document.getElementById("loginDisplayName").value.trim(),
+        pin: document.getElementById("loginPin").value.trim()
+      };
+      const { res, payload } = await postJson(`${baseUrl}/partner/auth/login`, body);
+      if (res.ok) {
+        tokenInput.value = payload.token;
+        localStorage.setItem("partnerToken", payload.token);
+        setStatus(
+          document.getElementById("loginStatus"),
+          `✅ Connecté !\\nbar_id: ${payload.bar_id}\\nrole: ${payload.role}\\nname: ${payload.display_name}`
+        );
+      } else {
+        handleError(document.getElementById("loginStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("copyToken").addEventListener("click", async () => {
+      if (!tokenInput.value.trim()) {
+        setStatus(document.getElementById("apiStatus"), "Aucun token à copier.", false);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(tokenInput.value.trim());
+        setStatus(document.getElementById("apiStatus"), "Token copié ✅");
+      } catch (err) {
+        setStatus(document.getElementById("apiStatus"), "Impossible de copier le token.", false);
+      }
+    });
+
+    document.getElementById("saveToken").addEventListener("click", () => {
+      localStorage.setItem("partnerToken", tokenInput.value.trim());
+      setStatus(document.getElementById("apiStatus"), "Token sauvegardé ✅");
+    });
+
+    document.getElementById("clearToken").addEventListener("click", () => {
+      tokenInput.value = "";
+      localStorage.removeItem("partnerToken");
+      setStatus(document.getElementById("apiStatus"), "Token effacé.");
+    });
+
+    document.getElementById("getBarBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const { res, payload } = await getJson(`${baseUrl}/partner/portal/bar`, token);
+      if (res.ok) {
+        setStatus(document.getElementById("apiStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("apiStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("listEventsBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const { res, payload } = await getJson(`${baseUrl}/partner/portal/events`, token);
+      if (res.ok) {
+        setStatus(document.getElementById("apiStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("apiStatus"), res, payload);
+      }
+    });
+  </script>
+</body>
+</html>
+    """
+    return HTMLResponse(html)
 
 
 def _get_partner_event(event_id: int, identity: Dict[str, Any], db: Session) -> Event:
@@ -1842,7 +2203,11 @@ def event_menu(event_id: int):
             d = s.get(Drink, ed.drink_id)
             if not d:
                 continue
-            effective = ed.override_price_cents if ed.override_price_cents is not None else ed.current_price_cents
+            effective = (
+                ed.override_price_cents
+                if ed.override_price_cents is not None
+                else ed.current_price_cents
+            )
             out.append(
                 {
                     "drink_id": d.id,
@@ -1916,7 +2281,13 @@ def price_ohlc(
 
 def _candle(start: datetime, rows: List[PriceHistory]) -> Dict[str, Any]:
     prices = [r.price_cents for r in rows]
-    return {"ts": start.isoformat(), "open": prices[0], "high": max(prices), "low": min(prices), "close": prices[-1]}
+    return {
+        "ts": start.isoformat(),
+        "open": prices[0],
+        "high": max(prices),
+        "low": min(prices),
+        "close": prices[-1],
+    }
 
 
 @app.post("/events/{event_id}/entry/issue")
@@ -2147,11 +2518,20 @@ def create_order(payload: CreateOrderIn):
             if not ed:
                 raise HTTPException(404, f"Drink {it.drink_id} not in event")
 
-            unit = ed.override_price_cents if ed.override_price_cents is not None else ed.current_price_cents
+            unit = (
+                ed.override_price_cents
+                if ed.override_price_cents is not None
+                else ed.current_price_cents
+            )
             if ed.override_price_cents is None:
                 unit = market_buy(s, payload.event_id, it.drink_id, it.qty)
 
-            item = OrderItem(order_id=order.id, drink_id=it.drink_id, qty=it.qty, unit_price_cents=unit)
+            item = OrderItem(
+                order_id=order.id,
+                drink_id=it.drink_id,
+                qty=it.qty,
+                unit_price_cents=unit,
+            )
             s.add(item)
             total += unit * it.qty
 
@@ -2183,7 +2563,12 @@ def list_orders(event_id: int = Query(...), user_id: str = Query(...)):
         )
         rows = s.scalars(q).all()
         return [
-            {"id": o.id, "total_cents": o.total_cents, "created_at": o.created_at.isoformat(), "pay_mode": o.pay_mode}
+            {
+                "id": o.id,
+                "total_cents": o.total_cents,
+                "created_at": o.created_at.isoformat(),
+                "pay_mode": o.pay_mode,
+            }
             for o in rows
         ]
     finally:
@@ -2201,7 +2586,13 @@ def beer_by_barcode(barcode: str):
         b = s.scalar(select(Beer).where(Beer.barcode == barcode))
         if not b:
             raise HTTPException(404, "Beer not found")
-        return {"id": b.id, "barcode": b.barcode, "name": b.name, "brewery": b.brewery, "style": b.style}
+        return {
+            "id": b.id,
+            "barcode": b.barcode,
+            "name": b.name,
+            "brewery": b.brewery,
+            "style": b.style,
+        }
     finally:
         s.close()
 
@@ -2212,11 +2603,29 @@ def create_beer(payload: CreateBeerIn):
     try:
         existing = s.scalar(select(Beer).where(Beer.barcode == payload.barcode))
         if existing:
-            return {"id": existing.id, "barcode": existing.barcode, "name": existing.name, "brewery": existing.brewery, "style": existing.style}
-        b = Beer(barcode=payload.barcode, name=payload.name, brewery=payload.brewery, style=payload.style)
+            return {
+                "id": existing.id,
+                "barcode": existing.barcode,
+                "name": existing.name,
+                "brewery": existing.brewery,
+                "style": existing.style,
+            }
+        b = Beer(
+            barcode=payload.barcode,
+            name=payload.name,
+            brewery=payload.brewery,
+            style=payload.style,
+        )
         s.add(b)
         s.commit()
-        return {"id": b.id, "barcode": b.barcode, "name": b.name, "brewery": b.brewery, "style": b.style, "new": True}
+        return {
+            "id": b.id,
+            "barcode": b.barcode,
+            "name": b.name,
+            "brewery": b.brewery,
+            "style": b.style,
+            "new": True,
+        }
     finally:
         s.close()
 
@@ -2225,7 +2634,12 @@ def create_beer(payload: CreateBeerIn):
 def list_checkins(user_id: str = Query(...), limit: int = Query(default=30, ge=1, le=200)):
     s = get_session()
     try:
-        q = select(Checkin).where(Checkin.user_id == user_id).order_by(Checkin.created_at.desc()).limit(limit)
+        q = (
+            select(Checkin)
+            .where(Checkin.user_id == user_id)
+            .order_by(Checkin.created_at.desc())
+            .limit(limit)
+        )
         rows = s.scalars(q).all()
         out = []
         for c in rows:
@@ -2236,7 +2650,13 @@ def list_checkins(user_id: str = Query(...), limit: int = Query(default=30, ge=1
                     "rating": (c.rating / 10.0),
                     "comment": c.comment,
                     "created_at": c.created_at.isoformat(),
-                    "beer": {"id": b.id, "barcode": b.barcode, "name": b.name, "brewery": b.brewery, "style": b.style},
+                    "beer": {
+                        "id": b.id,
+                        "barcode": b.barcode,
+                        "name": b.name,
+                        "brewery": b.brewery,
+                        "style": b.style,
+                    },
                 }
             )
         return out
@@ -2275,61 +2695,30 @@ def leaderboard(limit: int = Query(default=50, ge=1, le=200)):
             .limit(limit)
         )
         rows = s.execute(q).all()
-        return [{"user_id": user_id, "display_name": user_id, "checkins": cnt} for user_id, cnt in rows]
+        return [{"user_id": r.user_id, "checkins": int(r.checkins)} for r in rows]
     finally:
         s.close()
 
 
 # ---------------------------------------------------------------------
-# Battles (Afond) MVP
+# Battles (simple mini-game)
 # ---------------------------------------------------------------------
-
-@app.get("/battles")
-def list_battles(event_id: Optional[int] = Query(default=None)):
-    s = get_session()
-    try:
-        q = select(Battle).order_by(Battle.created_at.desc())
-        if event_id is not None:
-            q = q.where(Battle.event_id == event_id)
-
-        rows = s.scalars(q).all()
-        out = []
-        for b in rows:
-            parts = s.scalars(select(BattleParticipant).where(BattleParticipant.battle_id == b.id)).all()
-            out.append(
-                {
-                    "id": b.id,
-                    "event_id": b.event_id,
-                    "title": b.title,
-                    "mode": b.mode,
-                    "join_code": b.join_code,
-                    "created_at": b.created_at.isoformat(),
-                    "ended": b.ended,
-                    "winner_user_id": b.winner_user_id,
-                    "participants": [
-                        {"user_id": p.user_id, "display_name": p.display_name, "wins": p.wins, "losses": p.losses}
-                        for p in parts
-                    ],
-                }
-            )
-        return out
-    finally:
-        s.close()
-
 
 @app.post("/battles")
 def create_battle(payload: CreateBattleIn):
     s = get_session()
     try:
-        code = random_code(8)
-        while s.scalar(select(Battle).where(Battle.join_code == code)):
-            code = random_code(8)
-        b = Battle(event_id=payload.event_id, title=payload.title, mode=payload.mode, join_code=code)
+        require_feature(s, payload.event_id or 0, "battles_enabled") if payload.event_id else None
+        code = random_code(6)
+        b = Battle(
+            event_id=payload.event_id,
+            created_by_user_id=payload.user_id,
+            title=payload.title,
+            mode=payload.mode,
+            join_code=code,
+            created_at=now_utc(),
+        )
         s.add(b)
-        s.flush()
-
-        p = BattleParticipant(battle_id=b.id, user_id=payload.user_id, display_name=payload.user_id)
-        s.add(p)
         s.commit()
         return {"id": b.id, "join_code": b.join_code}
     finally:
@@ -2343,203 +2732,40 @@ def join_battle(payload: JoinBattleIn):
         b = s.scalar(select(Battle).where(Battle.join_code == payload.join_code))
         if not b:
             raise HTTPException(404, "Battle not found")
-        existing = s.scalar(
+        require_feature(s, b.event_id or 0, "battles_enabled") if b.event_id else None
+
+        exists = s.scalar(
             select(BattleParticipant).where(
                 BattleParticipant.battle_id == b.id, BattleParticipant.user_id == payload.user_id
             )
         )
-        if existing:
-            return {"ok": True}
-        s.add(BattleParticipant(battle_id=b.id, user_id=payload.user_id, display_name=payload.display_name))
+        if exists:
+            return {"ok": True, "battle_id": b.id}
+
+        p = BattleParticipant(
+            battle_id=b.id,
+            user_id=payload.user_id,
+            display_name=payload.display_name,
+            joined_at=now_utc(),
+        )
+        s.add(p)
         s.commit()
-        return {"ok": True}
+        return {"ok": True, "battle_id": b.id}
     finally:
         s.close()
 
 
 @app.post("/battles/{battle_id}/winner")
-def declare_winner(battle_id: int, payload: WinnerIn):
+def set_winner(battle_id: int, payload: WinnerIn):
     s = get_session()
     try:
         b = s.get(Battle, battle_id)
         if not b:
             raise HTTPException(404, "Battle not found")
-        if b.ended:
-            raise HTTPException(400, "Battle already ended")
-
-        participants = s.scalars(select(BattleParticipant).where(BattleParticipant.battle_id == battle_id)).all()
-        if not participants:
-            raise HTTPException(400, "No participants")
-
-        winner = next((p for p in participants if p.user_id == payload.winner_user_id), None)
-        if not winner:
-            raise HTTPException(404, "Winner must be a participant")
-
-        for p in participants:
-            if p.user_id == winner.user_id:
-                p.wins += 1
-            else:
-                p.losses += 1
-            s.add(p)
-
-        b.ended = True
-        b.winner_user_id = winner.user_id
+        b.winner_user_id = payload.winner_user_id
+        b.ended_at = now_utc()
         s.add(b)
         s.commit()
         return {"ok": True}
     finally:
         s.close()
-
-
-# ---------------------------------------------------------------------
-# Admin
-# ---------------------------------------------------------------------
-
-@app.get("/admin/events/{event_id}/prices")
-def admin_prices(event_id: int):
-    s = get_session()
-    try:
-        e = s.get(Event, event_id)
-        if not e:
-            raise HTTPException(404, "Event not found")
-        apply_decay(s, event_id)
-        rows = s.scalars(select(EventDrink).where(EventDrink.event_id == event_id)).all()
-        out = []
-        for ed in rows:
-            d = s.get(Drink, ed.drink_id)
-            if not d:
-                continue
-            effective = ed.override_price_cents if ed.override_price_cents is not None else ed.current_price_cents
-            out.append(
-                {
-                    "drink_id": d.id,
-                    "name": d.name,
-                    "type": d.type,
-                    "base_price_cents": ed.base_price_cents,
-                    "override_price_cents": ed.override_price_cents,
-                    "effective_price_cents": effective,
-                }
-            )
-        return out
-    finally:
-        s.close()
-
-
-@app.post("/admin/events/{event_id}/prices")
-def admin_set_prices(event_id: int, payload: SetPricesIn):
-    s = get_session()
-    try:
-        e = s.get(Event, event_id)
-        if not e:
-            raise HTTPException(404, "Event not found")
-        for p in payload.prices:
-            drink_id = int(p.get("drink_id"))
-            price_cents = int(p.get("price_cents"))
-            ed = s.get(EventDrink, {"event_id": event_id, "drink_id": drink_id})
-            if not ed:
-                continue
-            ed.override_price_cents = price_cents
-            s.add(ed)
-        s.commit()
-        return {"ok": True}
-    finally:
-        s.close()
-
-
-@app.post("/admin/events/{event_id}/ticket_value")
-def admin_ticket_value(event_id: int, payload: SetTicketValueIn):
-    s = get_session()
-    try:
-        e = s.get(Event, event_id)
-        if not e:
-            raise HTTPException(404, "Event not found")
-        e.ticket_value_cents = payload.ticket_value_cents
-        s.add(e)
-        s.commit()
-        return {"ok": True, "ticket_value_cents": e.ticket_value_cents}
-    finally:
-        s.close()
-
-
-@app.post("/admin/events/{event_id}/crash")
-def admin_crash(event_id: int, payload: CrashIn):
-    s = get_session()
-    try:
-        e = s.get(Event, event_id)
-        if not e:
-            raise HTTPException(404, "Event not found")
-        apply_decay(s, event_id)
-        rows = s.scalars(select(EventDrink).where(EventDrink.event_id == event_id)).all()
-        t = now_utc()
-        for ed in rows:
-            if ed.override_price_cents is not None:
-                continue
-            new_price = int(ed.current_price_cents * (100 - payload.percent_down) / 100)
-            lo = int(ed.base_price_cents * MIN_MULT)
-            ed.current_price_cents = clamp(new_price, lo, int(ed.base_price_cents * MAX_MULT))
-            ed.last_price_update = t
-            s.add(ed)
-            s.add(PriceHistory(event_id=event_id, drink_id=ed.drink_id, price_cents=ed.current_price_cents, ts=t))
-        _trim_history(s, event_id)
-        s.commit()
-        return {"ok": True}
-    finally:
-        s.close()
-
-
-@app.post("/admin/events/{event_id}/entry/scan")
-def admin_scan_entry(event_id: int, payload: ScanEntryIn):
-    try:
-        data = jwt.decode(payload.qr_payload, JWT_SECRET, algorithms=[JWT_ALG])
-    except Exception:
-        raise HTTPException(400, "Invalid QR payload")
-
-    if data.get("typ") != "entry" or int(data.get("event_id")) != event_id:
-        raise HTTPException(400, "QR not for this event")
-
-    entry_id = int(data.get("entry_id"))
-    user_id = str(data.get("user_id"))
-
-    s = get_session()
-    try:
-        require_feature(s, event_id, "entry_enabled")
-        if is_banned(s, event_id, user_id):
-            return {"ok": False, "message": "Utilisateur banni"}
-        entry = s.get(Entry, entry_id)
-        if not entry or entry.event_id != event_id:
-            return {"ok": False, "message": "Entrée inconnue"}
-        if entry.used:
-            return {"ok": False, "message": "Déjà scanné"}
-        entry.used = True
-        entry.used_at = now_utc()
-        s.add(entry)
-        s.commit()
-        return {"ok": True, "message": f"Entrée OK ({user_id})"}
-    finally:
-        s.close()
-
-
-@app.post("/admin/events/{event_id}/ban")
-def admin_ban(event_id: int, payload: BanIn):
-    s = get_session()
-    try:
-        e = s.get(Event, event_id)
-        if not e:
-            raise HTTPException(404, "Event not found")
-        b = Ban(event_id=event_id, user_id=payload.user_id, reason=payload.reason)
-        s.add(b)
-        s.commit()
-        return {"ok": True}
-    finally:
-        s.close()
-
-
-@app.get("/version")
-def version():
-    info = {
-        "render_git_commit": os.getenv("RENDER_GIT_COMMIT"),
-        "database_url": DATABASE_URL,
-    }
-    if DATABASE_URL.startswith("sqlite:///"):
-        info["sqlite_path"] = DATABASE_URL.replace("sqlite:///", "", 1)
-    return info
