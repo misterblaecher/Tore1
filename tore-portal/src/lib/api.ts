@@ -6,6 +6,17 @@ export const API_BASE =
   import.meta.env.VITE_API_BASE ??
   'http://localhost:8000'
 
+export class ApiError extends Error {
+  status?: number
+  url?: string
+
+  constructor(message: string, status?: number, url?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.url = url
+  }
+}
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken()
@@ -14,10 +25,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   let res: Response
+  const url = `${API_BASE}${path}`
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+    res = await fetch(url, { ...init, headers })
   } catch {
-    throw new Error('API indisponible. Vérifie la connexion.')
+    throw new ApiError('API indisponible. Vérifie la connexion.', undefined, url)
   }
   if (res.status === 401) {
     clearToken()
@@ -30,7 +42,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       // ignore
     }
-    throw new Error(msg)
+    throw new ApiError(msg, res.status, url)
   }
   return (await res.json()) as T
 }
