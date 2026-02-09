@@ -142,10 +142,14 @@ def _generate_code(n: int = 6) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
 
-def _generate_partner_code(prefix: str = "BAR", n: int = 8) -> str:
-    # Exemple: BAR-1A2B3C4D
-    return f"{prefix}-{_generate_code(n)}"
+def _generate_partner_code(db: Session) -> str:
+    while True:
+        code = f"BAR-{_generate_code(8)}"
+        if not db.query(Bar).filter(Bar.partner_code == code).first():
+            return code
 
+
+from fastapi import Header
 
 def current_identity(
     authorization: Optional[str] = Header(default=None),
