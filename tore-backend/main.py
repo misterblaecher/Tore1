@@ -729,6 +729,26 @@ class PartnerEventCreateIn(BaseModel):
     tickets_enabled: Optional[bool] = None
 
 
+class PartnerEventUpdateIn(BaseModel):
+    name: Optional[str] = None
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    entry_price_cents: Optional[int] = Field(default=None, ge=0)
+    tickets_enabled: Optional[bool] = None
+    entry_enabled: Optional[bool] = None
+
+
+class PartnerEventOut(BaseModel):
+    id: int
+    bar_id: Optional[int] = None
+    name: str
+    starts_at: datetime
+    ends_at: datetime
+    entry_price_cents: int
+    tickets_enabled: bool
+    entry_enabled: bool
+
+
 class PartnerEventDrinkOut(BaseModel):
     drink_id: int
     name: str
@@ -826,7 +846,7 @@ def partner_portal_bar(
     )
 
 
-@app.get("/partner/portal/events", response_model=List[EventSummaryOut])
+@app.get("/partner/portal/events", response_model=List[PartnerEventOut])
 def partner_portal_events(
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
@@ -837,22 +857,15 @@ def partner_portal_events(
         .order_by(Event.starts_at.desc())
         .all()
     )
-    return [
-        EventSummaryOut(
-            id=row.id,
-            bar_id=row.bar_id,
-            name=row.name,
-            starts_at=row.starts_at,
-            ends_at=row.ends_at,
-            entry_price_cents=row.entry_price_cents,
-            ticket_mode=row.ticket_mode,
-            ticket_value_cents=row.ticket_value_cents,
-        )
-        for row in rows
-    ]
+    event_ids = [row.id for row in rows]
+    configs = {}
+    if event_ids:
+        config_rows = db.query(EventConfig).filter(EventConfig.event_id.in_(event_ids)).all()
+        configs = {config.event_id: config for config in config_rows}
+    return [_partner_event_out(row, configs.get(row.id)) for row in rows]
 
 
-@app.post("/partner/portal/events", response_model=EventSummaryOut)
+@app.post("/partner/portal/events", response_model=PartnerEventOut)
 def partner_portal_event_create(
     payload: PartnerEventCreateIn,
     identity=Depends(current_partner_identity),
@@ -879,16 +892,7 @@ def partner_portal_event_create(
     db.add(event)
     db.commit()
     db.refresh(event)
-    return EventSummaryOut(
-        id=event.id,
-        bar_id=event.bar_id,
-        name=event.name,
-        starts_at=event.starts_at,
-        ends_at=event.ends_at,
-        entry_price_cents=event.entry_price_cents,
-        ticket_mode=event.ticket_mode,
-        ticket_value_cents=event.ticket_value_cents,
-    )
+    return _partner_event_out(event, None)
 
 
 @app.get("/health")
@@ -1114,6 +1118,36 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
+      <h2>6) Modifier un event</h2>
+      <div class="grid">
+        <div>
+          <label for="editEventId">Event ID</label>
+          <input id="editEventId" placeholder="Ex: 42" />
+        </div>
+        <div>
+          <label for="editEventName">Nom (optionnel)</label>
+          <input id="editEventName" placeholder="Nouveau nom" />
+        </div>
+        <div>
+          <label for="editEntryPrice">Prix entrée (€)</label>
+          <input id="editEntryPrice" type="number" step="0.01" min="0" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input id="editTicketsEnabled" type="checkbox" />
+          Tickets ON
+        </label>
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input id="editEntryEnabled" type="checkbox" />
+          Entrée ON
+        </label>
+        <button id="patchEventBtn">PATCH event</button>
+      </div>
+      <div id="editEventStatus" class="status"></div>
+    </div>
+
+    <div class="card">
       <h2>Endpoints utiles</h2>
       <pre id="endpointList"></pre>
     </div>
@@ -1127,6 +1161,7 @@ def quickstart() -> HTMLResponse:
       `GET  ${baseUrl}/partner/portal/bar`,
       `GET  ${baseUrl}/partner/portal/events`,
       `POST ${baseUrl}/partner/portal/events`,
+      `PATCH ${baseUrl}/partner/portal/events/{eventId}`,
       `GET  ${baseUrl}/events/{eventId}/entry/stats`,
       `GET  ${baseUrl}/health`
     ].join("\\n");
@@ -1165,6 +1200,25 @@ def quickstart() -> HTMLResponse:
         body: JSON.stringify(body)
       });
       const payload = await res.json().catch(() => ({}));
+      return { res, payload };
+    }
+
+    async function patchJson(url, body, token) {
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+      });
+      let payload = null;
+      try {
+        payload = await res.json();
+      } catch (err) {
+        payload = null;
+      }
       return { res, payload };
     }
 
@@ -1312,6 +1366,45 @@ def quickstart() -> HTMLResponse:
         handleError(document.getElementById("eventStatus"), res, payload);
       }
     });
+
+    const editTicketsEnabled = document.getElementById("editTicketsEnabled");
+    const editEntryEnabled = document.getElementById("editEntryEnabled");
+
+    editTicketsEnabled.addEventListener("change", () => {
+      editTicketsEnabled.dataset.changed = "1";
+    });
+    editEntryEnabled.addEventListener("change", () => {
+      editEntryEnabled.dataset.changed = "1";
+    });
+
+    document.getElementById("patchEventBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const eventId = document.getElementById("editEventId").value.trim();
+      if (!eventId) {
+        setStatus(document.getElementById("editEventStatus"), "Event ID manquant.", false);
+        return;
+      }
+      const body = {};
+      const name = document.getElementById("editEventName").value.trim();
+      if (name) body.name = name;
+      const entryPrice = document.getElementById("editEntryPrice").value.trim();
+      if (entryPrice) {
+        body.entry_price_cents = Math.round(Number(entryPrice) * 100);
+      }
+      if (editTicketsEnabled.dataset.changed) {
+        body.tickets_enabled = editTicketsEnabled.checked;
+      }
+      if (editEntryEnabled.dataset.changed) {
+        body.entry_enabled = editEntryEnabled.checked;
+      }
+
+      const { res, payload } = await patchJson(`${baseUrl}/partner/portal/events/${eventId}`, body, token);
+      if (res.ok) {
+        setStatus(document.getElementById("editEventStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("editEventStatus"), res, payload);
+      }
+    });
   </script>
 </body>
 </html>
@@ -1328,28 +1421,76 @@ def _get_partner_event(event_id: int, identity: Dict[str, Any], db: Session) -> 
     return event
 
 
-def _require_partner_role(identity: Dict[str, Any], role: str) -> None:
-    if identity.get("role") != role:
-        raise HTTPException(status_code=403, detail="Forbidden")
+def _get_event_config(db: Session, event_id: int) -> Optional[EventConfig]:
+    return db.query(EventConfig).filter(EventConfig.event_id == event_id).first()
 
 
-@app.get("/partner/portal/events/{event_id}", response_model=EventSummaryOut)
-def partner_portal_event_detail(
-    event_id: int,
-    identity=Depends(current_partner_identity),
-    db: Session = Depends(get_db),
-):
-    event = _get_partner_event(event_id, identity, db)
-    return EventSummaryOut(
+def _partner_event_out(event: Event, config: Optional[EventConfig]) -> PartnerEventOut:
+    return PartnerEventOut(
         id=event.id,
         bar_id=event.bar_id,
         name=event.name,
         starts_at=event.starts_at,
         ends_at=event.ends_at,
         entry_price_cents=event.entry_price_cents,
-        ticket_mode=event.ticket_mode,
-        ticket_value_cents=event.ticket_value_cents,
+        tickets_enabled=event.ticket_mode,
+        entry_enabled=config.entry_enabled if config else False,
     )
+
+
+def _require_partner_role(identity: Dict[str, Any], role: str) -> None:
+    if identity.get("role") != role:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@app.get("/partner/portal/events/{event_id}", response_model=PartnerEventOut)
+def partner_portal_event_detail(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    event = _get_partner_event(event_id, identity, db)
+    config = _get_event_config(db, event.id)
+    return _partner_event_out(event, config)
+
+
+@app.patch("/partner/portal/events/{event_id}", response_model=PartnerEventOut)
+def partner_portal_event_update(
+    event_id: int,
+    payload: PartnerEventUpdateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    event = _get_partner_event(event_id, identity, db)
+
+    if payload.name is not None:
+        event.name = payload.name
+    if payload.start_at is not None:
+        event.starts_at = payload.start_at
+    if payload.end_at is not None:
+        event.ends_at = payload.end_at
+    if payload.entry_price_cents is not None:
+        event.entry_price_cents = payload.entry_price_cents
+    if payload.tickets_enabled is not None:
+        event.ticket_mode = payload.tickets_enabled
+
+    config = None
+    if payload.entry_enabled is not None:
+        config = _get_event_config(db, event.id)
+        if not config:
+            config = EventConfig(event_id=event.id, entry_enabled=payload.entry_enabled)
+        else:
+            config.entry_enabled = payload.entry_enabled
+        config.updated_at = now_utc()
+        db.add(config)
+
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    if config is None:
+        config = _get_event_config(db, event.id)
+    return _partner_event_out(event, config)
 
 
 @app.get("/partner/portal/events/{event_id}/drinks", response_model=List[PartnerEventDrinkOut])

@@ -19,8 +19,10 @@ type EventOut = {
   starts_at: string
   ends_at: string
   entry_price_cents: number
-  ticket_mode: boolean
-  ticket_value_cents: number
+  ticket_mode?: boolean
+  ticket_value_cents?: number
+  tickets_enabled?: boolean
+  entry_enabled?: boolean
 }
 
 type EntryStatsOut = {
@@ -69,6 +71,8 @@ export default function Dashboard() {
               entry_price_cents: 0,
               ticket_mode: false,
               ticket_value_cents: 0,
+              tickets_enabled: false,
+              entry_enabled: false,
             },
           ]
           setError('Mode démo activé : événement local utilisé.')
@@ -189,6 +193,8 @@ export default function Dashboard() {
         {events.map((e) => {
           const starts = new Date(e.starts_at)
           const isPast = starts.getTime() < now.getTime() - 24 * 3600 * 1000
+          const ticketsEnabled = e.tickets_enabled ?? e.ticket_mode ?? false
+          const entryEnabled = e.entry_enabled ?? false
           return (
             <div
               key={e.id}
@@ -207,7 +213,8 @@ export default function Dashboard() {
                 {new Date(e.starts_at).toLocaleString()} → {new Date(e.ends_at).toLocaleString()}
               </div>
               <div style={{ opacity: 0.8 }}>
-                Entrée: {(e.entry_price_cents / 100).toFixed(2)}€ — {e.ticket_mode ? 'Tickets ON' : 'Tickets OFF'}
+                Entrée: {entryEnabled ? 'ON' : 'OFF'} ({(e.entry_price_cents / 100).toFixed(2)}€) —{' '}
+                {ticketsEnabled ? 'Tickets ON' : 'Tickets OFF'}
               </div>
             </div>
           )
