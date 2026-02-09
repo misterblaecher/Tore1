@@ -12,8 +12,9 @@ type EventOut = {
   starts_at: string
   ends_at: string
   entry_price_cents: number
-  ticket_mode: boolean
-  ticket_value_cents: number
+  ticket_mode?: boolean
+  tickets_enabled?: boolean
+  entry_enabled?: boolean
 }
 
 type EventDrinkOut = {
@@ -33,6 +34,13 @@ export default function EventDetail() {
   const [drinks, setDrinks] = useState<EventDrinkOut[]>([])
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState({ name: '', type: 'beer', base_price_cents: 250 })
+  const [settings, setSettings] = useState({
+    name: '',
+    tickets_enabled: false,
+    entry_enabled: false,
+    entry_price_cents: 0,
+  })
+  const [settingsStatus, setSettingsStatus] = useState<{ ok: boolean; message: string } | null>(null)
 
   const grouped = useMemo(() => {
     const m = new Map<string, EventDrinkOut[]>()
@@ -51,6 +59,12 @@ export default function EventDetail() {
       const d = await api<EventDrinkOut[]>(`/partner/portal/events/${id}/drinks`)
       setEvent(e)
       setDrinks(d)
+      setSettings({
+        name: e.name,
+        tickets_enabled: e.tickets_enabled ?? e.ticket_mode ?? false,
+        entry_enabled: e.entry_enabled ?? false,
+        entry_price_cents: e.entry_price_cents ?? 0,
+      })
     } catch (e: any) {
       setError(e?.message ?? 'Erreur')
     }
@@ -79,6 +93,28 @@ export default function EventDetail() {
       await load()
     } catch (e: any) {
       setError(e?.message ?? 'Erreur')
+    }
+  }
+
+  async function patchEvent(body: Partial<{ name: string; tickets_enabled: boolean; entry_enabled: boolean; entry_price_cents: number }>) {
+    try {
+      setError(null)
+      const updated = await api<EventOut>(`/partner/portal/events/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+      setEvent(updated)
+      setSettings({
+        name: updated.name,
+        tickets_enabled: updated.tickets_enabled ?? updated.ticket_mode ?? false,
+        entry_enabled: updated.entry_enabled ?? false,
+        entry_price_cents: updated.entry_price_cents ?? 0,
+      })
+      setSettingsStatus({ ok: true, message: 'HTTP 200 — Paramètres mis à jour.' })
+    } catch (e: any) {
+      const status = e?.status ? `HTTP ${e.status}` : 'Erreur'
+      const message = e?.message ?? 'Erreur inconnue'
+      setSettingsStatus({ ok: false, message: `${status} — ${message}` })
     }
   }
 
@@ -122,6 +158,132 @@ export default function EventDetail() {
           </div>
         </div>
       ) : null}
+
+      <h2 style={{ marginTop: 22 }}>Paramètres event</h2>
+      <div
+        style={{
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 16,
+          padding: 16,
+          background: 'rgba(255,255,255,0.04)',
+          display: 'grid',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ opacity: 0.85 }}>Renommer l’event</span>
+            <input
+              value={settings.name}
+              onChange={(e) => setSettings((p) => ({ ...p, name: e.target.value }))}
+              style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => patchEvent({ name: settings.name.trim() || event?.name || '' })}
+            style={{
+              alignSelf: 'flex-start',
+              padding: '8px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: '#ffffff',
+              color: '#000',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Sauvegarder le nom
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={settings.tickets_enabled}
+              onChange={(e) => setSettings((p) => ({ ...p, tickets_enabled: e.target.checked }))}
+            />
+            Tickets {settings.tickets_enabled ? 'ON' : 'OFF'}
+          </label>
+          <button
+            type="button"
+            onClick={() => patchEvent({ tickets_enabled: settings.tickets_enabled })}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'transparent',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Mettre à jour tickets
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={settings.entry_enabled}
+              onChange={(e) => setSettings((p) => ({ ...p, entry_enabled: e.target.checked }))}
+            />
+            Entrée {settings.entry_enabled ? 'ON' : 'OFF'}
+          </label>
+          <button
+            type="button"
+            onClick={() => patchEvent({ entry_enabled: settings.entry_enabled })}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'transparent',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Mettre à jour entrée
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ opacity: 0.85 }}>Prix entrée (€)</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={(settings.entry_price_cents / 100).toFixed(2)}
+              onChange={(e) =>
+                setSettings((p) => ({ ...p, entry_price_cents: Math.round(Number(e.target.value || 0) * 100) }))
+              }
+              style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => patchEvent({ entry_price_cents: settings.entry_price_cents })}
+            style={{
+              alignSelf: 'flex-start',
+              padding: '8px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'transparent',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Mettre à jour le prix
+          </button>
+        </div>
+
+        {settingsStatus ? (
+          <div style={{ color: settingsStatus.ok ? '#c7ffd8' : '#ffb4b4', fontWeight: 700 }}>
+            {settingsStatus.message}
+          </div>
+        ) : null}
+      </div>
 
       <h2 style={{ marginTop: 22 }}>Menu (drinks)</h2>
 

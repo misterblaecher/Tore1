@@ -42,6 +42,25 @@ def _seed_partner_user(role: str = "manager"):
         s.close()
 
 
+def _create_event(bar_id: int, name: str = "Event") -> int:
+    s = get_session()
+    try:
+        event = Event(
+            bar_id=bar_id,
+            name=name,
+            starts_at=now_utc(),
+            ends_at=now_utc() + timedelta(hours=4),
+            entry_price_cents=500,
+            ticket_mode=True,
+        )
+        s.add(event)
+        s.commit()
+        s.refresh(event)
+        return event.id
+    finally:
+        s.close()
+
+
 def test_partner_portal_event_create_requires_token():
     Base.metadata.create_all(engine)
     client = TestClient(app)
@@ -96,3 +115,93 @@ def test_partner_portal_event_create_and_list():
     assert list_res.status_code == 200
     events = list_res.json()
     assert any(event_row["id"] == payload["id"] for event_row in events)
+
+
+def test_partner_portal_event_patch_requires_token():
+    bar_id, _ = _seed_partner_user(role="manager")
+    event_id = _create_event(bar_id)
+    client = TestClient(app)
+    res = client.patch(f"/partner/portal/events/{event_id}", json={"name": "New"})
+    assert res.status_code == 401
+
+
+def test_partner_portal_event_patch_rejects_non_manager():
+    bar_id, token = _seed_partner_user(role="bartender")
+    event_id = _create_event(bar_id)
+    client = TestClient(app)
+    res = client.patch(
+        f"/partner/portal/events/{event_id}",
+        json={"name": "New"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 403
+
+
+def test_partner_portal_event_patch_rejects_other_bar():
+    bar_id, _ = _seed_partner_user(role="manager")
+    other_bar_id, other_token = _seed_partner_user(role="manager")
+    event_id = _create_event(bar_id)
+    client = TestClient(app)
+    res = client.patch(
+        f"/partner/portal/events/{event_id}",
+        json={"name": "New"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert res.status_code == 403
+    assert bar_id != other_bar_id
+
+
+def test_partner_portal_event_patch_ok():
+    bar_id, token = _seed_partner_user(role="manager")
+    event_id = _create_event(bar_id)
+    client = TestClient(app)
+    res = client.patch(
+        f"/partner/portal/events/{event_id}",
+        json={
+            "name": "After Party",
+            "entry_price_cents": 900,
+            "tickets_enabled": False,
+            "entry_enabled": True,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["name"] == "After Party"
+    assert payload["entry_price_cents"] == 900
+    assert payload["tickets_enabled"] is False
+    assert payload["entry_enabled"] is True
+
+    s = get_session()
+    try:
+        event = s.get(Event, event_id)
+        assert event is not None
+        assert event.name == "After Party"
+        assert event.entry_price_cents == 900
+        assert event.ticket_mode is False
+    finally:
+        s.close()
+
+
+def test_partner_portal_event_patch_partial():
+    bar_id, token = _seed_partner_user(role="manager")
+    event_id = _create_event(bar_id, name="Original")
+    client = TestClient(app)
+    res = client.patch(
+        f"/partner/portal/events/{event_id}",
+        json={"name": "Renamed"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["name"] == "Renamed"
+
+    s = get_session()
+    try:
+        event = s.get(Event, event_id)
+        assert event is not None
+        assert event.name == "Renamed"
+        assert event.entry_price_cents == 500
+        assert event.ticket_mode is True
+    finally:
+        s.close()
