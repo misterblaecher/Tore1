@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 # IMPORTANT: adapte ces imports à ton projet
 # - Base : declarative_base()
 # - get_db : dépendance qui retourne Session
-from db import get_db # <- si ton fichier s'appelle autrement, change ici
+from db import get_db, get_session # <- si ton fichier s'appelle autrement, change ici
 from models import Bar  # <- si ton modèle Bar est dans models.py
 from models import PartnerUser, PartnerMembership, PartnerInvite
 
@@ -144,6 +144,22 @@ def _generate_code(n: int = 6) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
 
+def _generate_partner_code(db: Optional[Session] = None) -> str:
+    session = db
+    close_session = False
+    if session is None:
+        session = get_session()
+        close_session = True
+    try:
+        while True:
+            code = f"BAR-{_generate_code(8)}"
+            if not session.query(Bar).filter(Bar.partner_code == code).first():
+                return code
+    finally:
+        if close_session:
+            session.close()
+
+
 from fastapi import Header
 
 def current_identity(
@@ -190,7 +206,11 @@ def require_role(required: str):
 @router.post("/manager/signup", response_model=AuthOut)
 def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
     try:
-        bar = Bar(name=data.bar_name, city=data.city)
+        bar = Bar(
+            name=data.bar_name,
+            city=data.city,
+            partner_code=_generate_partner_code(db),
+        )
         db.add(bar)
         db.commit()
         db.refresh(bar)

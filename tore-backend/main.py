@@ -12,6 +12,7 @@ from urllib.parse import urlparse, parse_qs
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -771,7 +772,15 @@ class WinnerIn(BaseModel):
 # App
 # ---------------------------------------------------------------------
 
-app = FastAPI(title="TORÈ backend", version="0.1.0")
+app = FastAPI(
+    title="TORÈ backend",
+    version="0.1.0",
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+        "docExpansion": "none",
+        "filter": True,
+    },
+)
 
 logging.basicConfig(level=logging.INFO)
 logging.info(f"BOOT commit={os.getenv('RENDER_GIT_COMMIT')} db={DATABASE_URL}")
@@ -833,6 +842,358 @@ def partner_portal_events(
         )
         for row in rows
     ]
+
+
+@app.get("/health")
+def health() -> JSONResponse:
+    return JSONResponse(
+        {
+            "status": "ok",
+            "commit": os.getenv("RENDER_GIT_COMMIT"),
+        }
+    )
+
+
+@app.get("/quickstart", response_class=HTMLResponse)
+def quickstart() -> HTMLResponse:
+    html = """
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TORÈ Partner QuickStart</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0;
+      background: #0f1115;
+      color: #f7f7f7;
+    }
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 6px;
+    }
+    p {
+      line-height: 1.5;
+    }
+    .card {
+      background: #1c1f26;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 16px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    }
+    label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 6px;
+    }
+    input, select, button, textarea {
+      font-size: 1rem;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #2e3440;
+      background: #10131a;
+      color: #f7f7f7;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    input::placeholder {
+      color: #9aa3b2;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .row > * {
+      flex: 1;
+    }
+    button {
+      cursor: pointer;
+      background: #2563eb;
+      border: none;
+      font-weight: 600;
+    }
+    button.secondary {
+      background: #374151;
+    }
+    button.copy {
+      background: #059669;
+      max-width: 160px;
+    }
+    pre {
+      background: #0b0d12;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.9rem;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+    }
+    .status.error {
+      border-color: #ef4444;
+      color: #fecaca;
+    }
+    .status.success {
+      border-color: #22c55e;
+      color: #bbf7d0;
+    }
+    .hint {
+      font-size: 0.9rem;
+      color: #9aa3b2;
+    }
+    a {
+      color: #60a5fa;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>QuickStart Partner — TORÈ</h1>
+    <p>Cette page vous guide pas à pas pour créer un bar, vous connecter et tester les endpoints essentiels.</p>
+    <div class="card">
+      <h2>1) Créer un bar + manager</h2>
+      <div class="grid">
+        <div>
+          <label for="barName">Nom du bar</label>
+          <input id="barName" placeholder="Ex: Le Zinc" />
+        </div>
+        <div>
+          <label for="city">Ville</label>
+          <input id="city" placeholder="Ex: Lille" />
+        </div>
+        <div>
+          <label for="managerName">Nom du manager</label>
+          <input id="managerName" placeholder="Ex: Alex" />
+        </div>
+        <div>
+          <label for="pin">PIN (4 chiffres)</label>
+          <input id="pin" placeholder="1234" maxlength="4" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="signupBtn">Créer le bar</button>
+        <button class="secondary" id="signupFill">Remplir un exemple</button>
+      </div>
+      <div id="signupStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>2) Login</h2>
+      <div class="grid">
+        <div>
+          <label for="loginBarId">Bar ID</label>
+          <input id="loginBarId" placeholder="Ex: 12" />
+        </div>
+        <div>
+          <label for="loginDisplayName">Nom d'affichage</label>
+          <input id="loginDisplayName" placeholder="Ex: Alex" />
+        </div>
+        <div>
+          <label for="loginPin">PIN</label>
+          <input id="loginPin" placeholder="1234" maxlength="4" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="loginBtn">Se connecter</button>
+      </div>
+      <div id="loginStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>3) Token</h2>
+      <label for="tokenInput">Token Bearer</label>
+      <textarea id="tokenInput" rows="3" placeholder="Votre token..."></textarea>
+      <div class="row" style="margin-top: 12px;">
+        <button class="copy" id="copyToken">Copier</button>
+        <button class="secondary" id="saveToken">Sauvegarder</button>
+        <button class="secondary" id="clearToken">Effacer</button>
+      </div>
+      <p class="hint">Le token est stocké en localStorage pour les prochains tests.</p>
+    </div>
+
+    <div class="card">
+      <h2>4) Tester les endpoints</h2>
+      <div class="row">
+        <button id="getBarBtn">Get my bar</button>
+        <button class="secondary" id="listEventsBtn">List events</button>
+      </div>
+      <div id="apiStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Endpoints utiles</h2>
+      <pre id="endpointList"></pre>
+    </div>
+  </main>
+  <script>
+    const baseUrl = window.location.origin;
+    const endpointList = document.getElementById("endpointList");
+    endpointList.textContent = [
+      `POST ${baseUrl}/partner/auth/manager/signup`,
+      `POST ${baseUrl}/partner/auth/login`,
+      `GET  ${baseUrl}/partner/portal/bar`,
+      `GET  ${baseUrl}/partner/portal/events`,
+      `GET  ${baseUrl}/health`
+    ].join("\\n");
+
+    const tokenInput = document.getElementById("tokenInput");
+    const savedToken = localStorage.getItem("partnerToken");
+    if (savedToken) {
+      tokenInput.value = savedToken;
+    }
+
+    function setStatus(element, message, ok = true) {
+      element.textContent = message;
+      element.classList.toggle("error", !ok);
+      element.classList.toggle("success", ok);
+    }
+
+    function handleError(element, res, payload) {
+      let message = "Erreur inconnue.";
+      if (res.status === 401) message = "401 — Token manquant ou invalide.";
+      else if (res.status === 403) message = "403 — Accès interdit pour ce rôle.";
+      else if (res.status === 422) message = "422 — Données invalides (vérifiez les champs).";
+      else if (res.status >= 500) message = "500 — Erreur serveur. Réessayez plus tard.";
+      else if (payload?.detail) message = payload.detail;
+      else message = `Erreur ${res.status}`;
+      setStatus(element, message, false);
+    }
+
+    async function postJson(url, body) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const payload = await res.json().catch(() => ({}));
+      return { res, payload };
+    }
+
+    async function getJson(url, token) {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      const payload = await res.json().catch(() => ({}));
+      return { res, payload };
+    }
+
+    document.getElementById("signupFill").addEventListener("click", () => {
+      document.getElementById("barName").value = "Le Zinc";
+      document.getElementById("city").value = "Lille";
+      document.getElementById("managerName").value = "Alex";
+      document.getElementById("pin").value = "1234";
+    });
+
+    document.getElementById("signupBtn").addEventListener("click", async () => {
+      const body = {
+        bar_name: document.getElementById("barName").value.trim(),
+        city: document.getElementById("city").value.trim(),
+        manager_name: document.getElementById("managerName").value.trim(),
+        pin: document.getElementById("pin").value.trim()
+      };
+      const { res, payload } = await postJson(`${baseUrl}/partner/auth/manager/signup`, body);
+      if (res.ok) {
+        tokenInput.value = payload.token;
+        localStorage.setItem("partnerToken", payload.token);
+        setStatus(
+          document.getElementById("signupStatus"),
+          `✅ Bar créé !\\nbar_id: ${payload.bar_id}\\nrole: ${payload.role}\\nname: ${payload.display_name}`
+        );
+      } else {
+        handleError(document.getElementById("signupStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const body = {
+        bar_id: Number(document.getElementById("loginBarId").value),
+        display_name: document.getElementById("loginDisplayName").value.trim(),
+        pin: document.getElementById("loginPin").value.trim()
+      };
+      const { res, payload } = await postJson(`${baseUrl}/partner/auth/login`, body);
+      if (res.ok) {
+        tokenInput.value = payload.token;
+        localStorage.setItem("partnerToken", payload.token);
+        setStatus(
+          document.getElementById("loginStatus"),
+          `✅ Connecté !\\nbar_id: ${payload.bar_id}\\nrole: ${payload.role}\\nname: ${payload.display_name}`
+        );
+      } else {
+        handleError(document.getElementById("loginStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("copyToken").addEventListener("click", async () => {
+      if (!tokenInput.value.trim()) {
+        setStatus(document.getElementById("apiStatus"), "Aucun token à copier.", false);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(tokenInput.value.trim());
+        setStatus(document.getElementById("apiStatus"), "Token copié ✅");
+      } catch (err) {
+        setStatus(document.getElementById("apiStatus"), "Impossible de copier le token.", false);
+      }
+    });
+
+    document.getElementById("saveToken").addEventListener("click", () => {
+      localStorage.setItem("partnerToken", tokenInput.value.trim());
+      setStatus(document.getElementById("apiStatus"), "Token sauvegardé ✅");
+    });
+
+    document.getElementById("clearToken").addEventListener("click", () => {
+      tokenInput.value = "";
+      localStorage.removeItem("partnerToken");
+      setStatus(document.getElementById("apiStatus"), "Token effacé.");
+    });
+
+    document.getElementById("getBarBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const { res, payload } = await getJson(`${baseUrl}/partner/portal/bar`, token);
+      if (res.ok) {
+        setStatus(document.getElementById("apiStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("apiStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("listEventsBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const { res, payload } = await getJson(`${baseUrl}/partner/portal/events`, token);
+      if (res.ok) {
+        setStatus(document.getElementById("apiStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("apiStatus"), res, payload);
+      }
+    });
+  </script>
+</body>
+</html>
+    """
+    return HTMLResponse(html)
 
 
 def _get_partner_event(event_id: int, identity: Dict[str, Any], db: Session) -> Event:
