@@ -143,6 +143,12 @@ def _generate_code(n: int = 6) -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
+def _generate_partner_code(db: Session, prefix: str = "BAR", n: int = 8) -> str:
+    # Exemple: BAR-1A2B3C4D
+    code = f"{prefix}-{_generate_code(n)}"
+    while db.query(Bar).filter(Bar.partner_code == code).first():
+        code = f"{prefix}-{_generate_code(n)}"
+    return code
 
 from fastapi import Header
 
@@ -190,7 +196,12 @@ def require_role(required: str):
 @router.post("/manager/signup", response_model=AuthOut)
 def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
     try:
-        bar = Bar(name=data.bar_name, city=data.city)
+        bar = Bar(
+            name=data.bar_name,
+            city=data.city,
+            partner_code=_generate_partner_code(db),
+            )
+
         db.add(bar)
         db.commit()
         db.refresh(bar)
