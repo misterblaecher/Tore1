@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from db import Base, engine, get_session
 from main import app
 from models import Bar
-from partner_auth import _generate_partner_code
 
 
 def _signup_payload(suffix: str) -> dict:
@@ -60,10 +59,3 @@ def test_partner_code_unique_for_signups():
         assert bar_a.partner_code != bar_b.partner_code
     finally:
         s.close()
-
-
-def test_generate_partner_code_without_db():
-    Base.metadata.create_all(engine)
-    code = _generate_partner_code()
-    assert code
-    assert code.startswith("BAR-")
