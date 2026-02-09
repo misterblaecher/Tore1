@@ -208,7 +208,7 @@ def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
                 bar = Bar(
                     name=data.bar_name,
                     city=data.city,
-                    partner_code=_generate_partner_code(),
+                    partner_code=_generate_partner_code(db),
                 )
                 db.add(bar)
                 db.commit()
