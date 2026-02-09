@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout from '../ui/Layout'
-import { api, API_BASE } from '../lib/api'
+import { api, API_BASE, ApiError } from '../lib/api'
 import { isApiUnavailable } from '../lib/errors'
 import ApiUnavailable from '../ui/ApiUnavailable'
 
@@ -100,7 +100,19 @@ export default function Dashboard() {
       if (isApiUnavailable(e)) {
         setApiDown(true)
       } else {
-        setStatsError('Impossible de charger les stats pour cet événement.')
+        if (e instanceof ApiError) {
+          const statusLabel = e.status ? `HTTP ${e.status}` : 'Erreur'
+          const message = e.message || 'Erreur inconnue'
+          setStatsError(`${statusLabel} — ${message}`)
+          if (e.url) {
+            console.error('[Stats entrée] Erreur API', { url: e.url, status: e.status, message })
+          } else {
+            console.error('[Stats entrée] Erreur API', { status: e.status, message })
+          }
+        } else {
+          setStatsError('Impossible de charger les stats pour cet événement.')
+          console.error('[Stats entrée] Erreur inconnue', e)
+        }
       }
     } finally {
       setLoadingStats(false)

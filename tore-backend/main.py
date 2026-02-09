@@ -721,6 +721,14 @@ class EventSummaryOut(BaseModel):
     ticket_value_cents: int
 
 
+class PartnerEventCreateIn(BaseModel):
+    name: str
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    entry_price_cents: Optional[int] = Field(default=None, ge=0)
+    tickets_enabled: Optional[bool] = None
+
+
 class PartnerEventDrinkOut(BaseModel):
     drink_id: int
     name: str
@@ -842,6 +850,45 @@ def partner_portal_events(
         )
         for row in rows
     ]
+
+
+@app.post("/partner/portal/events", response_model=EventSummaryOut)
+def partner_portal_event_create(
+    payload: PartnerEventCreateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    bar = db.get(Bar, identity["bar_id"])
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+
+    starts_at = payload.start_at or now_utc()
+    ends_at = payload.end_at or (starts_at + timedelta(hours=6))
+    entry_price_cents = payload.entry_price_cents if payload.entry_price_cents is not None else 0
+    ticket_mode = payload.tickets_enabled if payload.tickets_enabled is not None else True
+
+    event = Event(
+        bar_id=identity["bar_id"],
+        name=payload.name,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        entry_price_cents=entry_price_cents,
+        ticket_mode=ticket_mode,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return EventSummaryOut(
+        id=event.id,
+        bar_id=event.bar_id,
+        name=event.name,
+        starts_at=event.starts_at,
+        ends_at=event.ends_at,
+        entry_price_cents=event.entry_price_cents,
+        ticket_mode=event.ticket_mode,
+        ticket_value_cents=event.ticket_value_cents,
+    )
 
 
 @app.get("/health")
@@ -1044,6 +1091,29 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
+      <h2>5) Créer un event</h2>
+      <div class="grid">
+        <div>
+          <label for="eventName">Nom</label>
+          <input id="eventName" placeholder="Ex: Soirée lancement" />
+        </div>
+        <div>
+          <label for="eventStart">Start (optionnel)</label>
+          <input id="eventStart" type="datetime-local" />
+        </div>
+        <div>
+          <label for="eventEnd">End (optionnel)</label>
+          <input id="eventEnd" type="datetime-local" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="createEventBtn">Créer l’event</button>
+        <button class="secondary" id="testEntryStatsBtn" disabled>Tester entry stats</button>
+      </div>
+      <div id="eventStatus" class="status"></div>
+    </div>
+
+    <div class="card">
       <h2>Endpoints utiles</h2>
       <pre id="endpointList"></pre>
     </div>
@@ -1056,6 +1126,8 @@ def quickstart() -> HTMLResponse:
       `POST ${baseUrl}/partner/auth/login`,
       `GET  ${baseUrl}/partner/portal/bar`,
       `GET  ${baseUrl}/partner/portal/events`,
+      `POST ${baseUrl}/partner/portal/events`,
+      `GET  ${baseUrl}/events/{eventId}/entry/stats`,
       `GET  ${baseUrl}/health`
     ].join("\\n");
 
@@ -1082,10 +1154,14 @@ def quickstart() -> HTMLResponse:
       setStatus(element, message, false);
     }
 
-    async function postJson(url, body) {
+    async function postJson(url, body, token) {
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body)
       });
       const payload = await res.json().catch(() => ({}));
@@ -1098,6 +1174,13 @@ def quickstart() -> HTMLResponse:
       });
       const payload = await res.json().catch(() => ({}));
       return { res, payload };
+    }
+
+    function normalizeDateTime(value) {
+      if (!value) return null;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return parsed.toISOString();
     }
 
     document.getElementById("signupFill").addEventListener("click", () => {
@@ -1187,6 +1270,46 @@ def quickstart() -> HTMLResponse:
         setStatus(document.getElementById("apiStatus"), JSON.stringify(payload, null, 2));
       } else {
         handleError(document.getElementById("apiStatus"), res, payload);
+      }
+    });
+
+    let lastEventId = null;
+    const testEntryStatsBtn = document.getElementById("testEntryStatsBtn");
+
+    document.getElementById("createEventBtn").addEventListener("click", async () => {
+      const token = tokenInput.value.trim();
+      const body = {
+        name: document.getElementById("eventName").value.trim(),
+      };
+      const startValue = normalizeDateTime(document.getElementById("eventStart").value);
+      const endValue = normalizeDateTime(document.getElementById("eventEnd").value);
+      if (startValue) body.start_at = startValue;
+      if (endValue) body.end_at = endValue;
+
+      const { res, payload } = await postJson(`${baseUrl}/partner/portal/events`, body, token);
+      if (res.ok) {
+        lastEventId = payload.id;
+        testEntryStatsBtn.disabled = false;
+        setStatus(
+          document.getElementById("eventStatus"),
+          `✅ Event créé !\\nEvent ID: ${payload.id}\\nNom: ${payload.name}`
+        );
+      } else {
+        handleError(document.getElementById("eventStatus"), res, payload);
+      }
+    });
+
+    testEntryStatsBtn.addEventListener("click", async () => {
+      if (!lastEventId) {
+        setStatus(document.getElementById("eventStatus"), "Aucun event à tester.", false);
+        return;
+      }
+      const token = tokenInput.value.trim();
+      const { res, payload } = await getJson(`${baseUrl}/events/${lastEventId}/entry/stats`, token);
+      if (res.ok) {
+        setStatus(document.getElementById("eventStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("eventStatus"), res, payload);
       }
     });
   </script>
