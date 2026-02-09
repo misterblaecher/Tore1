@@ -144,6 +144,13 @@ def _generate_code(n: int = 6) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
 
+def _generate_partner_code(db: Session) -> str:
+    while True:
+        code = f"BAR-{_generate_code(8)}"
+        if not db.query(Bar).filter(Bar.partner_code == code).first():
+            return code
+
+
 from fastapi import Header
 
 def current_identity(
@@ -190,7 +197,11 @@ def require_role(required: str):
 @router.post("/manager/signup", response_model=AuthOut)
 def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
     try:
-        bar = Bar(name=data.bar_name, city=data.city)
+        bar = Bar(
+            name=data.bar_name,
+            city=data.city,
+            partner_code=_generate_partner_code(db),
+        )
         db.add(bar)
         db.commit()
         db.refresh(bar)
