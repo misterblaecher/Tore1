@@ -48,7 +48,11 @@ from models import (
     PartnerMembership,
     Wallet,
     WalletTx,
+    Bet,
+    BetPosition,
+    BetResolutionLog,
 )
+
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
 
 
@@ -66,6 +70,9 @@ UP_STEP_PCT = 0.06  # +6% of base per purchase
 DECAY_PCT_PER_MIN = 0.01  # 1%/min towards base
 HISTORY_MAX_POINTS = 2000
 
+# Polymarket V1
+POLYMARKET_TIMELINE_MAX_POINTS = 200
+
 
 # ---------------------------------------------------------------------
 # DB helpers
@@ -80,6 +87,25 @@ def get_db() -> Session:
         yield db
     finally:
         db.close()
+
+
+def _env_bool(key: str, default: bool = False) -> bool:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _polymarket_global_creators() -> set[str]:
+    raw = os.getenv("POLYMARKET_GLOBAL_CREATORS", "")
+    creators = {item.strip() for item in raw.split(",") if item.strip()}
+    if not creators:
+        return set()
+    return creators
+
+
+def _polymarket_global_enabled() -> bool:
+    return _env_bool("POLYMARKET_GLOBAL_ENABLED", False)
 
 
 def ensure_seed() -> None:
@@ -360,7 +386,6 @@ def get_or_create_balance(s: Session, event_id: int, user_id: str) -> TicketBala
     s.flush()
     return b
 
-
 def get_or_create_wallet(s: Session, user_id: str) -> Wallet:
     wallet = s.get(Wallet, user_id)
     if wallet:
@@ -383,6 +408,84 @@ def _wallet_tx_out(tx: WalletTx) -> WalletTxOut:
         created_at=tx.created_at,
         idempotency_key=tx.idempotency_key,
     )
+
+
+def _optional_current_user(
+    authorization: Optional[str],
+    db: Session,
+) -> Optional[AppUser]:
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        return None
+    return _resolve_app_user_from_token(raw, db)
+
+
+def _bet_total_pool(bet: Bet) -> int:
+    return int(bet.pool_yes_tickets or 0) + int(bet.pool_no_tickets or 0)
+
+
+def _bet_pct_yes(bet: Bet) -> float:
+    total = _bet_total_pool(bet)
+    if total <= 0:
+        return 0.5
+    return float(bet.pool_yes_tickets or 0) / float(total)
+
+
+def _bet_out(bet: Bet) -> Dict[str, Any]:
+    total = _bet_total_pool(bet)
+    pct_yes = _bet_pct_yes(bet)
+    return {
+        "id": bet.id,
+        "scope": bet.scope,
+        "event_id": bet.event_id,
+        "question": bet.question,
+        "kind": bet.kind,
+        "status": bet.status,
+        "deadline_at": bet.deadline_at.isoformat() if bet.deadline_at else None,
+        "resolver_user_id": bet.resolver_user_id,
+        "rules_text": bet.rules_text,
+        "dispute_window_minutes": bet.dispute_window_minutes,
+        "created_by_user_id": bet.created_by_user_id,
+        "created_at": bet.created_at.isoformat() if bet.created_at else None,
+        "resolved_at": bet.resolved_at.isoformat() if bet.resolved_at else None,
+        "resolved_outcome": bet.resolved_outcome,
+        "pool_yes_tickets": bet.pool_yes_tickets,
+        "pool_no_tickets": bet.pool_no_tickets,
+        "total_pool_tickets": total,
+        "pct_yes": pct_yes,
+        "pct_no": 1.0 - pct_yes if total > 0 else 0.5,
+    }
+
+
+def _is_polymarket_admin(user_id: str) -> bool:
+    allowlist = _polymarket_global_creators()
+    return user_id in allowlist if user_id else False
+
+
+def _normalize_upper(value: Optional[str]) -> str:
+    return (value or "").strip().upper()
+
+
+def _ensure_bet_scope(scope: str) -> str:
+    scope = _normalize_upper(scope)
+    if scope not in {"GLOBAL", "EVENT"}:
+        raise HTTPException(status_code=422, detail="Invalid scope")
+    return scope
+
+
+def _ensure_bet_kind(kind: str) -> str:
+    kind = _normalize_upper(kind)
+    if kind not in {"OBJECTIVE", "SUBJECTIVE"}:
+        raise HTTPException(status_code=422, detail="Invalid kind")
+    return kind
+
+
+def _ensure_bet_side(side: str) -> str:
+    side = _normalize_upper(side)
+    if side not in {"YES", "NO"}:
+        raise HTTPException(status_code=422, detail="Invalid side")
+    return side
+
 
 
 def resolve_qr_payload(raw: str) -> Dict[str, Any]:
@@ -475,6 +578,7 @@ def default_event_config_payload() -> Dict[str, Any]:
         "battles_enabled": False,
         "hunt_enabled": False,
         "report_enabled": True,
+        "allow_user_bets": False,
     }
 
 
@@ -747,6 +851,7 @@ class EventConfigOut(BaseModel):
     battles_enabled: bool
     hunt_enabled: bool
     report_enabled: bool
+    allow_user_bets: bool
     updated_at: Optional[str] = None
     updated_by_user_id: Optional[str] = None
     role: Optional[str] = None
@@ -760,6 +865,7 @@ class EventConfigPatchIn(BaseModel):
     battles_enabled: Optional[bool] = None
     hunt_enabled: Optional[bool] = None
     report_enabled: Optional[bool] = None
+    allow_user_bets: Optional[bool] = None
 
 
 class EventCostIn(BaseModel):
@@ -840,6 +946,74 @@ class PartnerEventDrinkOut(BaseModel):
     base_price_cents: int
     current_price_cents: int
     override_price_cents: Optional[int] = None
+
+
+class BetOut(BaseModel):
+    id: int
+    scope: str
+    event_id: Optional[int] = None
+    question: str
+    kind: str
+    status: str
+    deadline_at: Optional[str] = None
+    resolver_user_id: Optional[str] = None
+    rules_text: str
+    dispute_window_minutes: int
+    created_by_user_id: str
+    created_at: Optional[str] = None
+    resolved_at: Optional[str] = None
+    resolved_outcome: Optional[str] = None
+    pool_yes_tickets: int
+    pool_no_tickets: int
+    total_pool_tickets: int
+    pct_yes: float
+    pct_no: float
+
+
+class BetCreateIn(BaseModel):
+    scope: str
+    event_id: Optional[int] = None
+    question: str
+    kind: str = "OBJECTIVE"
+    deadline_at: datetime
+    resolver_user_id: Optional[str] = None
+    rules_text: str
+    dispute_window_minutes: int = Field(default=60, ge=1, le=1440)
+
+
+class BetPositionCreateIn(BaseModel):
+    side: str
+    stake_tickets: int = Field(ge=1, le=1000000)
+    idempotency_key: str = Field(min_length=4, max_length=64)
+
+
+class BetPositionOut(BaseModel):
+    id: int
+    bet_id: int
+    user_id: str
+    side: str
+    stake_tickets: int
+    created_at: Optional[str] = None
+
+
+class BetPositionResponseOut(BaseModel):
+    bet: BetOut
+    position: BetPositionOut
+
+
+class BetDetailOut(BetOut):
+    positions_count: int
+    user_position: Optional[Dict[str, Any]] = None
+
+
+class BetResolveIn(BaseModel):
+    outcome: str
+
+
+class BetTimelinePointOut(BaseModel):
+    timestamp: str
+    pct_yes: float
+    total_pool_tickets: int
 
 
 class PartnerEventDrinkIn(BaseModel):
@@ -2189,6 +2363,333 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------
+# Polymarket V1
+# ---------------------------------------------------------------------
+
+@app.get("/polymarket/bets", response_model=List[BetOut])
+def list_polymarket_bets(
+    scope: Optional[str] = Query(default=None),
+    event_id: Optional[int] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    kind: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    q = select(Bet)
+    if scope:
+        q = q.where(Bet.scope == _ensure_bet_scope(scope))
+    if event_id is not None:
+        q = q.where(Bet.event_id == event_id)
+    if status:
+        status_norm = _normalize_upper(status)
+        if status_norm not in {"LIVE", "RESOLVED", "CANCELLED"}:
+            raise HTTPException(status_code=422, detail="Invalid status")
+        q = q.where(Bet.status == status_norm)
+    if kind:
+        q = q.where(Bet.kind == _ensure_bet_kind(kind))
+
+    rows = db.scalars(q.order_by(Bet.created_at.desc()).limit(limit).offset(offset)).all()
+    return [_bet_out(row) for row in rows]
+
+
+@app.post("/polymarket/bets", response_model=BetOut)
+def create_polymarket_bet(
+    payload: BetCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    scope = _ensure_bet_scope(payload.scope)
+    kind = _ensure_bet_kind(payload.kind)
+    if scope == "GLOBAL":
+        if not _polymarket_global_enabled() or not _is_polymarket_admin(user.id):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    if scope == "EVENT":
+        if payload.event_id is None:
+            raise HTTPException(status_code=422, detail="event_id required")
+        event = db.get(Event, payload.event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        cfg = get_or_create_event_config(db, payload.event_id, commit=True)
+        if not cfg.allow_user_bets:
+            require_role_for_event(db, user.id, payload.event_id, "admin")
+
+    resolver_user_id = payload.resolver_user_id
+    if kind == "SUBJECTIVE" and not resolver_user_id:
+        raise HTTPException(status_code=422, detail="resolver_user_id required")
+
+    bet = Bet(
+        scope=scope,
+        event_id=payload.event_id if scope == "EVENT" else None,
+        question=payload.question.strip(),
+        kind=kind,
+        status="LIVE",
+        deadline_at=payload.deadline_at,
+        resolver_user_id=resolver_user_id,
+        rules_text=payload.rules_text,
+        dispute_window_minutes=payload.dispute_window_minutes,
+        created_by_user_id=user.id,
+        created_at=now_utc(),
+        resolved_outcome=None,
+        pool_yes_tickets=0,
+        pool_no_tickets=0,
+    )
+    db.add(bet)
+    db.commit()
+    db.refresh(bet)
+    return _bet_out(bet)
+
+
+@app.get("/polymarket/bets/{bet_id}", response_model=BetDetailOut)
+def get_polymarket_bet(
+    bet_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    data = _bet_out(bet)
+    positions_count = db.scalar(
+        select(func.count()).select_from(BetPosition).where(BetPosition.bet_id == bet_id)
+    )
+
+    user = _optional_current_user(authorization, db)
+    user_position = None
+    if user:
+        rows = db.scalars(
+            select(BetPosition).where(
+                BetPosition.bet_id == bet_id, BetPosition.user_id == user.id
+            )
+        ).all()
+        yes_total = sum(r.stake_tickets for r in rows if r.side == "YES")
+        no_total = sum(r.stake_tickets for r in rows if r.side == "NO")
+        total_pool = _bet_total_pool(bet)
+        payout_yes = (
+            (yes_total * total_pool / bet.pool_yes_tickets)
+            if bet.pool_yes_tickets > 0 and yes_total > 0
+            else 0
+        )
+        payout_no = (
+            (no_total * total_pool / bet.pool_no_tickets)
+            if bet.pool_no_tickets > 0 and no_total > 0
+            else 0
+        )
+        user_position = {
+            "stake_yes": yes_total,
+            "stake_no": no_total,
+            "stake_total": yes_total + no_total,
+            "payout_yes": payout_yes,
+            "payout_no": payout_no,
+        }
+
+    return {
+        **data,
+        "positions_count": positions_count or 0,
+        "user_position": user_position,
+    }
+
+
+@app.post("/polymarket/bets/{bet_id}/positions", response_model=BetPositionResponseOut)
+def create_polymarket_position(
+    bet_id: int,
+    payload: BetPositionCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    side = _ensure_bet_side(payload.side)
+    stake = payload.stake_tickets
+    idempotency_key = payload.idempotency_key.strip()
+
+    try:
+        bet = db.execute(
+            select(Bet).where(Bet.id == bet_id).with_for_update()
+        ).scalar_one_or_none()
+        if not bet:
+            raise HTTPException(status_code=404, detail="Bet not found")
+        if bet.status != "LIVE":
+            raise HTTPException(status_code=409, detail="Bet not live")
+        if bet.deadline_at and now_utc() > bet.deadline_at:
+            raise HTTPException(status_code=409, detail="Bet closed")
+
+        position = BetPosition(
+            bet_id=bet_id,
+            user_id=user.id,
+            side=side,
+            stake_tickets=stake,
+            idempotency_key=idempotency_key,
+            created_at=now_utc(),
+        )
+        db.add(position)
+        db.flush()
+        if side == "YES":
+            bet.pool_yes_tickets += stake
+        else:
+            bet.pool_no_tickets += stake
+        db.add(bet)
+        db.commit()
+        db.refresh(position)
+        return {
+            "bet": _bet_out(bet),
+            "position": {
+                "id": position.id,
+                "bet_id": position.bet_id,
+                "user_id": position.user_id,
+                "side": position.side,
+                "stake_tickets": position.stake_tickets,
+                "created_at": position.created_at.isoformat() if position.created_at else None,
+            },
+        }
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(BetPosition).filter(
+            BetPosition.bet_id == bet_id,
+            BetPosition.user_id == user.id,
+            BetPosition.idempotency_key == idempotency_key,
+        ).first()
+        if not existing:
+            raise
+        bet = db.get(Bet, bet_id)
+        if not bet:
+            raise HTTPException(status_code=404, detail="Bet not found")
+        return {
+            "bet": _bet_out(bet),
+            "position": {
+                "id": existing.id,
+                "bet_id": existing.bet_id,
+                "user_id": existing.user_id,
+                "side": existing.side,
+                "stake_tickets": existing.stake_tickets,
+                "created_at": existing.created_at.isoformat() if existing.created_at else None,
+            },
+        }
+
+
+@app.post("/polymarket/bets/{bet_id}/resolve", response_model=BetOut)
+def resolve_polymarket_bet(
+    bet_id: int,
+    payload: BetResolveIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    if bet.status != "LIVE":
+        raise HTTPException(status_code=409, detail="Bet not live")
+
+    outcome = _ensure_bet_side(payload.outcome)
+    is_admin = _is_polymarket_admin(user.id)
+    if bet.scope == "EVENT" and bet.event_id is not None:
+        role = resolve_event_role(db, user.id, bet.event_id)
+        if _role_rank(role) >= _role_rank("admin"):
+            is_admin = True
+
+    if bet.kind == "SUBJECTIVE":
+        if user.id != bet.resolver_user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    bet.status = "RESOLVED"
+    bet.resolved_outcome = outcome
+    bet.resolved_at = now_utc()
+    db.add(bet)
+    db.add(
+        BetResolutionLog(
+            bet_id=bet.id,
+            actor_user_id=user.id,
+            action="resolve",
+            outcome=outcome,
+            notes="manual",
+        )
+    )
+    db.commit()
+    return _bet_out(bet)
+
+
+@app.post("/polymarket/bets/{bet_id}/cancel", response_model=BetOut)
+def cancel_polymarket_bet(
+    bet_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    if bet.status != "LIVE":
+        raise HTTPException(status_code=409, detail="Bet not live")
+
+    is_admin = _is_polymarket_admin(user.id)
+    if bet.scope == "EVENT" and bet.event_id is not None:
+        role = resolve_event_role(db, user.id, bet.event_id)
+        if _role_rank(role) >= _role_rank("admin"):
+            is_admin = True
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    bet.status = "CANCELLED"
+    bet.resolved_at = now_utc()
+    bet.resolved_outcome = None
+    db.add(bet)
+    db.add(
+        BetResolutionLog(
+            bet_id=bet.id,
+            actor_user_id=user.id,
+            action="cancel",
+            outcome=None,
+            notes=None,
+        )
+    )
+    db.commit()
+    return _bet_out(bet)
+
+
+@app.get("/polymarket/bets/{bet_id}/timeline", response_model=List[BetTimelinePointOut])
+def polymarket_bet_timeline(
+    bet_id: int,
+    db: Session = Depends(get_db),
+):
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+
+    positions = db.scalars(
+        select(BetPosition)
+        .where(BetPosition.bet_id == bet_id)
+        .order_by(BetPosition.created_at.asc())
+    ).all()
+
+    points: List[Dict[str, Any]] = []
+    yes_pool = 0
+    no_pool = 0
+    for pos in positions:
+        if pos.side == "YES":
+            yes_pool += pos.stake_tickets
+        else:
+            no_pool += pos.stake_tickets
+        total = yes_pool + no_pool
+        pct_yes = yes_pool / total if total > 0 else 0.5
+        points.append(
+            {
+                "timestamp": pos.created_at.isoformat() if pos.created_at else now_utc().isoformat(),
+                "pct_yes": pct_yes,
+                "total_pool_tickets": total,
+            }
+        )
+
+    if len(points) > POLYMARKET_TIMELINE_MAX_POINTS:
+        step = max(1, len(points) // POLYMARKET_TIMELINE_MAX_POINTS)
+        trimmed = points[::step]
+        if trimmed[-1] != points[-1]:
+            trimmed.append(points[-1])
+        points = trimmed
+
+    return points
+
+
+# ---------------------------------------------------------------------
 # Public endpoints
 # ---------------------------------------------------------------------
 
@@ -2387,6 +2888,7 @@ def get_event_config(
         "battles_enabled": cfg.battles_enabled,
         "hunt_enabled": cfg.hunt_enabled,
         "report_enabled": cfg.report_enabled,
+        "allow_user_bets": cfg.allow_user_bets,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,
@@ -2416,6 +2918,7 @@ def patch_event_config(
         "battles_enabled",
         "hunt_enabled",
         "report_enabled",
+        "allow_user_bets",
     ]:
         value = getattr(payload, field)
         if value is None:
@@ -2448,6 +2951,7 @@ def patch_event_config(
         "battles_enabled": cfg.battles_enabled,
         "hunt_enabled": cfg.hunt_enabled,
         "report_enabled": cfg.report_enabled,
+        "allow_user_bets": cfg.allow_user_bets,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,

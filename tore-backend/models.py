@@ -189,8 +189,66 @@ class EventConfig(Base):
     battles_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     hunt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     report_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    allow_user_bets: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     updated_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class Bet(Base):
+    __tablename__ = "polymarket_bets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(16), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    question: Mapped[str] = mapped_column(String(280), default="")
+    kind: Mapped[str] = mapped_column(String(16), default="OBJECTIVE")
+    status: Mapped[str] = mapped_column(String(16), default="LIVE")
+
+    deadline_at: Mapped[datetime] = mapped_column(DateTime)
+    resolver_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    rules_text: Mapped[str] = mapped_column(Text, default="")
+    dispute_window_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    created_by_user_id: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    resolved_outcome: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+
+    pool_yes_tickets: Mapped[int] = mapped_column(Integer, default=0)
+    pool_no_tickets: Mapped[int] = mapped_column(Integer, default=0)
+
+    positions: Mapped[List["BetPosition"]] = relationship(
+        back_populates="bet", cascade="all, delete-orphan"
+    )
+
+
+class BetPosition(Base):
+    __tablename__ = "polymarket_positions"
+    __table_args__ = (
+        UniqueConstraint("bet_id", "user_id", "idempotency_key", name="uq_bet_positions_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bet_id: Mapped[int] = mapped_column(ForeignKey("polymarket_bets.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    side: Mapped[str] = mapped_column(String(8))
+    stake_tickets: Mapped[int] = mapped_column(Integer, default=0)
+    idempotency_key: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+    bet: Mapped["Bet"] = relationship(back_populates="positions")
+
+
+class BetResolutionLog(Base):
+    __tablename__ = "polymarket_resolution_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bet_id: Mapped[int] = mapped_column(ForeignKey("polymarket_bets.id"), index=True)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    action: Mapped[str] = mapped_column(String(20), default="resolve")
+    outcome: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
 
 class EventConfigLog(Base):
