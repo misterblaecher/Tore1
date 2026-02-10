@@ -402,6 +402,36 @@ class AppUser(Base):
     tokens: Mapped[List["AppToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
+class Wallet(Base):
+    __tablename__ = "wallets"
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), primary_key=True)
+    balance_tickets: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+    user: Mapped["AppUser"] = relationship()
+
+
+class WalletTx(Base):
+    __tablename__ = "wallet_txs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_wallet_txs_user_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="CREDIT")
+    amount_tickets: Mapped[int] = mapped_column(Integer)
+    ref_type: Mapped[str] = mapped_column(String(20), default="TOPUP_QR")
+    ref_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("partner_users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
+    user: Mapped["AppUser"] = relationship()
+
+
 class AppToken(Base):
     __tablename__ = "app_tokens"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
