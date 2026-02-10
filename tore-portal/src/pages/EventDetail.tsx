@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { api } from '../lib/api'
 import { isApiUnavailable } from '../lib/errors'
@@ -155,6 +155,21 @@ export default function EventDetail() {
           <div style={{ fontSize: 22, fontWeight: 900 }}>{event.name}</div>
           <div style={{ opacity: 0.85, marginTop: 6 }}>
             {new Date(event.starts_at).toLocaleString()} → {new Date(event.ends_at).toLocaleString()}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Link
+              to={`/events/${event.id}/polymarket`}
+              style={{
+                display: 'inline-block',
+                padding: '8px 12px',
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: '#fff',
+                textDecoration: 'none',
+              }}
+            >
+              Voir Polymarket Event
+            </Link>
           </div>
         </div>
       ) : null}
