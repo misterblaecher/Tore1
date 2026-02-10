@@ -3690,7 +3690,8 @@ def wallet_topup(
         )
         .first()
     )
-    if existing:
+    def _wallet_topup_response() -> WalletMeOut:
+        fresh_wallet = get_or_create_wallet(db, payload.user_id)
         rows = (
             db.query(WalletTx)
             .filter(WalletTx.user_id == payload.user_id)
@@ -3701,10 +3702,13 @@ def wallet_topup(
         db.commit()
         return WalletMeOut(
             user_id=payload.user_id,
-            balance_tickets=wallet.balance_tickets,
-            updated_at=wallet.updated_at,
+            balance_tickets=fresh_wallet.balance_tickets,
+            updated_at=fresh_wallet.updated_at,
             transactions=[_wallet_tx_out(tx) for tx in rows],
         )
+
+    if existing:
+        return _wallet_topup_response()
 
     tx = WalletTx(
         user_id=payload.user_id,
@@ -3718,21 +3722,23 @@ def wallet_topup(
     wallet.balance_tickets += payload.amount_tickets
     wallet.updated_at = now_utc()
     db.add_all([wallet, tx])
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        race_tx = (
+            db.query(WalletTx)
+            .filter(
+                WalletTx.user_id == payload.user_id,
+                WalletTx.idempotency_key == payload.idempotency_key,
+            )
+            .first()
+        )
+        if not race_tx:
+            raise
+        return _wallet_topup_response()
 
-    rows = (
-        db.query(WalletTx)
-        .filter(WalletTx.user_id == payload.user_id)
-        .order_by(WalletTx.created_at.desc())
-        .limit(20)
-        .all()
-    )
-    return WalletMeOut(
-        user_id=payload.user_id,
-        balance_tickets=wallet.balance_tickets,
-        updated_at=wallet.updated_at,
-        transactions=[_wallet_tx_out(tx) for tx in rows],
-    )
+    return _wallet_topup_response()
 
 
 @app.post("/wallet/topup/from_qr", response_model=WalletMeOut)
