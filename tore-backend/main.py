@@ -46,10 +46,13 @@ from models import (
     AppUser,
     AppToken,
     PartnerMembership,
+    Wallet,
+    WalletTx,
     Bet,
     BetPosition,
     BetResolutionLog,
 )
+
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
 
 
@@ -383,6 +386,29 @@ def get_or_create_balance(s: Session, event_id: int, user_id: str) -> TicketBala
     s.flush()
     return b
 
+def get_or_create_wallet(s: Session, user_id: str) -> Wallet:
+    wallet = s.get(Wallet, user_id)
+    if wallet:
+        return wallet
+    wallet = Wallet(user_id=user_id, balance_tickets=0, updated_at=now_utc())
+    s.add(wallet)
+    s.flush()
+    return wallet
+
+
+def _wallet_tx_out(tx: WalletTx) -> WalletTxOut:
+    return WalletTxOut(
+        id=tx.id,
+        user_id=tx.user_id,
+        kind=tx.kind,
+        amount_tickets=tx.amount_tickets,
+        ref_type=tx.ref_type,
+        ref_id=tx.ref_id,
+        created_by_user_id=tx.created_by_user_id,
+        created_at=tx.created_at,
+        idempotency_key=tx.idempotency_key,
+    )
+
 
 def _optional_current_user(
     authorization: Optional[str],
@@ -461,6 +487,7 @@ def _ensure_bet_side(side: str) -> str:
     return side
 
 
+
 def resolve_qr_payload(raw: str) -> Dict[str, Any]:
     trimmed = (raw or "").strip()
     if not trimmed:
@@ -471,6 +498,31 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
+    if qr_type == "wallet":
+        action = parsed.path.lstrip("/").lower()
+        if action != "topup":
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        params = parse_qs(parsed.query)
+        user_id = (params.get("user_id") or [None])[0]
+        amount_raw = (params.get("amount") or [None])[0]
+        nonce = (params.get("nonce") or [None])[0]
+        if not user_id or not amount_raw or not nonce:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        try:
+            amount_tickets = int(amount_raw)
+        except (TypeError, ValueError):
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        if amount_tickets <= 0:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        return {
+            "valid": True,
+            "type": "wallet_topup",
+            "event_id": None,
+            "user_id": user_id,
+            "amount_tickets": amount_tickets,
+            "idempotency_key": nonce,
+            "reason": None,
+        }
     if qr_type not in {"join", "menu", "entry", "admin_config", "staff_entry", "staff_invite"}:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
@@ -690,6 +742,36 @@ class EntryLogOut(BaseModel):
     raw_qr: Optional[str]
 
 
+class WalletTxOut(BaseModel):
+    id: int
+    user_id: str
+    kind: str
+    amount_tickets: int
+    ref_type: str
+    ref_id: Optional[str] = None
+    created_by_user_id: Optional[int] = None
+    created_at: datetime
+    idempotency_key: Optional[str] = None
+
+
+class WalletMeOut(BaseModel):
+    user_id: str
+    balance_tickets: int
+    updated_at: datetime
+    transactions: List[WalletTxOut]
+
+
+class WalletTopupIn(BaseModel):
+    user_id: str
+    amount_tickets: int = Field(ge=1)
+    idempotency_key: str
+    raw_qr: Optional[str] = None
+
+
+class WalletTopupFromQrIn(BaseModel):
+    raw_qr: str
+
+
 class BanIn(BaseModel):
     user_id: str
     reason: str = "reason"
@@ -718,6 +800,9 @@ class QrResolveOut(BaseModel):
     type: str
     event_id: Optional[int] = None
     token: Optional[str] = None
+    user_id: Optional[str] = None
+    amount_tickets: Optional[int] = None
+    idempotency_key: Optional[str] = None
     reason: Optional[str] = None
     required_role: Optional[str] = None
     granted_role: Optional[str] = None
@@ -1337,7 +1422,46 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
-      <h2>6) Tester les endpoints</h2>
+      <h2>6) Wallet tickets</h2>
+      <p class="hint">Créez un user app, consultez son wallet, puis créditez via un token manager.</p>
+      <div class="grid">
+        <div>
+          <label for="walletGuestName">Nom user app</label>
+          <input id="walletGuestName" placeholder="Ex: Clara" />
+        </div>
+        <div>
+          <label for="walletUserId">User ID</label>
+          <input id="walletUserId" placeholder="ID app user" />
+        </div>
+        <div>
+          <label for="walletUserToken">Token user app</label>
+          <input id="walletUserToken" placeholder="Token Bearer user app" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="walletCreateGuestBtn" class="secondary">Créer un user app</button>
+        <button id="walletMeBtn">Voir wallet me</button>
+      </div>
+      <div id="walletStatus" class="status"></div>
+      <div class="grid" style="margin-top: 16px;">
+        <div>
+          <label for="walletTopupAmount">Montant tickets</label>
+          <input id="walletTopupAmount" type="number" min="1" value="10" />
+        </div>
+        <div>
+          <label for="walletTopupNonce">Idempotency key</label>
+          <input id="walletTopupNonce" placeholder="nonce" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="walletTopupBtn">Topup user (manager)</button>
+        <button class="secondary" id="walletNonceBtn">Générer nonce</button>
+      </div>
+      <div id="walletTopupStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>7) Tester les endpoints</h2>
       <div class="row">
         <button id="getBarBtn">Get my bar</button>
         <button class="secondary" id="listEventsBtn">List events</button>
@@ -1346,7 +1470,7 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
-      <h2>7) Créer un event</h2>
+      <h2>8) Créer un event</h2>
       <div class="grid">
         <div>
           <label for="eventName">Nom</label>
@@ -1369,7 +1493,7 @@ def quickstart() -> HTMLResponse:
     </div>
 
     <div class="card">
-      <h2>8) Modifier un event</h2>
+      <h2>9) Modifier un event</h2>
       <div class="grid">
         <div>
           <label for="editEventId">Event ID</label>
@@ -1417,11 +1541,16 @@ def quickstart() -> HTMLResponse:
       `PATCH ${baseUrl}/partner/portal/events/{eventId}`,
       `POST ${baseUrl}/events/{eventId}/entry/scans`,
       `GET  ${baseUrl}/events/{eventId}/entry/stats`,
+      `GET  ${baseUrl}/wallet/me`,
+      `POST ${baseUrl}/wallet/topup`,
+      `POST ${baseUrl}/wallet/topup/from_qr`,
       `GET  ${baseUrl}/health`
     ].join("\\n");
 
     const tokenInput = document.getElementById("tokenInput");
     const staffTokenInput = document.getElementById("staffTokenInput");
+    const walletUserTokenInput = document.getElementById("walletUserToken");
+    const walletUserIdInput = document.getElementById("walletUserId");
     const savedToken = localStorage.getItem("partnerToken");
     if (savedToken) {
       tokenInput.value = savedToken;
@@ -1429,6 +1558,14 @@ def quickstart() -> HTMLResponse:
     const savedStaffToken = localStorage.getItem("staffToken");
     if (savedStaffToken) {
       staffTokenInput.value = savedStaffToken;
+    }
+    const savedWalletToken = localStorage.getItem("walletUserToken");
+    if (savedWalletToken && walletUserTokenInput) {
+      walletUserTokenInput.value = savedWalletToken;
+    }
+    const savedWalletUserId = localStorage.getItem("walletUserId");
+    if (savedWalletUserId && walletUserIdInput) {
+      walletUserIdInput.value = savedWalletUserId;
     }
 
     function setStatus(element, message, ok = true) {
@@ -1611,6 +1748,76 @@ def quickstart() -> HTMLResponse:
       }
     });
 
+    const walletNonceInput = document.getElementById("walletTopupNonce");
+    if (walletNonceInput) {
+      walletNonceInput.value = generateIdempotencyKey();
+    }
+
+    document.getElementById("walletNonceBtn").addEventListener("click", () => {
+      walletNonceInput.value = generateIdempotencyKey();
+      setStatus(document.getElementById("walletTopupStatus"), "Nonce régénéré ✅");
+    });
+
+    document.getElementById("walletCreateGuestBtn").addEventListener("click", async () => {
+      const body = { display_name: document.getElementById("walletGuestName").value.trim() };
+      const { res, payload } = await postJson(`${baseUrl}/auth/guest`, body);
+      if (res.ok) {
+        walletUserTokenInput.value = payload.token;
+        walletUserIdInput.value = payload.user.id;
+        localStorage.setItem("walletUserToken", payload.token);
+        localStorage.setItem("walletUserId", payload.user.id);
+        setStatus(
+          document.getElementById("walletStatus"),
+          `✅ User app créé !\\nuser_id: ${payload.user.id}`
+        );
+      } else {
+        handleError(document.getElementById("walletStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("walletMeBtn").addEventListener("click", async () => {
+      const token = walletUserTokenInput.value.trim();
+      if (!token) {
+        setStatus(document.getElementById("walletStatus"), "Token user app manquant.", false);
+        return;
+      }
+      localStorage.setItem("walletUserToken", token);
+      const { res, payload } = await getJson(`${baseUrl}/wallet/me`, token);
+      if (res.ok) {
+        if (payload.user_id) {
+          walletUserIdInput.value = payload.user_id;
+          localStorage.setItem("walletUserId", payload.user_id);
+        }
+        setStatus(document.getElementById("walletStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("walletStatus"), res, payload);
+      }
+    });
+
+    document.getElementById("walletTopupBtn").addEventListener("click", async () => {
+      const managerToken = tokenInput.value.trim();
+      if (!managerToken) {
+        setStatus(document.getElementById("walletTopupStatus"), "Token manager manquant.", false);
+        return;
+      }
+      const userId = walletUserIdInput.value.trim();
+      if (!userId) {
+        setStatus(document.getElementById("walletTopupStatus"), "User ID manquant.", false);
+        return;
+      }
+      const body = {
+        user_id: userId,
+        amount_tickets: Number(document.getElementById("walletTopupAmount").value || 0),
+        idempotency_key: walletNonceInput.value.trim(),
+      };
+      const { res, payload } = await postJson(`${baseUrl}/wallet/topup`, body, managerToken);
+      if (res.ok) {
+        setStatus(document.getElementById("walletTopupStatus"), JSON.stringify(payload, null, 2));
+      } else {
+        handleError(document.getElementById("walletTopupStatus"), res, payload);
+      }
+    });
+
     const scanIdempotencyInput = document.getElementById("scanIdempotency");
     scanIdempotencyInput.value = generateIdempotencyKey();
 
@@ -1790,6 +1997,10 @@ def _require_partner_role(identity: Dict[str, Any], role: str) -> None:
 def _require_partner_roles(identity: Dict[str, Any], roles: set[str]) -> None:
     if identity.get("role") not in roles:
         raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _require_wallet_staff(identity: Dict[str, Any]) -> None:
+    _require_partner_roles(identity, {"manager", "cashier", "wallet"})
 
 
 @app.get("/partner/portal/events/{event_id}", response_model=PartnerEventOut)
@@ -2059,6 +2270,19 @@ def qr_resolve(
     event_id = base.get("event_id")
     qr_type = base.get("type")
     token = base.get("token")
+    if qr_type == "wallet_topup":
+        return {
+            "valid": True,
+            "type": qr_type,
+            "event_id": None,
+            "token": None,
+            "user_id": base.get("user_id"),
+            "amount_tickets": base.get("amount_tickets"),
+            "idempotency_key": base.get("idempotency_key"),
+            "reason": None,
+            "required_role": None,
+            "granted_role": "guest",
+        }
     role_map = {
         "join": "guest",
         "menu": "guest",
@@ -3422,6 +3646,131 @@ def wallet_history(
         raise HTTPException(404, "Event not found")
     require_feature(db, event_id, "wallet_enabled")
     return []
+
+
+@app.get("/wallet/me", response_model=WalletMeOut)
+def wallet_me(
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    wallet = get_or_create_wallet(db, user.id)
+    rows = (
+        db.query(WalletTx)
+        .filter(WalletTx.user_id == user.id)
+        .order_by(WalletTx.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    db.commit()
+    return WalletMeOut(
+        user_id=user.id,
+        balance_tickets=wallet.balance_tickets,
+        updated_at=wallet.updated_at,
+        transactions=[_wallet_tx_out(tx) for tx in rows],
+    )
+
+
+@app.post("/wallet/topup", response_model=WalletMeOut)
+def wallet_topup(
+    payload: WalletTopupIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_wallet_staff(identity)
+    user = db.get(AppUser, payload.user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    wallet = get_or_create_wallet(db, payload.user_id)
+    existing = (
+        db.query(WalletTx)
+        .filter(
+            WalletTx.user_id == payload.user_id,
+            WalletTx.idempotency_key == payload.idempotency_key,
+        )
+        .first()
+    )
+    if existing:
+        rows = (
+            db.query(WalletTx)
+            .filter(WalletTx.user_id == payload.user_id)
+            .order_by(WalletTx.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        db.commit()
+        return WalletMeOut(
+            user_id=payload.user_id,
+            balance_tickets=wallet.balance_tickets,
+            updated_at=wallet.updated_at,
+            transactions=[_wallet_tx_out(tx) for tx in rows],
+        )
+
+    tx = WalletTx(
+        user_id=payload.user_id,
+        kind="CREDIT",
+        amount_tickets=payload.amount_tickets,
+        ref_type="TOPUP_QR",
+        ref_id=payload.raw_qr,
+        created_by_user_id=identity["user_id"],
+        idempotency_key=payload.idempotency_key,
+    )
+    wallet.balance_tickets += payload.amount_tickets
+    wallet.updated_at = now_utc()
+    db.add_all([wallet, tx])
+    db.commit()
+
+    rows = (
+        db.query(WalletTx)
+        .filter(WalletTx.user_id == payload.user_id)
+        .order_by(WalletTx.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return WalletMeOut(
+        user_id=payload.user_id,
+        balance_tickets=wallet.balance_tickets,
+        updated_at=wallet.updated_at,
+        transactions=[_wallet_tx_out(tx) for tx in rows],
+    )
+
+
+@app.post("/wallet/topup/from_qr", response_model=WalletMeOut)
+def wallet_topup_from_qr(
+    payload: WalletTopupFromQrIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_wallet_staff(identity)
+    resolved = resolve_qr_payload(payload.raw_qr)
+    if not resolved.get("valid") or resolved.get("type") != "wallet_topup":
+        raise HTTPException(400, "Invalid wallet topup QR")
+
+    topup_payload = WalletTopupIn(
+        user_id=resolved["user_id"],
+        amount_tickets=resolved["amount_tickets"],
+        idempotency_key=resolved["idempotency_key"],
+        raw_qr=payload.raw_qr,
+    )
+    return wallet_topup(topup_payload, identity=identity, db=db)
+
+
+@app.get("/wallet/{user_id}/history", response_model=List[WalletTxOut])
+def wallet_user_history(
+    user_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_wallet_staff(identity)
+    rows = (
+        db.query(WalletTx)
+        .filter(WalletTx.user_id == user_id)
+        .order_by(WalletTx.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_wallet_tx_out(tx) for tx in rows]
 
 
 @app.post("/tickets/credit")
