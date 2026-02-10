@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { api, API_BASE, ApiError } from '../lib/api'
 import { isApiUnavailable } from '../lib/errors'
@@ -166,6 +167,24 @@ export default function Dashboard() {
           </div>
         </div>
       ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        <Link
+          to="/polymarket"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,0,160,0.4)',
+            background: 'rgba(255,0,160,0.25)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Ouvrir Polymarket Global
+        </Link>
+      </div>
 
       <h2 style={{ marginTop: 22 }}>Événements</h2>
       <div style={{ display: 'grid', gap: 12 }}>
