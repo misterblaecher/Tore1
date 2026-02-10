@@ -410,6 +410,53 @@ def _wallet_tx_out(tx: WalletTx) -> WalletTxOut:
     )
 
 
+def _wallet_tx_exists(s: Session, user_id: str, idempotency_key: str) -> Optional[WalletTx]:
+    return (
+        s.query(WalletTx)
+        .filter(
+            WalletTx.user_id == user_id,
+            WalletTx.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+
+
+def _apply_wallet_tx(
+    s: Session,
+    *,
+    user_id: str,
+    amount_tickets: int,
+    kind: str,
+    ref_type: str,
+    ref_id: Optional[str],
+    idempotency_key: str,
+    created_by_user_id: Optional[int] = None,
+) -> tuple[Wallet, WalletTx, bool]:
+    wallet = get_or_create_wallet(s, user_id)
+    existing = _wallet_tx_exists(s, user_id, idempotency_key)
+    if existing:
+        return wallet, existing, False
+
+    wallet.balance_tickets += amount_tickets
+    wallet.updated_at = now_utc()
+    tx = WalletTx(
+        user_id=user_id,
+        kind=kind,
+        amount_tickets=amount_tickets,
+        ref_type=ref_type,
+        ref_id=ref_id,
+        created_by_user_id=created_by_user_id,
+        idempotency_key=idempotency_key,
+    )
+    s.add_all([wallet, tx])
+    s.flush()
+    return wallet, tx, True
+
+
+def _wallet_tx_key(prefix: str, bet_id: int, user_id: str) -> str:
+    return f"{prefix}:{bet_id}:{user_id}"
+
+
 def _optional_current_user(
     authorization: Optional[str],
     db: Session,
@@ -1004,6 +1051,17 @@ class BetPositionResponseOut(BaseModel):
 class BetDetailOut(BetOut):
     positions_count: int
     user_position: Optional[Dict[str, Any]] = None
+
+
+class BetMeOut(BaseModel):
+    bet_id: int
+    user_id: str
+    stake_yes: int
+    stake_no: int
+    stake_total: int
+    payout_yes: float
+    payout_no: float
+    wallet_balance_tickets: Optional[int] = None
 
 
 class BetResolveIn(BaseModel):
@@ -2490,6 +2548,52 @@ def get_polymarket_bet(
     }
 
 
+@app.get("/polymarket/bets/{bet_id}/me", response_model=BetMeOut)
+def get_polymarket_bet_me(
+    bet_id: int,
+    include_wallet_balance: bool = Query(default=True),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+
+    rows = db.scalars(
+        select(BetPosition).where(BetPosition.bet_id == bet_id, BetPosition.user_id == user.id)
+    ).all()
+    yes_total = sum(r.stake_tickets for r in rows if r.side == "YES")
+    no_total = sum(r.stake_tickets for r in rows if r.side == "NO")
+    total_pool = _bet_total_pool(bet)
+
+    payout_yes = (
+        (yes_total * total_pool / bet.pool_yes_tickets)
+        if bet.pool_yes_tickets > 0 and yes_total > 0
+        else 0
+    )
+    payout_no = (
+        (no_total * total_pool / bet.pool_no_tickets)
+        if bet.pool_no_tickets > 0 and no_total > 0
+        else 0
+    )
+
+    wallet_balance = None
+    if include_wallet_balance:
+        wallet_balance = get_or_create_wallet(db, user.id).balance_tickets
+        db.commit()
+
+    return BetMeOut(
+        bet_id=bet_id,
+        user_id=user.id,
+        stake_yes=yes_total,
+        stake_no=no_total,
+        stake_total=yes_total + no_total,
+        payout_yes=payout_yes,
+        payout_no=payout_no,
+        wallet_balance_tickets=wallet_balance,
+    )
+
+
 @app.post("/polymarket/bets/{bet_id}/positions", response_model=BetPositionResponseOut)
 def create_polymarket_position(
     bet_id: int,
@@ -2512,6 +2616,13 @@ def create_polymarket_position(
         if bet.deadline_at and now_utc() > bet.deadline_at:
             raise HTTPException(status_code=409, detail="Bet closed")
 
+        wallet = get_or_create_wallet(db, user.id)
+        if wallet.balance_tickets < stake:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient wallet balance: required {stake}, available {wallet.balance_tickets}",
+            )
+
         position = BetPosition(
             bet_id=bet_id,
             user_id=user.id,
@@ -2522,6 +2633,15 @@ def create_polymarket_position(
         )
         db.add(position)
         db.flush()
+        _apply_wallet_tx(
+            db,
+            user_id=user.id,
+            amount_tickets=-stake,
+            kind="BET_STAKE",
+            ref_type="BET",
+            ref_id=str(bet_id),
+            idempotency_key=idempotency_key,
+        )
         if side == "YES":
             bet.pool_yes_tickets += stake
         else:
@@ -2572,9 +2692,11 @@ def resolve_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    bet = db.get(Bet, bet_id)
+    bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
         raise HTTPException(status_code=404, detail="Bet not found")
+    if bet.status == "RESOLVED":
+        return _bet_out(bet)
     if bet.status != "LIVE":
         raise HTTPException(status_code=409, detail="Bet not live")
 
@@ -2596,6 +2718,31 @@ def resolve_polymarket_bet(
     bet.resolved_outcome = outcome
     bet.resolved_at = now_utc()
     db.add(bet)
+
+    positions = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet_id)).all()
+    total_pool = _bet_total_pool(bet)
+    winning_pool = bet.pool_yes_tickets if outcome == "YES" else bet.pool_no_tickets
+    if winning_pool > 0 and total_pool > 0:
+        payouts_by_user: Dict[str, int] = {}
+        for pos in positions:
+            if pos.side != outcome:
+                continue
+            payout = int(round(pos.stake_tickets * total_pool / winning_pool))
+            payouts_by_user[pos.user_id] = payouts_by_user.get(pos.user_id, 0) + payout
+
+        for winner_user_id, payout in payouts_by_user.items():
+            if payout <= 0:
+                continue
+            _apply_wallet_tx(
+                db,
+                user_id=winner_user_id,
+                amount_tickets=payout,
+                kind="BET_PAYOUT",
+                ref_type="BET",
+                ref_id=str(bet_id),
+                idempotency_key=_wallet_tx_key("BET_PAYOUT", bet_id, winner_user_id),
+            )
+
     db.add(
         BetResolutionLog(
             bet_id=bet.id,
@@ -2615,9 +2762,11 @@ def cancel_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    bet = db.get(Bet, bet_id)
+    bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
         raise HTTPException(status_code=404, detail="Bet not found")
+    if bet.status == "CANCELLED":
+        return _bet_out(bet)
     if bet.status != "LIVE":
         raise HTTPException(status_code=409, detail="Bet not live")
 
@@ -2633,6 +2782,25 @@ def cancel_polymarket_bet(
     bet.resolved_at = now_utc()
     bet.resolved_outcome = None
     db.add(bet)
+
+    positions = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet_id)).all()
+    refunds_by_user: Dict[str, int] = {}
+    for pos in positions:
+        refunds_by_user[pos.user_id] = refunds_by_user.get(pos.user_id, 0) + pos.stake_tickets
+
+    for user_id, refund in refunds_by_user.items():
+        if refund <= 0:
+            continue
+        _apply_wallet_tx(
+            db,
+            user_id=user_id,
+            amount_tickets=refund,
+            kind="REFUND",
+            ref_type="BET",
+            ref_id=str(bet_id),
+            idempotency_key=_wallet_tx_key("BET_REFUND", bet_id, user_id),
+        )
+
     db.add(
         BetResolutionLog(
             bet_id=bet.id,
@@ -3682,14 +3850,7 @@ def wallet_topup(
         raise HTTPException(404, "User not found")
 
     wallet = get_or_create_wallet(db, payload.user_id)
-    existing = (
-        db.query(WalletTx)
-        .filter(
-            WalletTx.user_id == payload.user_id,
-            WalletTx.idempotency_key == payload.idempotency_key,
-        )
-        .first()
-    )
+    existing = _wallet_tx_exists(db, payload.user_id, payload.idempotency_key)
     if existing:
         rows = (
             db.query(WalletTx)
@@ -3706,18 +3867,16 @@ def wallet_topup(
             transactions=[_wallet_tx_out(tx) for tx in rows],
         )
 
-    tx = WalletTx(
+    _apply_wallet_tx(
+        db,
         user_id=payload.user_id,
-        kind="CREDIT",
         amount_tickets=payload.amount_tickets,
+        kind="CREDIT",
         ref_type="TOPUP_QR",
         ref_id=payload.raw_qr,
         created_by_user_id=identity["user_id"],
         idempotency_key=payload.idempotency_key,
     )
-    wallet.balance_tickets += payload.amount_tickets
-    wallet.updated_at = now_utc()
-    db.add_all([wallet, tx])
     db.commit()
 
     rows = (
