@@ -761,17 +761,70 @@ class CreditTicketsIn(BaseModel):
 
 
 class CreateOrderItem(BaseModel):
-    drink_id: int
+    item_id: int
+    variant_id: Optional[int] = None
     qty: int = Field(ge=1, le=50)
 
 
 class CreateOrderIn(BaseModel):
-    event_id: int
-    user_id: str
-    pay_mode: str = Field(default="tickets")
+    bar_id: int
+    event_id: Optional[int] = None
+    user_id: Optional[str] = None
+    device_id: Optional[str] = None
     items: List[CreateOrderItem]
-    is_gift: bool = False
-    gift_to_user_id: Optional[str] = None
+    note: Optional[str] = None
+    idempotency_key: str = Field(min_length=4, max_length=120)
+
+
+class OrderItemOut(BaseModel):
+    id: int
+    menu_item_id: Optional[int] = None
+    variant_id: Optional[int] = None
+    name_snapshot: str
+    price_cents_snapshot: int
+    qty: int
+    line_total_cents: int
+
+
+class OrderOut(BaseModel):
+    id: int
+    bar_id: Optional[int] = None
+    event_id: Optional[int] = None
+    user_id: Optional[str] = None
+    status: str
+    note: Optional[str] = None
+    source: str
+    idempotency_key: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    items: List[OrderItemOut]
+
+def _order_out(order: Order) -> OrderOut:
+    return OrderOut(
+        id=order.id,
+        bar_id=order.bar_id,
+        event_id=order.event_id,
+        user_id=order.user_id,
+        status=order.status,
+        note=order.note,
+        source=order.source,
+        idempotency_key=order.idempotency_key,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        items=[
+            OrderItemOut(
+                id=item.id,
+                menu_item_id=item.menu_item_id,
+                variant_id=item.variant_id,
+                name_snapshot=item.name_snapshot,
+                price_cents_snapshot=item.price_cents_snapshot,
+                qty=item.qty,
+                line_total_cents=item.line_total_cents,
+            )
+            for item in order.items
+        ],
+    )
+
 
 
 class IssueEntryIn(BaseModel):
@@ -4422,95 +4475,162 @@ def credit_tickets(payload: CreditTicketsIn):
         s.close()
 
 
-@app.post("/orders")
-def create_order(payload: CreateOrderIn):
-    s = get_session()
-    try:
-        e = s.get(Event, payload.event_id)
-        if not e:
+@app.post("/orders", response_model=OrderOut)
+def create_order(
+    payload: CreateOrderIn,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    bar = db.get(Bar, payload.bar_id)
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+
+    if payload.event_id is not None:
+        event = db.get(Event, payload.event_id)
+        if not event:
             raise HTTPException(404, "Event not found")
-        if payload.pay_mode in {"checkin", "checkin_staff"}:
-            require_feature(s, payload.event_id, "checkin_enabled")
-        else:
-            require_feature(s, payload.event_id, "menu_enabled")
-        if payload.pay_mode == "tickets":
-            require_feature(s, payload.event_id, "wallet_enabled")
-        if is_banned(s, payload.event_id, payload.user_id):
-            raise HTTPException(403, "User banned")
-        if not payload.items:
-            raise HTTPException(400, "Empty order")
+        if event.bar_id != payload.bar_id:
+            raise HTTPException(403, "Event does not belong to bar")
 
-        total = 0
-        order = Order(
-            event_id=payload.event_id,
-            user_id=payload.user_id,
-            pay_mode=payload.pay_mode,
-            is_gift=payload.is_gift,
-            gift_to_user_id=payload.gift_to_user_id if payload.is_gift else None,
-        )
-        s.add(order)
-        s.flush()
+    token_user_id: Optional[str] = None
+    raw = _extract_bearer_token(authorization)
+    if raw:
+        app_user = _resolve_app_user_from_token(raw, db)
+        if app_user:
+            token_user_id = app_user.id
 
-        for it in payload.items:
-            ed = s.get(EventDrink, {"event_id": payload.event_id, "drink_id": it.drink_id})
-            if not ed:
-                raise HTTPException(404, f"Drink {it.drink_id} not in event")
+    resolved_user_id = payload.user_id or token_user_id
+    if token_user_id and payload.user_id and payload.user_id != token_user_id:
+        raise HTTPException(403, "Forbidden")
 
-            unit = (
-                ed.override_price_cents
-                if ed.override_price_cents is not None
-                else ed.current_price_cents
-            )
-            if ed.override_price_cents is None:
-                unit = market_buy(s, payload.event_id, it.drink_id, it.qty)
+    dedupe_query = db.query(Order).filter(
+        Order.bar_id == payload.bar_id,
+        Order.idempotency_key == payload.idempotency_key,
+    )
+    if resolved_user_id:
+        dedupe_query = dedupe_query.filter(Order.user_id == resolved_user_id)
+    else:
+        dedupe_query = dedupe_query.filter(Order.device_id == payload.device_id)
 
-            item = OrderItem(
-                order_id=order.id,
-                drink_id=it.drink_id,
-                qty=it.qty,
-                unit_price_cents=unit,
-            )
-            s.add(item)
-            total += unit * it.qty
+    existing = dedupe_query.first()
+    if existing:
+        return _order_out(existing)
 
-        order.total_cents = total
-        s.add(order)
+    if not payload.items:
+        raise HTTPException(400, "Empty order")
 
-        if payload.pay_mode == "tickets" and e.ticket_mode:
-            b = get_or_create_balance(s, payload.event_id, payload.user_id)
-            needed = (total + e.ticket_value_cents - 1) // e.ticket_value_cents
-            if b.balance < needed:
-                raise HTTPException(402, f"Not enough tickets (need {needed}, have {b.balance})")
-            b.balance -= needed
-            s.add(b)
+    order = Order(
+        bar_id=payload.bar_id,
+        event_id=payload.event_id,
+        user_id=resolved_user_id,
+        status="NEW",
+        note=payload.note,
+        source="menu_qr",
+        idempotency_key=payload.idempotency_key,
+        device_id=payload.device_id,
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(order)
+    db.flush()
 
-        s.commit()
-        return {"id": order.id, "total_cents": total}
-    finally:
-        s.close()
+    for row in payload.items:
+        menu_item = db.get(MenuItem, row.item_id)
+        if not menu_item or menu_item.bar_id != payload.bar_id or not menu_item.is_active or not menu_item.is_available:
+            raise HTTPException(404, f"Menu item {row.item_id} not found")
+
+        variant = None
+        unit_price = menu_item.price_cents
+        name_snapshot = menu_item.name
+
+        if row.variant_id is not None:
+            variant = db.get(MenuItemVariant, row.variant_id)
+            if not variant or variant.item_id != menu_item.id or not variant.is_active:
+                raise HTTPException(404, f"Variant {row.variant_id} not found")
+            unit_price = menu_item.price_cents + variant.price_delta_cents
+            name_snapshot = f"{menu_item.name} — {variant.name}"
+
+        line_total = unit_price * row.qty
+        db.add(OrderItem(
+            order_id=order.id,
+            menu_item_id=menu_item.id,
+            variant_id=variant.id if variant else None,
+            name_snapshot=name_snapshot,
+            price_cents_snapshot=unit_price,
+            qty=row.qty,
+            line_total_cents=line_total,
+            drink_id=None,
+            unit_price_cents=unit_price,
+        ))
+        order.total_cents += line_total
+
+    order.updated_at = now_utc()
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return _order_out(order)
 
 
-@app.get("/orders")
-def list_orders(event_id: int = Query(...), user_id: str = Query(...)):
-    s = get_session()
-    try:
-        q = (
-            select(Order)
-            .where(Order.event_id == event_id, Order.user_id == user_id)
-            .order_by(Order.created_at.desc())
-        )
-        rows = s.scalars(q).all()
-        return [
-            {
-                "id": o.id,
-                "total_cents": o.total_cents,
-                "created_at": o.created_at.isoformat(),
-                "pay_mode": o.pay_mode,
-            }
-            for o in rows
-        ]
-    finally:
-        s.close()
+@app.get("/orders/{order_id}", response_model=OrderOut)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    return _order_out(order)
+
+
+@app.get("/partner/portal/orders", response_model=List[OrderOut])
+def partner_portal_orders(
+    status: Optional[str] = Query(default=None),
+    event_id: Optional[int] = Query(default=None),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Order).filter(Order.bar_id == identity["bar_id"]) 
+    if status:
+        query = query.filter(Order.status == status)
+    if event_id is not None:
+        query = query.filter(Order.event_id == event_id)
+    rows = query.order_by(Order.created_at.desc()).limit(300).all()
+    return [_order_out(row) for row in rows]
+
+
+class OrderStatusPatchIn(BaseModel):
+    status: str
+
+
+@app.patch("/partner/portal/orders/{order_id}/status", response_model=OrderOut)
+def partner_portal_order_status_patch(
+    order_id: int,
+    payload: OrderStatusPatchIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+
+    valid_flow = {
+        "NEW": {"IN_PROGRESS", "CANCELLED"},
+        "IN_PROGRESS": {"READY", "CANCELLED"},
+        "READY": {"SERVED", "CANCELLED"},
+        "SERVED": set(),
+        "CANCELLED": set(),
+    }
+    next_status = payload.status.upper()
+    if next_status not in valid_flow:
+        raise HTTPException(400, "Invalid status")
+    if next_status not in valid_flow.get(order.status, set()):
+        raise HTTPException(400, "Invalid transition")
+
+    order.status = next_status
+    order.updated_at = now_utc()
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return _order_out(order)
 
 
 # ---------------------------------------------------------------------

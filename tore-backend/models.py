@@ -347,14 +347,20 @@ class EventCost(Base):
 class Order(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    event_id: Mapped[int] = mapped_column(Integer, index=True)
-    user_id: Mapped[str] = mapped_column(String, index=True)
-    pay_mode: Mapped[str] = mapped_column(String, default="tickets")
+    bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
+    event_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String, index=True, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="NEW", index=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="menu_qr")
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(120), index=True, nullable=True)
+    device_id: Mapped[Optional[str]] = mapped_column(String(120), index=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    total_cents: Mapped[int] = mapped_column(Integer, default=0)
+    pay_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_gift: Mapped[bool] = mapped_column(Boolean, default=False)
     gift_to_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    total_cents: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
     items: Mapped[List["OrderItem"]] = relationship(back_populates="order")
 
@@ -363,8 +369,13 @@ class OrderItem(Base):
     __tablename__ = "order_items"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
-    drink_id: Mapped[int] = mapped_column(Integer, index=True)
+    menu_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_items.id"), index=True, nullable=True)
+    variant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_item_variants.id"), index=True, nullable=True)
+    name_snapshot: Mapped[str] = mapped_column(String(180), default="")
+    price_cents_snapshot: Mapped[int] = mapped_column(Integer, default=0)
     qty: Mapped[int] = mapped_column(Integer, default=1)
+    line_total_cents: Mapped[int] = mapped_column(Integer, default=0)
+    drink_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     unit_price_cents: Mapped[int] = mapped_column(Integer, default=0)
 
     order: Mapped["Order"] = relationship(back_populates="items")
