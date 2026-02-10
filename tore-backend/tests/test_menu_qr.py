@@ -4,7 +4,7 @@ import secrets
 
 from db import Base, engine, get_session
 from main import app
-from models import Bar, MenuTrackEvent, PartnerMembership, PartnerUser
+from models import Bar, MenuItem, MenuTrackEvent, PartnerMembership, PartnerUser
 from partner_auth import _make_token
 
 
@@ -116,6 +116,36 @@ def test_menu_track_and_analytics():
     assert data['period_days'] == 7
     assert len(data['top_items']) >= 1
     assert data['top_items'][0]['item_id'] == item['id']
+
+
+def test_delete_category_cascades_items():
+    _, token = _seed_partner_user(role='manager')
+    client = TestClient(app)
+
+    category = client.post(
+        '/partner/portal/menu/categories',
+        json={'name': 'Wine', 'sort_order': 1},
+        headers={'Authorization': f'Bearer {token}'},
+    ).json()
+    item = client.post(
+        '/partner/portal/menu/items',
+        json={'category_id': category['id'], 'name': 'Red', 'description': '', 'price_cents': 700},
+        headers={'Authorization': f'Bearer {token}'},
+    ).json()
+
+    deleted = client.delete(
+        f"/partner/portal/menu/categories/{category['id']}",
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()['ok'] is True
+
+    s = get_session()
+    try:
+        remaining_item = s.query(MenuItem).filter(MenuItem.id == item['id']).first()
+        assert remaining_item is None
+    finally:
+        s.close()
 
 
 def test_qr_resolve_menu_route_front():
