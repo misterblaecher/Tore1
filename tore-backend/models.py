@@ -278,7 +278,9 @@ class MenuCategory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
     bar: Mapped["Bar"] = relationship(back_populates="menu_categories")
-    items: Mapped[List["MenuItem"]] = relationship(back_populates="category")
+    items: Mapped[List["MenuItem"]] = relationship(
+        back_populates="category", cascade="all, delete-orphan"
+    )
 
 
 class MenuItem(Base):
