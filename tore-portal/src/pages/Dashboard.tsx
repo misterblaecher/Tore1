@@ -168,7 +168,7 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <Link
           to="/polymarket"
           style={{
@@ -184,6 +184,38 @@ export default function Dashboard() {
         >
           Ouvrir Polymarket Global
         </Link>
+        <Link
+          to="/menu-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.3)',
+            background: 'rgba(255,255,255,0.1)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Gérer Menu QR
+        </Link>
+        {bar ? (
+          <Link
+            to={`/menu/${bar.id}`}
+            style={{
+              display: 'inline-block',
+              padding: '10px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(0,180,255,0.45)',
+              background: 'rgba(0,180,255,0.25)',
+              color: '#fff',
+              fontWeight: 800,
+              textDecoration: 'none',
+            }}
+          >
+            Ouvrir Menu Public
+          </Link>
+        ) : null}
       </div>
 
       <h2 style={{ marginTop: 22 }}>Événements</h2>

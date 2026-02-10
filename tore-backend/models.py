@@ -34,6 +34,12 @@ class Bar(Base):
     partner_accesses: Mapped[List["PartnerBarAccess"]] = relationship(
         back_populates="bar", cascade="all, delete-orphan"
     )
+    menu_categories: Mapped[List["MenuCategory"]] = relationship(
+        back_populates="bar", cascade="all, delete-orphan"
+    )
+    menu_items: Mapped[List["MenuItem"]] = relationship(
+        back_populates="bar", cascade="all, delete-orphan"
+    )
 
 
 class Event(Base):
@@ -258,6 +264,71 @@ class EventConfigLog(Base):
     event_id: Mapped[int] = mapped_column(Integer, index=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     changed_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    changes_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class MenuCategory(Base):
+    __tablename__ = "menu_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+    bar: Mapped["Bar"] = relationship(back_populates="menu_categories")
+    items: Mapped[List["MenuItem"]] = relationship(back_populates="category")
+
+
+class MenuItem(Base):
+    __tablename__ = "menu_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("menu_categories.id"), index=True)
+    name: Mapped[str] = mapped_column(String(180), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    image_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    alcohol: Mapped[bool] = mapped_column(Boolean, default=False)
+    vegan: Mapped[bool] = mapped_column(Boolean, default=False)
+    allergens: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+    bar: Mapped["Bar"] = relationship(back_populates="menu_items")
+    category: Mapped["MenuCategory"] = relationship(back_populates="items")
+    variants: Mapped[List["MenuItemVariant"]] = relationship(
+        back_populates="item", cascade="all, delete-orphan"
+    )
+
+
+class MenuItemVariant(Base):
+    __tablename__ = "menu_item_variants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    price_delta_cents: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    item: Mapped["MenuItem"] = relationship(back_populates="variants")
+
+
+class MenuTrackEvent(Base):
+    __tablename__ = "menu_track_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_items.id"), index=True, nullable=True)
+    action: Mapped[str] = mapped_column(String(16), default="view")
+    device_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     changes_json: Mapped[str] = mapped_column(Text, default="{}")
 
 

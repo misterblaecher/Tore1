@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, desc, case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -51,6 +51,10 @@ from models import (
     Bet,
     BetPosition,
     BetResolutionLog,
+    MenuCategory,
+    MenuItem,
+    MenuItemVariant,
+    MenuTrackEvent,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -570,10 +574,37 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
             "idempotency_key": nonce,
             "reason": None,
         }
-    if qr_type not in {"join", "menu", "entry", "admin_config", "staff_entry", "staff_invite"}:
+    params = parse_qs(parsed.query)
+
+    if qr_type == "menu":
+        raw_bar_id = (params.get("bar_id") or [None])[0]
+        raw_item_id = (params.get("item_id") or [None])[0]
+        raw_category_id = (params.get("category_id") or [None])[0]
+        try:
+            bar_id = int(raw_bar_id) if raw_bar_id is not None else None
+            item_id = int(raw_item_id) if raw_item_id is not None else None
+            category_id = int(raw_category_id) if raw_category_id is not None else None
+        except (TypeError, ValueError):
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        if bar_id is None:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        route_front = f"/menu/{bar_id}"
+        if item_id is not None:
+            route_front = f"/menu/{bar_id}/item/{item_id}"
+        return {
+            "valid": True,
+            "type": "menu",
+            "event_id": None,
+            "bar_id": bar_id,
+            "item_id": item_id,
+            "category_id": category_id,
+            "route_front": route_front,
+            "reason": None,
+        }
+
+    if qr_type not in {"join", "entry", "admin_config", "staff_entry", "staff_invite"}:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
-    params = parse_qs(parsed.query)
     raw_event_id = (params.get("event_id") or [None])[0]
     try:
         event_id = int(raw_event_id) if raw_event_id is not None else None
@@ -589,7 +620,7 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
         if not token:
             return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
-    return {"valid": True, "type": qr_type, "event_id": event_id, "token": token, "reason": None}
+    return {"valid": True, "type": qr_type, "event_id": event_id, "bar_id": None, "item_id": None, "category_id": None, "route_front": None, "token": token, "reason": None}
 
 
 def _role_rank(role: str) -> int:
@@ -846,6 +877,10 @@ class QrResolveOut(BaseModel):
     valid: bool
     type: str
     event_id: Optional[int] = None
+    bar_id: Optional[int] = None
+    item_id: Optional[int] = None
+    category_id: Optional[int] = None
+    route_front: Optional[str] = None
     token: Optional[str] = None
     user_id: Optional[str] = None
     amount_tickets: Optional[int] = None
@@ -1079,6 +1114,108 @@ class PartnerEventDrinkIn(BaseModel):
     type: str
     base_price_cents: int = Field(ge=0)
     override_price_cents: Optional[int] = Field(default=None, ge=0)
+
+
+class MenuVariantOut(BaseModel):
+    id: int
+    name: str
+    price_delta_cents: int
+    is_active: bool
+
+
+class MenuItemOut(BaseModel):
+    id: int
+    bar_id: int
+    category_id: int
+    name: str
+    description: str
+    price_cents: int
+    image_url: Optional[str] = None
+    tags: Optional[str] = None
+    is_active: bool
+    is_available: bool
+    alcohol: bool
+    vegan: bool
+    allergens: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    variants: List[MenuVariantOut] = []
+
+
+class MenuCategoryOut(BaseModel):
+    id: int
+    bar_id: int
+    name: str
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    items: List[MenuItemOut] = []
+
+
+class MenuPublicOut(BaseModel):
+    bar: Dict[str, Any]
+    categories: List[MenuCategoryOut]
+
+
+class MenuCategoryCreateIn(BaseModel):
+    name: str
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class MenuCategoryUpdateIn(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class MenuItemCreateIn(BaseModel):
+    category_id: int
+    name: str
+    description: str = ""
+    price_cents: int = Field(ge=0)
+    image_url: Optional[str] = None
+    tags: Optional[str] = None
+    is_active: bool = True
+    is_available: bool = True
+    alcohol: bool = False
+    vegan: bool = False
+    allergens: Optional[str] = None
+
+
+class MenuItemUpdateIn(BaseModel):
+    category_id: Optional[int] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price_cents: Optional[int] = Field(default=None, ge=0)
+    image_url: Optional[str] = None
+    tags: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_available: Optional[bool] = None
+    alcohol: Optional[bool] = None
+    vegan: Optional[bool] = None
+    allergens: Optional[str] = None
+
+
+class MenuTrackIn(BaseModel):
+    bar_id: int
+    item_id: Optional[int] = None
+    action: str
+    event_id: Optional[int] = None
+    device_id: Optional[str] = None
+
+
+class MenuAnalyticsItemOut(BaseModel):
+    item_id: int
+    item_name: str
+    views: int
+    clicks: int
+    adds: int
+
+
+class MenuAnalyticsOut(BaseModel):
+    period_days: int
+    top_items: List[MenuAnalyticsItemOut]
 
 
 class PartnerBarOut(BaseModel):
@@ -2061,6 +2198,308 @@ def _require_wallet_staff(identity: Dict[str, Any]) -> None:
     _require_partner_roles(identity, {"manager", "cashier", "wallet"})
 
 
+def _menu_variant_out(variant: MenuItemVariant) -> MenuVariantOut:
+    return MenuVariantOut(
+        id=variant.id,
+        name=variant.name,
+        price_delta_cents=variant.price_delta_cents,
+        is_active=variant.is_active,
+    )
+
+
+def _menu_item_out(item: MenuItem, include_inactive_variants: bool = True) -> MenuItemOut:
+    variants = item.variants or []
+    if not include_inactive_variants:
+        variants = [variant for variant in variants if variant.is_active]
+    return MenuItemOut(
+        id=item.id,
+        bar_id=item.bar_id,
+        category_id=item.category_id,
+        name=item.name,
+        description=item.description,
+        price_cents=item.price_cents,
+        image_url=item.image_url,
+        tags=item.tags,
+        is_active=item.is_active,
+        is_available=item.is_available,
+        alcohol=item.alcohol,
+        vegan=item.vegan,
+        allergens=item.allergens,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+        variants=[_menu_variant_out(variant) for variant in variants],
+    )
+
+
+def _menu_category_out(category: MenuCategory, public_only: bool = False) -> MenuCategoryOut:
+    items = category.items or []
+    if public_only:
+        items = [it for it in items if it.is_active and it.is_available]
+    items = sorted(items, key=lambda it: (it.name.lower(), it.id))
+    return MenuCategoryOut(
+        id=category.id,
+        bar_id=category.bar_id,
+        name=category.name,
+        sort_order=category.sort_order,
+        is_active=category.is_active,
+        created_at=category.created_at,
+        items=[_menu_item_out(item, include_inactive_variants=not public_only) for item in items],
+    )
+
+
+def _get_partner_category(category_id: int, identity: Dict[str, Any], db: Session) -> MenuCategory:
+    category = db.get(MenuCategory, category_id)
+    if not category:
+        raise HTTPException(404, "Category not found")
+    if category.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    return category
+
+
+def _get_partner_item(item_id: int, identity: Dict[str, Any], db: Session) -> MenuItem:
+    item = db.get(MenuItem, item_id)
+    if not item:
+        raise HTTPException(404, "Item not found")
+    if item.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    return item
+
+
+@app.get("/menu/public/{bar_id}", response_model=MenuPublicOut)
+def menu_public(bar_id: int, db: Session = Depends(get_db)):
+    bar = db.get(Bar, bar_id)
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+
+    categories = (
+        db.query(MenuCategory)
+        .filter(MenuCategory.bar_id == bar_id, MenuCategory.is_active.is_(True))
+        .order_by(MenuCategory.sort_order.asc(), MenuCategory.id.asc())
+        .all()
+    )
+    response = MenuPublicOut(
+        bar={"id": bar.id, "name": bar.name, "city": bar.city},
+        categories=[_menu_category_out(category, public_only=True) for category in categories],
+    )
+    return JSONResponse(content=response.model_dump(mode="json"), headers={"Cache-Control": "public, max-age=30"})
+
+
+@app.get("/menu/public/{bar_id}/items/{item_id}", response_model=MenuItemOut)
+def menu_public_item(bar_id: int, item_id: int, db: Session = Depends(get_db)):
+    item = db.get(MenuItem, item_id)
+    if not item or item.bar_id != bar_id:
+        raise HTTPException(404, "Item not found")
+    if not item.is_active or not item.is_available:
+        raise HTTPException(404, "Item not available")
+    return _menu_item_out(item, include_inactive_variants=False)
+
+
+@app.post("/menu/track")
+def menu_track(payload: MenuTrackIn, db: Session = Depends(get_db)):
+    if payload.action not in {"view", "click", "add"}:
+        raise HTTPException(422, "Invalid action")
+    bar = db.get(Bar, payload.bar_id)
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+    if payload.item_id is not None:
+        item = db.get(MenuItem, payload.item_id)
+        if not item or item.bar_id != payload.bar_id:
+            raise HTTPException(404, "Item not found")
+
+    row = MenuTrackEvent(
+        bar_id=payload.bar_id,
+        event_id=payload.event_id,
+        item_id=payload.item_id,
+        action=payload.action,
+        device_id=payload.device_id,
+        changes_json="{}",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "id": row.id}
+
+
+@app.get("/partner/portal/menu", response_model=List[MenuCategoryOut])
+def partner_portal_menu(identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    categories = (
+        db.query(MenuCategory)
+        .filter(MenuCategory.bar_id == identity["bar_id"])
+        .order_by(MenuCategory.sort_order.asc(), MenuCategory.id.asc())
+        .all()
+    )
+    return [_menu_category_out(category, public_only=False) for category in categories]
+
+
+@app.post("/partner/portal/menu/categories", response_model=MenuCategoryOut)
+def partner_portal_menu_category_create(
+    payload: MenuCategoryCreateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    category = MenuCategory(
+        bar_id=identity["bar_id"],
+        name=payload.name,
+        sort_order=payload.sort_order,
+        is_active=payload.is_active,
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return _menu_category_out(category)
+
+
+@app.patch("/partner/portal/menu/categories/{id}", response_model=MenuCategoryOut)
+def partner_portal_menu_category_patch(
+    id: int,
+    payload: MenuCategoryUpdateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    category = _get_partner_category(id, identity, db)
+    if payload.name is not None:
+        category.name = payload.name
+    if payload.sort_order is not None:
+        category.sort_order = payload.sort_order
+    if payload.is_active is not None:
+        category.is_active = payload.is_active
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return _menu_category_out(category)
+
+
+@app.delete("/partner/portal/menu/categories/{id}")
+def partner_portal_menu_category_delete(
+    id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    category = _get_partner_category(id, identity, db)
+    db.delete(category)
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/partner/portal/menu/items", response_model=MenuItemOut)
+def partner_portal_menu_item_create(
+    payload: MenuItemCreateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    category = _get_partner_category(payload.category_id, identity, db)
+    item = MenuItem(
+        bar_id=identity["bar_id"],
+        category_id=category.id,
+        name=payload.name,
+        description=payload.description,
+        price_cents=payload.price_cents,
+        image_url=payload.image_url,
+        tags=payload.tags,
+        is_active=payload.is_active,
+        is_available=payload.is_available,
+        alcohol=payload.alcohol,
+        vegan=payload.vegan,
+        allergens=payload.allergens,
+        updated_at=now_utc(),
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _menu_item_out(item)
+
+
+@app.patch("/partner/portal/menu/items/{id}", response_model=MenuItemOut)
+def partner_portal_menu_item_patch(
+    id: int,
+    payload: MenuItemUpdateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    item = _get_partner_item(id, identity, db)
+    if payload.category_id is not None:
+        category = _get_partner_category(payload.category_id, identity, db)
+        item.category_id = category.id
+    if payload.name is not None:
+        item.name = payload.name
+    if payload.description is not None:
+        item.description = payload.description
+    if payload.price_cents is not None:
+        item.price_cents = payload.price_cents
+    if payload.image_url is not None:
+        item.image_url = payload.image_url
+    if payload.tags is not None:
+        item.tags = payload.tags
+    if payload.is_active is not None:
+        item.is_active = payload.is_active
+    if payload.is_available is not None:
+        item.is_available = payload.is_available
+    if payload.alcohol is not None:
+        item.alcohol = payload.alcohol
+    if payload.vegan is not None:
+        item.vegan = payload.vegan
+    if payload.allergens is not None:
+        item.allergens = payload.allergens
+    item.updated_at = now_utc()
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _menu_item_out(item)
+
+
+@app.delete("/partner/portal/menu/items/{id}")
+def partner_portal_menu_item_delete(
+    id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    item = _get_partner_item(id, identity, db)
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/partner/portal/menu/analytics", response_model=MenuAnalyticsOut)
+def partner_portal_menu_analytics(identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    since = now_utc() - timedelta(days=7)
+    rows = (
+        db.query(
+            MenuTrackEvent.item_id,
+            MenuItem.name,
+            func.sum(case((MenuTrackEvent.action == "view", 1), else_=0)).label("views"),
+            func.sum(case((MenuTrackEvent.action == "click", 1), else_=0)).label("clicks"),
+            func.sum(case((MenuTrackEvent.action == "add", 1), else_=0)).label("adds"),
+        )
+        .join(MenuItem, MenuItem.id == MenuTrackEvent.item_id)
+        .filter(
+            MenuTrackEvent.bar_id == identity["bar_id"],
+            MenuTrackEvent.created_at >= since,
+            MenuTrackEvent.item_id.is_not(None),
+        )
+        .group_by(MenuTrackEvent.item_id, MenuItem.name)
+        .order_by(desc("views"), desc("clicks"), desc("adds"))
+        .limit(20)
+        .all()
+    )
+    top_items = [
+        MenuAnalyticsItemOut(
+            item_id=item_id,
+            item_name=item_name,
+            views=int(views or 0),
+            clicks=int(clicks or 0),
+            adds=int(adds or 0),
+        )
+        for item_id, item_name, views, clicks, adds in rows
+    ]
+    return MenuAnalyticsOut(period_days=7, top_items=top_items)
+
+
 @app.get("/partner/portal/events/{event_id}", response_model=PartnerEventOut)
 def partner_portal_event_detail(
     event_id: int,
@@ -2319,6 +2758,10 @@ def qr_resolve(
             "valid": False,
             "type": "unknown",
             "event_id": None,
+            "bar_id": None,
+            "item_id": None,
+            "category_id": None,
+            "route_front": None,
             "token": None,
             "reason": base.get("reason"),
             "required_role": None,
@@ -2333,6 +2776,10 @@ def qr_resolve(
             "valid": True,
             "type": qr_type,
             "event_id": None,
+            "bar_id": None,
+            "item_id": None,
+            "category_id": None,
+            "route_front": None,
             "token": None,
             "user_id": base.get("user_id"),
             "amount_tickets": base.get("amount_tickets"),
@@ -2341,6 +2788,21 @@ def qr_resolve(
             "required_role": None,
             "granted_role": "guest",
         }
+    if qr_type == "menu":
+        return {
+            "valid": True,
+            "type": "menu",
+            "event_id": None,
+            "bar_id": base.get("bar_id"),
+            "item_id": base.get("item_id"),
+            "category_id": base.get("category_id"),
+            "route_front": base.get("route_front"),
+            "token": None,
+            "reason": None,
+            "required_role": None,
+            "granted_role": "guest",
+        }
+
     role_map = {
         "join": "guest",
         "menu": "guest",
@@ -2357,6 +2819,10 @@ def qr_resolve(
             "valid": False,
             "type": "unknown",
             "event_id": None,
+            "bar_id": None,
+            "item_id": None,
+            "category_id": None,
+            "route_front": None,
             "token": None,
             "reason": "forbidden",
             "required_role": required_role,
@@ -2367,6 +2833,10 @@ def qr_resolve(
         "valid": True,
         "type": qr_type,
         "event_id": event_id,
+        "bar_id": None,
+        "item_id": None,
+        "category_id": None,
+        "route_front": None,
         "token": token,
         "reason": None,
         "required_role": required_role,
