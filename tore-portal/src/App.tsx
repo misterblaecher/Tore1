@@ -7,6 +7,8 @@ import EventDetail from './pages/EventDetail'
 import PolymarketGlobal from './pages/PolymarketGlobal'
 import PolymarketEvent from './pages/PolymarketEvent'
 import PolymarketDetail from './pages/PolymarketDetail'
+import MenuAdmin from './pages/MenuAdmin'
+import MenuPublic from './pages/MenuPublic'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -58,6 +60,16 @@ export default function App() {
           </RequireAuth>
         }
       />
+      <Route
+        path="/menu-admin"
+        element={
+          <RequireAuth>
+            <MenuAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route path="/menu/:barId" element={<MenuPublic />} />
+      <Route path="/menu/:barId/item/:itemId" element={<MenuPublic />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
