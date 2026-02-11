@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Orders and wallet routes are now implemented in app/routers/orders.py and app/routers/wallet.py.
+
 import os
 import logging
 import secrets
@@ -115,6 +117,8 @@ def _polymarket_global_enabled() -> bool:
 
 
 def _ensure_orders_payment_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
     s = get_session()
     try:
         columns = {
@@ -1345,6 +1349,10 @@ logging.basicConfig(level=logging.INFO)
 logging.info(f"BOOT commit={os.getenv('RENDER_GIT_COMMIT')} db={DATABASE_URL}")
 
 app.include_router(partner_auth_router, prefix="/partner")
+from app.routers.orders import router as orders_router
+from app.routers.wallet import router as wallet_router
+app.include_router(orders_router)
+app.include_router(wallet_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -4365,122 +4373,6 @@ def wallet_history(
     return []
 
 
-@app.get("/wallet/me", response_model=WalletMeOut)
-def wallet_me(
-    user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    wallet = get_or_create_wallet(db, user.id)
-    rows = (
-        db.query(WalletTx)
-        .filter(WalletTx.user_id == user.id)
-        .order_by(WalletTx.created_at.desc())
-        .limit(20)
-        .all()
-    )
-    db.commit()
-    return WalletMeOut(
-        user_id=user.id,
-        balance_tickets=wallet.balance_tickets,
-        updated_at=wallet.updated_at,
-        transactions=[_wallet_tx_out(tx) for tx in rows],
-    )
-
-
-@app.post("/wallet/topup", response_model=WalletMeOut)
-def wallet_topup(
-    payload: WalletTopupIn,
-    identity=Depends(current_partner_identity),
-    db: Session = Depends(get_db),
-):
-    _require_wallet_staff(identity)
-    user = db.get(AppUser, payload.user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
-
-    wallet = get_or_create_wallet(db, payload.user_id)
-    existing = _wallet_tx_exists(db, payload.user_id, payload.idempotency_key)
-    if existing:
-        rows = (
-            db.query(WalletTx)
-            .filter(WalletTx.user_id == payload.user_id)
-            .order_by(WalletTx.created_at.desc())
-            .limit(20)
-            .all()
-        )
-        db.commit()
-        return WalletMeOut(
-            user_id=payload.user_id,
-            balance_tickets=wallet.balance_tickets,
-            updated_at=wallet.updated_at,
-            transactions=[_wallet_tx_out(tx) for tx in rows],
-        )
-
-    _apply_wallet_tx(
-        db,
-        user_id=payload.user_id,
-        amount_tickets=payload.amount_tickets,
-        kind="CREDIT",
-        ref_type="TOPUP_QR",
-        ref_id=payload.raw_qr,
-        created_by_user_id=identity["user_id"],
-        idempotency_key=payload.idempotency_key,
-    )
-    db.commit()
-
-    rows = (
-        db.query(WalletTx)
-        .filter(WalletTx.user_id == payload.user_id)
-        .order_by(WalletTx.created_at.desc())
-        .limit(20)
-        .all()
-    )
-    return WalletMeOut(
-        user_id=payload.user_id,
-        balance_tickets=wallet.balance_tickets,
-        updated_at=wallet.updated_at,
-        transactions=[_wallet_tx_out(tx) for tx in rows],
-    )
-
-
-@app.post("/wallet/topup/from_qr", response_model=WalletMeOut)
-def wallet_topup_from_qr(
-    payload: WalletTopupFromQrIn,
-    identity=Depends(current_partner_identity),
-    db: Session = Depends(get_db),
-):
-    _require_wallet_staff(identity)
-    resolved = resolve_qr_payload(payload.raw_qr)
-    if not resolved.get("valid") or resolved.get("type") != "wallet_topup":
-        raise HTTPException(400, "Invalid wallet topup QR")
-
-    topup_payload = WalletTopupIn(
-        user_id=resolved["user_id"],
-        amount_tickets=resolved["amount_tickets"],
-        idempotency_key=resolved["idempotency_key"],
-        raw_qr=payload.raw_qr,
-    )
-    return wallet_topup(topup_payload, identity=identity, db=db)
-
-
-@app.get("/wallet/{user_id}/history", response_model=List[WalletTxOut])
-def wallet_user_history(
-    user_id: str,
-    limit: int = Query(50, ge=1, le=200),
-    identity=Depends(current_partner_identity),
-    db: Session = Depends(get_db),
-):
-    _require_wallet_staff(identity)
-    rows = (
-        db.query(WalletTx)
-        .filter(WalletTx.user_id == user_id)
-        .order_by(WalletTx.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return [_wallet_tx_out(tx) for tx in rows]
-
-
 @app.post("/tickets/credit")
 def credit_tickets(payload: CreditTicketsIn):
     s = get_session()
@@ -4499,218 +4391,6 @@ def credit_tickets(payload: CreditTicketsIn):
         return {"ok": True, "balance": b.balance}
     finally:
         s.close()
-
-
-@app.post("/orders", response_model=OrderOut)
-def create_order(
-    payload: CreateOrderIn,
-    authorization: Optional[str] = Header(default=None),
-    db: Session = Depends(get_db),
-):
-    bar = db.get(Bar, payload.bar_id)
-    if not bar:
-        raise HTTPException(404, "Bar not found")
-
-    event: Optional[Event] = None
-    if payload.event_id is not None:
-        event = db.get(Event, payload.event_id)
-        if not event:
-            raise HTTPException(404, "Event not found")
-        if event.bar_id != payload.bar_id:
-            raise HTTPException(403, "Event does not belong to bar")
-
-    token_user_id: Optional[str] = None
-    raw = _extract_bearer_token(authorization)
-    if raw:
-        app_user = _resolve_app_user_from_token(raw, db)
-        if app_user:
-            token_user_id = app_user.id
-
-    resolved_user_id = payload.user_id or token_user_id
-    if token_user_id and payload.user_id and payload.user_id != token_user_id:
-        raise HTTPException(403, "Forbidden")
-
-    dedupe_query = db.query(Order).filter(
-        Order.bar_id == payload.bar_id,
-        Order.idempotency_key == payload.idempotency_key,
-    )
-    if resolved_user_id:
-        dedupe_query = dedupe_query.filter(Order.user_id == resolved_user_id)
-    else:
-        dedupe_query = dedupe_query.filter(Order.device_id == payload.device_id)
-
-    existing = dedupe_query.first()
-    if existing:
-        return _order_out(existing)
-
-    if not payload.items:
-        raise HTTPException(400, "Empty order")
-
-    total_cents = 0
-    order_items: list[dict[str, Any]] = []
-    for row in payload.items:
-        menu_item = db.get(MenuItem, row.item_id)
-        if not menu_item or menu_item.bar_id != payload.bar_id or not menu_item.is_active or not menu_item.is_available:
-            raise HTTPException(404, f"Menu item {row.item_id} not found")
-
-        variant = None
-        unit_price = menu_item.price_cents
-        name_snapshot = menu_item.name
-
-        if row.variant_id is not None:
-            variant = db.get(MenuItemVariant, row.variant_id)
-            if not variant or variant.item_id != menu_item.id or not variant.is_active:
-                raise HTTPException(404, f"Variant {row.variant_id} not found")
-            unit_price = menu_item.price_cents + variant.price_delta_cents
-            name_snapshot = f"{menu_item.name} — {variant.name}"
-
-        line_total = unit_price * row.qty
-        total_cents += line_total
-        order_items.append(
-            {
-                "menu_item_id": menu_item.id,
-                "variant_id": variant.id if variant else None,
-                "name_snapshot": name_snapshot,
-                "price_cents_snapshot": unit_price,
-                "qty": row.qty,
-                "line_total_cents": line_total,
-                "unit_price_cents": unit_price,
-            }
-        )
-
-    payment_status = "UNPAID"
-    total_tickets = 0
-    pay_mode = "PAY_LATER"
-    if payload.payment_mode == "tickets":
-        if not resolved_user_id:
-            raise HTTPException(400, "User is required for ticket payments")
-        ticket_value_cents = max(1, int(event.ticket_value_cents if event else 200))
-        total_tickets = (total_cents + ticket_value_cents - 1) // ticket_value_cents
-        wallet = get_or_create_wallet(db, resolved_user_id)
-        if wallet.balance_tickets < total_tickets:
-            raise HTTPException(
-                400,
-                f"Insufficient wallet balance: required {total_tickets}, available {wallet.balance_tickets}",
-            )
-        payment_status = "PAID"
-        pay_mode = "PAY_WITH_TICKETS"
-
-    order = Order(
-        bar_id=payload.bar_id,
-        event_id=payload.event_id,
-        user_id=resolved_user_id,
-        status="NEW",
-        payment_status=payment_status,
-        note=payload.note,
-        source="menu_qr",
-        idempotency_key=payload.idempotency_key,
-        device_id=payload.device_id,
-        created_at=now_utc(),
-        updated_at=now_utc(),
-        total_cents=total_cents,
-        total_tickets=total_tickets,
-        pay_mode=pay_mode,
-    )
-    db.add(order)
-    db.flush()
-
-    for item in order_items:
-        db.add(
-            OrderItem(
-                order_id=order.id,
-                menu_item_id=item["menu_item_id"],
-                variant_id=item["variant_id"],
-                name_snapshot=item["name_snapshot"],
-                price_cents_snapshot=item["price_cents_snapshot"],
-                qty=item["qty"],
-                line_total_cents=item["line_total_cents"],
-                drink_id=None,
-                unit_price_cents=item["unit_price_cents"],
-            )
-        )
-
-    if payload.payment_mode == "tickets":
-        _apply_wallet_tx(
-            db,
-            user_id=resolved_user_id,
-            amount_tickets=-total_tickets,
-            kind="ORDER_PAYMENT",
-            ref_type="ORDER",
-            ref_id=str(order.id),
-            idempotency_key=f"order-payment:{payload.bar_id}:{payload.idempotency_key}",
-            created_by_user_id=None,
-        )
-
-    order.updated_at = now_utc()
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-    return _order_out(order)
-
-
-@app.get("/orders/{order_id}", response_model=OrderOut)
-def get_order(order_id: int, db: Session = Depends(get_db)):
-    order = db.get(Order, order_id)
-    if not order:
-        raise HTTPException(404, "Order not found")
-    return _order_out(order)
-
-
-@app.get("/partner/portal/orders", response_model=List[OrderOut])
-def partner_portal_orders(
-    status: Optional[str] = Query(default=None),
-    payment_status: Optional[str] = Query(default=None),
-    event_id: Optional[int] = Query(default=None),
-    identity=Depends(current_partner_identity),
-    db: Session = Depends(get_db),
-):
-    query = db.query(Order).filter(Order.bar_id == identity["bar_id"]) 
-    if status:
-        query = query.filter(Order.status == status)
-    if payment_status:
-        query = query.filter(Order.payment_status == payment_status.upper())
-    if event_id is not None:
-        query = query.filter(Order.event_id == event_id)
-    rows = query.order_by(Order.created_at.desc()).limit(300).all()
-    return [_order_out(row) for row in rows]
-
-
-class OrderStatusPatchIn(BaseModel):
-    status: str
-
-
-@app.patch("/partner/portal/orders/{order_id}/status", response_model=OrderOut)
-def partner_portal_order_status_patch(
-    order_id: int,
-    payload: OrderStatusPatchIn,
-    identity=Depends(current_partner_identity),
-    db: Session = Depends(get_db),
-):
-    order = db.get(Order, order_id)
-    if not order:
-        raise HTTPException(404, "Order not found")
-    if order.bar_id != identity["bar_id"]:
-        raise HTTPException(403, "Forbidden")
-
-    valid_flow = {
-        "NEW": {"IN_PROGRESS", "CANCELLED"},
-        "IN_PROGRESS": {"READY", "CANCELLED"},
-        "READY": {"SERVED", "CANCELLED"},
-        "SERVED": set(),
-        "CANCELLED": set(),
-    }
-    next_status = payload.status.upper()
-    if next_status not in valid_flow:
-        raise HTTPException(400, "Invalid status")
-    if next_status not in valid_flow.get(order.status, set()):
-        raise HTTPException(400, "Invalid transition")
-
-    order.status = next_status
-    order.updated_at = now_utc()
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-    return _order_out(order)
 
 
 # ---------------------------------------------------------------------
