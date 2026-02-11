@@ -358,6 +358,8 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     total_cents: Mapped[int] = mapped_column(Integer, default=0)
+    total_tickets: Mapped[int] = mapped_column(Integer, default=0)
+    payment_status: Mapped[str] = mapped_column(String(20), default="UNPAID", index=True)
     pay_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_gift: Mapped[bool] = mapped_column(Boolean, default=False)
     gift_to_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

@@ -7,7 +7,7 @@ import string
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from urllib.parse import urlparse, parse_qs
 
 import jwt
@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc, case
+from sqlalchemy import select, func, desc, case, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -112,8 +112,26 @@ def _polymarket_global_enabled() -> bool:
     return _env_bool("POLYMARKET_GLOBAL_ENABLED", False)
 
 
+
+
+def _ensure_orders_payment_columns() -> None:
+    s = get_session()
+    try:
+        columns = {
+            row[1]
+            for row in s.execute(text("PRAGMA table_info(orders)")).fetchall()
+        }
+        if "total_tickets" not in columns:
+            s.execute(text("ALTER TABLE orders ADD COLUMN total_tickets INTEGER DEFAULT 0"))
+        if "payment_status" not in columns:
+            s.execute(text("ALTER TABLE orders ADD COLUMN payment_status VARCHAR(20) DEFAULT 'UNPAID'"))
+        s.commit()
+    finally:
+        s.close()
+
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
+    _ensure_orders_payment_columns()
     s = get_session()
     try:
         bar_count = s.scalar(select(func.count()).select_from(Bar)) or 0
@@ -773,6 +791,7 @@ class CreateOrderIn(BaseModel):
     device_id: Optional[str] = None
     items: List[CreateOrderItem]
     note: Optional[str] = None
+    payment_mode: Literal["pay_later", "tickets"] = "pay_later"
     idempotency_key: str = Field(min_length=4, max_length=120)
 
 
@@ -792,6 +811,9 @@ class OrderOut(BaseModel):
     event_id: Optional[int] = None
     user_id: Optional[str] = None
     status: str
+    payment_status: str
+    total_cents: int
+    total_tickets: int
     note: Optional[str] = None
     source: str
     idempotency_key: Optional[str] = None
@@ -806,6 +828,9 @@ def _order_out(order: Order) -> OrderOut:
         event_id=order.event_id,
         user_id=order.user_id,
         status=order.status,
+        payment_status=order.payment_status,
+        total_cents=order.total_cents,
+        total_tickets=order.total_tickets,
         note=order.note,
         source=order.source,
         idempotency_key=order.idempotency_key,
@@ -2766,6 +2791,7 @@ def debug_auth_check(
 @app.post("/auth/guest", response_model=GuestOut)
 def auth_guest(payload: GuestIn):
     Base.metadata.create_all(engine)
+    _ensure_orders_payment_columns()
     s = get_session()
     try:
         user_id = secrets.token_hex(16)
@@ -4485,6 +4511,7 @@ def create_order(
     if not bar:
         raise HTTPException(404, "Bar not found")
 
+    event: Optional[Event] = None
     if payload.event_id is not None:
         event = db.get(Event, payload.event_id)
         if not event:
@@ -4519,21 +4546,8 @@ def create_order(
     if not payload.items:
         raise HTTPException(400, "Empty order")
 
-    order = Order(
-        bar_id=payload.bar_id,
-        event_id=payload.event_id,
-        user_id=resolved_user_id,
-        status="NEW",
-        note=payload.note,
-        source="menu_qr",
-        idempotency_key=payload.idempotency_key,
-        device_id=payload.device_id,
-        created_at=now_utc(),
-        updated_at=now_utc(),
-    )
-    db.add(order)
-    db.flush()
-
+    total_cents = 0
+    order_items: list[dict[str, Any]] = []
     for row in payload.items:
         menu_item = db.get(MenuItem, row.item_id)
         if not menu_item or menu_item.bar_id != payload.bar_id or not menu_item.is_active or not menu_item.is_available:
@@ -4551,18 +4565,81 @@ def create_order(
             name_snapshot = f"{menu_item.name} — {variant.name}"
 
         line_total = unit_price * row.qty
-        db.add(OrderItem(
-            order_id=order.id,
-            menu_item_id=menu_item.id,
-            variant_id=variant.id if variant else None,
-            name_snapshot=name_snapshot,
-            price_cents_snapshot=unit_price,
-            qty=row.qty,
-            line_total_cents=line_total,
-            drink_id=None,
-            unit_price_cents=unit_price,
-        ))
-        order.total_cents += line_total
+        total_cents += line_total
+        order_items.append(
+            {
+                "menu_item_id": menu_item.id,
+                "variant_id": variant.id if variant else None,
+                "name_snapshot": name_snapshot,
+                "price_cents_snapshot": unit_price,
+                "qty": row.qty,
+                "line_total_cents": line_total,
+                "unit_price_cents": unit_price,
+            }
+        )
+
+    payment_status = "UNPAID"
+    total_tickets = 0
+    pay_mode = "PAY_LATER"
+    if payload.payment_mode == "tickets":
+        if not resolved_user_id:
+            raise HTTPException(400, "User is required for ticket payments")
+        ticket_value_cents = max(1, int(event.ticket_value_cents if event else 200))
+        total_tickets = (total_cents + ticket_value_cents - 1) // ticket_value_cents
+        wallet = get_or_create_wallet(db, resolved_user_id)
+        if wallet.balance_tickets < total_tickets:
+            raise HTTPException(
+                400,
+                f"Insufficient wallet balance: required {total_tickets}, available {wallet.balance_tickets}",
+            )
+        payment_status = "PAID"
+        pay_mode = "PAY_WITH_TICKETS"
+
+    order = Order(
+        bar_id=payload.bar_id,
+        event_id=payload.event_id,
+        user_id=resolved_user_id,
+        status="NEW",
+        payment_status=payment_status,
+        note=payload.note,
+        source="menu_qr",
+        idempotency_key=payload.idempotency_key,
+        device_id=payload.device_id,
+        created_at=now_utc(),
+        updated_at=now_utc(),
+        total_cents=total_cents,
+        total_tickets=total_tickets,
+        pay_mode=pay_mode,
+    )
+    db.add(order)
+    db.flush()
+
+    for item in order_items:
+        db.add(
+            OrderItem(
+                order_id=order.id,
+                menu_item_id=item["menu_item_id"],
+                variant_id=item["variant_id"],
+                name_snapshot=item["name_snapshot"],
+                price_cents_snapshot=item["price_cents_snapshot"],
+                qty=item["qty"],
+                line_total_cents=item["line_total_cents"],
+                drink_id=None,
+                unit_price_cents=item["unit_price_cents"],
+            )
+        )
+
+    if payload.payment_mode == "tickets":
+        _apply_wallet_tx(
+            db,
+            user_id=resolved_user_id,
+            amount_tickets=-total_tickets,
+            kind="ORDER_PAYMENT",
+            ref_type="ORDER",
+            ref_id=str(order.id),
+            idempotency_key=f"order-payment:{payload.bar_id}:{payload.idempotency_key}",
+            created_by_user_id=None,
+        )
 
     order.updated_at = now_utc()
     db.add(order)
@@ -4582,6 +4659,7 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 @app.get("/partner/portal/orders", response_model=List[OrderOut])
 def partner_portal_orders(
     status: Optional[str] = Query(default=None),
+    payment_status: Optional[str] = Query(default=None),
     event_id: Optional[int] = Query(default=None),
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
@@ -4589,6 +4667,8 @@ def partner_portal_orders(
     query = db.query(Order).filter(Order.bar_id == identity["bar_id"]) 
     if status:
         query = query.filter(Order.status == status)
+    if payment_status:
+        query = query.filter(Order.payment_status == payment_status.upper())
     if event_id is not None:
         query = query.filter(Order.event_id == event_id)
     rows = query.order_by(Order.created_at.desc()).limit(300).all()

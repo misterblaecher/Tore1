@@ -14,6 +14,7 @@ export default function MenuPublic() {
   const [item, setItem] = useState<MenuItem | null>(null)
   const [cart, setCart] = useState<Record<number, CartLine>>({})
   const [statusMsg, setStatusMsg] = useState<string>('')
+  const [payWithTickets, setPayWithTickets] = useState<boolean>(false)
 
   useEffect(() => {
     if (!barId) return
@@ -68,6 +69,7 @@ export default function MenuPublic() {
         bar_id: Number(barId),
         device_id: 'web-menu',
         idempotency_key: idempotency,
+        payment_mode: payWithTickets ? 'tickets' : 'pay_later',
         items: cartLines.map((line) => ({ item_id: line.item.id, qty: line.qty })),
       }),
     })
@@ -77,7 +79,7 @@ export default function MenuPublic() {
     }
     const payload = await res.json()
     setCart({})
-    setStatusMsg(`Commande #${payload.id} envoyée`) 
+    setStatusMsg(`Commande #${payload.id} envoyée (${payload.payment_status})`) 
   }
 
   return (
@@ -120,6 +122,10 @@ export default function MenuPublic() {
           </div>
         ))}
         <div style={{ marginTop: 8, fontWeight: 700 }}>Total: {(totalCents / 100).toFixed(2)}€</div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <input type="checkbox" checked={payWithTickets} onChange={(e) => setPayWithTickets(e.target.checked)} />
+          Payer en tickets
+        </label>
         <button onClick={submitOrder} disabled={cartLines.length === 0} style={{ marginTop: 10 }}>Commander</button>
         {statusMsg ? <div style={{ marginTop: 8 }}>{statusMsg}</div> : null}
       </section>
