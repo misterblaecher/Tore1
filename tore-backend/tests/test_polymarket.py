@@ -430,3 +430,19 @@ def test_polymarket_bet_me_endpoint(monkeypatch):
     assert payload["stake_yes"] == 6
     assert payload["stake_total"] == 6
     assert payload["wallet_balance_tickets"] == 9
+
+
+def test_polymarket_share_links(monkeypatch):
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    token, user_id = _create_guest(client)
+
+    bet_id = _create_global_bet(client, token, user_id, monkeypatch)
+    monkeypatch.setenv("TORE_PORTAL_BASE_URL", "https://portal.example")
+
+    res = client.get(f"/polymarket/bets/{bet_id}/share")
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["deep_link"] == f"tore://polymarket?bet_id={bet_id}"
+    assert payload["qr_payload"] == payload["deep_link"]
+    assert payload["web_url"] == f"https://portal.example/polymarket/bets/{bet_id}"

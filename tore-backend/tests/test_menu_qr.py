@@ -8,6 +8,13 @@ from models import Bar, MenuTrackEvent, PartnerMembership, PartnerUser
 from partner_auth import _make_token
 
 
+def _create_guest(client: TestClient):
+    res = client.post('/auth/guest', json={'display_name': 'qr-user'})
+    assert res.status_code == 200
+    data = res.json()
+    return data['token'], data['user']['id']
+
+
 def _seed_partner_user(role: str = "manager"):
     Base.metadata.create_all(engine)
     s = get_session()
@@ -129,3 +136,37 @@ def test_qr_resolve_menu_route_front():
     assert payload['bar_id'] == 42
     assert payload['item_id'] == 7
     assert payload['route_front'] == '/menu/42/item/7'
+
+
+def test_qr_resolve_polymarket_bet(monkeypatch):
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    token, user_id = _create_guest(client)
+
+    monkeypatch.setenv("POLYMARKET_GLOBAL_ENABLED", "true")
+    monkeypatch.setenv("POLYMARKET_GLOBAL_CREATORS", user_id)
+    create_res = client.post(
+        "/polymarket/bets",
+        json={
+            "scope": "GLOBAL",
+            "question": "QR polymarket?",
+            "kind": "OBJECTIVE",
+            "deadline_at": "2099-01-01T00:00:00",
+            "rules_text": "Rules",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert create_res.status_code == 200
+    bet_id = create_res.json()["id"]
+
+    res = client.post(
+        "/qr/resolve",
+        json={"raw": f"tore://polymarket?bet_id={bet_id}"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["type"] == "polymarket_bet"
+    assert payload["bet_id"] == bet_id
+    assert payload["scope"] == "GLOBAL"
+    assert payload["route_front"] == f"/polymarket/bets/{bet_id}"
