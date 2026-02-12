@@ -42,10 +42,6 @@ from models import (
     OrderItem,
     Beer,
     Checkin,
-    Battle,
-    BattleTeam,
-    BattleJoin,
-    BattleAction,
     AppUser,
     AppToken,
     PartnerMembership,
@@ -61,6 +57,7 @@ from models import (
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
+from app.db.sqlite_compat import ensure_sqlite_compat
 
 
 # ---------------------------------------------------------------------
@@ -154,89 +151,12 @@ def _ensure_polymarket_v1_columns() -> None:
     finally:
         s.close()
 
-def _ensure_battles_v1_schema() -> None:
-    if engine.dialect.name != "sqlite":
-        return
-    s = get_session()
-    try:
-        tables = {
-            row[0]
-            for row in s.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-        }
-        if "battles" in tables:
-            columns = {
-                row[1]
-                for row in s.execute(text("PRAGMA table_info(battles)"))
-            }
-            if "bar_id" not in columns:
-                s.execute(text("ALTER TABLE battles ADD COLUMN bar_id INTEGER"))
-            if "is_active" not in columns:
-                s.execute(text("ALTER TABLE battles ADD COLUMN is_active BOOLEAN DEFAULT 1"))
-            if "mode" not in columns:
-                s.execute(text("ALTER TABLE battles ADD COLUMN mode VARCHAR(16) DEFAULT 'teams'"))
-            if "event_id" not in columns:
-                s.execute(text("ALTER TABLE battles ADD COLUMN event_id INTEGER"))
-            if "title" not in columns:
-                s.execute(text("ALTER TABLE battles ADD COLUMN title VARCHAR(180) DEFAULT 'Battle'"))
-
-        s.execute(text("""
-            CREATE TABLE IF NOT EXISTS battle_teams (
-                id INTEGER NOT NULL PRIMARY KEY,
-                battle_id INTEGER NOT NULL,
-                name VARCHAR(120) NOT NULL DEFAULT '',
-                color VARCHAR(32),
-                created_at DATETIME,
-                FOREIGN KEY(battle_id) REFERENCES battles (id)
-            )
-        """))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_teams_battle_id ON battle_teams (battle_id)"))
-
-        s.execute(text("""
-            CREATE TABLE IF NOT EXISTS battle_joins (
-                id INTEGER NOT NULL PRIMARY KEY,
-                battle_id INTEGER NOT NULL,
-                team_id INTEGER,
-                user_id VARCHAR NOT NULL,
-                joined_at DATETIME,
-                CONSTRAINT uq_battle_join_user UNIQUE (battle_id, user_id),
-                FOREIGN KEY(battle_id) REFERENCES battles (id),
-                FOREIGN KEY(team_id) REFERENCES battle_teams (id)
-            )
-        """))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_joins_battle_id ON battle_joins (battle_id)"))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_joins_team_id ON battle_joins (team_id)"))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_joins_user_id ON battle_joins (user_id)"))
-
-        s.execute(text("""
-            CREATE TABLE IF NOT EXISTS battle_actions (
-                id INTEGER NOT NULL PRIMARY KEY,
-                battle_id INTEGER NOT NULL,
-                team_id INTEGER,
-                user_id VARCHAR,
-                kind VARCHAR(16) NOT NULL DEFAULT 'AFFOND',
-                delta INTEGER NOT NULL DEFAULT 0,
-                idempotency_key VARCHAR(120),
-                created_at DATETIME,
-                CONSTRAINT uq_battle_action_idempotency UNIQUE (battle_id, idempotency_key),
-                FOREIGN KEY(battle_id) REFERENCES battles (id),
-                FOREIGN KEY(team_id) REFERENCES battle_teams (id)
-            )
-        """))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_actions_battle_id ON battle_actions (battle_id)"))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_actions_team_id ON battle_actions (team_id)"))
-        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_actions_user_id ON battle_actions (user_id)"))
-
-        s.execute(text("DROP TABLE IF EXISTS battle_participants"))
-        s.commit()
-    finally:
-        s.close()
-
 
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
     _ensure_polymarket_v1_columns()
-    _ensure_battles_v1_schema()
+    ensure_sqlite_compat(engine)
     s = get_session()
     try:
         bar_count = s.scalar(select(func.count()).select_from(Bar)) or 0
@@ -1149,33 +1069,6 @@ class QrPackOut(BaseModel):
     qrs: Dict[str, str]
 
 
-class BattleTeamIn(BaseModel):
-    name: str
-    color: Optional[str] = None
-
-
-class PartnerBattleCreateIn(BaseModel):
-    event_id: int
-    title: str = "Battle"
-    mode: Literal["teams", "solo"] = "teams"
-    is_active: bool = True
-    teams: List[BattleTeamIn] = Field(default_factory=list)
-
-
-class PartnerBattleUpdateIn(BaseModel):
-    is_active: bool
-
-
-class BattleActionIn(BaseModel):
-    team_id: Optional[int] = None
-    kind: Literal["AFFOND", "BONUS", "PENALTY"]
-    delta: int
-    idempotency_key: Optional[str] = None
-
-
-class BattleJoinIn(BaseModel):
-    team_id: Optional[int] = None
-
 
 
 # ---------------------------------------------------------------------
@@ -1202,12 +1095,14 @@ from app.routers.polymarket import router as polymarket_router
 from app.routers.qr import router as qr_router
 from app.routers.analytics import router as analytics_router
 from app.routers.hunt import router as hunt_router
+from app.routers.battles import router as battles_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
 app.include_router(polymarket_router)
 app.include_router(qr_router)
 app.include_router(hunt_router)
+app.include_router(battles_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -4040,4 +3935,3 @@ def battle_me(
         "joined_at": join.joined_at.isoformat() if join else None,
         "score_snapshot": stats,
     }
-
