@@ -1108,8 +1108,10 @@ from app.routers.orders import router as orders_router
 from app.routers.wallet import router as wallet_router
 from app.routers.polymarket import router as polymarket_router
 from app.routers.qr import router as qr_router
+from app.routers.analytics import router as analytics_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
+app.include_router(analytics_router)
 app.include_router(polymarket_router)
 app.include_router(qr_router)
 
