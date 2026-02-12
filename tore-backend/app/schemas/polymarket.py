@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ class BetOut(BaseModel):
     created_by_user_id: str
     created_at: Optional[str] = None
     resolved_at: Optional[str] = None
+    finalized_at: Optional[str] = None
     resolved_outcome: Optional[str] = None
     pool_yes_tickets: int
     pool_no_tickets: int
@@ -77,6 +78,53 @@ class BetMeOut(BaseModel):
 
 class BetResolveIn(BaseModel):
     outcome: str
+
+
+class BetFinalizeOut(BetOut):
+    pass
+
+
+class BetDisputeIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class BetDisputeOut(BaseModel):
+    id: int
+    bet_id: int
+    user_id: str
+    reason: str
+    created_at: Optional[str] = None
+
+
+class BetDisputeCreateOut(BaseModel):
+    ok: bool
+    disputes_count: int
+    status: str
+
+
+class BetLogActionOut(BaseModel):
+    id: int
+    kind: str
+    actor_user_id: Optional[str] = None
+    payload: Optional[str] = None
+    outcome: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class BetLogsBetOut(BaseModel):
+    id: int
+    status: str
+    resolved_at: Optional[str] = None
+    finalized_at: Optional[str] = None
+    dispute_window_minutes: int
+    resolved_outcome: Optional[str] = None
+
+
+class BetLogsOut(BaseModel):
+    bet: BetLogsBetOut
+    actions: List[BetLogActionOut]
+    disputes: List[BetDisputeOut]
+    positions_summary: Dict[str, Any]
 
 
 class BetTimelinePointOut(BaseModel):

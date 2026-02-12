@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import json
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
@@ -9,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import AppUser, Bet, BetPosition, BetResolutionLog, Event
+from models import AppUser, Bet, BetDispute, BetPosition, BetResolutionLog, Event
 
 
 POLYMARKET_TIMELINE_MAX_POINTS = 200
@@ -92,6 +94,7 @@ def bet_out(bet: Bet) -> Dict[str, Any]:
         "created_by_user_id": bet.created_by_user_id,
         "created_at": bet.created_at.isoformat() if bet.created_at else None,
         "resolved_at": bet.resolved_at.isoformat() if bet.resolved_at else None,
+        "finalized_at": bet.finalized_at.isoformat() if bet.finalized_at else None,
         "resolved_outcome": bet.resolved_outcome,
         "pool_yes_tickets": bet.pool_yes_tickets,
         "pool_no_tickets": bet.pool_no_tickets,
@@ -172,6 +175,15 @@ def create_position(
         else:
             bet.pool_no_tickets += stake
         db.add(bet)
+        db.add(
+            BetResolutionLog(
+                bet_id=bet.id,
+                actor_user_id=user_id,
+                action="position",
+                outcome=side,
+                notes=json.dumps({"stake_tickets": stake, "idempotency_key": idempotency_key}),
+            )
+        )
         db.commit()
         db.refresh(position)
         return {
@@ -211,12 +223,14 @@ def create_position(
 
 
 def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Dict[str, Any]:
-    from main import _apply_wallet_tx, _role_rank, resolve_event_role
+    from main import _role_rank, resolve_event_role
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
         raise HTTPException(status_code=404, detail="Bet not found")
-    if bet.status == "RESOLVED":
+    if bet.status == "FINALIZED":
+        return bet_out(bet)
+    if bet.status == "RESOLVED_PENDING" and bet.resolved_outcome == outcome:
         return bet_out(bet)
     if bet.status != "LIVE":
         raise HTTPException(status_code=409, detail="Bet not live")
@@ -234,10 +248,62 @@ def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Di
         if not is_admin:
             raise HTTPException(status_code=403, detail="Forbidden")
 
-    bet.status = "RESOLVED"
+    bet.status = "RESOLVED_PENDING"
     bet.resolved_outcome = outcome
     bet.resolved_at = now_utc()
     db.add(bet)
+
+    db.add(
+        BetResolutionLog(
+            bet_id=bet.id,
+            actor_user_id=actor.id,
+            action="resolve",
+            outcome=outcome,
+            notes="proposed_outcome",
+        )
+    )
+    db.commit()
+    return bet_out(bet)
+
+
+def finalize_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
+    from main import _apply_wallet_tx, _role_rank, resolve_event_role
+
+    bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    if bet.status == "FINALIZED":
+        return bet_out(bet)
+    if bet.status != "RESOLVED_PENDING":
+        raise HTTPException(status_code=409, detail="Bet not pending resolution")
+
+    is_admin = is_polymarket_admin(actor.id)
+    if bet.scope == "EVENT" and bet.event_id is not None:
+        role = resolve_event_role(db, actor.id, bet.event_id)
+        if _role_rank(role) >= _role_rank("admin"):
+            is_admin = True
+
+    if bet.kind == "SUBJECTIVE":
+        if actor.id != bet.resolver_user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not bet.resolved_at:
+        raise HTTPException(status_code=400, detail="Bet has no resolved_at")
+
+    lock_at = bet.resolved_at + timedelta(minutes=int(bet.dispute_window_minutes or 0))
+    if now_utc() < lock_at:
+        raise HTTPException(status_code=400, detail="Dispute window not expired")
+
+    disputes_count = db.scalar(select(func.count()).select_from(BetDispute).where(BetDispute.bet_id == bet.id)) or 0
+    if disputes_count > 0:
+        raise HTTPException(status_code=403, detail="Bet has disputes")
+
+    outcome = bet.resolved_outcome
+    if outcome not in {"YES", "NO"}:
+        raise HTTPException(status_code=400, detail="Invalid resolved outcome")
 
     positions = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet_id)).all()
     total_pool = bet_total_pool(bet)
@@ -263,13 +329,16 @@ def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Di
                 idempotency_key=wallet_tx_key("BET_PAYOUT", bet_id, winner_user_id),
             )
 
+    bet.status = "FINALIZED"
+    bet.finalized_at = now_utc()
+    db.add(bet)
     db.add(
         BetResolutionLog(
             bet_id=bet.id,
             actor_user_id=actor.id,
-            action="resolve",
+            action="finalize",
             outcome=outcome,
-            notes="manual",
+            notes="payout_locked",
         )
     )
     db.commit()
@@ -284,7 +353,7 @@ def cancel_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="Bet not found")
     if bet.status == "CANCELLED":
         return bet_out(bet)
-    if bet.status != "LIVE":
+    if bet.status not in {"LIVE", "RESOLVED_PENDING"}:
         raise HTTPException(status_code=409, detail="Bet not live")
 
     is_admin = is_polymarket_admin(actor.id)
@@ -348,8 +417,10 @@ def list_bets(
         q = q.where(Bet.event_id == event_id)
     if status:
         status_norm = _normalize_upper(status)
-        if status_norm not in {"LIVE", "RESOLVED", "CANCELLED"}:
+        if status_norm not in {"LIVE", "RESOLVED", "RESOLVED_PENDING", "FINALIZED", "CANCELLED"}:
             raise HTTPException(status_code=422, detail="Invalid status")
+        if status_norm == "RESOLVED":
+            status_norm = "FINALIZED"
         q = q.where(Bet.status == status_norm)
     if kind:
         q = q.where(Bet.kind == ensure_bet_kind(kind))
@@ -397,6 +468,16 @@ def create_bet(db: Session, *, payload, user: AppUser) -> Dict[str, Any]:
         pool_no_tickets=0,
     )
     db.add(bet)
+    db.flush()
+    db.add(
+        BetResolutionLog(
+            bet_id=bet.id,
+            actor_user_id=user.id,
+            action="create",
+            outcome=None,
+            notes=None,
+        )
+    )
     db.commit()
     db.refresh(bet)
     return bet_out(bet)
@@ -494,3 +575,91 @@ def bet_timeline(db: Session, *, bet_id: int) -> list[Dict[str, Any]]:
         points = trimmed
 
     return points
+
+
+def create_dispute(db: Session, *, bet_id: int, user: AppUser, reason: str) -> Dict[str, Any]:
+    bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    if bet.status != "RESOLVED_PENDING":
+        raise HTTPException(status_code=409, detail="Bet not pending resolution")
+    if not bet.resolved_at:
+        raise HTTPException(status_code=400, detail="Bet has no resolved_at")
+
+    lock_at = bet.resolved_at + timedelta(minutes=int(bet.dispute_window_minutes or 0))
+    if now_utc() >= lock_at:
+        raise HTTPException(status_code=400, detail="Dispute window expired")
+
+    try:
+        db.add(BetDispute(bet_id=bet_id, user_id=user.id, reason=reason.strip(), created_at=now_utc()))
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+
+    bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    disputes_count = db.scalar(select(func.count()).select_from(BetDispute).where(BetDispute.bet_id == bet_id)) or 0
+    db.add(
+        BetResolutionLog(
+            bet_id=bet.id,
+            actor_user_id=user.id,
+            action="dispute",
+            outcome=bet.resolved_outcome,
+            notes=reason.strip(),
+        )
+    )
+    db.commit()
+    return {"ok": True, "disputes_count": disputes_count, "status": bet.status}
+
+
+def get_bet_logs(db: Session, *, bet_id: int) -> Dict[str, Any]:
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+
+    actions = db.scalars(
+        select(BetResolutionLog).where(BetResolutionLog.bet_id == bet_id).order_by(BetResolutionLog.created_at.asc())
+    ).all()
+    disputes = db.scalars(select(BetDispute).where(BetDispute.bet_id == bet_id).order_by(BetDispute.created_at.asc())).all()
+
+    positions = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet_id)).all()
+    positions_summary = {
+        "positions_count": len(positions),
+        "staked_yes": sum(pos.stake_tickets for pos in positions if pos.side == "YES"),
+        "staked_no": sum(pos.stake_tickets for pos in positions if pos.side == "NO"),
+        "total_pool_tickets": bet_total_pool(bet),
+    }
+
+    return {
+        "bet": {
+            "id": bet.id,
+            "status": bet.status,
+            "resolved_at": bet.resolved_at.isoformat() if bet.resolved_at else None,
+            "finalized_at": bet.finalized_at.isoformat() if bet.finalized_at else None,
+            "dispute_window_minutes": bet.dispute_window_minutes,
+            "resolved_outcome": bet.resolved_outcome,
+        },
+        "actions": [
+            {
+                "id": row.id,
+                "kind": row.action.upper(),
+                "actor_user_id": row.actor_user_id,
+                "payload": row.notes,
+                "outcome": row.outcome,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in actions
+        ],
+        "disputes": [
+            {
+                "id": row.id,
+                "bet_id": row.bet_id,
+                "user_id": row.user_id,
+                "reason": row.reason,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in disputes
+        ],
+        "positions_summary": positions_summary,
+    }
