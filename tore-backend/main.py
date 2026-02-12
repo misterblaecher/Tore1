@@ -10,7 +10,6 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
-from urllib.parse import urlparse, parse_qs
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header
@@ -465,108 +464,6 @@ def _apply_wallet_tx(
 
 
 
-def resolve_qr_payload(raw: str) -> Dict[str, Any]:
-    trimmed = (raw or "").strip()
-    if not trimmed:
-        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-
-    parsed = urlparse(trimmed)
-    if parsed.scheme.lower() != "tore":
-        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-
-    qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
-    if qr_type == "wallet":
-        action = parsed.path.lstrip("/").lower()
-        if action != "topup":
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        params = parse_qs(parsed.query)
-        user_id = (params.get("user_id") or [None])[0]
-        amount_raw = (params.get("amount") or [None])[0]
-        nonce = (params.get("nonce") or [None])[0]
-        if not user_id or not amount_raw or not nonce:
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        try:
-            amount_tickets = int(amount_raw)
-        except (TypeError, ValueError):
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        if amount_tickets <= 0:
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        return {
-            "valid": True,
-            "type": "wallet_topup",
-            "event_id": None,
-            "user_id": user_id,
-            "amount_tickets": amount_tickets,
-            "idempotency_key": nonce,
-            "reason": None,
-        }
-    params = parse_qs(parsed.query)
-
-    if qr_type == "polymarket":
-        raw_bet_id = (params.get("bet_id") or [None])[0]
-        try:
-            bet_id = int(raw_bet_id) if raw_bet_id is not None else None
-        except (TypeError, ValueError):
-            bet_id = None
-        if bet_id is None:
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        return {
-            "valid": True,
-            "type": "polymarket_bet",
-            "event_id": None,
-            "bet_id": bet_id,
-            "scope": None,
-            "route_front": f"/polymarket/bets/{bet_id}",
-            "reason": None,
-        }
-
-    if qr_type == "menu":
-        raw_bar_id = (params.get("bar_id") or [None])[0]
-        raw_item_id = (params.get("item_id") or [None])[0]
-        raw_category_id = (params.get("category_id") or [None])[0]
-        try:
-            bar_id = int(raw_bar_id) if raw_bar_id is not None else None
-            item_id = int(raw_item_id) if raw_item_id is not None else None
-            category_id = int(raw_category_id) if raw_category_id is not None else None
-        except (TypeError, ValueError):
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        if bar_id is None:
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        route_front = f"/menu/{bar_id}"
-        if item_id is not None:
-            route_front = f"/menu/{bar_id}/item/{item_id}"
-        return {
-            "valid": True,
-            "type": "menu",
-            "event_id": None,
-            "bar_id": bar_id,
-            "item_id": item_id,
-            "category_id": category_id,
-            "route_front": route_front,
-            "reason": None,
-        }
-
-    if qr_type not in {"join", "entry", "admin_config", "staff_entry", "staff_invite"}:
-        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-
-    raw_event_id = (params.get("event_id") or [None])[0]
-    try:
-        event_id = int(raw_event_id) if raw_event_id is not None else None
-    except (TypeError, ValueError):
-        event_id = None
-
-    if event_id is None:
-        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-
-    token = None
-    if qr_type == "staff_invite":
-        token = (params.get("token") or [None])[0]
-        if not token:
-            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-
-    return {"valid": True, "type": qr_type, "event_id": event_id, "bar_id": None, "item_id": None, "category_id": None, "route_front": None, "token": token, "reason": None}
-
-
 def _role_rank(role: str) -> int:
     if role == "admin":
         return 3
@@ -873,29 +770,6 @@ class CreateCheckinIn(BaseModel):
     comment: str = ""
 
 
-class QrResolveIn(BaseModel):
-    raw: str
-
-
-class QrResolveOut(BaseModel):
-    valid: bool
-    type: str
-    event_id: Optional[int] = None
-    bar_id: Optional[int] = None
-    item_id: Optional[int] = None
-    category_id: Optional[int] = None
-    bet_id: Optional[int] = None
-    scope: Optional[str] = None
-    route_front: Optional[str] = None
-    token: Optional[str] = None
-    user_id: Optional[str] = None
-    amount_tickets: Optional[int] = None
-    idempotency_key: Optional[str] = None
-    reason: Optional[str] = None
-    required_role: Optional[str] = None
-    granted_role: Optional[str] = None
-
-
 class StaffInviteIn(BaseModel):
     role: str = "entry"
     max_uses: int = Field(default=1, ge=1, le=50)
@@ -1197,9 +1071,11 @@ app.include_router(partner_auth_router, prefix="/partner")
 from app.routers.orders import router as orders_router
 from app.routers.wallet import router as wallet_router
 from app.routers.polymarket import router as polymarket_router
+from app.routers.qr import router as qr_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(polymarket_router)
+app.include_router(qr_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -2678,148 +2554,6 @@ def auth_guest(payload: GuestIn):
         }
     finally:
         s.close()
-
-
-@app.post("/qr/resolve", response_model=QrResolveOut)
-def qr_resolve(
-    payload: QrResolveIn,
-    user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    base = resolve_qr_payload(payload.raw)
-    if not base.get("valid"):
-        return {
-            "valid": False,
-            "type": "unknown",
-            "event_id": None,
-            "bar_id": None,
-            "item_id": None,
-            "category_id": None,
-            "bet_id": None,
-            "scope": None,
-            "route_front": None,
-            "token": None,
-            "reason": base.get("reason"),
-            "required_role": None,
-            "granted_role": "guest",
-        }
-
-    event_id = base.get("event_id")
-    qr_type = base.get("type")
-    token = base.get("token")
-    if qr_type == "wallet_topup":
-        return {
-            "valid": True,
-            "type": qr_type,
-            "event_id": None,
-            "bar_id": None,
-            "item_id": None,
-            "category_id": None,
-            "bet_id": None,
-            "scope": None,
-            "route_front": None,
-            "token": None,
-            "user_id": base.get("user_id"),
-            "amount_tickets": base.get("amount_tickets"),
-            "idempotency_key": base.get("idempotency_key"),
-            "reason": None,
-            "required_role": None,
-            "granted_role": "guest",
-        }
-    if qr_type == "menu":
-        return {
-            "valid": True,
-            "type": "menu",
-            "event_id": None,
-            "bar_id": base.get("bar_id"),
-            "item_id": base.get("item_id"),
-            "category_id": base.get("category_id"),
-            "bet_id": None,
-            "scope": None,
-            "route_front": base.get("route_front"),
-            "token": None,
-            "reason": None,
-            "required_role": None,
-            "granted_role": "guest",
-        }
-
-    if qr_type == "polymarket_bet":
-        bet = db.get(Bet, base.get("bet_id"))
-        if not bet:
-            return {
-                "valid": False,
-                "type": "unknown",
-                "event_id": None,
-                "bar_id": None,
-                "item_id": None,
-                "category_id": None,
-                "bet_id": None,
-                "scope": None,
-                "route_front": None,
-                "token": None,
-                "reason": "invalid",
-                "required_role": None,
-                "granted_role": "guest",
-            }
-        return {
-            "valid": True,
-            "type": "polymarket_bet",
-            "event_id": bet.event_id,
-            "bar_id": None,
-            "item_id": None,
-            "category_id": None,
-            "bet_id": bet.id,
-            "scope": bet.scope,
-            "route_front": base.get("route_front"),
-            "token": None,
-            "reason": None,
-            "required_role": None,
-            "granted_role": "guest",
-        }
-
-    role_map = {
-        "join": "guest",
-        "menu": "guest",
-        "entry": "entry",
-        "admin_config": "admin",
-        "staff_entry": "entry",
-        "staff_invite": "guest",
-    }
-    required_role = role_map.get(qr_type, "guest")
-    granted_role = resolve_event_role(db, user.id, event_id)
-
-    if _role_rank(granted_role) < _role_rank(required_role):
-        return {
-            "valid": False,
-            "type": "unknown",
-            "event_id": None,
-            "bar_id": None,
-            "item_id": None,
-            "category_id": None,
-            "bet_id": None,
-            "scope": None,
-            "route_front": None,
-            "token": None,
-            "reason": "forbidden",
-            "required_role": required_role,
-            "granted_role": granted_role,
-        }
-
-    return {
-        "valid": True,
-        "type": qr_type,
-        "event_id": event_id,
-        "bar_id": None,
-        "item_id": None,
-        "category_id": None,
-        "bet_id": None,
-        "scope": None,
-        "route_front": None,
-        "token": token,
-        "reason": None,
-        "required_role": required_role,
-        "granted_role": granted_role,
-    }
 
 
 @app.get("/auth/me")

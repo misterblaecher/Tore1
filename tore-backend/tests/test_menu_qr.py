@@ -170,3 +170,66 @@ def test_qr_resolve_polymarket_bet(monkeypatch):
     assert payload["bet_id"] == bet_id
     assert payload["scope"] == "GLOBAL"
     assert payload["route_front"] == f"/polymarket/bets/{bet_id}"
+
+
+def test_qr_resolve_schema_retrocompat_optional_fields():
+    client = TestClient(app)
+    guest = client.post('/auth/guest', json={'display_name': 'qr-compat'})
+    token = guest.json()['token']
+
+    res = client.post(
+        '/qr/resolve',
+        json={'raw': 'tore://menu?bar_id=12'},
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload['valid'] is True
+    assert payload['type'] == 'menu'
+    assert payload['bet_id'] is None
+    assert payload['order_id'] is None
+    assert payload['event_id'] is None
+    assert payload['category_id'] is None
+
+
+def test_qr_resolve_order_route_front():
+    bar_id, manager_token = _seed_partner_user(role='manager')
+    client = TestClient(app)
+    guest = client.post('/auth/guest', json={'display_name': 'order-qr'})
+    token = guest.json()['token']
+    user_id = guest.json()['user']['id']
+
+    category = client.post(
+        '/partner/portal/menu/categories',
+        json={'name': 'Snacks', 'sort_order': 1},
+        headers={'Authorization': f'Bearer {manager_token}'},
+    ).json()
+    item = client.post(
+        '/partner/portal/menu/items',
+        json={'category_id': category['id'], 'name': 'Frites', 'description': '', 'price_cents': 500},
+        headers={'Authorization': f'Bearer {manager_token}'},
+    ).json()
+
+    create_order = client.post(
+        '/orders',
+        json={
+            'bar_id': bar_id,
+            'user_id': user_id,
+            'items': [{'item_id': item['id'], 'qty': 1}],
+            'idempotency_key': 'order-qr-idem-1',
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert create_order.status_code == 200
+    order_id = create_order.json()['id']
+
+    res = client.post(
+        '/qr/resolve',
+        json={'raw': f'tore://order?order_id={order_id}'},
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload['type'] == 'order'
+    assert payload['order_id'] == order_id
+    assert payload['route_front'] == f'/orders/{order_id}'
