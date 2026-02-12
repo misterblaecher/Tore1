@@ -50,6 +50,10 @@ from models import (
     Bet,
     BetPosition,
     BetResolutionLog,
+    Battle,
+    BattleTeam,
+    BattleJoin,
+    BattleAction,
     MenuCategory,
     MenuItem,
     MenuItemVariant,
@@ -1054,6 +1058,34 @@ class MenuAnalyticsItemOut(BaseModel):
 class MenuAnalyticsOut(BaseModel):
     period_days: int
     top_items: List[MenuAnalyticsItemOut]
+
+
+class PartnerBattleTeamIn(BaseModel):
+    name: str
+    color: Optional[str] = None
+
+
+class PartnerBattleCreateIn(BaseModel):
+    event_id: int
+    title: str = "Battle"
+    mode: str = "teams"
+    is_active: bool = True
+    teams: List[PartnerBattleTeamIn] = []
+
+
+class PartnerBattleUpdateIn(BaseModel):
+    is_active: bool
+
+
+class BattleActionIn(BaseModel):
+    team_id: Optional[int] = None
+    kind: str = "AFFOND"
+    delta: int = 1
+    idempotency_key: Optional[str] = None
+
+
+class BattleJoinIn(BaseModel):
+    team_id: Optional[int] = None
 
 
 class PartnerBarOut(BaseModel):
