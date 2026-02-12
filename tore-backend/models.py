@@ -135,6 +135,57 @@ class PriceHistory(Base):
     price_cents: Mapped[int] = mapped_column(Integer)
 
 
+class DrinkMarketConfig(Base):
+    __tablename__ = "drink_market_configs"
+    __table_args__ = (UniqueConstraint("bar_id", "event_id", name="uq_drink_market_config_scope"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
+    is_live: Mapped[bool] = mapped_column(Boolean, default=False)
+    ticket_value_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    price_floor_cents: Mapped[int] = mapped_column(Integer, default=50)
+    price_cap_cents: Mapped[int] = mapped_column(Integer, default=2000)
+    step_cents: Mapped[int] = mapped_column(Integer, default=10)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+
+class DrinkMarketItem(Base):
+    __tablename__ = "drink_market_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("drink_market_configs.id"), index=True)
+    name: Mapped[str] = mapped_column(String(180), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    base_price_cents: Mapped[int] = mapped_column(Integer)
+    current_price_cents: Mapped[int] = mapped_column(Integer)
+    unit: Mapped[str] = mapped_column(String(40), default="unit")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class DrinkPriceTick(Base):
+    __tablename__ = "drink_price_ticks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("drink_market_items.id"), index=True)
+    price_cents: Mapped[int] = mapped_column(Integer)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    actor_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class DrinkPriceTickIdempotency(Base):
+    __tablename__ = "drink_price_tick_idempotency"
+    __table_args__ = (UniqueConstraint("item_id", "idempotency_key", name="uq_market_price_idempotency"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("drink_market_items.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    tick_id: Mapped[int] = mapped_column(ForeignKey("drink_price_ticks.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+
 class TicketBalance(Base):
     __tablename__ = "ticket_balances"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -473,8 +524,23 @@ class Battle(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
     title: Mapped[str] = mapped_column(String(180), default="Battle")
     mode: Mapped[str] = mapped_column(String(16), default="teams")
+    join_code: Mapped[Optional[str]] = mapped_column(String(16), index=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    winner_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class BattleParticipant(Base):
+    __tablename__ = "battle_participants"
+    __table_args__ = (UniqueConstraint("battle_id", "user_id", name="uq_battle_participant_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    battle_id: Mapped[int] = mapped_column(ForeignKey("battles.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
 
 class BattleTeam(Base):

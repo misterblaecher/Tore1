@@ -50,6 +50,10 @@ from models import (
     Bet,
     BetPosition,
     BetResolutionLog,
+    Battle,
+    BattleTeam,
+    BattleJoin,
+    BattleAction,
     MenuCategory,
     MenuItem,
     MenuItemVariant,
@@ -1096,6 +1100,7 @@ from app.routers.qr import router as qr_router
 from app.routers.analytics import router as analytics_router
 from app.routers.hunt import router as hunt_router
 from app.routers.battles import router as battles_router
+from app.routers.market import router as market_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1103,6 +1108,7 @@ app.include_router(polymarket_router)
 app.include_router(qr_router)
 app.include_router(hunt_router)
 app.include_router(battles_router)
+app.include_router(market_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -3667,6 +3673,35 @@ def leaderboard(limit: int = Query(default=50, ge=1, le=200)):
 # ---------------------------------------------------------------------
 # Battles / Affonds V1
 # ---------------------------------------------------------------------
+
+
+class PartnerBattleTeamIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    color: Optional[str] = Field(default=None, max_length=32)
+
+
+class PartnerBattleCreateIn(BaseModel):
+    event_id: int = Field(ge=1)
+    title: str = Field(default="Battle", min_length=1, max_length=180)
+    mode: str = Field(default="teams", max_length=16)
+    is_active: bool = True
+    teams: List[PartnerBattleTeamIn] = Field(default_factory=list)
+
+
+class PartnerBattleUpdateIn(BaseModel):
+    is_active: bool
+
+
+class BattleActionIn(BaseModel):
+    team_id: Optional[int] = Field(default=None, ge=1)
+    kind: str = Field(default="AFFOND", max_length=16)
+    delta: int = 1
+    idempotency_key: Optional[str] = Field(default=None, max_length=120)
+
+
+class BattleJoinIn(BaseModel):
+    team_id: Optional[int] = Field(default=None, ge=1)
+
 
 def _battle_to_dict(db: Session, battle: Battle) -> Dict[str, Any]:
     teams = db.scalars(

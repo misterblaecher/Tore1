@@ -259,6 +259,38 @@ export default function Dashboard() {
         >
           Hunt Admin
         </Link>
+        <Link
+          to="/market-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,120,90,0.45)',
+            background: 'rgba(255,120,90,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Market Admin
+        </Link>
+        {bar ? (
+          <Link
+            to={`/market/${bar.id}`}
+            style={{
+              display: 'inline-block',
+              padding: '10px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,140,0,0.45)',
+              background: 'rgba(255,140,0,0.25)',
+              color: '#fff',
+              fontWeight: 800,
+              textDecoration: 'none',
+            }}
+          >
+            Ouvrir Market Public
+          </Link>
+        ) : null}
         {bar ? (
           <Link
             to={`/menu/${bar.id}`}
