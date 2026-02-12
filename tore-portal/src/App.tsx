@@ -12,6 +12,8 @@ import MenuPublic from './pages/MenuPublic'
 import OrdersQueue from './pages/OrdersQueue'
 import Analytics from './pages/Analytics'
 import HuntAdmin from './pages/HuntAdmin'
+import BattlesAdmin from './pages/BattlesAdmin'
+import BattlePublic from './pages/BattlePublic'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -88,6 +90,14 @@ export default function App() {
         }
       />
       <Route
+        path="/battles-admin"
+        element={
+          <RequireAuth>
+            <BattlesAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
         path="/hunt-admin"
         element={
           <RequireAuth>
@@ -97,6 +107,7 @@ export default function App() {
       />
       <Route path="/menu/:barId" element={<MenuPublic />} />
       <Route path="/menu/:barId/item/:itemId" element={<MenuPublic />} />
+      <Route path="/battles/:id" element={<BattlePublic />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

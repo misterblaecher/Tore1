@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.schemas.qr import QrResolveIn, QrResolveOut
 from app.services.qr_service import resolve_qr_payload
-from models import AppUser, Bet, Order
+from models import AppUser, Battle, Bet, Order
 from main import _role_rank, get_current_user, resolve_event_role
 
 router = APIRouter()
@@ -36,6 +36,7 @@ def qr_resolve(
             "category_id": None,
             "bet_id": None,
             "order_id": None,
+            "battle_id": None,
             "scope": None,
             "route_front": None,
             "token": None,
@@ -58,6 +59,7 @@ def qr_resolve(
             "category_id": None,
             "bet_id": None,
             "order_id": None,
+            "battle_id": None,
             "scope": None,
             "route_front": None,
             "token": None,
@@ -80,6 +82,47 @@ def qr_resolve(
             "category_id": base.get("category_id"),
             "bet_id": None,
             "order_id": None,
+            "battle_id": None,
+            "scope": None,
+            "route_front": base.get("route_front"),
+            "token": None,
+            "reason": None,
+            "required_role": None,
+            "granted_role": "guest",
+            "data": base.get("data"),
+        }
+
+    if qr_type == "battle":
+        battle = db.get(Battle, base.get("battle_id"))
+        if not battle:
+            return {
+                "valid": False,
+                "type": "unknown",
+                "event_id": None,
+                "bar_id": None,
+                "item_id": None,
+                "category_id": None,
+                "bet_id": None,
+                "order_id": None,
+                "battle_id": None,
+                "scope": None,
+                "route_front": None,
+                "token": None,
+                "reason": "invalid",
+                "required_role": None,
+                "granted_role": "guest",
+                "data": base.get("data"),
+            }
+        return {
+            "valid": True,
+            "type": "battle",
+            "event_id": battle.event_id,
+            "bar_id": battle.bar_id,
+            "item_id": None,
+            "category_id": None,
+            "bet_id": None,
+            "order_id": None,
+            "battle_id": battle.id,
             "scope": None,
             "route_front": base.get("route_front"),
             "token": None,
@@ -118,6 +161,7 @@ def qr_resolve(
             "category_id": None,
             "bet_id": bet.id,
             "order_id": None,
+            "battle_id": None,
             "scope": bet.scope,
             "route_front": base.get("route_front"),
             "token": None,
@@ -156,6 +200,7 @@ def qr_resolve(
             "category_id": None,
             "bet_id": None,
             "order_id": order.id,
+            "battle_id": None,
             "scope": None,
             "route_front": base.get("route_front"),
             "token": None,
@@ -186,6 +231,7 @@ def qr_resolve(
             "category_id": None,
             "bet_id": None,
             "order_id": None,
+            "battle_id": None,
             "scope": None,
             "route_front": None,
             "token": None,
@@ -204,6 +250,7 @@ def qr_resolve(
         "category_id": None,
         "bet_id": None,
         "order_id": None,
+        "battle_id": None,
         "scope": None,
         "route_front": None,
         "token": token,

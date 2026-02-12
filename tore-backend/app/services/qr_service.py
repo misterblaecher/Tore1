@@ -95,6 +95,27 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
             },
         }
 
+
+    if qr_type == "battle":
+        raw_battle_id = (params.get("battle_id") or [None])[0]
+        try:
+            battle_id = int(raw_battle_id) if raw_battle_id is not None else None
+        except (TypeError, ValueError):
+            battle_id = None
+        if battle_id is None:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        return {
+            "valid": True,
+            "type": "battle",
+            "event_id": None,
+            "battle_id": battle_id,
+            "route_front": f"/battles/{battle_id}",
+            "reason": None,
+            "data": {
+                "deep_link": trimmed,
+            },
+        }
+
     if qr_type == "order":
         raw_order_id = (params.get("order_id") or [None])[0]
         try:

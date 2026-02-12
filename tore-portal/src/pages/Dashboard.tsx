@@ -230,6 +230,21 @@ export default function Dashboard() {
           Gérer Menu QR
         </Link>
         <Link
+          to="/battles-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(130,120,255,0.35)',
+            background: 'rgba(130,120,255,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Battles Admin
+        </Link>
+        <Link
           to="/hunt-admin"
           style={{
             display: 'inline-block',
