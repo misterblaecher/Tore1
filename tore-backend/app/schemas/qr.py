@@ -18,6 +18,7 @@ class QrResolveOut(BaseModel):
     category_id: Optional[int] = None
     bet_id: Optional[int] = None
     order_id: Optional[int] = None
+    battle_id: Optional[int] = None
     scope: Optional[str] = None
     route_front: Optional[str] = None
     token: Optional[str] = None
