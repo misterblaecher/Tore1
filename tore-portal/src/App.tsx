@@ -11,6 +11,7 @@ import MenuAdmin from './pages/MenuAdmin'
 import MenuPublic from './pages/MenuPublic'
 import OrdersQueue from './pages/OrdersQueue'
 import Analytics from './pages/Analytics'
+import HuntAdmin from './pages/HuntAdmin'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -83,6 +84,14 @@ export default function App() {
         element={
           <RequireAuth>
             <OrdersQueue />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/hunt-admin"
+        element={
+          <RequireAuth>
+            <HuntAdmin />
           </RequireAuth>
         }
       />

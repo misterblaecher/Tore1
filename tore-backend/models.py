@@ -62,6 +62,47 @@ class Event(Base):
     drinks: Mapped[List["EventDrink"]] = relationship(back_populates="event")
 
 
+class Hunt(Base):
+    __tablename__ = "hunts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    name: Mapped[str] = mapped_column(String(180), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    reward_tickets: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+
+class HuntPoint(Base):
+    __tablename__ = "hunt_points"
+    __table_args__ = (
+        UniqueConstraint("secret_code", name="uq_hunt_points_secret_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hunt_id: Mapped[int] = mapped_column(ForeignKey("hunts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(180), default="")
+    hint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    secret_code: Mapped[str] = mapped_column(String(64), index=True)
+
+
+class HuntScan(Base):
+    __tablename__ = "hunt_scans"
+    __table_args__ = (
+        UniqueConstraint("point_id", "user_id", name="uq_hunt_scans_point_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hunt_id: Mapped[int] = mapped_column(ForeignKey("hunts.id"), index=True)
+    point_id: Mapped[int] = mapped_column(ForeignKey("hunt_points.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    device_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class Drink(Base):
     __tablename__ = "drinks"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

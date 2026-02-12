@@ -229,6 +229,21 @@ export default function Dashboard() {
         >
           Gérer Menu QR
         </Link>
+        <Link
+          to="/hunt-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(120,255,160,0.45)',
+            background: 'rgba(120,255,160,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Hunt Admin
+        </Link>
         {bar ? (
           <Link
             to={`/menu/${bar.id}`}
