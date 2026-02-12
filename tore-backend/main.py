@@ -43,7 +43,9 @@ from models import (
     Beer,
     Checkin,
     Battle,
-    BattleParticipant,
+    BattleTeam,
+    BattleJoin,
+    BattleAction,
     AppUser,
     AppToken,
     PartnerMembership,
@@ -152,10 +154,89 @@ def _ensure_polymarket_v1_columns() -> None:
     finally:
         s.close()
 
+def _ensure_battles_v1_schema() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    s = get_session()
+    try:
+        tables = {
+            row[0]
+            for row in s.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+        }
+        if "battles" in tables:
+            columns = {
+                row[1]
+                for row in s.execute(text("PRAGMA table_info(battles)"))
+            }
+            if "bar_id" not in columns:
+                s.execute(text("ALTER TABLE battles ADD COLUMN bar_id INTEGER"))
+            if "is_active" not in columns:
+                s.execute(text("ALTER TABLE battles ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+            if "mode" not in columns:
+                s.execute(text("ALTER TABLE battles ADD COLUMN mode VARCHAR(16) DEFAULT 'teams'"))
+            if "event_id" not in columns:
+                s.execute(text("ALTER TABLE battles ADD COLUMN event_id INTEGER"))
+            if "title" not in columns:
+                s.execute(text("ALTER TABLE battles ADD COLUMN title VARCHAR(180) DEFAULT 'Battle'"))
+
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS battle_teams (
+                id INTEGER NOT NULL PRIMARY KEY,
+                battle_id INTEGER NOT NULL,
+                name VARCHAR(120) NOT NULL DEFAULT '',
+                color VARCHAR(32),
+                created_at DATETIME,
+                FOREIGN KEY(battle_id) REFERENCES battles (id)
+            )
+        """))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_teams_battle_id ON battle_teams (battle_id)"))
+
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS battle_joins (
+                id INTEGER NOT NULL PRIMARY KEY,
+                battle_id INTEGER NOT NULL,
+                team_id INTEGER,
+                user_id VARCHAR NOT NULL,
+                joined_at DATETIME,
+                CONSTRAINT uq_battle_join_user UNIQUE (battle_id, user_id),
+                FOREIGN KEY(battle_id) REFERENCES battles (id),
+                FOREIGN KEY(team_id) REFERENCES battle_teams (id)
+            )
+        """))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_joins_battle_id ON battle_joins (battle_id)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_joins_team_id ON battle_joins (team_id)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_joins_user_id ON battle_joins (user_id)"))
+
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS battle_actions (
+                id INTEGER NOT NULL PRIMARY KEY,
+                battle_id INTEGER NOT NULL,
+                team_id INTEGER,
+                user_id VARCHAR,
+                kind VARCHAR(16) NOT NULL DEFAULT 'AFFOND',
+                delta INTEGER NOT NULL DEFAULT 0,
+                idempotency_key VARCHAR(120),
+                created_at DATETIME,
+                CONSTRAINT uq_battle_action_idempotency UNIQUE (battle_id, idempotency_key),
+                FOREIGN KEY(battle_id) REFERENCES battles (id),
+                FOREIGN KEY(team_id) REFERENCES battle_teams (id)
+            )
+        """))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_actions_battle_id ON battle_actions (battle_id)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_actions_team_id ON battle_actions (team_id)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_battle_actions_user_id ON battle_actions (user_id)"))
+
+        s.execute(text("DROP TABLE IF EXISTS battle_participants"))
+        s.commit()
+    finally:
+        s.close()
+
+
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
     _ensure_polymarket_v1_columns()
+    _ensure_battles_v1_schema()
     s = get_session()
     try:
         bar_count = s.scalar(select(func.count()).select_from(Bar)) or 0
@@ -1068,22 +1149,33 @@ class QrPackOut(BaseModel):
     qrs: Dict[str, str]
 
 
-class CreateBattleIn(BaseModel):
-    user_id: str
+class BattleTeamIn(BaseModel):
+    name: str
+    color: Optional[str] = None
+
+
+class PartnerBattleCreateIn(BaseModel):
+    event_id: int
     title: str = "Battle"
-    mode: str = "1v1"
-    event_id: Optional[int] = None
+    mode: Literal["teams", "solo"] = "teams"
+    is_active: bool = True
+    teams: List[BattleTeamIn] = Field(default_factory=list)
 
 
-class JoinBattleIn(BaseModel):
-    user_id: str
-    join_code: str
-    display_name: str = "Player"
+class PartnerBattleUpdateIn(BaseModel):
+    is_active: bool
 
 
-class WinnerIn(BaseModel):
-    user_id: str
-    winner_user_id: str
+class BattleActionIn(BaseModel):
+    team_id: Optional[int] = None
+    kind: Literal["AFFOND", "BONUS", "PENALTY"]
+    delta: int
+    idempotency_key: Optional[str] = None
+
+
+class BattleJoinIn(BaseModel):
+    team_id: Optional[int] = None
+
 
 
 # ---------------------------------------------------------------------
@@ -3678,71 +3770,274 @@ def leaderboard(limit: int = Query(default=50, ge=1, le=200)):
 
 
 # ---------------------------------------------------------------------
-# Battles (simple mini-game)
+# Battles / Affonds V1
 # ---------------------------------------------------------------------
 
-@app.post("/battles")
-def create_battle(payload: CreateBattleIn):
-    s = get_session()
-    try:
-        require_feature(s, payload.event_id or 0, "battles_enabled") if payload.event_id else None
-        code = random_code(6)
-        b = Battle(
-            event_id=payload.event_id,
-            created_by_user_id=payload.user_id,
-            title=payload.title,
-            mode=payload.mode,
-            join_code=code,
-            created_at=now_utc(),
-        )
-        s.add(b)
-        s.commit()
-        return {"id": b.id, "join_code": b.join_code}
-    finally:
-        s.close()
+def _battle_to_dict(db: Session, battle: Battle) -> Dict[str, Any]:
+    teams = db.scalars(
+        select(BattleTeam).where(BattleTeam.battle_id == battle.id).order_by(BattleTeam.created_at.asc())
+    ).all()
+    scores = {team.id: 0 for team in teams}
+    rows = db.execute(
+        select(BattleAction.team_id, func.coalesce(func.sum(BattleAction.delta), 0))
+        .where(BattleAction.battle_id == battle.id)
+        .group_by(BattleAction.team_id)
+    ).all()
+    for team_id, total in rows:
+        scores[team_id] = int(total or 0)
+    return {
+        "id": battle.id,
+        "bar_id": battle.bar_id,
+        "event_id": battle.event_id,
+        "title": battle.title,
+        "mode": battle.mode,
+        "is_active": bool(battle.is_active),
+        "created_at": battle.created_at.isoformat(),
+        "teams": [
+            {
+                "id": team.id,
+                "name": team.name,
+                "color": team.color,
+                "score": scores.get(team.id, 0),
+            }
+            for team in teams
+        ],
+    }
 
 
-@app.post("/battles/join")
-def join_battle(payload: JoinBattleIn):
-    s = get_session()
-    try:
-        b = s.scalar(select(Battle).where(Battle.join_code == payload.join_code))
-        if not b:
-            raise HTTPException(404, "Battle not found")
-        require_feature(s, b.event_id or 0, "battles_enabled") if b.event_id else None
+def _battle_stats(db: Session, battle_id: int, limit: int = 20) -> Dict[str, Any]:
+    battle = db.get(Battle, battle_id)
+    if not battle:
+        raise HTTPException(404, "Battle not found")
+    payload = _battle_to_dict(db, battle)
+    actions = db.scalars(
+        select(BattleAction)
+        .where(BattleAction.battle_id == battle.id)
+        .order_by(BattleAction.created_at.desc(), BattleAction.id.desc())
+        .limit(limit)
+    ).all()
+    payload["recent_actions"] = [
+        {
+            "id": action.id,
+            "team_id": action.team_id,
+            "user_id": action.user_id,
+            "kind": action.kind,
+            "delta": action.delta,
+            "idempotency_key": action.idempotency_key,
+            "created_at": action.created_at.isoformat(),
+        }
+        for action in actions
+    ]
+    return payload
 
-        exists = s.scalar(
-            select(BattleParticipant).where(
-                BattleParticipant.battle_id == b.id, BattleParticipant.user_id == payload.user_id
+
+def _assert_partner_event_access(db: Session, identity: Dict[str, Any], event_id: int) -> Event:
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    return event
+
+
+@app.post("/partner/portal/battles")
+def partner_portal_create_battle(
+    payload: PartnerBattleCreateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    event = _assert_partner_event_access(db, identity, payload.event_id)
+    battle = Battle(
+        bar_id=event.bar_id,
+        event_id=event.id,
+        title=payload.title,
+        mode=payload.mode,
+        is_active=payload.is_active,
+        created_at=now_utc(),
+    )
+    db.add(battle)
+    db.flush()
+    for team in payload.teams:
+        db.add(BattleTeam(battle_id=battle.id, name=team.name, color=team.color, created_at=now_utc()))
+    db.commit()
+    return _battle_to_dict(db, battle)
+
+
+@app.patch("/partner/portal/battles/{battle_id}")
+def partner_portal_update_battle(
+    battle_id: int,
+    payload: PartnerBattleUpdateIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    battle = db.get(Battle, battle_id)
+    if not battle:
+        raise HTTPException(404, "Battle not found")
+    _assert_partner_event_access(db, identity, battle.event_id)
+    battle.is_active = payload.is_active
+    db.add(battle)
+    db.commit()
+    return _battle_to_dict(db, battle)
+
+
+@app.get("/partner/portal/battles")
+def partner_portal_list_battles(
+    event_id: int = Query(..., ge=1),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _assert_partner_event_access(db, identity, event_id)
+    rows = db.scalars(
+        select(Battle).where(Battle.event_id == event_id).order_by(Battle.created_at.desc(), Battle.id.desc())
+    ).all()
+    return [_battle_to_dict(db, row) for row in rows]
+
+
+@app.post("/partner/portal/battles/{battle_id}/action")
+def partner_portal_record_battle_action(
+    battle_id: int,
+    payload: BattleActionIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    battle = db.get(Battle, battle_id)
+    if not battle:
+        raise HTTPException(404, "Battle not found")
+    _assert_partner_event_access(db, identity, battle.event_id)
+
+    if payload.team_id is not None:
+        team = db.get(BattleTeam, payload.team_id)
+        if not team or team.battle_id != battle.id:
+            raise HTTPException(400, "Invalid team_id")
+
+    existing = None
+    if payload.idempotency_key:
+        existing = db.scalar(
+            select(BattleAction).where(
+                BattleAction.battle_id == battle.id,
+                BattleAction.idempotency_key == payload.idempotency_key,
             )
         )
-        if exists:
-            return {"ok": True, "battle_id": b.id}
+    if existing:
+        return {"ok": True, "action_id": existing.id, "idempotent": True, "stats": _battle_stats(db, battle.id)}
 
-        p = BattleParticipant(
-            battle_id=b.id,
-            user_id=payload.user_id,
-            display_name=payload.display_name,
-            joined_at=now_utc(),
-        )
-        s.add(p)
-        s.commit()
-        return {"ok": True, "battle_id": b.id}
-    finally:
-        s.close()
-
-
-@app.post("/battles/{battle_id}/winner")
-def set_winner(battle_id: int, payload: WinnerIn):
-    s = get_session()
+    action = BattleAction(
+        battle_id=battle.id,
+        team_id=payload.team_id,
+        user_id=str(identity.get("user_id")),
+        kind=payload.kind,
+        delta=payload.delta,
+        idempotency_key=payload.idempotency_key,
+        created_at=now_utc(),
+    )
+    db.add(action)
     try:
-        b = s.get(Battle, battle_id)
-        if not b:
-            raise HTTPException(404, "Battle not found")
-        b.winner_user_id = payload.winner_user_id
-        b.ended_at = now_utc()
-        s.add(b)
-        s.commit()
-        return {"ok": True}
-    finally:
-        s.close()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.scalar(
+            select(BattleAction).where(
+                BattleAction.battle_id == battle.id,
+                BattleAction.idempotency_key == payload.idempotency_key,
+            )
+        )
+        if existing:
+            return {"ok": True, "action_id": existing.id, "idempotent": True, "stats": _battle_stats(db, battle.id)}
+        raise
+    return {"ok": True, "action_id": action.id, "idempotent": False, "stats": _battle_stats(db, battle.id)}
+
+
+@app.get("/partner/portal/battles/{battle_id}/stats")
+def partner_portal_battle_stats(
+    battle_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    battle = db.get(Battle, battle_id)
+    if not battle:
+        raise HTTPException(404, "Battle not found")
+    _assert_partner_event_access(db, identity, battle.event_id)
+    return _battle_stats(db, battle_id)
+
+
+@app.get("/battles/{battle_id}")
+def get_public_battle(battle_id: int, db: Session = Depends(get_db)):
+    battle = db.get(Battle, battle_id)
+    if not battle:
+        raise HTTPException(404, "Battle not found")
+    return _battle_stats(db, battle_id)
+
+
+@app.get("/battles/event/{event_id}")
+def list_public_battles(event_id: int, db: Session = Depends(get_db)):
+    rows = db.scalars(
+        select(Battle)
+        .where(Battle.event_id == event_id, Battle.is_active.is_(True))
+        .order_by(Battle.created_at.desc(), Battle.id.desc())
+    ).all()
+    return [_battle_to_dict(db, row) for row in rows]
+
+
+@app.post("/battles/{battle_id}/join")
+def join_battle(
+    battle_id: int,
+    payload: BattleJoinIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    battle = db.get(Battle, battle_id)
+    if not battle or not battle.is_active:
+        raise HTTPException(404, "Battle not found")
+    if payload.team_id is not None:
+        team = db.get(BattleTeam, payload.team_id)
+        if not team or team.battle_id != battle.id:
+            raise HTTPException(400, "Invalid team_id")
+
+    existing = db.scalar(
+        select(BattleJoin).where(BattleJoin.battle_id == battle.id, BattleJoin.user_id == user.id)
+    )
+    if existing:
+        return {"ok": True, "join_id": existing.id, "idempotent": True}
+
+    join = BattleJoin(
+        battle_id=battle.id,
+        team_id=payload.team_id,
+        user_id=user.id,
+        joined_at=now_utc(),
+    )
+    db.add(join)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.scalar(
+            select(BattleJoin).where(BattleJoin.battle_id == battle.id, BattleJoin.user_id == user.id)
+        )
+        if existing:
+            return {"ok": True, "join_id": existing.id, "idempotent": True}
+        raise
+    return {"ok": True, "join_id": join.id, "idempotent": False}
+
+
+@app.get("/battles/{battle_id}/me")
+def battle_me(
+    battle_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    battle = db.get(Battle, battle_id)
+    if not battle:
+        raise HTTPException(404, "Battle not found")
+    join = db.scalar(select(BattleJoin).where(BattleJoin.battle_id == battle.id, BattleJoin.user_id == user.id))
+    stats = _battle_stats(db, battle_id)
+    return {
+        "battle_id": battle_id,
+        "user_id": user.id,
+        "team_id": join.team_id if join else None,
+        "joined_at": join.joined_at.isoformat() if join else None,
+        "score_snapshot": stats,
+    }
+

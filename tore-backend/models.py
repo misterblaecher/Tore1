@@ -469,27 +469,47 @@ class Checkin(Base):
 class Battle(Base):
     __tablename__ = "battles"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    event_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
-    title: Mapped[str] = mapped_column(String, default="Battle")
-    mode: Mapped[str] = mapped_column(String, default="1v1")
-    join_code: Mapped[str] = mapped_column(String, unique=True, index=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180), default="Battle")
+    mode: Mapped[str] = mapped_column(String(16), default="teams")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
-    ended: Mapped[bool] = mapped_column(Boolean, default=False)
-    winner_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
-class BattleParticipant(Base):
-    __tablename__ = "battle_participants"
+class BattleTeam(Base):
+    __tablename__ = "battle_teams"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     battle_id: Mapped[int] = mapped_column(ForeignKey("battles.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    color: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+
+class BattleJoin(Base):
+    __tablename__ = "battle_joins"
+    __table_args__ = (UniqueConstraint("battle_id", "user_id", name="uq_battle_join_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    battle_id: Mapped[int] = mapped_column(ForeignKey("battles.id"), index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(ForeignKey("battle_teams.id"), nullable=True, index=True)
     user_id: Mapped[str] = mapped_column(String, index=True)
-    display_name: Mapped[str] = mapped_column(String, default="")
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
-    # Stats
-    wins: Mapped[int] = mapped_column(Integer, default=0)
-    losses: Mapped[int] = mapped_column(Integer, default=0)
 
-    battle: Mapped["Battle"] = relationship()
+class BattleAction(Base):
+    __tablename__ = "battle_actions"
+    __table_args__ = (UniqueConstraint("battle_id", "idempotency_key", name="uq_battle_action_idempotency"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    battle_id: Mapped[int] = mapped_column(ForeignKey("battles.id"), index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(ForeignKey("battle_teams.id"), nullable=True, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="AFFOND")
+    delta: Mapped[int] = mapped_column(Integer, default=0)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
 # --- Partner authentication / bar backoffice ---
 
 
