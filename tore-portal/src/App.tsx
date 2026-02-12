@@ -10,6 +10,7 @@ import PolymarketDetail from './pages/PolymarketDetail'
 import MenuAdmin from './pages/MenuAdmin'
 import MenuPublic from './pages/MenuPublic'
 import OrdersQueue from './pages/OrdersQueue'
+import Analytics from './pages/Analytics'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -66,6 +67,14 @@ export default function App() {
         element={
           <RequireAuth>
             <MenuAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <RequireAuth>
+            <Analytics />
           </RequireAuth>
         }
       />

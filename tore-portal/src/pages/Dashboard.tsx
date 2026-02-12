@@ -185,6 +185,21 @@ export default function Dashboard() {
           Ouvrir Polymarket Global
         </Link>
         <Link
+          to="/analytics"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,210,0,0.4)',
+            background: 'rgba(255,210,0,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Ops Analytics
+        </Link>
+        <Link
           to="/orders-queue"
           style={{
             display: 'inline-block',
