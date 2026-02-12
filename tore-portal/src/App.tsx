@@ -14,6 +14,8 @@ import Analytics from './pages/Analytics'
 import HuntAdmin from './pages/HuntAdmin'
 import BattlesAdmin from './pages/BattlesAdmin'
 import BattlePublic from './pages/BattlePublic'
+import MarketAdmin from './pages/MarketAdmin'
+import MarketPublic from './pages/MarketPublic'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -105,9 +107,18 @@ export default function App() {
           </RequireAuth>
         }
       />
+      <Route
+        path="/market-admin"
+        element={
+          <RequireAuth>
+            <MarketAdmin />
+          </RequireAuth>
+        }
+      />
       <Route path="/menu/:barId" element={<MenuPublic />} />
       <Route path="/menu/:barId/item/:itemId" element={<MenuPublic />} />
       <Route path="/battles/:id" element={<BattlePublic />} />
+      <Route path="/market/:barId" element={<MarketPublic />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
