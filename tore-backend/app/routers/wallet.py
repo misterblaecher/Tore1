@@ -142,7 +142,7 @@ def wallet_topup_from_qr(
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
 ):
-    from main import resolve_qr_payload
+    from app.services.qr_service import resolve_qr_payload
 
     require_wallet_staff(identity)
     resolved = resolve_qr_payload(payload.raw_qr)
