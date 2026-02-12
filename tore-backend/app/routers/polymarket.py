@@ -10,6 +10,10 @@ from main import get_current_user
 from app.schemas.polymarket import (
     BetCreateIn,
     BetDetailOut,
+    BetDisputeCreateOut,
+    BetDisputeIn,
+    BetFinalizeOut,
+    BetLogsOut,
     BetMeOut,
     BetOut,
     BetPositionCreateIn,
@@ -110,6 +114,35 @@ def resolve_polymarket_bet(
 ):
     outcome = polymarket_service.ensure_bet_side(payload.outcome)
     return polymarket_service.resolve_bet(db, bet_id=bet_id, outcome=outcome, actor=user)
+
+
+
+
+@router.post("/polymarket/bets/{bet_id}/finalize", response_model=BetFinalizeOut)
+def finalize_polymarket_bet(
+    bet_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return polymarket_service.finalize_bet(db, bet_id=bet_id, actor=user)
+
+
+@router.post("/polymarket/bets/{bet_id}/dispute", response_model=BetDisputeCreateOut)
+def dispute_polymarket_bet(
+    bet_id: int,
+    payload: BetDisputeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return polymarket_service.create_dispute(db, bet_id=bet_id, user=user, reason=payload.reason)
+
+
+@router.get("/polymarket/bets/{bet_id}/logs", response_model=BetLogsOut)
+def get_polymarket_bet_logs(
+    bet_id: int,
+    db: Session = Depends(get_db),
+):
+    return polymarket_service.get_bet_logs(db, bet_id=bet_id)
 
 
 @router.post("/polymarket/bets/{bet_id}/cancel", response_model=BetOut)

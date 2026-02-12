@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session, now_utc
 from main import app
-from models import Bar, Event, EventConfig, EventStaff, PartnerMembership, PartnerUser, WalletTx
+from models import Bar, Bet, Event, EventConfig, EventStaff, PartnerMembership, PartnerUser, WalletTx
 from partner_auth import _make_token
 
 
@@ -304,7 +304,7 @@ def test_resolve_permissions(monkeypatch):
     assert res_ok.json()["resolved_outcome"] == "YES"
 
 
-def test_resolve_pays_winner_and_is_idempotent(monkeypatch):
+def test_resolve_sets_pending_and_finalize_pays_winner_idempotent(monkeypatch):
     Base.metadata.create_all(engine)
     client = TestClient(app)
     manager_token = _seed_wallet_manager()
@@ -336,6 +336,27 @@ def test_resolve_pays_winner_and_is_idempotent(monkeypatch):
         headers={"Authorization": f"Bearer {creator_token}"},
     )
     assert resolve_res.status_code == 200
+    assert resolve_res.json()["status"] == "RESOLVED_PENDING"
+
+    winner_wallet_before = client.get("/wallet/me", headers={"Authorization": f"Bearer {winner_token}"})
+    assert winner_wallet_before.status_code == 200
+    assert winner_wallet_before.json()["balance_tickets"] == 30
+
+    s = get_session()
+    try:
+        bet = s.get(Bet, bet_id)
+        bet.resolved_at = now_utc() - timedelta(minutes=61)
+        s.add(bet)
+        s.commit()
+    finally:
+        s.close()
+
+    finalize_res = client.post(
+        f"/polymarket/bets/{bet_id}/finalize",
+        headers={"Authorization": f"Bearer {creator_token}"},
+    )
+    assert finalize_res.status_code == 200
+    assert finalize_res.json()["status"] == "FINALIZED"
 
     winner_wallet = client.get("/wallet/me", headers={"Authorization": f"Bearer {winner_token}"})
     assert winner_wallet.status_code == 200
@@ -347,12 +368,11 @@ def test_resolve_pays_winner_and_is_idempotent(monkeypatch):
     ]
     assert len(payout_txs) == 1
 
-    resolve_res_dup = client.post(
-        f"/polymarket/bets/{bet_id}/resolve",
-        json={"outcome": "YES"},
+    finalize_res_dup = client.post(
+        f"/polymarket/bets/{bet_id}/finalize",
         headers={"Authorization": f"Bearer {creator_token}"},
     )
-    assert resolve_res_dup.status_code == 200
+    assert finalize_res_dup.status_code == 200
 
     s = get_session()
     try:
@@ -430,6 +450,85 @@ def test_polymarket_bet_me_endpoint(monkeypatch):
     assert payload["stake_yes"] == 6
     assert payload["stake_total"] == 6
     assert payload["wallet_balance_tickets"] == 9
+
+
+
+def test_dispute_window_and_logs(monkeypatch):
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    manager_token = _seed_wallet_manager()
+    creator_token, creator_id = _create_guest(client)
+    user_token, user_id = _create_guest(client)
+
+    bet_id = _create_global_bet(client, creator_token, creator_id, monkeypatch)
+    _topup_wallet(client, manager_token, user_id, 10)
+
+    pos_res = client.post(
+        f"/polymarket/bets/{bet_id}/positions",
+        json={"side": "YES", "stake_tickets": 5, "idempotency_key": "disp-yes"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert pos_res.status_code == 200
+
+    resolve_res = client.post(
+        f"/polymarket/bets/{bet_id}/resolve",
+        json={"outcome": "YES"},
+        headers={"Authorization": f"Bearer {creator_token}"},
+    )
+    assert resolve_res.status_code == 200
+    assert resolve_res.json()["status"] == "RESOLVED_PENDING"
+
+    dispute_ok = client.post(
+        f"/polymarket/bets/{bet_id}/dispute",
+        json={"reason": "Outcome source unclear"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert dispute_ok.status_code == 200
+    assert dispute_ok.json()["ok"] is True
+
+    finalize_blocked = client.post(
+        f"/polymarket/bets/{bet_id}/finalize",
+        headers={"Authorization": f"Bearer {creator_token}"},
+    )
+    assert finalize_blocked.status_code in {400, 403}
+
+    logs_res = client.get(f"/polymarket/bets/{bet_id}/logs")
+    assert logs_res.status_code == 200
+    logs_payload = logs_res.json()
+    assert len(logs_payload["disputes"]) == 1
+    kinds = {item["kind"] for item in logs_payload["actions"]}
+    assert {"CREATE", "POSITION", "RESOLVE", "DISPUTE"}.issubset(kinds)
+
+
+def test_dispute_after_window_rejected(monkeypatch):
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    creator_token, creator_id = _create_guest(client)
+    user_token, _ = _create_guest(client)
+
+    bet_id = _create_global_bet(client, creator_token, creator_id, monkeypatch)
+    resolve_res = client.post(
+        f"/polymarket/bets/{bet_id}/resolve",
+        json={"outcome": "YES"},
+        headers={"Authorization": f"Bearer {creator_token}"},
+    )
+    assert resolve_res.status_code == 200
+
+    s = get_session()
+    try:
+        bet = s.get(Bet, bet_id)
+        bet.resolved_at = now_utc() - timedelta(minutes=61)
+        s.add(bet)
+        s.commit()
+    finally:
+        s.close()
+
+    dispute_late = client.post(
+        f"/polymarket/bets/{bet_id}/dispute",
+        json={"reason": "Too late"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert dispute_late.status_code == 400
 
 
 def test_polymarket_share_links(monkeypatch):

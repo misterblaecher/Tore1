@@ -218,6 +218,7 @@ class Bet(Base):
     created_by_user_id: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finalized_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     resolved_outcome: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
 
     pool_yes_tickets: Mapped[int] = mapped_column(Integer, default=0)
@@ -254,6 +255,19 @@ class BetResolutionLog(Base):
     action: Mapped[str] = mapped_column(String(20), default="resolve")
     outcome: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+
+class BetDispute(Base):
+    __tablename__ = "polymarket_disputes"
+    __table_args__ = (
+        UniqueConstraint("bet_id", "user_id", name="uq_polymarket_dispute_bet_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bet_id: Mapped[int] = mapped_column(ForeignKey("polymarket_bets.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
 

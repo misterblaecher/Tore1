@@ -117,9 +117,45 @@ def _ensure_orders_payment_columns() -> None:
     finally:
         s.close()
 
+
+
+def _ensure_polymarket_v1_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    s = get_session()
+    try:
+        bet_columns = {
+            row[1]
+            for row in s.execute(text("PRAGMA table_info(polymarket_bets)")).fetchall()
+        }
+        if "dispute_window_minutes" not in bet_columns:
+            s.execute(text("ALTER TABLE polymarket_bets ADD COLUMN dispute_window_minutes INTEGER DEFAULT 60"))
+        if "resolved_at" not in bet_columns:
+            s.execute(text("ALTER TABLE polymarket_bets ADD COLUMN resolved_at DATETIME"))
+        if "finalized_at" not in bet_columns:
+            s.execute(text("ALTER TABLE polymarket_bets ADD COLUMN finalized_at DATETIME"))
+
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS polymarket_disputes (
+                id INTEGER NOT NULL PRIMARY KEY,
+                bet_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at DATETIME,
+                CONSTRAINT uq_polymarket_dispute_bet_user UNIQUE (bet_id, user_id),
+                FOREIGN KEY(bet_id) REFERENCES polymarket_bets (id)
+            )
+        """))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_polymarket_disputes_bet_id ON polymarket_disputes (bet_id)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_polymarket_disputes_user_id ON polymarket_disputes (user_id)"))
+        s.commit()
+    finally:
+        s.close()
+
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
+    _ensure_polymarket_v1_columns()
     s = get_session()
     try:
         bar_count = s.scalar(select(func.count()).select_from(Bar)) or 0
