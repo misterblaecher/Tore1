@@ -42,8 +42,6 @@ from models import (
     OrderItem,
     Beer,
     Checkin,
-    Battle,
-    BattleParticipant,
     AppUser,
     AppToken,
     PartnerMembership,
@@ -59,6 +57,7 @@ from models import (
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
+from app.db.sqlite_compat import ensure_sqlite_compat
 
 
 # ---------------------------------------------------------------------
@@ -156,6 +155,7 @@ def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
     _ensure_polymarket_v1_columns()
+    ensure_sqlite_compat(engine)
     s = get_session()
     try:
         bar_count = s.scalar(select(func.count()).select_from(Bar)) or 0
@@ -1068,22 +1068,6 @@ class QrPackOut(BaseModel):
     qrs: Dict[str, str]
 
 
-class CreateBattleIn(BaseModel):
-    user_id: str
-    title: str = "Battle"
-    mode: str = "1v1"
-    event_id: Optional[int] = None
-
-
-class JoinBattleIn(BaseModel):
-    user_id: str
-    join_code: str
-    display_name: str = "Player"
-
-
-class WinnerIn(BaseModel):
-    user_id: str
-    winner_user_id: str
 
 
 # ---------------------------------------------------------------------
@@ -1110,12 +1094,14 @@ from app.routers.polymarket import router as polymarket_router
 from app.routers.qr import router as qr_router
 from app.routers.analytics import router as analytics_router
 from app.routers.hunt import router as hunt_router
+from app.routers.battles import router as battles_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
 app.include_router(polymarket_router)
 app.include_router(qr_router)
 app.include_router(hunt_router)
+app.include_router(battles_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -3673,76 +3659,5 @@ def leaderboard(limit: int = Query(default=50, ge=1, le=200)):
         )
         rows = s.execute(q).all()
         return [{"user_id": r.user_id, "checkins": int(r.checkins)} for r in rows]
-    finally:
-        s.close()
-
-
-# ---------------------------------------------------------------------
-# Battles (simple mini-game)
-# ---------------------------------------------------------------------
-
-@app.post("/battles")
-def create_battle(payload: CreateBattleIn):
-    s = get_session()
-    try:
-        require_feature(s, payload.event_id or 0, "battles_enabled") if payload.event_id else None
-        code = random_code(6)
-        b = Battle(
-            event_id=payload.event_id,
-            created_by_user_id=payload.user_id,
-            title=payload.title,
-            mode=payload.mode,
-            join_code=code,
-            created_at=now_utc(),
-        )
-        s.add(b)
-        s.commit()
-        return {"id": b.id, "join_code": b.join_code}
-    finally:
-        s.close()
-
-
-@app.post("/battles/join")
-def join_battle(payload: JoinBattleIn):
-    s = get_session()
-    try:
-        b = s.scalar(select(Battle).where(Battle.join_code == payload.join_code))
-        if not b:
-            raise HTTPException(404, "Battle not found")
-        require_feature(s, b.event_id or 0, "battles_enabled") if b.event_id else None
-
-        exists = s.scalar(
-            select(BattleParticipant).where(
-                BattleParticipant.battle_id == b.id, BattleParticipant.user_id == payload.user_id
-            )
-        )
-        if exists:
-            return {"ok": True, "battle_id": b.id}
-
-        p = BattleParticipant(
-            battle_id=b.id,
-            user_id=payload.user_id,
-            display_name=payload.display_name,
-            joined_at=now_utc(),
-        )
-        s.add(p)
-        s.commit()
-        return {"ok": True, "battle_id": b.id}
-    finally:
-        s.close()
-
-
-@app.post("/battles/{battle_id}/winner")
-def set_winner(battle_id: int, payload: WinnerIn):
-    s = get_session()
-    try:
-        b = s.get(Battle, battle_id)
-        if not b:
-            raise HTTPException(404, "Battle not found")
-        b.winner_user_id = payload.winner_user_id
-        b.ended_at = now_utc()
-        s.add(b)
-        s.commit()
-        return {"ok": True}
     finally:
         s.close()
