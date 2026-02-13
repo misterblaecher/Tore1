@@ -173,6 +173,7 @@ class DrinkPriceTick(Base):
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     source: Mapped[str] = mapped_column(String(20), default="manual")
     actor_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+    ref_order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
 
 
 class DrinkPriceTickIdempotency(Base):

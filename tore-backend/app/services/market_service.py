@@ -13,6 +13,7 @@ from models import (
     DrinkPriceTick,
     DrinkPriceTickIdempotency,
     Event,
+    Order,
 )
 
 
@@ -255,6 +256,49 @@ def set_item_price(
     s.refresh(tick)
     return item, tick
 
+
+
+
+def apply_order_market_impact(s: Session, *, order: Order) -> int:
+    config = (
+        s.query(DrinkMarketConfig)
+        .filter(DrinkMarketConfig.bar_id == order.bar_id)
+        .filter(_scope_filter(order.event_id))
+        .first()
+    )
+    if not config or not config.is_live:
+        return 0
+
+    impacted = 0
+    for line in order.items:
+        item = (
+            s.query(DrinkMarketItem)
+            .filter(
+                DrinkMarketItem.config_id == config.id,
+                DrinkMarketItem.is_active.is_(True),
+                DrinkMarketItem.name == line.name_snapshot,
+            )
+            .first()
+        )
+        if not item:
+            continue
+        next_price = normalize_price(item.current_price_cents + config.step_cents, config)
+        item.current_price_cents = next_price
+        s.add(
+            DrinkPriceTick(
+                item_id=item.id,
+                price_cents=next_price,
+                ts=now_utc(),
+                source="order",
+                actor_user_id=None,
+                ref_order_id=order.id,
+            )
+        )
+        impacted += 1
+
+    if impacted > 0:
+        config.updated_at = now_utc()
+    return impacted
 
 def list_scope_items(s: Session, *, config_id: int) -> list[DrinkMarketItem]:
     return (

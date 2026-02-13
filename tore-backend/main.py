@@ -122,6 +122,24 @@ def _ensure_orders_payment_columns() -> None:
 
 
 
+def _ensure_market_tick_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    s = get_session()
+    try:
+        columns = {
+            row[1]
+            for row in s.execute(text("PRAGMA table_info(drink_price_ticks)")).fetchall()
+        }
+        if "ref_order_id" not in columns:
+            s.execute(text("ALTER TABLE drink_price_ticks ADD COLUMN ref_order_id INTEGER"))
+            s.execute(text("CREATE INDEX IF NOT EXISTS ix_drink_price_ticks_ref_order_id ON drink_price_ticks (ref_order_id)"))
+        s.commit()
+    finally:
+        s.close()
+
+
+
 def _ensure_polymarket_v1_columns() -> None:
     if engine.dialect.name != "sqlite":
         return
@@ -159,6 +177,7 @@ def _ensure_polymarket_v1_columns() -> None:
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
+    _ensure_market_tick_columns()
     _ensure_polymarket_v1_columns()
     ensure_sqlite_compat(engine)
     s = get_session()
@@ -2556,6 +2575,7 @@ def debug_auth_check(
 def auth_guest(payload: GuestIn):
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
+    _ensure_market_tick_columns()
     s = get_session()
     try:
         user_id = secrets.token_hex(16)
