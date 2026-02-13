@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from db import now_utc
 from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem
 from app.schemas.orders import OrderItemOut, OrderOut
+from app.services.market_service import apply_order_market_impact
 from app.services.wallet_service import apply_wallet_tx, get_or_create_wallet
 
 
@@ -200,11 +201,15 @@ def patch_order_status(db: Session, *, order_id: int, bar_id: int, status: str) 
     next_status = status.upper()
     if next_status not in valid_flow:
         raise HTTPException(400, "Invalid status")
+    if next_status == order.status:
+        return order
     if next_status not in valid_flow.get(order.status, set()):
         raise HTTPException(400, "Invalid transition")
 
     order.status = next_status
     order.updated_at = now_utc()
+    if next_status == "SERVED" and (order.payment_status == "PAID" or (order.pay_mode or "") == "PAY_WITH_TICKETS"):
+        apply_order_market_impact(db, order=order)
     db.add(order)
     db.commit()
     db.refresh(order)

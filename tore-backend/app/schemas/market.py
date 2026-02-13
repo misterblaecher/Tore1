@@ -37,6 +37,7 @@ class DrinkPriceTickOut(BaseModel):
     ts: datetime
     source: str
     actor_user_id: Optional[int] = None
+    ref_order_id: Optional[int] = None
 
 
 class MarketPublicOut(BaseModel):
