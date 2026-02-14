@@ -122,6 +122,14 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+
+
+  Future<Map<String, dynamic>> issueOrderClientQr({
+    required int orderId,
+  }) async {
+    final res = await _client.dio.post('/orders/$orderId/client-qr');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
   // -------- MARKET / GRAPHS --------
 
   /// Price history for a drink during an event.

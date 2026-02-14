@@ -5,6 +5,7 @@ class AppUser {
   final String? addressText;
   final bool showAddress;
   final bool showAvatar;
+  final bool showIdentityToStaff;
 
   const AppUser({
     required this.id,
@@ -13,6 +14,7 @@ class AppUser {
     required this.addressText,
     required this.showAddress,
     required this.showAvatar,
+    required this.showIdentityToStaff,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class AppUser {
       addressText: json['address_text']?.toString(),
       showAddress: (json['show_address'] as bool?) ?? false,
       showAvatar: (json['show_avatar'] as bool?) ?? true,
+      showIdentityToStaff: (json['show_identity_to_staff'] as bool?) ?? false,
     );
   }
 
@@ -33,6 +36,7 @@ class AppUser {
       'address_text': addressText,
       'show_address': showAddress,
       'show_avatar': showAvatar,
+      'show_identity_to_staff': showIdentityToStaff,
     };
   }
 
@@ -42,6 +46,7 @@ class AppUser {
     String? addressText,
     bool? showAddress,
     bool? showAvatar,
+    bool? showIdentityToStaff,
   }) {
     return AppUser(
       id: id,
@@ -50,6 +55,7 @@ class AppUser {
       addressText: addressText ?? this.addressText,
       showAddress: showAddress ?? this.showAddress,
       showAvatar: showAvatar ?? this.showAvatar,
+      showIdentityToStaff: showIdentityToStaff ?? this.showIdentityToStaff,
     );
   }
 }

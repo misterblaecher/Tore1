@@ -76,6 +76,16 @@ class ProfileScreen extends ConsumerWidget {
                           ref.invalidate(meProvider);
                         },
                       ),
+                      SwitchListTile.adaptive(
+                        value: me.showIdentityToStaff,
+                        title: const Text('Autoriser l'affichage de mon identité au staff'),
+                        subtitle: const Text('Visible seulement si le bar active aussi ce mode.'),
+                        onChanged: (v) async {
+                          final repo = ref.read(authRepositoryProvider);
+                          await repo.patchMe(showIdentityToStaff: v);
+                          ref.invalidate(meProvider);
+                        },
+                      ),
                     ],
                   ),
                 ),
