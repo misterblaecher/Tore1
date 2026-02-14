@@ -16,6 +16,11 @@ import BattlesAdmin from './pages/BattlesAdmin'
 import BattlePublic from './pages/BattlePublic'
 import MarketAdmin from './pages/MarketAdmin'
 import MarketPublic from './pages/MarketPublic'
+import EntryStaff from './pages/EntryStaff'
+import EntryAdmin from './pages/EntryAdmin'
+import EventControlHub from './pages/EventControlHub'
+import WalletAdmin from './pages/WalletAdmin'
+import PolymarketAdmin from './pages/PolymarketAdmin'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -104,6 +109,46 @@ export default function App() {
         element={
           <RequireAuth>
             <HuntAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/entry-staff"
+        element={
+          <RequireAuth>
+            <EntryStaff />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/entry-admin"
+        element={
+          <RequireAuth>
+            <EntryAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/event-control/:eventId"
+        element={
+          <RequireAuth>
+            <EventControlHub />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/wallet-admin"
+        element={
+          <RequireAuth>
+            <WalletAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/polymarket-admin/:eventId"
+        element={
+          <RequireAuth>
+            <PolymarketAdmin />
           </RequireAuth>
         }
       />

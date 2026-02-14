@@ -62,6 +62,24 @@ class Event(Base):
     drinks: Mapped[List["EventDrink"]] = relationship(back_populates="event")
 
 
+class EventModuleConfig(Base):
+    __tablename__ = "event_module_configs"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_module_config_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    orders_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    market_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    battles_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    hunt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    polymarket_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    entry_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("partner_users.id"), nullable=True
+    )
+
+
 class Hunt(Base):
     __tablename__ = "hunts"
 
@@ -230,6 +248,27 @@ class EntryLog(Base):
     device_id: Mapped[str] = mapped_column(String, default="")
     idempotency_key: Mapped[str] = mapped_column(String, default="")
     raw_qr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class EntryScanLog(Base):
+    __tablename__ = "entry_scan_logs"
+    __table_args__ = (
+        UniqueConstraint("event_id", "payload_hash", name="uq_entry_scan_logs_event_payload"),
+        UniqueConstraint("event_id", "scan_id", name="uq_entry_scan_logs_event_scan_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    scan_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    payload_raw: Mapped[str] = mapped_column(Text, default="")
+    payload_hash: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    decision: Mapped[str] = mapped_column(String(12), default="DENY")
+    reason: Mapped[str] = mapped_column(String(120), default="invalid")
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("partner_users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class EventStaff(Base):
@@ -715,6 +754,24 @@ class WalletTx(Base):
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     user: Mapped["AppUser"] = relationship()
+
+
+class WalletLedgerEntry(Base):
+    __tablename__ = "wallet_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_wallet_ledger_event_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    amount_tickets: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("partner_users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class AppToken(Base):

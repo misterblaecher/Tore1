@@ -54,6 +54,26 @@ def list_polymarket_bets(
     )
 
 
+
+
+@router.get("/polymarket/event/{event_id}")
+def list_polymarket_event_view(
+    event_id: int,
+    db: Session = Depends(get_db),
+):
+    bets = polymarket_service.list_bets(
+        db,
+        scope="EVENT",
+        event_id=event_id,
+        status=None,
+        kind=None,
+        limit=200,
+        offset=0,
+    )
+    for bet in bets:
+        status = bet.get("status")
+        bet["status_compat"] = "RESOLVED" if status == "FINALIZED" else status
+    return {"event_id": event_id, "bets": bets}
 @router.post("/polymarket/bets", response_model=BetOut)
 def create_polymarket_bet(
     payload: BetCreateIn,
