@@ -122,6 +122,33 @@ def test_wifi_and_module_off_behavior():
     assert disabled.status_code == 204
 
 
+def test_wifi_public_returns_no_content_before_event_starts():
+    bar_id, _, manager_token = _seed('manager')
+    client = TestClient(app)
+
+    s = get_session()
+    try:
+        future_event = Event(
+            bar_id=bar_id,
+            name='Future WiFi Event',
+            starts_at=now_utc() + timedelta(hours=1),
+            ends_at=now_utc() + timedelta(hours=3),
+        )
+        s.add(future_event)
+        s.flush()
+        s.add(EventModuleConfig(event_id=future_event.id, wifi_enabled=True))
+        s.commit()
+        event_id = future_event.id
+    finally:
+        s.close()
+
+    res = client.post('/partner/portal/wifi/set', json={'bar_id': bar_id, 'event_id': event_id, 'ssid': 'BAR', 'password': 'secret'}, headers={'Authorization': f'Bearer {manager_token}'})
+    assert res.status_code == 200
+
+    pub = client.get(f'/public/wifi?bar_id={bar_id}&event_id={event_id}')
+    assert pub.status_code == 204
+
+
 def test_safety_transitions_and_smoke_audit_viewer():
     _, event_id, manager_token = _seed('manager')
     client = TestClient(app)
@@ -137,3 +164,19 @@ def test_safety_transitions_and_smoke_audit_viewer():
     audit = client.get(f'/partner/portal/audit/logs?event_id={event_id}', headers={'Authorization': f'Bearer {manager_token}'})
     assert audit.status_code == 200
     assert 'items' in audit.json()
+
+
+def test_safety_ping_rate_limit_uses_ping_window_not_start_expiry_default():
+    _, event_id, _ = _seed('manager')
+    client = TestClient(app)
+    token = _guest(client, 'safe-default-expiry')
+
+    start = client.post('/safety/buddy/start', json={'buddy_user_id': 'buddy', 'event_id': event_id}, headers={'Authorization': f'Bearer {token}'})
+    assert start.status_code == 200
+    session_id = start.json()['session_id']
+
+    first_ping = client.post('/safety/buddy/ping', json={'session_id': session_id}, headers={'Authorization': f'Bearer {token}'})
+    assert first_ping.status_code == 200
+
+    second_ping = client.post('/safety/buddy/ping', json={'session_id': session_id}, headers={'Authorization': f'Bearer {token}'})
+    assert second_ping.status_code == 429
