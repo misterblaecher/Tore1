@@ -346,6 +346,8 @@ def wifi_set(payload: WifiSetIn, identity=Depends(require_role("manager")), db: 
 @router.get("/public/wifi")
 def wifi_public(bar_id: int, event_id: Optional[int] = None, db: Session = Depends(get_db)):
     if event_id:
+        if not is_event_live(db, event_id):
+            return Response(status_code=204)
         state, reason = effective_module_state(db, event_id, "wifi_enabled")
         if state == "OFF" and reason == "module_off":
             return Response(status_code=204)
@@ -377,9 +379,10 @@ def safety_ping(payload: BuddyPingIn, user=Depends(_app_user), db: Session = Dep
         raise HTTPException(409, "Session not active")
     if row.event_id:
         ensure_event_action_allowed(db, row.event_id, "safety_enabled", write=True)
-    if row.expires_at and row.expires_at >= now_utc() + timedelta(minutes=29, seconds=55):
+    now = now_utc()
+    if row.expires_at and (now + timedelta(minutes=29, seconds=55)) <= row.expires_at <= (now + timedelta(minutes=30)):
         raise _ux_error(429, "BUDDY_PING_RATE_LIMIT", "Ping trop fréquent, attends 5 secondes.")
-    row.expires_at = now_utc() + timedelta(minutes=30)
+    row.expires_at = now + timedelta(minutes=30)
     db.add(row)
     db.commit()
     return {"ok": True}
