@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../qr_router.dart';
@@ -21,6 +22,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
   bool _handling = false;
   bool _torchOn = false;
+  QrRouteOutcome? _lastOutcome;
 
   @override
   void dispose() {
@@ -39,7 +41,19 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     await _controller.stop();
     if (!mounted) return;
 
-    await ref.read(qrRouterServiceProvider).route(context: context, raw: raw);
+    await ref.read(qrRouterServiceProvider).route(
+      context: context,
+      raw: raw,
+      onOutcome: (outcome) {
+        if (!mounted) return;
+        setState(() => _lastOutcome = outcome);
+        if (outcome.status == QrRouteStatus.success) {
+          HapticFeedback.lightImpact();
+        } else {
+          HapticFeedback.mediumImpact();
+        }
+      },
+    );
 
     if (!mounted) return;
     setState(() => _handling = false);
@@ -73,7 +87,14 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
     setState(() => _handling = true);
     await _controller.stop();
-    await ref.read(qrRouterServiceProvider).route(context: context, raw: manual);
+    await ref.read(qrRouterServiceProvider).route(
+      context: context,
+      raw: manual,
+      onOutcome: (outcome) {
+        if (!mounted) return;
+        setState(() => _lastOutcome = outcome);
+      },
+    );
     if (!mounted) return;
     setState(() => _handling = false);
     unawaited(_controller.start());
@@ -117,6 +138,16 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               ),
             ),
           ),
+          if (_lastOutcome != null)
+            Align(
+              alignment: Alignment.topCenter,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 72),
+                  child: _ScanFeedbackBanner(outcome: _lastOutcome!),
+                ),
+              ),
+            ),
           Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
@@ -149,6 +180,43 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScanFeedbackBanner extends StatelessWidget {
+  const _ScanFeedbackBanner({required this.outcome});
+
+  final QrRouteOutcome outcome;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (outcome.status) {
+      QrRouteStatus.success => Colors.greenAccent,
+      QrRouteStatus.denied => Colors.orangeAccent,
+      QrRouteStatus.unknown => Colors.redAccent,
+    };
+    final label = switch (outcome.status) {
+      QrRouteStatus.success => 'OK',
+      QrRouteStatus.denied => 'REFUS',
+      QrRouteStatus.unknown => 'INCONNU',
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, color: color, size: 10),
+          const SizedBox(width: 8),
+          Text('$label · ${outcome.label}', style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
     );

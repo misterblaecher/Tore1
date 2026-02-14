@@ -131,7 +131,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     );
 
     if (config != null && !config.menuEnabled) {
-      return const ModuleUnavailableScreen(title: 'Menu indisponible', message: 'Ce module est désactivé pour cet event.');
+      return const ModuleUnavailableScreen(
+        title: 'Menu indisponible',
+        message: 'Ce module est désactivé pour cet event.',
+        reasonCode: 'module_off',
+      );
     }
 
     // Si initState a chargé sans userId, on recharge une fois dès que le user arrive.

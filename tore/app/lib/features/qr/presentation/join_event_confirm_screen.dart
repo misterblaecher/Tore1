@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,52 +22,98 @@ class JoinEventConfirmScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: eventAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('Event introuvable.')),
-          data: (event) {
-            final eventName = (event['name'] ?? 'Event #$eventId').toString();
-            final modules = configAsync.maybeWhen(
-              data: (cfg) => <String, bool>{
-                'menu': cfg.menuEnabled,
-                'wallet': cfg.walletEnabled,
-                'polymarket': cfg.polymarketEnabled,
-                'ticker': cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
-              },
-              orElse: () => const <String, bool>{},
-            );
-            final visibleModules = modules.entries.where((e) => e.value).map((e) => e.key).toList();
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(eventName, style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 6),
-                Text('Event #$eventId', style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 18),
-                Text('Modules disponibles', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: visibleModules.isEmpty
-                      ? [const Chip(label: Text('Aucun module actif'))]
-                      : visibleModules.map((m) => Chip(avatar: Icon(_iconForModule(m), size: 18), label: Text(_labelForModule(m)))).toList(),
-                ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: () {
-                    ref.read(appContextProvider.notifier).enterEvent(
-                      eventId: eventId,
-                      eventName: eventName,
-                      activeEventModules: modules,
-                    );
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  },
-                  child: const Text('Rejoindre'),
-                ),
-              ],
-            );
-          },
+          error: (error, _) => _JoinErrorState(
+            reasonCode: _joinErrorCode(error),
+            message: _joinErrorMessage(error),
+            onRetry: () => ref.invalidate(_eventDetailsProvider(eventId)),
+          ),
+          data: (event) => configAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => _JoinErrorState(
+              reasonCode: _joinErrorCode(error),
+              message: _joinErrorMessage(error),
+              onRetry: () => ref.invalidate(eventConfigProvider(eventId)),
+            ),
+            data: (cfg) => _JoinEventContent(event: event, config: cfg, eventId: eventId),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _JoinEventContent extends ConsumerWidget {
+  const _JoinEventContent({required this.event, required this.config, required this.eventId});
+
+  final Map<String, dynamic> event;
+  final dynamic config;
+  final int eventId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventName = (event['name'] ?? 'Event #$eventId').toString();
+    final modules = <String, bool>{
+      'menu': config.menuEnabled,
+      'wallet': config.walletEnabled,
+      'polymarket': config.polymarketEnabled,
+      'ticker': config.menuEnabled || config.walletEnabled || config.polymarketEnabled,
+    };
+    final visibleModules = modules.entries.where((e) => e.value).map((e) => e.key).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(eventName, style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 6),
+        Text('Event #$eventId', style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 18),
+        Text('Modules actifs', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: visibleModules
+              .map((m) => Chip(avatar: Icon(_iconForModule(m), size: 18), label: Text(_labelForModule(m))))
+              .toList(),
+        ),
+        const Spacer(),
+        FilledButton(
+          onPressed: () {
+            ref.read(appContextProvider.notifier).enterEvent(
+                  eventId: eventId,
+                  eventName: eventName,
+                  activeEventModules: modules,
+                );
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          },
+          child: const Text('Confirmer join'),
+        ),
+      ],
+    );
+  }
+}
+
+class _JoinErrorState extends StatelessWidget {
+  const _JoinErrorState({required this.reasonCode, required this.message, required this.onRetry});
+
+  final String reasonCode;
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 44),
+          const SizedBox(height: 10),
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 6),
+          Text('Code: $reasonCode', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Réessayer')),
+        ],
       ),
     );
   }
@@ -75,6 +122,35 @@ class JoinEventConfirmScreen extends ConsumerWidget {
 final _eventDetailsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, eventId) async {
   return ref.read(apiProvider).event(eventId);
 });
+
+String _joinErrorCode(Object error) {
+  if (error is DioException) {
+    final detail = error.response?.data;
+    if (detail is Map && detail['detail'] is Map) {
+      final reason = (detail['detail'] as Map)['reason']?.toString();
+      if (reason != null && reason.isNotEmpty) return reason;
+    }
+    if (error.response?.statusCode == 403) return 'forbidden';
+    if (error.response?.statusCode == 404) return 'invalid';
+  }
+  return 'invalid';
+}
+
+String _joinErrorMessage(Object error) {
+  switch (_joinErrorCode(error)) {
+    case 'invalid':
+    case 'expired':
+      return 'QR invalid/expiré.';
+    case 'forbidden':
+      return 'Accès interdit.';
+    case 'module_off':
+      return 'Module OFF pour cet event.';
+    case 'event_paused':
+      return 'Event en pause.';
+    default:
+      return 'Impossible de rejoindre cet event.';
+  }
+}
 
 IconData _iconForModule(String module) {
   switch (module) {
