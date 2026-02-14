@@ -58,7 +58,7 @@ class ToreCTA extends StatelessWidget {
         ),
         child: busy
             ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(label, style: ToreType.body.copyWith(fontWeight: FontWeight.w650)),
+            : Text(label, style: ToreType.body.copyWith(fontWeight: FontWeight.w600)),
       ),
     );
   }
