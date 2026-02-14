@@ -222,14 +222,7 @@ def create_position(
         }
 
 
-def resolve_bet(
-    db: Session,
-    *,
-    bet_id: int,
-    outcome: str,
-    actor: AppUser,
-    force_admin: bool = False,
-) -> Dict[str, Any]:
+def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Dict[str, Any]:
     from main import _role_rank, resolve_event_role
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
@@ -248,13 +241,12 @@ def resolve_bet(
         if _role_rank(role) >= _role_rank("admin"):
             is_admin = True
 
-    if not force_admin:
-        if bet.kind == "SUBJECTIVE":
-            if actor.id != bet.resolver_user_id and not is_admin:
-                raise HTTPException(status_code=403, detail="Forbidden")
-        else:
-            if not is_admin:
-                raise HTTPException(status_code=403, detail="Forbidden")
+    if bet.kind == "SUBJECTIVE":
+        if actor.id != bet.resolver_user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
 
     bet.status = "RESOLVED_PENDING"
     bet.resolved_outcome = outcome
@@ -274,13 +266,7 @@ def resolve_bet(
     return bet_out(bet)
 
 
-def finalize_bet(
-    db: Session,
-    *,
-    bet_id: int,
-    actor: AppUser,
-    force_admin: bool = False,
-) -> Dict[str, Any]:
+def finalize_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
     from main import _apply_wallet_tx, _role_rank, resolve_event_role
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
@@ -297,13 +283,12 @@ def finalize_bet(
         if _role_rank(role) >= _role_rank("admin"):
             is_admin = True
 
-    if not force_admin:
-        if bet.kind == "SUBJECTIVE":
-            if actor.id != bet.resolver_user_id and not is_admin:
-                raise HTTPException(status_code=403, detail="Forbidden")
-        else:
-            if not is_admin:
-                raise HTTPException(status_code=403, detail="Forbidden")
+    if bet.kind == "SUBJECTIVE":
+        if actor.id != bet.resolver_user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
 
     if not bet.resolved_at:
         raise HTTPException(status_code=400, detail="Bet has no resolved_at")
