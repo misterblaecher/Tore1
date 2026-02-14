@@ -66,7 +66,8 @@ class OrderClientQrOut(BaseModel):
 
 
 class OrderClientQrScanIn(BaseModel):
-    raw: str = Field(min_length=8)
+    raw: Optional[str] = Field(default=None, min_length=8)
+    ot: Optional[str] = Field(default=None, min_length=8)
     idempotency_key: str = Field(min_length=4, max_length=120)
 
 
@@ -74,3 +75,4 @@ class OrderClientQrScanOut(BaseModel):
     idempotent: bool
     order: OrderOut
     user_visible_to_staff: bool
+    identity_visible: bool

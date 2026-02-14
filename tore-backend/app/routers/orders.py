@@ -54,6 +54,14 @@ def _extract_client_qr_token(raw: str) -> str:
     return token
 
 
+def _resolve_scan_token(payload: OrderClientQrScanIn) -> str:
+    if payload.ot:
+        return payload.ot.strip()
+    if payload.raw:
+        return _extract_client_qr_token(payload.raw)
+    raise HTTPException(400, "Missing client QR token")
+
+
 @router.post("/orders", response_model=OrderOut)
 def create_order_route(
     payload: CreateOrderIn,
@@ -141,9 +149,14 @@ def scan_client_order_qr(
         bar_settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == order.bar_id).first() if order.bar_id else None
         user_settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == order.user_id).first() if order.user_id else None
         visible = bool(bar_settings and user_settings and bar_settings.staff_identity_consent_required and user_settings.show_identity_to_staff)
-        return {"idempotent": True, "order": order_out(order), "user_visible_to_staff": visible}
+        return {
+            "idempotent": True,
+            "order": order_out(order),
+            "user_visible_to_staff": visible,
+            "identity_visible": visible,
+        }
 
-    decoded = decode_order_client_token(_extract_client_qr_token(payload.raw))
+    decoded = decode_order_client_token(_resolve_scan_token(payload))
     order = db.get(Order, int(decoded["oid"]))
     if not order:
         raise HTTPException(404, "Order not found")
@@ -184,7 +197,12 @@ def scan_client_order_qr(
     bar_settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == order.bar_id).first() if order.bar_id else None
     user_settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == order.user_id).first() if order.user_id else None
     visible = bool(bar_settings and user_settings and bar_settings.staff_identity_consent_required and user_settings.show_identity_to_staff)
-    return {"idempotent": False, "order": order_out(order), "user_visible_to_staff": visible}
+    return {
+        "idempotent": False,
+        "order": order_out(order),
+        "user_visible_to_staff": visible,
+        "identity_visible": visible,
+    }
 
 
 @router.get("/orders/live", response_model=OrdersLiveOut)

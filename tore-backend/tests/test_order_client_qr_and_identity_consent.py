@@ -58,12 +58,13 @@ def test_order_client_qr_scan_is_idempotent_and_updates_status():
 
     first_scan = client.post(
         '/partner/portal/orders/scan-client-qr',
-        json={'raw': issued.json()['qr_raw'], 'idempotency_key': 'scan-1'},
+        json={'ot': issued.json()['qr_raw'].split('ot=')[1], 'idempotency_key': 'scan-1'},
         headers={'Authorization': f'Bearer {staff_token}'},
     )
     assert first_scan.status_code == 200
     assert first_scan.json()['idempotent'] is False
     assert first_scan.json()['order']['status'] == 'IN_PROGRESS'
+    assert first_scan.json()['identity_visible'] is False
 
     second_scan = client.post(
         '/partner/portal/orders/scan-client-qr',
@@ -102,6 +103,7 @@ def test_identity_consent_requires_bar_and_user_toggle():
     )
     assert no_consent.status_code == 200
     assert no_consent.json()['user_visible_to_staff'] is False
+    assert no_consent.json()['identity_visible'] is False
 
     patch_bar = client.patch(
         '/partner/portal/settings/identity-consent',
@@ -129,6 +131,7 @@ def test_identity_consent_requires_bar_and_user_toggle():
     )
     assert with_consent.status_code == 200
     assert with_consent.json()['user_visible_to_staff'] is True
+    assert with_consent.json()['identity_visible'] is True
 
     s = get_session()
     try:

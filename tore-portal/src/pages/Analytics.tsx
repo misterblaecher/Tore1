@@ -49,12 +49,44 @@ export default function Analytics() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [exportLoading, setExportLoading] = useState<string>('')
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [barIdentityConsent, setBarIdentityConsent] = useState(false)
+  const [consentBusy, setConsentBusy] = useState(false)
+  const [consentMessage, setConsentMessage] = useState<string | null>(null)
 
   const query = useMemo(() => {
     const qs = new URLSearchParams({ days: String(days) })
     if (eventId !== '') qs.set('event_id', String(eventId))
     return qs.toString()
   }, [days, eventId])
+
+  const downloadCsv = async (path: string, filename: string, key: string) => {
+    const token = getToken()
+    if (!token) return
+    setExportLoading(key)
+    setExportError(null)
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(body || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setExportError(e?.message || 'Export impossible')
+    } finally {
+      setExportLoading('')
+    }
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -63,6 +95,12 @@ export default function Analytics() {
         setEvents(rows)
       } catch {
         setEvents([])
+      }
+      try {
+        const settings = await api<{ staff_identity_consent_required: boolean }>('/partner/portal/settings/identity-consent')
+        setBarIdentityConsent(Boolean(settings.staff_identity_consent_required))
+      } catch {
+        setBarIdentityConsent(false)
       }
     })()
   }, [])
@@ -82,6 +120,22 @@ export default function Analytics() {
     })()
   }, [query])
 
+  const patchConsent = async (next: boolean) => {
+    setConsentBusy(true)
+    setConsentMessage(null)
+    try {
+      const saved = await api<{ staff_identity_consent_required: boolean }>('/partner/portal/settings/identity-consent', {
+        method: 'PATCH',
+        body: JSON.stringify({ staff_identity_consent_required: next }),
+      })
+      setBarIdentityConsent(Boolean(saved.staff_identity_consent_required))
+      setConsentMessage('Paramètre sauvegardé.')
+    } catch (e: any) {
+      setConsentMessage(e?.message || 'Impossible de sauvegarder le paramètre.')
+    } finally {
+      setConsentBusy(false)
+    }
+  }
 
   return (
     <Layout title="Ops Dashboard V1">
@@ -90,7 +144,7 @@ export default function Analytics() {
       </div>
 
       <div style={{ ...cardStyle(), display: 'grid', gap: 10, marginBottom: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 10 }}>
           <label>
             <div style={{ marginBottom: 6 }}>Période (jours)</div>
             <input
@@ -114,27 +168,42 @@ export default function Analytics() {
           <div style={{ display: 'flex', alignItems: 'end' }}>
             <button
               type="button"
-              onClick={async () => {
-                const token = getToken()
-                if (!token) return
-                const res = await fetch(`${API_BASE}/partner/portal/analytics/orders.csv?${query}`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                })
-                if (!res.ok) return
-                const blob = await res.blob()
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `orders-${days}d.csv`
-                a.click()
-                URL.revokeObjectURL(url)
-              }}
+              onClick={() => void downloadCsv(`/partner/portal/analytics/orders.csv?${query}`, `orders-${days}d.csv`, 'orders')}
               style={btn('ghost')}
+              disabled={!!exportLoading}
             >
-              Export CSV orders
+              {exportLoading === 'orders' ? 'Téléchargement…' : 'Export orders.csv'}
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'end' }}>
+            <button
+              type="button"
+              onClick={() => void downloadCsv(`/partner/portal/analytics/menu-tracking.csv?${query}`, `menu-tracking-${days}d.csv`, 'menu')}
+              style={btn('ghost')}
+              disabled={!!exportLoading}
+            >
+              {exportLoading === 'menu' ? 'Téléchargement…' : 'Download menu-tracking.csv'}
             </button>
           </div>
         </div>
+        {exportError ? <div style={{ color: '#ffb4b4' }}>{exportError}</div> : null}
+      </div>
+
+      <div style={{ ...cardStyle(), display: 'grid', gap: 8, marginBottom: 16 }}>
+        <h3 style={{ margin: 0 }}>Privacy / Identity</h3>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={barIdentityConsent}
+            onChange={(e) => void patchConsent(e.target.checked)}
+            disabled={consentBusy}
+          />
+          Show user identity to staff
+        </label>
+        <div style={{ opacity: 0.8, fontSize: 13 }}>
+          L’identité client ne sera visible au staff que si ce toggle bar est ON et que l’utilisateur a aussi donné son consentement.
+        </div>
+        {consentMessage ? <div style={{ color: consentMessage.includes('Impossible') ? '#ffb4b4' : '#c7ffd8' }}>{consentMessage}</div> : null}
       </div>
 
       {loading ? <div>Chargement…</div> : null}
