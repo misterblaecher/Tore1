@@ -84,6 +84,19 @@ class EventModuleConfig(Base):
     )
 
 
+
+
+class EventRuntimeState(Base):
+    __tablename__ = "event_runtime_states"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_runtime_state_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    state: Mapped[str] = mapped_column(String(24), default="LIVE")
+    reason: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
 class Hunt(Base):
     __tablename__ = "hunts"
 

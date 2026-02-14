@@ -50,6 +50,10 @@ def get_db() -> Iterator[Session]:
 
 security = HTTPBearer(auto_error=False)
 
+
+def _ux_error(status_code: int, code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
 def _app_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
@@ -128,6 +132,14 @@ def battles_submit(battle_id: int, payload: BattleSubmitIn, user=Depends(_app_us
         raise HTTPException(404, "Battle not found")
     if battle.event_id:
         ensure_event_module_enabled(db, battle.event_id, "battles_enabled")
+    recent_submit_count = (
+        db.query(func.count(BattleSubmit.id))
+        .filter(BattleSubmit.battle_id == battle_id, BattleSubmit.actor_user_id == user.id, BattleSubmit.created_at >= now_utc() - timedelta(seconds=10))
+        .scalar()
+        or 0
+    )
+    if int(recent_submit_count) >= 20:
+        raise _ux_error(429, "BATTLES_RATE_LIMIT", "Trop d'actions, réessaie dans quelques secondes.")
     existing = db.query(BattleSubmit).filter(BattleSubmit.battle_id == battle_id, BattleSubmit.scan_id == payload.scan_id).first()
     if existing:
         return {"submit_id": existing.id, "idempotent": True}
@@ -201,6 +213,14 @@ def drinks_checkin(payload: CheckinIn, user=Depends(_app_user), db: Session = De
         name = drink.name
     if payload.event_id:
         ensure_event_module_enabled(db, payload.event_id, "checkins_enabled")
+    recent_checkins = (
+        db.query(func.count(DrinkCheckin.id))
+        .filter(DrinkCheckin.user_id == user.id, DrinkCheckin.ts >= now_utc() - timedelta(minutes=1))
+        .scalar()
+        or 0
+    )
+    if int(recent_checkins) >= 12:
+        raise _ux_error(429, "CHECKIN_RATE_LIMIT", "Tu vas trop vite, attends quelques secondes.")
     row = DrinkCheckin(user_id=user.id, drink_id=payload.drink_id, name_snapshot=name, rating=payload.rating, comment=payload.comment, event_id=payload.event_id, bar_id=payload.bar_id)
     db.add(row)
     db.commit()
@@ -334,6 +354,8 @@ def safety_ping(payload: BuddyPingIn, user=Depends(_app_user), db: Session = Dep
         raise HTTPException(404, "Session not found")
     if row.status != "ACTIVE":
         raise HTTPException(409, "Session not active")
+    if row.expires_at and row.expires_at >= now_utc() + timedelta(minutes=29, seconds=55):
+        raise _ux_error(429, "BUDDY_PING_RATE_LIMIT", "Ping trop fréquent, attends 5 secondes.")
     row.expires_at = now_utc() + timedelta(minutes=30)
     db.add(row)
     db.commit()
