@@ -9,6 +9,19 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
     if not trimmed:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
+    # Manual fallback (short code typed by staff/user when camera/QR fails)
+    if not trimmed.startswith("tore://"):
+        code = trimmed.replace(" ", "")
+        if len(code) >= 4 and code.isalnum():
+            return {
+                "valid": False,
+                "type": "manual_code",
+                "event_id": None,
+                "reason": "manual_required",
+                "data": {"manual_code": code.upper()},
+            }
+        return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+
     parsed = urlparse(trimmed)
     if parsed.scheme.lower() != "tore":
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
@@ -155,6 +168,42 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
             "event_id": None,
             "order_id": order_id,
             "route_front": f"/orders/{order_id}",
+            "reason": None,
+            "data": {
+                "deep_link": trimmed,
+            },
+        }
+
+    # Roadmap extensions: expose contract + routing, backend handlers can remain modular.
+    route_map = {
+        "event": "/events/{event_id}",
+        "payment": "/wallet",
+        "paiement": "/wallet",
+        "hunt": "/hunt",
+        "gift": "/wallet/gift",
+        "wifi": "/wifi",
+        "safety": "/safety",
+        "checkins": "/checkins",
+        "staff": None,
+    }
+    if qr_type in route_map:
+        raw_event_id = (params.get("event_id") or [None])[0]
+        event_id = None
+        if raw_event_id is not None:
+            try:
+                event_id = int(raw_event_id)
+            except (TypeError, ValueError):
+                return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        route = route_map[qr_type]
+        if route and "{event_id}" in route:
+            if event_id is None:
+                return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+            route = route.format(event_id=event_id)
+        return {
+            "valid": True,
+            "type": qr_type,
+            "event_id": event_id,
+            "route_front": route,
             "reason": None,
             "data": {
                 "deep_link": trimmed,

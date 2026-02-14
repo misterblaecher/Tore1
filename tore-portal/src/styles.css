@@ -1,0 +1,30 @@
+:root {
+  --tore-ruby: #a40045;
+  --tore-cta: #ffd84d;
+  --tore-bg: #0d0e12;
+  --tore-surface: #171923;
+  --tore-text: #f6f7fb;
+  --tore-muted: #9fa5b3;
+  --tore-radius: 14px;
+}
+body { margin: 0; background: var(--tore-bg); color: var(--tore-text); font-family: Inter, system-ui, sans-serif; }
+.tore-shell { max-width: 980px; margin: 0 auto; padding: 20px; }
+.tore-card { background: var(--tore-surface); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--tore-radius); padding: 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+.tore-btn { border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+.tore-btn--primary { background: var(--tore-cta); color: #222; border: 1px solid #d7b733; }
+.tore-btn--secondary { background: transparent; color: #ffd8e8; border: 1px solid rgba(164,0,69,0.8); }
+.tore-badge { border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+.tore-badge--event { background: rgba(164,0,69,0.25); color: #ffc3de; }
+.tore-badge--global { background: rgba(99,102,241,0.25); color: #cdd2ff; }
+.tore-badge--bar { background: rgba(249,115,22,0.25); color: #ffd0a9; }
+.tore-badge--warning { background: rgba(255,216,77,0.2); color: #ffe99d; }
+.tore-badge--success { background: rgba(34,197,94,0.2); color: #b7f7cb; }
+.tore-badge--danger { background: rgba(239,68,68,0.2); color: #ffb1b1; }
+.tore-badge--neutral { background: rgba(255,255,255,0.1); color: var(--tore-text); }
+.tore-alert { border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.tore-alert--warning { background: rgba(255,216,77,0.12); border: 1px solid rgba(255,216,77,0.4); }
+.tore-alert--error { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); }
+.tore-alert--success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.4); }
+.tore-empty { padding: 18px; text-align: center; border: 1px dashed rgba(255,255,255,0.2); border-radius: 10px; color: var(--tore-muted); }
+.tore-skeleton { border-radius: 8px; background: linear-gradient(90deg, #202330 20%, #2d3140 40%, #202330 60%); background-size: 200% 100%; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { from { background-position: 0 0; } to { background-position: -200% 0; } }

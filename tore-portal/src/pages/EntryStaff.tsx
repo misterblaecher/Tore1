@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import Layout from '../ui/Layout'
 import { api } from '../lib/api'
+import { InlineAlert } from '../lib/ui'
 
 type EntryLog = {
   id: number
@@ -11,20 +12,38 @@ type EntryLog = {
   created_at: string
 }
 
+type EntryLogPage = { items: EntryLog[]; next_cursor: string | null }
+
 export default function EntryStaff() {
   const [eventId, setEventId] = useState('')
-  const [scan, setScan] = useState('')
+  const [scanToken, setScanToken] = useState('')
+  const [manualCode, setManualCode] = useState('')
   const [feedback, setFeedback] = useState<any>(null)
   const [logs, setLogs] = useState<EntryLog[]>([])
 
-  const submit = async () => {
+  const refreshLogs = async () => {
+    const rows = await api<EntryLogPage>(`/entry/logs?event_id=${Number(eventId)}&limit=20`)
+    setLogs(rows.items)
+  }
+
+  const submitScan = async () => {
     const res = await api<any>('/entry/scan', {
       method: 'POST',
-      body: JSON.stringify({ event_id: Number(eventId), raw_payload: scan, scan_id: `${Date.now()}` }),
+      body: JSON.stringify({ event_id: Number(eventId), token: scanToken, scan_id: `${Date.now()}` }),
     })
     setFeedback(res)
-    const rows = await api<EntryLog[]>(`/entry/logs?event_id=${Number(eventId)}&limit=20`)
-    setLogs(rows)
+    await refreshLogs()
+  }
+
+  const submitManual = async () => {
+    const resolved = await api<any>('/qr/resolve', {
+      method: 'POST',
+      body: JSON.stringify({ raw: manualCode }),
+    })
+    setFeedback(resolved)
+    if (resolved?.type === 'manual_code' || resolved?.type === 'unknown') {
+      return
+    }
   }
 
   return (
@@ -32,16 +51,24 @@ export default function EntryStaff() {
       <div style={{ display: 'grid', gap: 12 }}>
         <input placeholder="Event ID" value={eventId} onChange={(e) => setEventId(e.target.value)} />
         <textarea
-          placeholder="Scan QR ou code manuel (ex: tore://entry?event_id=1 ou user:abc)"
-          value={scan}
-          onChange={(e) => setScan(e.target.value)}
-          rows={4}
+          placeholder="Token scan entry"
+          value={scanToken}
+          onChange={(e) => setScanToken(e.target.value)}
+          rows={3}
         />
-        <button onClick={submit}>Scanner</button>
+        <button onClick={submitScan}>Scanner token</button>
+        <input
+          placeholder="Manual code (fallback terrain)"
+          value={manualCode}
+          onChange={(e) => setManualCode(e.target.value)}
+        />
+        <button onClick={submitManual}>Résoudre code manuel</button>
       </div>
+      {feedback?.type === 'manual_code' ? <InlineAlert tone="warning">Code manuel détecté: {feedback?.data?.manual_code}</InlineAlert> : null}
+      {feedback?.reason === 'invalid' || feedback?.type === 'unknown' ? <InlineAlert tone="error">QR/code inconnu.</InlineAlert> : null}
       {feedback ? (
-        <div style={{ marginTop: 14, fontWeight: 800, color: feedback.decision === 'ALLOW' ? '#4dff88' : '#ff7878' }}>
-          {feedback.decision} — {feedback.reason}
+        <div style={{ marginTop: 14, fontWeight: 800 }}>
+          {feedback.decision || feedback.type} — {feedback.reason || 'ok'}
         </div>
       ) : null}
       <h3>Derniers scans</h3>

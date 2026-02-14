@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from sqlalchemy import func
-from models import Bet, BetDispute
+from db import now_utc
+from models import Bet, BetDispute, Event, EventRuntimeState
 from partner_auth import require_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
 from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminLogPageOut, WalletAdminTopupIn, WalletAdminTopupOut
@@ -16,15 +17,39 @@ from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
 from app.services.wallet_service import get_or_create_wallet
-from app.services.p3_common import is_event_live
+from app.services.p3_common import effective_module_state, ensure_event_action_allowed, get_event_runtime_state, is_event_live
 
 router = APIRouter(prefix="/partner/portal", tags=["portal-event-control"])
+
+MODULE_FIELDS = [
+    "orders_enabled",
+    "market_enabled",
+    "battles_enabled",
+    "hunt_enabled",
+    "polymarket_enabled",
+    "entry_enabled",
+    "checkins_enabled",
+    "wifi_enabled",
+    "safety_enabled",
+]
 
 
 def get_db() -> Iterator[Session]:
     from main import get_db as _get_db
 
     yield from _get_db()
+
+
+def _get_or_create_runtime_state(db: Session, event_id: int) -> EventRuntimeState:
+    row = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event_id).first()
+    if row:
+        return row
+    row = EventRuntimeState(event_id=event_id, state="LIVE")
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
 
 
 @router.get("/event/{event_id}/modules", response_model=EventModulesOut)
@@ -49,19 +74,69 @@ def get_event_status(
     return {
         "event_id": event_id,
         "live": is_event_live(db, event_id),
-        "modules": {
-            "orders_enabled": cfg.orders_enabled,
-            "market_enabled": cfg.market_enabled,
-            "battles_enabled": cfg.battles_enabled,
-            "hunt_enabled": cfg.hunt_enabled,
-            "polymarket_enabled": cfg.polymarket_enabled,
-            "entry_enabled": cfg.entry_enabled,
-            "checkins_enabled": cfg.checkins_enabled,
-            "wifi_enabled": cfg.wifi_enabled,
-            "safety_enabled": cfg.safety_enabled,
-        },
+        "modules": {field: getattr(cfg, field) for field in MODULE_FIELDS},
     }
 
+
+@router.get("/event/{event_id}/state-snapshot")
+def event_state_snapshot(
+    event_id: int,
+    identity=Depends(require_role("manager")),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    cfg = get_or_create_event_modules(db, event_id)
+    runtime = _get_or_create_runtime_state(db, event_id)
+    event_state = get_event_runtime_state(db, event_id)
+    modules = {}
+    warnings = []
+    for field in MODULE_FIELDS:
+        effective, reason = effective_module_state(db, event_id, field)
+        enabled = bool(getattr(cfg, field))
+        modules[field] = {"configured_enabled": enabled, "effective_state": effective, "reason": reason}
+        if effective in {"READ_ONLY", "OFF"}:
+            warnings.append(f"{field}:{effective}:{reason}")
+    return {
+        "event_id": event_id,
+        "event_state": event_state,
+        "runtime_reason": runtime.reason,
+        "modules": modules,
+        "warnings": warnings,
+        "priority_rule": "event_state_overrides_module_toggle",
+    }
+
+
+@router.post("/event/{event_id}/state")
+def set_event_runtime_state(
+    event_id: int,
+    payload: dict,
+    identity=Depends(require_role("manager")),
+    db: Session = Depends(get_db),
+):
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    state = str(payload.get("state") or "").upper()
+    if state not in {"LIVE", "PAUSE", "MENU_ONLY", "CLOSED"}:
+        return {"ok": False, "code": "INVALID_STATE", "message": "Etat event invalide."}
+    runtime = _get_or_create_runtime_state(db, event_id)
+    before = {"state": runtime.state, "reason": runtime.reason}
+    runtime.state = state
+    runtime.reason = (payload.get("reason") or "")[:180] or None
+    runtime.updated_by_user_id = identity["user_id"]
+    runtime.updated_at = now_utc()
+    db.add(runtime)
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="event_state.update",
+        entity_type="event",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"before": before, "after": {"state": runtime.state, "reason": runtime.reason}},
+    )
+    db.commit()
+    return {"ok": True, "event_id": event_id, "state": runtime.state, "reason": runtime.reason}
 
 
 @router.post("/event/{event_id}/modules", response_model=EventModulesOut)
@@ -73,15 +148,9 @@ def update_modules(
 ):
     event = get_owned_event_or_403(db, event_id, identity["bar_id"])
     cfg = get_or_create_event_modules(db, event_id)
-    before = {
-        k: getattr(cfg, k)
-        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled", "checkins_enabled", "wifi_enabled", "safety_enabled"]
-    }
+    before = {k: getattr(cfg, k) for k in MODULE_FIELDS}
     cfg = update_event_modules(db, cfg, payload.model_dump(), identity["user_id"])
-    after = {
-        k: getattr(cfg, k)
-        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled", "checkins_enabled", "wifi_enabled", "safety_enabled"]
-    }
+    after = {k: getattr(cfg, k) for k in MODULE_FIELDS}
     if before != after:
         write_audit_log(
             db,
@@ -105,6 +174,7 @@ def wallet_admin_topup(
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, payload.event_id, None, write=True)
     ledger, idempotent = admin_topup(
         db,
         event_id=payload.event_id,
@@ -155,6 +225,7 @@ def wallet_admin_logs(
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, event_id, None, write=False)
     rows, next_cursor = list_wallet_admin_logs(
         db,
         event_id=event.id,

@@ -1,70 +1,50 @@
 import React from 'react'
 
-export function Shell({ title, children }: { title: string; children: React.ReactNode }) {
+export function PageShell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div style={{ padding: 20, maxWidth: 980, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 22, letterSpacing: 0.2 }}>{title}</h1>
-      </div>
-      <div style={{ marginTop: 16 }}>{children}</div>
+    <div className="tore-shell">
+      <header style={{ marginBottom: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 26 }}>{title}</h1>
+        {subtitle ? <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{subtitle}</p> : null}
+      </header>
+      {children}
     </div>
   )
 }
 
 export function Card({ children }: { children: React.ReactNode }) {
+  return <section className="tore-card">{children}</section>
+}
+
+export function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'event' | 'global' | 'bar' | 'success' | 'warning' | 'danger' }) {
+  return <span className={`tore-badge tore-badge--${tone}`}>{label}</span>
+}
+
+export function Button({ variant = 'primary', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }) {
+  return <button {...props} className={`tore-btn tore-btn--${variant}`} />
+}
+
+export function InlineAlert({ tone = 'warning', children }: { tone?: 'warning' | 'error' | 'success'; children: React.ReactNode }) {
+  return <div className={`tore-alert tore-alert--${tone}`}>{children}</div>
+}
+
+export function EmptyState({ title, body }: { title: string; body?: string }) {
   return (
-    <div
-      style={{
-        border: '1px solid rgba(127,127,127,0.25)',
-        borderRadius: 14,
-        padding: 16,
-        background: 'rgba(127,127,127,0.06)',
-      }}
-    >
-      {children}
+    <div className="tore-empty">
+      <strong>{title}</strong>
+      {body ? <p style={{ margin: '6px 0 0' }}>{body}</p> : null}
     </div>
   )
 }
 
-export function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{children}</div>
+export function Skeleton({ height = 14 }: { height?: number }) {
+  return <div className="tore-skeleton" style={{ height }} aria-hidden />
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function CursorPager({ nextCursor, onNext }: { nextCursor?: string | null; onNext: () => void }) {
   return (
-    <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
-      <span style={{ fontSize: 12, opacity: 0.8 }}>{label}</span>
-      {children}
-    </label>
-  )
-}
-
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      style={{
-        padding: '10px 12px',
-        borderRadius: 12,
-        border: '1px solid rgba(127,127,127,0.35)',
-        background: 'transparent',
-        outline: 'none',
-      }}
-    />
-  )
-}
-
-export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      style={{
-        padding: '10px 12px',
-        borderRadius: 12,
-        border: '1px solid rgba(127,127,127,0.35)',
-        background: 'rgba(127,127,127,0.14)',
-        cursor: props.disabled ? 'not-allowed' : 'pointer',
-      }}
-    />
+    <div style={{ marginTop: 12 }}>
+      <Button variant="secondary" onClick={onNext} disabled={!nextCursor}>Charger plus</Button>
+    </div>
   )
 }

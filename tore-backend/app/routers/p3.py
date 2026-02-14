@@ -23,8 +23,9 @@ from app.schemas.p3 import (
     CheckinIn,
     WifiSetIn,
 )
+from app.services.audit_service import write_audit_log
 from app.services.entry_service import get_owned_event_or_403
-from app.services.p3_common import decode_cursor, encode_cursor, ensure_event_module_enabled, is_event_live
+from app.services.p3_common import decode_cursor, effective_module_state, encode_cursor, ensure_event_action_allowed, ensure_event_module_enabled, is_event_live
 from db import now_utc
 from models import (
     AuditLog,
@@ -49,6 +50,10 @@ def get_db() -> Iterator[Session]:
 
 
 security = HTTPBearer(auto_error=False)
+
+
+def _ux_error(status_code: int, code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
 
 def _app_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -128,6 +133,14 @@ def battles_submit(battle_id: int, payload: BattleSubmitIn, user=Depends(_app_us
         raise HTTPException(404, "Battle not found")
     if battle.event_id:
         ensure_event_module_enabled(db, battle.event_id, "battles_enabled")
+    recent_submit_count = (
+        db.query(func.count(BattleSubmit.id))
+        .filter(BattleSubmit.battle_id == battle_id, BattleSubmit.actor_user_id == user.id, BattleSubmit.created_at >= now_utc() - timedelta(seconds=10))
+        .scalar()
+        or 0
+    )
+    if int(recent_submit_count) >= 20:
+        raise _ux_error(429, "BATTLES_RATE_LIMIT", "Trop d'actions, réessaie dans quelques secondes.")
     existing = db.query(BattleSubmit).filter(BattleSubmit.battle_id == battle_id, BattleSubmit.scan_id == payload.scan_id).first()
     if existing:
         return {"submit_id": existing.id, "idempotent": True}
@@ -160,6 +173,17 @@ def battles_validate(battle_id: int, payload: BattleValidateIn, identity=Depends
     submit.validated_at = now_utc()
     submit.validated_by_partner_id = identity["user_id"]
     db.add(submit)
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="battle.validate",
+        entity_type="battle_submit",
+        entity_id=str(submit.id),
+        event_id=battle.event_id,
+        bar_id=battle.bar_id,
+        payload={"battle_id": battle_id, "submit_id": submit.id},
+    )
     db.commit()
     return {"ok": True}
 
@@ -201,6 +225,14 @@ def drinks_checkin(payload: CheckinIn, user=Depends(_app_user), db: Session = De
         name = drink.name
     if payload.event_id:
         ensure_event_module_enabled(db, payload.event_id, "checkins_enabled")
+    recent_checkins = (
+        db.query(func.count(DrinkCheckin.id))
+        .filter(DrinkCheckin.user_id == user.id, DrinkCheckin.ts >= now_utc() - timedelta(minutes=1))
+        .scalar()
+        or 0
+    )
+    if int(recent_checkins) >= 12:
+        raise _ux_error(429, "CHECKIN_RATE_LIMIT", "Tu vas trop vite, attends quelques secondes.")
     row = DrinkCheckin(user_id=user.id, drink_id=payload.drink_id, name_snapshot=name, rating=payload.rating, comment=payload.comment, event_id=payload.event_id, bar_id=payload.bar_id)
     db.add(row)
     db.commit()
@@ -296,6 +328,17 @@ def wifi_set(payload: WifiSetIn, identity=Depends(require_role("manager")), db: 
         row.updated_by = identity["user_id"]
         row.updated_at = now_utc()
     db.add(row)
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="wifi.set",
+        entity_type="wifi_config",
+        entity_id=str(row.id if row.id else "new"),
+        event_id=payload.event_id,
+        bar_id=payload.bar_id,
+        payload={"ssid": payload.ssid, "note": payload.note},
+    )
     db.commit()
     return {"ok": True, "id": row.id}
 
@@ -303,12 +346,10 @@ def wifi_set(payload: WifiSetIn, identity=Depends(require_role("manager")), db: 
 @router.get("/public/wifi")
 def wifi_public(bar_id: int, event_id: Optional[int] = None, db: Session = Depends(get_db)):
     if event_id:
-        if not is_event_live(db, event_id):
+        state, reason = effective_module_state(db, event_id, "wifi_enabled")
+        if state == "OFF" and reason == "module_off":
             return Response(status_code=204)
-        from models import EventModuleConfig
-        cfg = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == event_id).first()
-        if not cfg or cfg.wifi_enabled is not True:
-            return Response(status_code=204)
+        ensure_event_action_allowed(db, event_id, "wifi_enabled", write=True)
     row = db.query(WifiConfig).filter(WifiConfig.bar_id == bar_id, WifiConfig.event_id == event_id).first()
     if not row:
         return Response(status_code=204)
@@ -319,7 +360,7 @@ def wifi_public(bar_id: int, event_id: Optional[int] = None, db: Session = Depen
 @router.post("/safety/buddy/start")
 def safety_start(payload: BuddyStartIn, user=Depends(_app_user), db: Session = Depends(get_db)):
     if payload.event_id:
-        ensure_event_module_enabled(db, payload.event_id, "safety_enabled")
+        ensure_event_action_allowed(db, payload.event_id, "safety_enabled", write=True)
     now = now_utc()
     row = SafetyBuddySession(event_id=payload.event_id, user_id=user.id, buddy_user_id=payload.buddy_user_id, status="ACTIVE", started_at=now, expires_at=now + timedelta(minutes=max(1, payload.expires_minutes)))
     db.add(row)
@@ -334,6 +375,10 @@ def safety_ping(payload: BuddyPingIn, user=Depends(_app_user), db: Session = Dep
         raise HTTPException(404, "Session not found")
     if row.status != "ACTIVE":
         raise HTTPException(409, "Session not active")
+    if row.event_id:
+        ensure_event_action_allowed(db, row.event_id, "safety_enabled", write=True)
+    if row.expires_at and row.expires_at >= now_utc() + timedelta(minutes=29, seconds=55):
+        raise _ux_error(429, "BUDDY_PING_RATE_LIMIT", "Ping trop fréquent, attends 5 secondes.")
     row.expires_at = now_utc() + timedelta(minutes=30)
     db.add(row)
     db.commit()
@@ -347,6 +392,8 @@ def safety_end(payload: BuddyEndIn, user=Depends(_app_user), db: Session = Depen
         raise HTTPException(404, "Session not found")
     if row.status != "ACTIVE":
         return {"ok": True, "idempotent": True}
+    if row.event_id:
+        ensure_event_action_allowed(db, row.event_id, "safety_enabled", write=True)
     row.status = "ENDED"
     row.ended_at = now_utc()
     db.add(row)
@@ -362,7 +409,19 @@ def safety_me(user=Depends(_app_user), db: Session = Depends(get_db)):
 
 @router.get("/partner/portal/safety/event/{event_id}/stats")
 def safety_stats(event_id: int, identity=Depends(require_role("manager")), db: Session = Depends(get_db)):
-    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="safety.stats.view",
+        entity_type="event",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={},
+    )
+    db.commit()
     total = db.query(func.count(SafetyBuddySession.id)).filter(SafetyBuddySession.event_id == event_id).scalar() or 0
     active = db.query(func.count(SafetyBuddySession.id)).filter(SafetyBuddySession.event_id == event_id, SafetyBuddySession.status == "ACTIVE").scalar() or 0
     recent = (
