@@ -5,6 +5,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/network/error_mapper.dart';
 import '../../state.dart';
 import '../../shared/utils/runtime_write_guard.dart';
+import '../../shared/utils/write_gate.dart';
 import '../../shared/widgets/service_limited_banner.dart';
 import 'polymarket_models.dart';
 
@@ -134,6 +135,8 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final readOnly = isReadOnly(ref);
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: _writeBlocked);
     if (_loading) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: CircularProgressIndicator()));
     final m = _market;
     if (m == null) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: Text('Introuvable')));
@@ -151,11 +154,11 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             if (m.outcome != null) Text('Outcome: ${m.outcome}'),
             const SizedBox(height: 12),
             Text('My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
-            if (_bannerReason != null)
+            if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: ServiceLimitedBanner(
-                  message: writeBlockedReasonMessage(_bannerReason),
+                  message: writeBlockedMessage(readOnly: readOnly, runtimeReason: _bannerReason),
                 ),
               ),
             const SizedBox(height: 12),
@@ -165,7 +168,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                   .map((e) => ChoiceChip(
                         label: Text('$e'),
                         selected: _amount == e,
-                        onSelected: (_) => setState(() => _amount = e),
+                        onSelected: writeBlocked ? null : (_) => setState(() => _amount = e),
                       ))
                   .toList(),
             ),
@@ -190,14 +193,14 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               children: [
                 Expanded(
                   child: FilledButton(
-                    onPressed: (_submitting || _writeBlocked) ? null : () => _submit('yes'),
+                    onPressed: (_submitting || writeBlocked) ? null : () => _submit('yes'),
                     child: const Text('YES'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: (_submitting || _writeBlocked) ? null : () => _submit('no'),
+                    onPressed: (_submitting || writeBlocked) ? null : () => _submit('no'),
                     child: const Text('NO'),
                   ),
                 ),

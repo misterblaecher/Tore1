@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/network/error_mapper.dart';
 import 'package:tore/shared/utils/runtime_write_guard.dart';
+import 'package:tore/shared/utils/write_gate.dart';
 import 'package:tore/shared/utils/user_display.dart';
 import 'package:tore/shared/widgets/service_limited_banner.dart';
 import 'package:tore/state.dart';
@@ -58,7 +59,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final configAsync = ref.watch(eventConfigProvider(widget.eventId));
     final eventAsync = ref.watch(_eventDetailsProvider(widget.eventId));
     final eventState = eventAsync.maybeWhen(data: _readEventState, orElse: () => 'LIVE');
-    final writeBlocked = isWriteBlockedByEventState(eventState);
+    final runtimeWriteBlocked = isWriteBlockedByEventState(eventState);
+    final readOnly = isReadOnly(ref);
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: runtimeWriteBlocked);
     final config = configAsync.maybeWhen(
       data: (value) => value,
       orElse: () => null,
@@ -135,7 +138,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 if (writeBlocked)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: ServiceLimitedBanner(message: writeBlockedReasonMessage(eventState)),
+                    child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, runtimeState: eventState)),
                   ),
                 Text(
                   'Tickets: $balance',
@@ -178,7 +181,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 ),
                 if (kDebugMode)
                   ToreCTA(
-                    onPressed: () async {
+                    onPressed: writeBlocked
+                        ? null
+                        : () async {
                       try {
                         await api.creditTickets(
                           eventId: widget.eventId,

@@ -21,7 +21,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     });
     try {
       await ref.read(authRepositoryProvider).ensureGuestSession();
-      ref.invalidate(appBootProvider);
+      await ref.read(appBootProvider.notifier).bootstrap();
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Erreur réseau, réessaie.');

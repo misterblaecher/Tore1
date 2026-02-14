@@ -9,6 +9,7 @@ import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/widgets/offline_fallback_screen.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
+import '../../../shared/utils/write_gate.dart';
 import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
@@ -95,6 +96,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       error: (err, _) => err is OfflineNoCacheException,
       orElse: () => false,
     );
+    final readOnly = isReadOnly(ref);
 
     if (config != null && !config.menuEnabled) {
       return const ModuleUnavailableScreen(
@@ -201,6 +203,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           final tickets = data.tickets;
           final isOffline = data.isOffline;
           final writeBlocked = isWriteBlockedByEventState(data.eventState);
+          final allWritesBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: writeBlocked);
 
           final top = Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -251,10 +254,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: _OfflineOrdersBanner(),
                   ),
-                if (writeBlocked)
+                if (allWritesBlocked)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: ServiceLimitedBanner(message: writeBlockedReasonMessage(data.eventState)),
+                    child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, runtimeState: data.eventState)),
                   ),
                 top,
                 const Expanded(child: Center(child: Text('Menu vide'))),
@@ -274,10 +277,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: _OfflineOrdersBanner(),
                 ),
-              if (writeBlocked)
+              if (allWritesBlocked)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: ServiceLimitedBanner(message: writeBlockedReasonMessage(data.eventState)),
+                  child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, runtimeState: data.eventState)),
                 ),
               top,
               Expanded(
@@ -301,7 +304,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
                     final disabledBecauseAuth = userId == null;
                     final disabledBecauseOffline = isOffline;
-                    final disabledBecauseEventState = writeBlocked;
+                    final disabledBecauseEventState = allWritesBlocked;
                     final cartController = ref.read(cartProvider(widget.eventId).notifier);
 
                     return ListTile(
