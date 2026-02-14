@@ -48,12 +48,12 @@ def update_modules(
     cfg = get_or_create_event_modules(db, event_id)
     before = {
         k: getattr(cfg, k)
-        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled"]
+        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled", "checkins_enabled", "wifi_enabled", "safety_enabled"]
     }
     cfg = update_event_modules(db, cfg, payload.model_dump(), identity["user_id"])
     after = {
         k: getattr(cfg, k)
-        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled"]
+        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled", "checkins_enabled", "wifi_enabled", "safety_enabled"]
     }
     if before != after:
         write_audit_log(

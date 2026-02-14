@@ -26,6 +26,9 @@ def update_event_modules(db: Session, cfg: EventModuleConfig, payload: dict, act
         "hunt_enabled",
         "polymarket_enabled",
         "entry_enabled",
+        "checkins_enabled",
+        "wifi_enabled",
+        "safety_enabled",
     ]:
         value = payload.get(field)
         if value is None:
