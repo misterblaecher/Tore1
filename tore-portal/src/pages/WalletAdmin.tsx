@@ -5,6 +5,12 @@ import { api } from '../lib/api'
 import { CursorPager, EmptyState, InlineAlert } from '../lib/ui'
 
 type WalletPage = { items: any[]; next_cursor: string | null }
+type ScanResolve = { userId: string | null; raw: string; reason?: string }
+
+type TopupResult = {
+  kind: 'success' | 'duplicate' | 'denied'
+  message: string
+}
 
 const reasonToLabel: Record<string, string> = {
   event_paused: 'event_paused',
@@ -12,6 +18,27 @@ const reasonToLabel: Record<string, string> = {
   rate_limited: 'rate_limited',
   invalid_amount: 'invalid_amount',
   insufficient_balance: 'insufficient_balance',
+}
+
+const parseTopupTarget = (rawInput: string): ScanResolve => {
+  const raw = rawInput.trim()
+  if (!raw) return { userId: null, raw, reason: 'empty' }
+
+  if (raw.startsWith('tore://')) {
+    try {
+      const normalized = raw.replace('tore://', 'https://tore.local/')
+      const url = new URL(normalized)
+      if (url.pathname.replace(/^\//, '') !== 'user') {
+        return { userId: null, raw, reason: 'unsupported_qr' }
+      }
+      const userId = url.searchParams.get('uid') || url.searchParams.get('user_id')
+      return { userId, raw, reason: userId ? undefined : 'missing_uid' }
+    } catch {
+      return { userId: null, raw, reason: 'invalid_qr' }
+    }
+  }
+
+  return { userId: raw, raw }
 }
 
 export default function WalletAdmin() {
@@ -25,6 +52,9 @@ export default function WalletAdmin() {
   const [filterType, setFilterType] = useState('')
   const [filterQ, setFilterQ] = useState('')
   const [loading, setLoading] = useState(false)
+  const [scanInput, setScanInput] = useState('')
+  const [scanAmount, setScanAmount] = useState('10')
+  const [scanResult, setScanResult] = useState<TopupResult | null>(null)
 
   const eventId = params.get('event_id') || ''
   const filterUserId = params.get('user_id') || ''
@@ -63,6 +93,39 @@ export default function WalletAdmin() {
     }
   }
 
+  const topupByScan = async () => {
+    setScanResult(null)
+    const parsed = parseTopupTarget(scanInput)
+    if (!parsed.userId) {
+      setScanResult({ kind: 'denied', message: `denied: ${parsed.reason || 'invalid_target'}` })
+      return
+    }
+    const key = `scan-${parsed.userId}-${Number(scanAmount)}-${Date.now()}`
+    try {
+      const payload = await api<any>('/partner/portal/wallet/topup', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': key },
+        body: JSON.stringify({
+          event_id: Number(eventId),
+          target_user_id: parsed.userId,
+          amount_cents: Number(scanAmount),
+          note: `scan:${parsed.raw}`,
+          client_key: key,
+        }),
+      })
+      setScanResult({ kind: payload?.idempotent ? 'duplicate' : 'success', message: payload?.idempotent ? 'duplicate' : 'success' })
+      await loadLogs()
+    } catch (e: any) {
+      const status = Number(e?.status || 0)
+      const reason = e?.reason || e?.detail?.reason || 'unknown'
+      if (status === 429) {
+        setScanResult({ kind: 'denied', message: `denied: cooldown (${reason})` })
+      } else {
+        setScanResult({ kind: 'denied', message: `denied: ${reason}` })
+      }
+    }
+  }
+
   const exportCsv = async () => {
     window.open(`/partner/portal/wallet/logs/export.csv?event_id=${Number(eventId)}`, '_blank', 'noopener,noreferrer')
   }
@@ -74,6 +137,22 @@ export default function WalletAdmin() {
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
       <button onClick={topup} style={{ marginTop: 8 }}>Topup</button>
+      <hr />
+      <h3>Topup by scan</h3>
+      <input
+        style={inputStyle()}
+        placeholder="Coller tore://user?uid=... ou user_id"
+        value={scanInput}
+        onChange={(e) => setScanInput(e.target.value)}
+      />
+      <input
+        style={{ ...inputStyle(), marginTop: 8 }}
+        placeholder="Amount tickets"
+        value={scanAmount}
+        onChange={(e) => setScanAmount(e.target.value)}
+      />
+      <button onClick={topupByScan} style={{ marginTop: 8 }}>Run scan topup</button>
+      {scanResult ? <InlineAlert tone={scanResult.kind === 'denied' ? 'error' : 'success'}>{scanResult.message}</InlineAlert> : null}
       <hr />
       <input style={inputStyle()} placeholder="Filter user_id" value={filterUserId} onChange={(e) => setParams({ event_id: eventId, user_id: e.target.value })} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Filter type" value={filterType} onChange={(e) => setFilterType(e.target.value)} />

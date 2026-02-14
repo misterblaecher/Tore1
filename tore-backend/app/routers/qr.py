@@ -28,7 +28,9 @@ QR_RUNTIME_POLICY = {
     "market": ("market_enabled", False),
     "battle": ("battles_enabled", False),
     "polymarket_bet": ("polymarket_enabled", False),
+    "wallet_user": ("wallet_enabled", True),
 }
+
 
 
 def _resolve_runtime_gate(db: Session, qr_type: str, event_id: int | None) -> tuple[bool, str | None]:
@@ -105,6 +107,74 @@ def qr_resolve(
             "reason": None,
             "required_role": None,
             "granted_role": "guest",
+            "data": base.get("data"),
+        }
+
+
+    if qr_type == "wallet_user":
+        required_role = "entry"
+        granted_role = resolve_event_role(db, user.id, event_id) if event_id is not None else "guest"
+        allowed, blocked_reason = _resolve_runtime_gate(db, qr_type, event_id)
+        if not allowed:
+            return {
+                "valid": False,
+                "type": qr_type,
+                "event_id": event_id,
+                "bar_id": None,
+                "item_id": None,
+                "category_id": None,
+                "zone_id": None,
+                "bet_id": None,
+                "order_id": None,
+                "battle_id": None,
+                "scope": None,
+                "route_front": None,
+                "token": None,
+                "user_id": base.get("user_id"),
+                "reason": blocked_reason,
+                "required_role": required_role,
+                "granted_role": granted_role,
+                "data": base.get("data"),
+            }
+        if _role_rank(granted_role) < _role_rank(required_role):
+            return {
+                "valid": False,
+                "type": qr_type,
+                "event_id": event_id,
+                "bar_id": None,
+                "item_id": None,
+                "category_id": None,
+                "zone_id": None,
+                "bet_id": None,
+                "order_id": None,
+                "battle_id": None,
+                "scope": None,
+                "route_front": None,
+                "token": None,
+                "user_id": base.get("user_id"),
+                "reason": "forbidden",
+                "required_role": required_role,
+                "granted_role": granted_role,
+                "data": base.get("data"),
+            }
+        return {
+            "valid": True,
+            "type": qr_type,
+            "event_id": event_id,
+            "bar_id": None,
+            "item_id": None,
+            "category_id": None,
+            "zone_id": None,
+            "bet_id": None,
+            "order_id": None,
+            "battle_id": None,
+            "scope": None,
+            "route_front": base.get("route_front") or "topup_target",
+            "token": None,
+            "user_id": base.get("user_id"),
+            "reason": None,
+            "required_role": required_role,
+            "granted_role": granted_role,
             "data": base.get("data"),
         }
 

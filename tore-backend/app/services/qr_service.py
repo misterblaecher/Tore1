@@ -27,6 +27,8 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
+    params = parse_qs(parsed.query)
+
     if qr_type == "wallet":
         action = parsed.path.lstrip("/").lower()
         if action != "topup":
@@ -56,7 +58,26 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
             },
         }
 
-    params = parse_qs(parsed.query)
+    if qr_type == "user":
+        uid = (params.get("uid") or params.get("user_id") or [None])[0]
+        raw_event_id = (params.get("event_id") or [None])[0]
+        if not uid:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        try:
+            event_id = int(raw_event_id) if raw_event_id is not None else None
+        except (TypeError, ValueError):
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        return {
+            "valid": True,
+            "type": "wallet_user",
+            "event_id": event_id,
+            "user_id": uid,
+            "route_front": "topup_target",
+            "reason": None,
+            "data": {
+                "deep_link": trimmed,
+            },
+        }
 
     if qr_type == "polymarket":
         raw_bet_id = (params.get("bet_id") or [None])[0]

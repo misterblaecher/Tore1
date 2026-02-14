@@ -4,7 +4,7 @@ import secrets
 
 from db import Base, engine, get_session
 from main import app
-from models import Bar, Event, EventModuleConfig, PartnerMembership, PartnerUser
+from models import AppToken, AppUser, Bar, Event, EventModuleConfig, EventStaff, PartnerMembership, PartnerUser
 from partner_auth import _make_token
 
 
@@ -136,3 +136,39 @@ def test_qr_resolve_contract_mvp_types():
     assert unknown.status_code == 200
     assert unknown.json()['valid'] is False
     assert unknown.json()['type'] == 'unknown'
+
+
+def test_wallet_user_qr_resolve_is_staff_only():
+    manager_token, event_id = _seed_manager_with_event()
+    client = TestClient(app)
+
+    guest = client.post('/auth/guest', json={'display_name': 'qr-user'})
+    assert guest.status_code == 200
+    target_user_id = guest.json()['user']['id']
+
+    raw = f'tore://user?uid={target_user_id}&event_id={event_id}'
+    denied = client.post('/qr/resolve', json={'raw': raw}, headers={'Authorization': f"Bearer {guest.json()['token']}"})
+    assert denied.status_code == 200
+    assert denied.json()['valid'] is False
+    assert denied.json()['type'] == 'wallet_user'
+    assert denied.json()['reason'] == 'forbidden'
+
+    s = get_session()
+    try:
+        staff_user = AppUser(id=secrets.token_hex(16), display_name='Staff')
+        s.add(staff_user)
+        s.flush()
+        staff_token = secrets.token_urlsafe(32)
+        s.add(AppToken(user_id=staff_user.id, token_hash=__import__('hashlib').sha256(staff_token.encode('utf-8')).hexdigest()))
+        s.add(EventStaff(event_id=event_id, user_id=staff_user.id, role='entry', is_active=True))
+        s.commit()
+    finally:
+        s.close()
+
+    allowed = client.post('/qr/resolve', json={'raw': raw}, headers={'Authorization': f'Bearer {staff_token}'})
+    assert allowed.status_code == 200
+    payload = allowed.json()
+    assert payload['valid'] is True
+    assert payload['route_front'] == 'topup_target'
+    assert payload['user_id'] == target_user_id
+

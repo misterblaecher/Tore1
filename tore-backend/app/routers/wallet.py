@@ -21,6 +21,7 @@ from app.schemas.wallet import (
     WalletLedgerPageOut,
     WalletLedgerRowOut,
     WalletMeOut,
+    WalletMyQrOut,
     WalletTopupFromQrIn,
     WalletTopupIn,
     WalletTxOut,
@@ -103,6 +104,21 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+
+@router.post("/wallet/me/qr", response_model=WalletMyQrOut)
+def wallet_me_qr(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_event_action_allowed(db, event_id, "wallet_enabled", write=False)
+    return WalletMyQrOut(
+        user_id=user.id,
+        event_id=event_id,
+        qr_type="wallet_user",
+        deeplink=f"tore://user?uid={user.id}&event_id={event_id}",
+    )
 
 
 @router.get("/wallet/me", response_model=WalletMeOut)

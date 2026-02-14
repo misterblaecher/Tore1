@@ -149,3 +149,68 @@ def test_wallet_gift_validations_idempotence_and_rate_limit():
             break
     assert rate_limited is not None
     assert rate_limited.json()["detail"]["reason"] == "rate_limited"
+
+
+def test_wallet_me_qr_and_topup_denied_when_event_paused():
+    client = TestClient(app)
+    _, event_id, manager_token, _ = _seed_manager_event()
+    user_id, user_token = _guest(client, "qr-user")
+
+    qr_resp = client.post(
+        f"/wallet/me/qr?event_id={event_id}",
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert qr_resp.status_code == 200
+    assert qr_resp.json()["qr_type"] == "wallet_user"
+    deeplink = qr_resp.json()["deeplink"]
+
+    pause = client.post(
+        f"/partner/portal/event/{event_id}/state",
+        json={"state": "PAUSE", "reason": "hold"},
+        headers={"Authorization": f"Bearer {manager_token}"},
+    )
+    assert pause.status_code == 200
+
+    denied = client.post(
+        "/partner/portal/wallet/topup",
+        json={
+            "event_id": event_id,
+            "target_user_id": user_id,
+            "amount_cents": 10,
+            "note": deeplink,
+            "client_key": "pause-key",
+        },
+        headers={"Authorization": f"Bearer {manager_token}", "Idempotency-Key": "pause-idem"},
+    )
+    assert denied.status_code == 423
+    assert denied.json()["detail"]["reason"] == "event_paused"
+
+
+def test_staff_topup_by_scan_is_idempotent():
+    client = TestClient(app)
+    _, event_id, manager_token, _ = _seed_manager_event()
+    user_id, _ = _guest(client, "scan-user")
+    raw_qr = f"tore://user?uid={user_id}&event_id={event_id}"
+
+    body = {
+        "event_id": event_id,
+        "target_user_id": user_id,
+        "amount_cents": 11,
+        "note": f"scan:{raw_qr}",
+        "client_key": "scan-key",
+    }
+    first = client.post(
+        "/partner/portal/wallet/topup",
+        json=body,
+        headers={"Authorization": f"Bearer {manager_token}", "Idempotency-Key": "scan-idem"},
+    )
+    second = client.post(
+        "/partner/portal/wallet/topup",
+        json=body,
+        headers={"Authorization": f"Bearer {manager_token}", "Idempotency-Key": "scan-idem"},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["idempotent"] is False
+    assert second.json()["idempotent"] is True
+
