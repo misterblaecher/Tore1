@@ -14,6 +14,9 @@ class EventModulesOut(BaseModel):
     hunt_enabled: bool
     polymarket_enabled: bool
     entry_enabled: bool
+    checkins_enabled: bool
+    wifi_enabled: bool
+    safety_enabled: bool
     updated_at: Optional[datetime] = None
 
 
@@ -24,3 +27,6 @@ class EventModulesUpdateIn(BaseModel):
     hunt_enabled: Optional[bool] = None
     polymarket_enabled: Optional[bool] = None
     entry_enabled: Optional[bool] = None
+    checkins_enabled: Optional[bool] = None
+    wifi_enabled: Optional[bool] = None
+    safety_enabled: Optional[bool] = None
