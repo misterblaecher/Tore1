@@ -28,6 +28,7 @@ import WifiAdmin from './pages/WifiAdmin'
 import SafetyAdmin from './pages/SafetyAdmin'
 import ZonesAdmin from './pages/ZonesAdmin'
 import Kitchen from './pages/Kitchen'
+import BarDashboard from './pages/BarDashboard'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -100,6 +101,14 @@ export default function App() {
         element={
           <RequireAuth>
             <OrdersQueue />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/bar-dashboard"
+        element={
+          <RequireAuth>
+            <BarDashboard />
           </RequireAuth>
         }
       />
