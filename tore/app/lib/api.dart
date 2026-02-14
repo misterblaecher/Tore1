@@ -35,6 +35,16 @@ class Api {
         (await _client.dio.get('/events/$eventId')).data as Map,
       );
 
+  Future<Map<String, dynamic>> eventContext(int eventId) async =>
+      Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/context')).data as Map,
+      );
+
+  Future<Map<String, dynamic>> eventState(int eventId) async =>
+      Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/state')).data as Map,
+      );
+
   Future<Map<String, dynamic>> joinEvent({
     required int eventId,
     String? idempotencyKey,

@@ -10,7 +10,9 @@ import '../../polymarket/my_positions_screen.dart';
 import '../../polymarket/polymarket_models.dart';
 
 class PolymarketTabScreen extends ConsumerStatefulWidget {
-  const PolymarketTabScreen({super.key});
+  const PolymarketTabScreen({super.key, this.initialScope = 'global'});
+
+  final String initialScope;
 
   @override
   ConsumerState<PolymarketTabScreen> createState() => _PolymarketTabScreenState();
@@ -32,6 +34,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   @override
   void initState() {
     super.initState();
+    _scope = widget.initialScope;
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }

@@ -6,7 +6,7 @@ import 'package:tore/ui/components/components.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
 import '../../../shared/models/event_summary.dart';
-import '../../events/presentation/event_landing_screen.dart';
+import '../../events/presentation/event_hub_screen.dart';
 import 'bars_providers.dart';
 
 class BarEventsScreen extends ConsumerWidget {
@@ -79,7 +79,7 @@ class BarEventsScreen extends ConsumerWidget {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EventLandingScreen(eventId: event.id, eventName: event.name),
+        builder: (_) => EventHubScreen(eventId: event.id, eventName: event.name),
       ),
     );
   }

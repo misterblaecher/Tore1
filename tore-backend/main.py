@@ -2923,23 +2923,42 @@ def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
         return {
             "menu": True,
             "wallet": True,
+            "ticker": True,
             "entry": False,
             "checkin": False,
             "battles": False,
             "hunt": False,
             "report": True,
             "polymarket": False,
+            "polymarket_event": False,
+            "classement": True,
+            "music_vote": False,
+            "broadcast": False,
         }
+    polymarket_enabled = bool(cfg.allow_user_bets)
+    menu_enabled = bool(cfg.menu_enabled)
+    wallet_enabled = bool(cfg.wallet_enabled)
     return {
-        "menu": bool(cfg.menu_enabled),
-        "wallet": bool(cfg.wallet_enabled),
+        "menu": menu_enabled,
+        "wallet": wallet_enabled,
+        "ticker": menu_enabled or wallet_enabled or polymarket_enabled,
         "entry": bool(cfg.entry_enabled),
         "checkin": bool(cfg.checkin_enabled),
         "battles": bool(cfg.battles_enabled),
         "hunt": bool(cfg.hunt_enabled),
         "report": bool(cfg.report_enabled),
-        "polymarket": bool(cfg.allow_user_bets),
+        "polymarket": polymarket_enabled,
+        "polymarket_event": polymarket_enabled,
+        "classement": bool(cfg.report_enabled),
+        "music_vote": False,
+        "broadcast": False,
     }
+
+
+def _event_state_last_updated(runtime: Optional[EventRuntimeState]) -> Optional[str]:
+    if runtime is None or runtime.updated_at is None:
+        return None
+    return runtime.updated_at.isoformat()
 
 
 def _event_join_payload(db: Session, event: Event) -> dict[str, Any]:
@@ -2960,10 +2979,38 @@ def _event_join_payload(db: Session, event: Event) -> dict[str, Any]:
         },
         "modulesOn": _event_modules_on(db, event.id),
         "eventState": ((runtime.state if runtime else None) or "LIVE").upper(),
+        "lastUpdatedAt": _event_state_last_updated(runtime),
+        "lastStateUpdatedAt": _event_state_last_updated(runtime),
         "flags": {
             "charterEnabled": bool(event.charter_enabled),
             "charterVersion": event.charter_version,
         },
+    }
+
+
+@app.get("/events/{event_id}/context")
+def get_event_context(event_id: int, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
+    payload = _event_join_payload(db, event)
+    payload["lastUpdatedAt"] = _event_state_last_updated(runtime)
+    payload["lastStateUpdatedAt"] = _event_state_last_updated(runtime)
+    return payload
+
+
+@app.get("/events/{event_id}/state")
+def get_event_state(event_id: int, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
+    return {
+        "eventId": event_id,
+        "eventState": ((runtime.state if runtime else None) or "LIVE").upper(),
+        "lastUpdatedAt": _event_state_last_updated(runtime),
+        "lastStateUpdatedAt": _event_state_last_updated(runtime),
     }
 
 
