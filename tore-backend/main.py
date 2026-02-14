@@ -1122,6 +1122,7 @@ from app.routers.battles import router as battles_router
 from app.routers.market import router as market_router
 from app.routers.entry import router as entry_router
 from app.routers.portal_event_control import router as portal_event_control_router
+from app.routers.p3 import router as p3_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1132,6 +1133,7 @@ app.include_router(battles_router)
 app.include_router(market_router)
 app.include_router(entry_router)
 app.include_router(portal_event_control_router)
+app.include_router(p3_router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -75,6 +75,9 @@ class EventModuleConfig(Base):
     hunt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     polymarket_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     entry_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    checkins_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    wifi_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    safety_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     updated_by_user_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("partner_users.id"), nullable=True
@@ -85,8 +88,8 @@ class Hunt(Base):
     __tablename__ = "hunts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
-    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
     name: Mapped[str] = mapped_column(String(180), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     reward_tickets: Mapped[int] = mapped_column(Integer, default=0)
@@ -583,10 +586,11 @@ class Checkin(Base):
 class Battle(Base):
     __tablename__ = "battles"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
-    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(180), default="Battle")
     mode: Mapped[str] = mapped_column(String(16), default="teams")
+    status: Mapped[str] = mapped_column(String(16), default="OPEN")
     join_code: Mapped[Optional[str]] = mapped_column(String(16), index=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -809,6 +813,66 @@ class AuditLog(Base):
     event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
     bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), nullable=True, index=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class BattleSubmit(Base):
+    __tablename__ = "battle_submits"
+    __table_args__ = (
+        UniqueConstraint("battle_id", "scan_id", name="uq_battle_submit_scan"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    battle_id: Mapped[int] = mapped_column(ForeignKey("battles.id"), index=True)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    scan_id: Mapped[str] = mapped_column(String(120), index=True)
+    target_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True)
+    points: Mapped[int] = mapped_column(Integer, default=1)
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    validated_by_partner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class DrinkCheckin(Base):
+    __tablename__ = "drink_checkins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    drink_id: Mapped[Optional[int]] = mapped_column(ForeignKey("drinks.id"), index=True, nullable=True)
+    name_snapshot: Mapped[str] = mapped_column(String(180), default="")
+    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class WifiConfig(Base):
+    __tablename__ = "wifi_configs"
+    __table_args__ = (UniqueConstraint("bar_id", "event_id", name="uq_wifi_scope"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
+    ssid: Mapped[str] = mapped_column(String(120), default="")
+    password_enc: Mapped[str] = mapped_column(Text, default="")
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("partner_users.id"))
+    updated_by: Mapped[int] = mapped_column(ForeignKey("partner_users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+
+
+class SafetyBuddySession(Base):
+    __tablename__ = "safety_buddy_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    buddy_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class AppToken(Base):

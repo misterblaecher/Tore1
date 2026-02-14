@@ -21,6 +21,9 @@ import EntryAdmin from './pages/EntryAdmin'
 import EventControlHub from './pages/EventControlHub'
 import WalletAdmin from './pages/WalletAdmin'
 import PolymarketAdmin from './pages/PolymarketAdmin'
+import BattlesLive from './pages/BattlesLive'
+import CheckinsAdmin from './pages/CheckinsAdmin'
+import AuditLogs from './pages/AuditLogs'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -97,7 +100,7 @@ export default function App() {
         }
       />
       <Route
-        path="/battles-admin"
+        path="/battles-admin/:eventId"
         element={
           <RequireAuth>
             <BattlesAdmin />
@@ -149,6 +152,30 @@ export default function App() {
         element={
           <RequireAuth>
             <PolymarketAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/battles-live/:battleId"
+        element={
+          <RequireAuth>
+            <BattlesLive />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/checkins-admin/:eventId"
+        element={
+          <RequireAuth>
+            <CheckinsAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/audit/:eventId"
+        element={
+          <RequireAuth>
+            <AuditLogs />
           </RequireAuth>
         }
       />
