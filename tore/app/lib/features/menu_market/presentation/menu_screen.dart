@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,8 +13,9 @@ import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
 import '../../leaderboard/presentation/leaderboard_screen.dart';
+import '../../orders/presentation/order_qr_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
-import '../../qr/presentation/qr_feature_disabled_screen.dart';
+import '../../qr/presentation/module_unavailable_screen.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key, required this.eventId});
@@ -128,7 +131,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     );
 
     if (config != null && !config.menuEnabled) {
-      return const QrFeatureDisabledScreen(featureLabel: 'Menu');
+      return const ModuleUnavailableScreen(title: 'Menu indisponible', message: 'Ce module est désactivé pour cet event.');
     }
 
     // Si initState a chargé sans userId, on recharge une fois dès que le user arrive.
@@ -329,7 +332,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                         throw Exception('bar_id manquant pour commander');
                                       }
                                       final idemKey = 'menu-${widget.eventId}-${itemId}-${DateTime.now().millisecondsSinceEpoch}';
-                                      await api.createOrder(
+                                      final order = await api.createOrder(
                                         barId: resolvedBarId,
                                         eventId: widget.eventId,
                                         userId: uid,
@@ -339,6 +342,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                         ],
                                         idempotencyKey: idemKey,
                                       );
+                                      final orderId = (order['id'] as num?)?.toInt() ?? int.tryParse(order['id']?.toString() ?? '');
+                                      if (context.mounted && orderId != null) {
+                                        unawaited(Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => OrderQrScreen(orderId: orderId),
+                                          ),
+                                        ));
+                                      }
                                     } finally {
                                       if (mounted) {
                                         setState(() => _ordering[itemId] = false);
@@ -347,7 +358,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
                                     if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('✅ Commande envoyée: $name')),
+                                      SnackBar(content: Text('✅ Commande envoyée: $name (QR prêt)')),
                                     );
 
                                     // Refresh balance/menu

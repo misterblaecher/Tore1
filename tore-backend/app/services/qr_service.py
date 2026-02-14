@@ -160,6 +160,20 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
         }
 
     if qr_type == "order":
+        client_token = (params.get("ot") or [None])[0]
+        if client_token:
+            return {
+                "valid": True,
+                "type": "order_client",
+                "event_id": None,
+                "order_id": None,
+                "token": client_token,
+                "route_front": None,
+                "reason": None,
+                "data": {
+                    "deep_link": trimmed,
+                },
+            }
         raw_order_id = (params.get("order_id") or [None])[0]
         try:
             order_id = int(raw_order_id) if raw_order_id is not None else None

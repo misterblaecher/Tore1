@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout, { cardStyle } from '../ui/Layout'
 import { ApiError, api } from '../lib/api'
 import { CursorPager, EmptyState, InlineAlert } from '../lib/ui'
 
 type OrderItem = { id: number; name_snapshot: string; qty: number; line_total_cents: number }
-type OrderRow = { id: number; event_id?: number | null; status: string; payment_status: 'PAID' | 'UNPAID'; note?: string | null; created_at: string; items: OrderItem[] }
+type OrderRow = { id: number; event_id?: number | null; user_id?: string | null; status: string; payment_status: 'PAID' | 'UNPAID'; note?: string | null; created_at: string; items: OrderItem[]; total_cents?: number }
 type LiveResponse = { items: OrderRow[]; next_cursor?: string | null }
+type ScanResponse = { idempotent: boolean; order: OrderRow; user_visible_to_staff: boolean; identity_visible?: boolean }
 
 const STATUS_TABS = [
   { key: '', label: 'Tous' },
@@ -14,7 +15,33 @@ const STATUS_TABS = [
   { key: 'ready', label: 'Ready' },
 ]
 
-const BLOCKED_REASONS = new Set(['event_paused', 'module_off', 'revoked'])
+const BLOCKED_REASONS = new Set(['event_paused', 'module_off', 'revoked', 'rate_limited'])
+
+const reasonLabel = (reason: string) => {
+  const map: Record<string, string> = {
+    event_paused: 'Event en pause: actions temporairement bloquées.',
+    module_off: 'Module désactivé pour cet event.',
+    rate_limited: 'Trop de scans/actions, attends quelques secondes.',
+    revoked: 'Action révoquée côté backend.',
+    invalid_qr: 'QR invalide.',
+    forbidden: 'Action non autorisée.',
+  }
+  return map[reason] || reason
+}
+
+function extractOt(input: string): string {
+  const value = input.trim()
+  if (!value) return ''
+  if (value.startsWith('tore://')) {
+    try {
+      const url = new URL(value.replace('tore://', 'https://tore.local/'))
+      return url.searchParams.get('ot') || ''
+    } catch {
+      return ''
+    }
+  }
+  return value
+}
 
 export default function OrdersQueue() {
   const [orders, setOrders] = useState<OrderRow[]>([])
@@ -24,6 +51,13 @@ export default function OrdersQueue() {
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
   const [reason, setReason] = useState<string>('')
+
+  const [scanValue, setScanValue] = useState('')
+  const [scanBusy, setScanBusy] = useState(false)
+  const [scanError, setScanError] = useState('')
+  const [scanReason, setScanReason] = useState('')
+  const [scanResult, setScanResult] = useState<ScanResponse | null>(null)
+  const [scanCooldownUntil, setScanCooldownUntil] = useState<number>(0)
 
   const load = useCallback(async (append = false) => {
     if (!eventFilter) {
@@ -76,7 +110,53 @@ export default function OrdersQueue() {
     }
   }
 
-  const readOnly = BLOCKED_REASONS.has(reason)
+  const onScan = async () => {
+    if (Date.now() < scanCooldownUntil) return
+    const ot = extractOt(scanValue)
+    if (!ot) {
+      setScanError('Token QR invalide. Colle un lien tore://order?ot=... ou un token ot brut.')
+      return
+    }
+    setScanBusy(true)
+    setScanError('')
+    setScanReason('')
+    try {
+      const payload = {
+        ot,
+        idempotency_key: `scan-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      }
+      const res = await api<ScanResponse>('/partner/portal/orders/scan-client-qr', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      setScanResult(res)
+      if (res.idempotent) {
+        setScanError('QR déjà scanné récemment (idempotent).')
+      }
+      if (eventFilter) await load(false)
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setScanReason(e.reason ?? '')
+        if (e.status === 429 || e.reason === 'rate_limited') {
+          setScanCooldownUntil(Date.now() + 8000)
+        }
+        if (e.message.toLowerCase().includes('expired')) {
+          setScanError('QR expiré. Demande au client de regénérer son QR.')
+        } else if (e.message.toLowerCase().includes('invalid')) {
+          setScanError('QR invalide. Re-scan nécessaire.')
+        } else {
+          setScanError(e.message)
+        }
+      } else {
+        setScanError('Erreur scan QR')
+      }
+    } finally {
+      setScanBusy(false)
+    }
+  }
+
+  const scanCooldownLeft = Math.max(0, Math.ceil((scanCooldownUntil - Date.now()) / 1000))
+  const readOnly = BLOCKED_REASONS.has(reason) || BLOCKED_REASONS.has(scanReason)
 
   const actions = (status: string, id: number) => {
     if (readOnly) return null
@@ -86,8 +166,43 @@ export default function OrdersQueue() {
     return null
   }
 
+  const scanIdentityVisible = useMemo(() => {
+    if (!scanResult) return false
+    return scanResult.identity_visible ?? scanResult.user_visible_to_staff
+  }, [scanResult])
+
   return (
     <Layout title="Orders Live">
+      <section style={{ ...cardStyle(), marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Scan Order Client QR (Mode C)</h3>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            style={{ minWidth: 360 }}
+            placeholder="tore://order?ot=... ou token ot"
+            value={scanValue}
+            onChange={(e) => setScanValue(e.target.value)}
+          />
+          <button onClick={() => void onScan()} disabled={scanBusy || readOnly || scanCooldownLeft > 0}>{scanCooldownLeft > 0 ? `Scan (${scanCooldownLeft}s)` : 'Scan'}</button>
+        </div>
+        {scanReason ? <InlineAlert tone="warning">{reasonLabel(scanReason)}</InlineAlert> : null}
+        {scanCooldownLeft > 0 ? <InlineAlert tone="warning">Trop de requêtes, réessaie dans {scanCooldownLeft}s.</InlineAlert> : null}
+        {scanError ? <InlineAlert tone={scanResult?.idempotent ? 'warning' : 'error'}>{scanError}</InlineAlert> : null}
+        {scanResult ? (
+          <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+            <div>
+              Résultat: <b>{scanResult.idempotent ? 'Déjà scanné' : 'Scan validé'}</b>
+            </div>
+            <div>
+              Order #{scanResult.order.id} — status backend: <b>{scanResult.order.status}</b>
+            </div>
+            <div>
+              Total: {((scanResult.order.total_cents || 0) / 100).toFixed(2)}€ • Items: {scanResult.order.items.map((i) => `${i.qty}x ${i.name_snapshot}`).join(', ')}
+            </div>
+            {scanIdentityVisible ? <div>Identité client: {scanResult.order.user_id || 'N/A'}</div> : <div>Identité client masquée (consentement requis).</div>}
+          </div>
+        ) : null}
+      </section>
+
       <div style={{ ...cardStyle(), marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <input placeholder="event_id" value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} />
         {STATUS_TABS.map((tab) => (
@@ -96,7 +211,7 @@ export default function OrdersQueue() {
         <button onClick={() => void load(false)} disabled={loading || !eventFilter}>Refresh</button>
       </div>
 
-      {readOnly ? <InlineAlert tone="warning">Actions désactivées ({reason}).</InlineAlert> : null}
+      {readOnly ? <InlineAlert tone="warning">Actions désactivées ({reason || scanReason}).</InlineAlert> : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       {!eventFilter ? <EmptyState title="Saisis un event_id" body="Le live orders nécessite un event_id." /> : null}
       {eventFilter && !loading && orders.length === 0 ? <EmptyState title="Aucune commande" /> : null}

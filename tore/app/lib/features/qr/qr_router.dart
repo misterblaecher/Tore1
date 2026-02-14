@@ -7,6 +7,7 @@ import '../menu_market/presentation/menu_screen.dart';
 import '../navigation/presentation/home_hub_screen.dart';
 import '../qr/presentation/qr_forbidden_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
+import '../qr/presentation/module_unavailable_screen.dart';
 import '../qr/qr_resolve_service.dart';
 import '../staff/presentation/bar_staff_screen.dart';
 
@@ -36,6 +37,17 @@ class QrRouterService {
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => QrForbiddenScreen(roleRequired: result.requiredRole ?? 'entry'),
+          ),
+        );
+        return;
+      }
+      if (result.reason == 'module_off' || result.reason == 'event_paused' || result.reason == 'event_closed') {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ModuleUnavailableScreen(
+              title: 'Module indisponible',
+              message: _reasonMessage(result.reason),
+            ),
           ),
         );
         return;

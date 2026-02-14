@@ -845,6 +845,41 @@ class AuditLog(Base):
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class BarPrivacySetting(Base):
+    __tablename__ = "bar_privacy_settings"
+    __table_args__ = (UniqueConstraint("bar_id", name="uq_bar_privacy_settings_bar"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    staff_identity_consent_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class AppUserPrivacySetting(Base):
+    __tablename__ = "app_user_privacy_settings"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_app_user_privacy_settings_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    show_identity_to_staff: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class OrderClientQrScan(Base):
+    __tablename__ = "order_client_qr_scans"
+    __table_args__ = (
+        UniqueConstraint("bar_id", "idempotency_key", name="uq_order_client_qr_scan_bar_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    staff_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class BattleSubmit(Base):
     __tablename__ = "battle_submits"
     __table_args__ = (

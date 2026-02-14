@@ -6,13 +6,24 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from models import Order
+from models import AppUserPrivacySetting, BarPrivacySetting, Order, OrderClientQrScan
 from partner_auth import current_identity as current_partner_identity
-from app.schemas.orders import CreateOrderIn, OrderOut, OrdersLiveOut, OrderStatusPatchIn
+from app.schemas.orders import (
+    CreateOrderIn,
+    OrderClientQrOut,
+    OrderClientQrScanIn,
+    OrderClientQrScanOut,
+    OrderOut,
+    OrdersLiveOut,
+    OrderStatusPatchIn,
+)
+from app.services.audit_service import write_audit_log
+from app.services.order_client_qr_service import decode_order_client_token, issue_order_client_token
 from app.services.orders_service import create_order, order_out, patch_order_status
 from app.services.authz_service import ensure_partner_role
 from app.services.rate_limit_service import enforce_rate_limit
 from app.services.p3_common import decode_cursor, encode_cursor, get_event_runtime_state
+from app.services.p3_common import ensure_event_action_allowed
 
 router = APIRouter()
 
@@ -29,6 +40,26 @@ def get_db() -> Iterator[Session]:
     from main import get_db as _get_db
 
     yield from _get_db()
+
+
+def _extract_client_qr_token(raw: str) -> str:
+    from app.services.qr_service import resolve_qr_payload
+
+    payload = resolve_qr_payload(raw)
+    if not payload.get("valid") or payload.get("type") != "order_client":
+        raise HTTPException(400, "Invalid order client QR")
+    token = str(payload.get("token") or "")
+    if not token:
+        raise HTTPException(400, "Invalid order client QR")
+    return token
+
+
+def _resolve_scan_token(payload: OrderClientQrScanIn) -> str:
+    if payload.ot:
+        return payload.ot.strip()
+    if payload.raw:
+        return _extract_client_qr_token(payload.raw)
+    raise HTTPException(400, "Missing client QR token")
 
 
 @router.post("/orders", response_model=OrderOut)
@@ -70,6 +101,108 @@ def create_order_route(
         idempotency_key=idem_key,
     )
     return order_out(order)
+
+
+@router.post("/orders/{order_id}/client-qr", response_model=OrderClientQrOut)
+def issue_client_order_qr(
+    order_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    from main import _extract_bearer_token, _resolve_app_user_from_token
+
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(401, "Missing token")
+    app_user = _resolve_app_user_from_token(raw, db)
+    if not app_user:
+        raise HTTPException(401, "Invalid token")
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.user_id != app_user.id:
+        raise HTTPException(403, "Forbidden")
+
+    issued = issue_order_client_token(order_id=order.id, user_id=app_user.id)
+    qr_raw = f"tore://order?ot={issued['token']}"
+    return {"order_id": order.id, "qr_raw": qr_raw, "expires_at": issued["expires_at"]}
+
+
+@router.post("/partner/portal/orders/scan-client-qr", response_model=OrderClientQrScanOut)
+def scan_client_order_qr(
+    payload: OrderClientQrScanIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    idem_key = payload.idempotency_key.strip()
+    existing = (
+        db.query(OrderClientQrScan)
+        .filter(OrderClientQrScan.bar_id == identity["bar_id"], OrderClientQrScan.idempotency_key == idem_key)
+        .first()
+    )
+    if existing:
+        order = db.get(Order, existing.order_id)
+        if not order:
+            raise HTTPException(404, "Order not found")
+        bar_settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == order.bar_id).first() if order.bar_id else None
+        user_settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == order.user_id).first() if order.user_id else None
+        visible = bool(bar_settings and user_settings and bar_settings.staff_identity_consent_required and user_settings.show_identity_to_staff)
+        return {
+            "idempotent": True,
+            "order": order_out(order),
+            "user_visible_to_staff": visible,
+            "identity_visible": visible,
+        }
+
+    decoded = decode_order_client_token(_resolve_scan_token(payload))
+    order = db.get(Order, int(decoded["oid"]))
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    if order.user_id != decoded["uid"]:
+        raise HTTPException(400, "Order QR does not match owner")
+    if order.event_id is not None:
+        ensure_event_action_allowed(db, order.event_id, "orders_enabled", write=True)
+
+    if order.status == "NEW":
+        order.status = "IN_PROGRESS"
+
+    stamp = OrderClientQrScan(
+        bar_id=identity["bar_id"],
+        order_id=order.id,
+        event_id=order.event_id,
+        staff_user_id=identity.get("user_id"),
+        idempotency_key=idem_key,
+    )
+    db.add(stamp)
+    db.add(order)
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity.get("user_id"),
+        actor_role=identity.get("role"),
+        action="orders.client_qr.scan",
+        entity_type="order",
+        entity_id=str(order.id),
+        event_id=order.event_id,
+        bar_id=identity.get("bar_id"),
+        payload={"idempotency_key": idem_key},
+    )
+    db.commit()
+    db.refresh(order)
+
+    bar_settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == order.bar_id).first() if order.bar_id else None
+    user_settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == order.user_id).first() if order.user_id else None
+    visible = bool(bar_settings and user_settings and bar_settings.staff_identity_consent_required and user_settings.show_identity_to_staff)
+    return {
+        "idempotent": False,
+        "order": order_out(order),
+        "user_visible_to_staff": visible,
+        "identity_visible": visible,
+    }
 
 
 @router.get("/orders/live", response_model=OrdersLiveOut)

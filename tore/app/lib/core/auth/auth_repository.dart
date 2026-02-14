@@ -51,6 +51,7 @@ class AuthRepository {
     String? addressText,
     bool? showAddress,
     bool? showAvatar,
+    bool? showIdentityToStaff,
   }) async {
     final payload = <String, dynamic>{
       if (displayName != null) 'display_name': displayName,
@@ -58,6 +59,7 @@ class AuthRepository {
       if (addressText != null) 'address_text': addressText,
       if (showAddress != null) 'show_address': showAddress,
       if (showAvatar != null) 'show_avatar': showAvatar,
+      if (showIdentityToStaff != null) 'show_identity_to_staff': showIdentityToStaff,
     };
 
     final r = await api.dio.patch(ApiEndpoints.authMe, data: payload);
