@@ -26,7 +26,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   String? _bannerReason;
   final _customCtrl = TextEditingController();
   int _amount = 100;
-  final Set<int> _historyIds = <int>{};
+  final Set<String> _historyIds = <String>{};
 
   @override
   void initState() {
