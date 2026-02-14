@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/app_context/app_context.dart';
 import 'package:tore/features/events/presentation/event_config_providers.dart';
+import 'package:tore/features/events/presentation/event_hub_screen.dart';
 import 'package:tore/features/menu_market/presentation/menu_screen.dart';
 import 'package:tore/features/navigation/presentation/polymarket_tab_screen.dart';
 import 'package:tore/features/navigation/presentation/profile_screen.dart';
@@ -94,6 +95,13 @@ class HomeHubScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+          if (hasEvent)
+            _ModuleCard(
+              icon: Icons.event_note_outlined,
+              title: 'Event Hub',
+              subtitle: 'Modules actifs de l’event',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: ctx.activeEventId!, eventName: ctx.activeEventName ?? 'Event #${ctx.activeEventId}'))),
             ),
           if (hasEvent && menuOn)
             _ModuleCard(

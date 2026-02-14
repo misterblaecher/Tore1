@@ -8,7 +8,7 @@ import '../../../core/qr/qr_parser.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
 import '../../../state.dart';
-import '../../events/presentation/event_landing_screen.dart';
+import '../../events/presentation/event_hub_screen.dart';
 import 'qr_scanner_screen.dart';
 
 class JoinEventScreen extends ConsumerStatefulWidget {
@@ -107,7 +107,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
       ref.read(appContextProvider.notifier).enterEvent(eventId: eventId, eventName: eventName, activeEventModules: modules);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => EventLandingScreen(eventId: eventId, eventName: eventName)),
+        MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: eventName)),
         (route) => route.isFirst,
       );
     } on DioException catch (e) {
@@ -130,7 +130,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
             ref.read(appContextProvider.notifier).enterEvent(eventId: eventId, eventName: eventName, activeEventModules: modules);
             if (!mounted) return;
             Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => EventLandingScreen(eventId: eventId, eventName: eventName)),
+              MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: eventName)),
               (route) => route.isFirst,
             );
             return;
@@ -183,7 +183,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
       ref.read(appContextProvider.notifier).enterEvent(eventId: eventId, eventName: eventName, activeEventModules: modules);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => EventLandingScreen(eventId: eventId, eventName: eventName)),
+        MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: eventName)),
         (route) => route.isFirst,
       );
     } catch (e) {
