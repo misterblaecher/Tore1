@@ -109,6 +109,17 @@ def _env_bool(key: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _cors_origins() -> list[str]:
+    raw = os.getenv("TORE_CORS_ORIGINS", "*")
+    values = [v.strip() for v in raw.split(",") if v.strip()]
+    return values or ["*"]
+
+
+def _should_bootstrap_on_startup() -> bool:
+    if engine.dialect.name == "sqlite":
+        return True
+    return _env_bool("TORE_AUTO_DB_BOOTSTRAP", default=False)
+
 
 def _ensure_orders_payment_columns() -> None:
     if engine.dialect.name != "sqlite":
@@ -1179,7 +1190,7 @@ app.include_router(ticker_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1188,7 +1199,10 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
-    ensure_seed()
+    if _should_bootstrap_on_startup():
+        ensure_seed()
+    else:
+        logging.info("Startup bootstrap disabled (expected in Postgres prod with Alembic migrations).")
 
 
 @app.get("/partner/portal/bar", response_model=PartnerBarOut)
@@ -2649,9 +2663,9 @@ def debug_auth_check(
 
 @app.post("/auth/guest", response_model=GuestOut)
 def auth_guest(payload: GuestIn):
-    Base.metadata.create_all(engine)
-    _ensure_orders_payment_columns()
-    _ensure_market_tick_columns()
+    if engine.dialect.name == "sqlite":
+        _ensure_orders_payment_columns()
+        _ensure_market_tick_columns()
     s = get_session()
     try:
         user_id = secrets.token_hex(16)
