@@ -68,6 +68,7 @@ from models import (
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
 from app.db.sqlite_compat import ensure_sqlite_compat
+from app.services.audit_service import write_audit_log
 
 
 # ---------------------------------------------------------------------
@@ -2671,10 +2672,18 @@ def auth_guest(payload: GuestIn):
 
 
 @app.get("/auth/me")
-def me(user: AppUser = Depends(get_current_user)):
+def me(
+    bar_id: Optional[int] = Query(default=None),
+    user: AppUser = Depends(get_current_user),
+):
     s = get_session()
     try:
         settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user.id).first()
+        bar_settings = (
+            s.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == bar_id).first()
+            if bar_id is not None
+            else None
+        )
         return {
             "id": user.id,
             "display_name": user.display_name,
@@ -2683,6 +2692,11 @@ def me(user: AppUser = Depends(get_current_user)):
             "show_address": user.show_address,
             "show_avatar": user.show_avatar,
             "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
+            "bar_show_identity_to_staff": (
+                bool(bar_settings and bar_settings.staff_identity_consent_required)
+                if bar_id is not None
+                else None
+            ),
         }
     finally:
         s.close()
@@ -2714,6 +2728,26 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             s.add(settings)
 
         s.add(u)
+
+        write_audit_log(
+            s,
+            actor_partner_id=None,
+            actor_role="user",
+            action="user.privacy.update",
+            entity_type="app_user",
+            entity_id=str(u.id),
+            event_id=None,
+            bar_id=None,
+            payload={
+                "show_identity_to_staff": (
+                    bool(payload.show_identity_to_staff)
+                    if payload.show_identity_to_staff is not None
+                    else None
+                ),
+                "show_address": payload.show_address,
+                "show_avatar": payload.show_avatar,
+            },
+        )
         s.commit()
 
         refreshed_settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()

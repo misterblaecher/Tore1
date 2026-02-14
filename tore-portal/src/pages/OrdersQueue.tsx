@@ -57,6 +57,7 @@ export default function OrdersQueue() {
   const [scanError, setScanError] = useState('')
   const [scanReason, setScanReason] = useState('')
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null)
+  const [scanCooldownUntil, setScanCooldownUntil] = useState<number>(0)
 
   const load = useCallback(async (append = false) => {
     if (!eventFilter) {
@@ -110,6 +111,7 @@ export default function OrdersQueue() {
   }
 
   const onScan = async () => {
+    if (Date.now() < scanCooldownUntil) return
     const ot = extractOt(scanValue)
     if (!ot) {
       setScanError('Token QR invalide. Colle un lien tore://order?ot=... ou un token ot brut.')
@@ -135,6 +137,9 @@ export default function OrdersQueue() {
     } catch (e) {
       if (e instanceof ApiError) {
         setScanReason(e.reason ?? '')
+        if (e.status === 429 || e.reason === 'rate_limited') {
+          setScanCooldownUntil(Date.now() + 8000)
+        }
         if (e.message.toLowerCase().includes('expired')) {
           setScanError('QR expiré. Demande au client de regénérer son QR.')
         } else if (e.message.toLowerCase().includes('invalid')) {
@@ -150,6 +155,7 @@ export default function OrdersQueue() {
     }
   }
 
+  const scanCooldownLeft = Math.max(0, Math.ceil((scanCooldownUntil - Date.now()) / 1000))
   const readOnly = BLOCKED_REASONS.has(reason) || BLOCKED_REASONS.has(scanReason)
 
   const actions = (status: string, id: number) => {
@@ -176,9 +182,10 @@ export default function OrdersQueue() {
             value={scanValue}
             onChange={(e) => setScanValue(e.target.value)}
           />
-          <button onClick={() => void onScan()} disabled={scanBusy || readOnly}>Scan</button>
+          <button onClick={() => void onScan()} disabled={scanBusy || readOnly || scanCooldownLeft > 0}>{scanCooldownLeft > 0 ? `Scan (${scanCooldownLeft}s)` : 'Scan'}</button>
         </div>
         {scanReason ? <InlineAlert tone="warning">{reasonLabel(scanReason)}</InlineAlert> : null}
+        {scanCooldownLeft > 0 ? <InlineAlert tone="warning">Trop de requêtes, réessaie dans {scanCooldownLeft}s.</InlineAlert> : null}
         {scanError ? <InlineAlert tone={scanResult?.idempotent ? 'warning' : 'error'}>{scanError}</InlineAlert> : null}
         {scanResult ? (
           <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>

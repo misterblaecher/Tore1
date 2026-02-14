@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../state.dart';
@@ -203,7 +204,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Expiration'),
+                  const Text('Expire dans'),
                   Text(
                     _isExpired ? 'Expiré' : '${_remaining}s',
                     style: TextStyle(
@@ -234,6 +235,22 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
               ),
             ],
             const SizedBox(height: 12),
+
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _qrRaw == null
+                  ? null
+                  : () async {
+                      await Clipboard.setData(ClipboardData(text: _qrRaw!));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Lien QR copié')),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.copy_all_outlined),
+              label: const Text('Copier le deeplink'),
+            ),
             ElevatedButton.icon(
               onPressed: (_loading || _isRateLimited) ? null : () => _issueQr(),
               icon: const Icon(Icons.refresh),

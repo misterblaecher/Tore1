@@ -102,16 +102,7 @@ class HomeHubScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 12),
-          _CardLink(
-            icon: Icons.local_bar_outlined,
-            title: 'Catalogue boissons',
-            subtitle: 'Bientôt : bières, cocktails, softs…',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Catalogue: à venir (V1.5)')),
-              );
-            },
-          ),
+
 
           const SizedBox(height: 20),
           if (ctx.hasActiveEvent) ...[

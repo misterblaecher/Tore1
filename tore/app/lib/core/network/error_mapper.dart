@@ -13,6 +13,10 @@ class ErrorMapper {
         return 'Accès révoqué. Contacte un manager.';
       case 'rate_limited':
         return 'Trop de requêtes, réessaie.';
+      case 'expired':
+      case 'invalid':
+      case 'invalid_qr':
+        return 'QR expiré.';
       default:
         return '';
     }

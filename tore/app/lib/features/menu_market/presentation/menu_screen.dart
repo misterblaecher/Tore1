@@ -15,7 +15,7 @@ import '../../../screens/admin_prices.dart';
 import '../../leaderboard/presentation/leaderboard_screen.dart';
 import '../../orders/presentation/order_qr_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
-import '../../qr/presentation/qr_feature_disabled_screen.dart';
+import '../../qr/presentation/module_unavailable_screen.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key, required this.eventId});
@@ -131,7 +131,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     );
 
     if (config != null && !config.menuEnabled) {
-      return const QrFeatureDisabledScreen(featureLabel: 'Menu');
+      return const ModuleUnavailableScreen(title: 'Menu indisponible', message: 'Ce module est désactivé pour cet event.');
     }
 
     // Si initState a chargé sans userId, on recharge une fois dès que le user arrive.

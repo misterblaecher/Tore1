@@ -63,8 +63,21 @@ class ProfileScreen extends ConsumerWidget {
                         title: const Text('Afficher mon avatar'),
                         onChanged: (v) async {
                           final repo = ref.read(authRepositoryProvider);
-                          await repo.patchMe(showAvatar: v);
-                          ref.invalidate(meProvider);
+                          try {
+                            await repo.patchMe(showAvatar: v);
+                            ref.invalidate(meProvider);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Préférence enregistrée')),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Erreur réseau, réessaie.')),
+                              );
+                            }
+                          }
                         },
                       ),
                       SwitchListTile.adaptive(
@@ -72,8 +85,21 @@ class ProfileScreen extends ConsumerWidget {
                         title: const Text('Afficher mon adresse'),
                         onChanged: (v) async {
                           final repo = ref.read(authRepositoryProvider);
-                          await repo.patchMe(showAddress: v);
-                          ref.invalidate(meProvider);
+                          try {
+                            await repo.patchMe(showAddress: v);
+                            ref.invalidate(meProvider);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Préférence enregistrée')),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Erreur réseau, réessaie.')),
+                              );
+                            }
+                          }
                         },
                       ),
                       SwitchListTile.adaptive(
@@ -82,8 +108,21 @@ class ProfileScreen extends ConsumerWidget {
                         subtitle: const Text('Visible seulement si le bar active aussi ce mode.'),
                         onChanged: (v) async {
                           final repo = ref.read(authRepositoryProvider);
-                          await repo.patchMe(showIdentityToStaff: v);
-                          ref.invalidate(meProvider);
+                          try {
+                            await repo.patchMe(showIdentityToStaff: v);
+                            ref.invalidate(meProvider);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Consentement enregistré')),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Erreur réseau, réessaie.')),
+                              );
+                            }
+                          }
                         },
                       ),
                     ],
