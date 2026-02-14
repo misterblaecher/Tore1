@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
-import '../../bars/presentation/bars_screen.dart';
-import '../../menu_market/presentation/menu_screen.dart';
-import '../../wallet/presentation/wallet_screen.dart';
-import '../../qr/presentation/qr_scanner_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
-import '../../events/presentation/create_event_screen.dart';
-import '../../events/presentation/qr_pack_screen.dart';
-import '../../reports/presentation/report_screen.dart';
-import '../../../shared/cache/offline_no_cache_exception.dart';
-import 'checkin_screen.dart';
+import '../../menu_market/presentation/menu_screen.dart';
+import '../../qr/presentation/qr_scanner_screen.dart';
+import '../../ticker/ticker_providers.dart';
+import '../../wallet/presentation/wallet_screen.dart';
+import 'polymarket_tab_screen.dart';
+import 'profile_screen.dart';
+import 'ticker_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -19,262 +17,161 @@ class HomeHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctx = ref.watch(appContextProvider);
-    final configAsync = ctx.hasActiveEvent
-        ? ref.watch(eventConfigProvider(ctx.activeEventId!))
-        : null;
-    final config = configAsync?.maybeWhen(
-      data: (value) => value,
-      orElse: () => null,
-    );
-    final configOfflineLimited = configAsync?.maybeWhen(
-          error: (err, _) => err is OfflineNoCacheException,
-          orElse: () => false,
-        ) ??
-        false;
+    final hasEvent = ctx.hasActiveEvent;
+    final configAsync = hasEvent ? ref.watch(eventConfigProvider(ctx.activeEventId!)) : null;
+    final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
 
-    final menuEnabled = configOfflineLimited ? true : (config?.menuEnabled ?? true);
-    final walletEnabled = configOfflineLimited ? false : (config?.walletEnabled ?? true);
-    final entryEnabled = configOfflineLimited ? false : (config?.entryEnabled ?? false);
-    final checkinEnabled = configOfflineLimited ? false : (config?.checkinEnabled ?? false);
-    final reportEnabled = configOfflineLimited ? false : (config?.reportEnabled ?? false);
-    final isAdmin = (config?.role ?? '') == 'admin';
-
+    final menuOn = config?.menuEnabled ?? false;
+    final walletOn = config?.walletEnabled ?? false;
+    final polymarketOn = config?.polymarketEnabled ?? false;
+    final tickerOn = menuOn || walletOn || polymarketOn;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TORÈ'),
+        title: const Text('Home Hub'),
         actions: [
+          if (hasEvent && tickerOn)
+            IconButton(
+              tooltip: 'Ticker',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TickerScreen())),
+              icon: const Icon(Icons.toll_outlined),
+            ),
           IconButton(
-            tooltip: 'Scanner QR',
-            icon: const Icon(Icons.qr_code_scanner_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-              );
-            },
+            tooltip: 'Profil',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+        icon: const Icon(Icons.qr_code_scanner_outlined),
+        label: const Text('Scanner QR'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _CardLink(
-            icon: Icons.qr_code_scanner_outlined,
-            title: 'Scanner',
-            subtitle: 'Scanner un QR pour rejoindre un event, menu ou entrée',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-              );
-            },
+          _EventHeader(
+            title: hasEvent ? (ctx.activeEventName ?? 'Event #${ctx.activeEventId}') : 'Aucun event actif',
+            live: hasEvent,
+            onLeave: hasEvent
+                ? () async {
+                    final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Quitter l’event ?'),
+                            content: const Text('Tu vas revenir en mode libre.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
+                            ],
+                          ),
+                        ) ??
+                        false;
+                    if (ok) ref.read(appContextProvider.notifier).leaveEvent();
+                  }
+                : null,
           ),
-          const SizedBox(height: 12),
-          _CardLink(
-            icon: Icons.event_available_outlined,
-            title: 'Créer un event',
-            subtitle: 'Nouveau event + QR Pack officiel',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const CreateEventScreen()),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _CardLink(
-            icon: Icons.near_me_outlined,
-            title: 'Bars à proximité',
-            subtitle: 'Trouver des bars autour de toi',
-            onTap: () {
-              // V1: on réutilise l’explorer (BarsScreen). Nearby arrive côté backend.
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BarsScreen()),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _CardLink(
-            icon: Icons.map_outlined,
-            title: 'Tous les bars',
-            subtitle: 'Par ville / recherche',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BarsScreen()),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-
-
-          const SizedBox(height: 20),
-          if (ctx.hasActiveEvent) ...[
-            Text(
-              'Mode Event',
-              style: Theme.of(context).textTheme.titleMedium,
+          const SizedBox(height: 14),
+          if (!hasEvent)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(14),
+                child: Text('Scanne un QR join_event pour activer ton event.'),
+              ),
             ),
-            const SizedBox(height: 8),
-            if (configOfflineLimited) ...[
-              const _LimitedModeNotice(),
-              const SizedBox(height: 12),
-            ],
-            _CardLink(
-              icon: Icons.qr_code_2_outlined,
-              title: 'QR Pack',
-              subtitle: 'Accéder aux QR officiels',
+          if (hasEvent && menuOn)
+            _ModuleCard(
+              icon: Icons.restaurant_menu_outlined,
+              title: 'Menu',
+              subtitle: 'Commander dans ton event',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MenuScreen(eventId: ctx.activeEventId!))),
+            ),
+          if (hasEvent && walletOn)
+            _ModuleCard(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Wallet',
+              subtitle: 'Solde, historique et My Wallet QR',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: ctx.activeEventId!))),
+            ),
+          if (hasEvent && polymarketOn)
+            _ModuleCard(
+              icon: Icons.casino_outlined,
+              title: 'Polymarket',
+              subtitle: 'Markets et positions',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PolymarketTabScreen())),
+            ),
+          if (hasEvent && tickerOn)
+            _ModuleCard(
+              icon: Icons.toll_outlined,
+              title: 'Ticker',
+              subtitle: 'Activité live',
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => QrPackScreen(eventId: ctx.activeEventId!),
-                  ),
-                );
+                final eventId = ctx.activeEventId;
+                if (eventId != null) {
+                  ref.read(tickerControllerProvider(eventId).notifier).refresh();
+                }
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TickerScreen()));
               },
             ),
-            const SizedBox(height: 12),
-            if (reportEnabled && isAdmin) ...[
-              _CardLink(
-                icon: Icons.insert_chart_outlined,
-                title: 'Rapport soirée',
-                subtitle: 'Bilan ventes, coûts et export',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ReportScreen(eventId: ctx.activeEventId!),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (menuEnabled) ...[
-              _CardLink(
-                icon: Icons.restaurant_menu_outlined,
-                title: 'Menu Event',
-                subtitle: 'Commander dans l’event actif',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => MenuScreen(eventId: ctx.activeEventId!)),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (walletEnabled) ...[
-              _CardLink(
-                icon: Icons.account_balance_wallet_outlined,
-                title: 'Wallet / Tickets',
-                subtitle: 'Solde tickets + historique',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => WalletScreen(eventId: ctx.activeEventId!)),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (entryEnabled) ...[
-              _CardLink(
-                icon: Icons.qr_code_scanner_outlined,
-                title: 'Entrée',
-                subtitle: 'Scanner des accès pour l’event',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (checkinEnabled)
-              _CardLink(
-                icon: Icons.qr_code_scanner_outlined,
-                title: 'Check-in',
-                subtitle: 'Ajouter une conso',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const CheckinScreen()),
-                  );
-                },
-              ),
-          ] else ...[
-            Text(
-              'Mode Libre',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Sélectionne un bar puis un event pour accéder au menu et au wallet.',
-            ),
-          ],
         ],
       ),
     );
   }
 }
 
-class _CardLink extends StatelessWidget {
+class _EventHeader extends StatelessWidget {
+  const _EventHeader({required this.title, required this.live, this.onLeave});
+
+  final String title;
+  final bool live;
+  final VoidCallback? onLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
+                if (live)
+                  const Chip(
+                    label: Text('LIVE'),
+                    avatar: Icon(Icons.circle, size: 12, color: Colors.greenAccent),
+                  ),
+              ],
+            ),
+            if (onLeave != null) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(onPressed: onLeave, icon: const Icon(Icons.logout), label: const Text('Quitter l’event')),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModuleCard extends StatelessWidget {
+  const _ModuleCard({required this.icon, required this.title, required this.subtitle, required this.onTap});
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
 
-  const _CardLink({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Icon(icon),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
-                    Text(subtitle),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LimitedModeNotice extends StatelessWidget {
-  const _LimitedModeNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.blueGrey.shade100,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Mode limité : configuration indisponible hors-ligne.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }

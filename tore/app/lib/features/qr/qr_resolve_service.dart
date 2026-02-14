@@ -9,6 +9,7 @@ class QrResolveResult {
   final int? eventId;
   final int? barId;
   final String? token;
+  final int? orderId;
   final String? routeFront;
   final String? reason;
   final String? requiredRole;
@@ -20,6 +21,7 @@ class QrResolveResult {
     required this.eventId,
     required this.barId,
     required this.token,
+    required this.orderId,
     required this.routeFront,
     required this.reason,
     required this.requiredRole,
@@ -33,6 +35,7 @@ class QrResolveResult {
       eventId: json['event_id'] is num ? (json['event_id'] as num).toInt() : null,
       barId: json['bar_id'] is num ? (json['bar_id'] as num).toInt() : null,
       token: json['token']?.toString(),
+      orderId: json['order_id'] is num ? (json['order_id'] as num).toInt() : null,
       routeFront: json['route_front']?.toString(),
       reason: json['reason']?.toString(),
       requiredRole: json['required_role']?.toString(),

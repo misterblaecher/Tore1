@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_context/app_context.dart';
-import 'features/events/presentation/event_config_providers.dart';
 import 'features/navigation/presentation/home_hub_screen.dart';
-import 'features/navigation/presentation/polymarket_tab_screen.dart';
-import 'features/navigation/presentation/ticker_screen.dart';
 import 'features/navigation/presentation/profile_screen.dart';
 import 'features/qr/presentation/qr_scanner_screen.dart';
 
@@ -20,8 +17,6 @@ class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
 
   final _homeNavKey = GlobalKey<NavigatorState>();
-  final _tickerNavKey = GlobalKey<NavigatorState>();
-  final _polymarketNavKey = GlobalKey<NavigatorState>();
   final _profileNavKey = GlobalKey<NavigatorState>();
 
   Widget _tabNavigator(GlobalKey<NavigatorState> key, Widget root) {
@@ -31,25 +26,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(appContextInitProvider);
-    final ctx = ref.watch(appContextProvider);
-    final configAsync = ctx.hasActiveEvent ? ref.watch(eventConfigProvider(ctx.activeEventId!)) : null;
-    final showTicker = configAsync?.maybeWhen(
-          data: (cfg) => cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
-          orElse: () => true,
-        ) ??
-        true;
 
     final tabs = <Widget>[
       _tabNavigator(_homeNavKey, const HomeHubScreen()),
-      if (showTicker) _tabNavigator(_tickerNavKey, const TickerScreen()),
-      _tabNavigator(_polymarketNavKey, const PolymarketTabScreen()),
       _tabNavigator(_profileNavKey, const ProfileScreen()),
     ];
 
     final entries = <({IconData icon, String label})>[
       (icon: Icons.home_outlined, label: 'Home'),
-      if (showTicker) (icon: Icons.toll_outlined, label: 'Ticker'),
-      (icon: Icons.casino_outlined, label: 'Polymarket'),
       (icon: Icons.person_outline, label: 'Profil'),
     ];
     if (_index >= tabs.length) _index = 0;

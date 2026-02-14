@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_shell.dart';
+import 'features/auth/presentation/welcome_screen.dart';
 import 'theme/tore_theme.dart';
 import 'state.dart';
 
@@ -16,8 +17,7 @@ class ToreApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Boot = garantir une session guest + récupérer le user.
-    final boot = ref.watch(meProvider);
+    final boot = ref.watch(appBootProvider);
 
     return MaterialApp(
       title: 'TORÈ',
@@ -28,7 +28,7 @@ class ToreApp extends ConsumerWidget {
       home: boot.when(
         loading: () => const _Splash(),
         error: (e, _) => _BootError(error: e.toString()),
-        data: (_) => const AppShell(),
+        data: (state) => state.status == AppBootStatus.needsWelcome ? const WelcomeScreen() : const AppShell(),
       ),
     );
   }
@@ -71,7 +71,7 @@ class _BootErrorBody extends ConsumerWidget {
               Text('Erreur démarrage: $error', textAlign: TextAlign.center),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: () => ref.invalidate(meProvider),
+                onPressed: () => ref.invalidate(appBootProvider),
                 child: const Text('Réessayer'),
               ),
             ],

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5,18 +7,21 @@ const _kLastBarId = 'ctx_last_bar_id';
 const _kLastBarName = 'ctx_last_bar_name';
 const _kLastEventId = 'ctx_last_event_id';
 const _kLastEventName = 'ctx_last_event_name';
+const _kLastEventModules = 'ctx_last_event_modules';
 
 class AppContextState {
   final int? selectedBarId;
   final String? selectedBarName;
   final int? activeEventId;
   final String? activeEventName;
+  final Map<String, bool>? activeEventModules;
 
   const AppContextState({
     this.selectedBarId,
     this.selectedBarName,
     this.activeEventId,
     this.activeEventName,
+    this.activeEventModules,
   });
 
   bool get hasActiveEvent => activeEventId != null;
@@ -26,6 +31,7 @@ class AppContextState {
     String? selectedBarName,
     int? activeEventId,
     String? activeEventName,
+    Map<String, bool>? activeEventModules,
     bool clearEvent = false,
     bool clearBar = false,
   }) {
@@ -34,6 +40,7 @@ class AppContextState {
       selectedBarName: clearBar ? null : (selectedBarName ?? this.selectedBarName),
       activeEventId: clearEvent ? null : (activeEventId ?? this.activeEventId),
       activeEventName: clearEvent ? null : (activeEventName ?? this.activeEventName),
+      activeEventModules: clearEvent ? null : (activeEventModules ?? this.activeEventModules),
     );
   }
 }
@@ -55,12 +62,25 @@ class AppContextController extends StateNotifier<AppContextState> {
     final barName = prefs.getString(_kLastBarName);
     final eventId = prefs.getInt(_kLastEventId);
     final eventName = prefs.getString(_kLastEventName);
+    final eventModulesRaw = prefs.getString(_kLastEventModules);
+    Map<String, bool>? eventModules;
+    if (eventModulesRaw != null && eventModulesRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(eventModulesRaw);
+        if (decoded is Map) {
+          eventModules = decoded.map((key, value) => MapEntry(key.toString(), value == true));
+        }
+      } catch (_) {
+        eventModules = null;
+      }
+    }
 
     state = state.copyWith(
       selectedBarId: barId,
       selectedBarName: barName,
       activeEventId: eventId,
       activeEventName: eventName,
+      activeEventModules: eventModules,
     );
   }
 
@@ -70,16 +90,33 @@ class AppContextController extends StateNotifier<AppContextState> {
     _prefs?.setString(_kLastBarName, barName);
   }
 
-  void enterEvent({required int eventId, required String eventName}) {
-    state = state.copyWith(activeEventId: eventId, activeEventName: eventName);
+  void enterEvent({
+    required int eventId,
+    required String eventName,
+    Map<String, bool>? activeEventModules,
+  }) {
+    state = state.copyWith(
+      activeEventId: eventId,
+      activeEventName: eventName,
+      activeEventModules: activeEventModules,
+    );
     _prefs?.setInt(_kLastEventId, eventId);
     _prefs?.setString(_kLastEventName, eventName);
+    if (activeEventModules != null) {
+      _prefs?.setString(_kLastEventModules, jsonEncode(activeEventModules));
+    }
+  }
+
+  void setActiveEventModules(Map<String, bool> modules) {
+    state = state.copyWith(activeEventModules: modules);
+    _prefs?.setString(_kLastEventModules, jsonEncode(modules));
   }
 
   void leaveEvent() {
     state = state.copyWith(clearEvent: true);
     _prefs?.remove(_kLastEventId);
     _prefs?.remove(_kLastEventName);
+    _prefs?.remove(_kLastEventModules);
   }
 
   void clearAll() {
@@ -88,6 +125,7 @@ class AppContextController extends StateNotifier<AppContextState> {
     _prefs?.remove(_kLastBarName);
     _prefs?.remove(_kLastEventId);
     _prefs?.remove(_kLastEventName);
+    _prefs?.remove(_kLastEventModules);
   }
 }
 

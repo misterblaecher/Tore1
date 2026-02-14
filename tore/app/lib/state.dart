@@ -5,6 +5,13 @@ import 'core/auth/auth_models.dart';
 import 'core/network/providers.dart';
 import 'shared/cache/cache_providers.dart';
 
+enum AppBootStatus { needsWelcome, ready }
+
+class AppBootState {
+  final AppBootStatus status;
+  const AppBootState(this.status);
+}
+
 final apiProvider = Provider<Api>((ref) {
   final client = ref.watch(apiClientProvider);
   final cache = ref.watch(cacheStoreProvider);
@@ -14,6 +21,16 @@ final apiProvider = Provider<Api>((ref) {
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   return AuthRepository(apiClient);
+});
+
+final appBootProvider = FutureProvider<AppBootState>((ref) async {
+  final auth = ref.read(authRepositoryProvider);
+  final token = await auth.api.tokenStorage.readToken();
+  if (token == null || token.isEmpty) {
+    return const AppBootState(AppBootStatus.needsWelcome);
+  }
+  await auth.ensureGuestSession();
+  return const AppBootState(AppBootStatus.ready);
 });
 
 /// ✅ Le user "connecté" (guest) récupéré depuis /auth/me
