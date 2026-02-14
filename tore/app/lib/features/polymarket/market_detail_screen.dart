@@ -136,7 +136,8 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final readOnly = isReadOnly(ref);
-    final writeBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: _writeBlocked);
+    final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: _writeBlocked);
     if (_loading) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: CircularProgressIndicator()));
     final m = _market;
     if (m == null) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: Text('Introuvable')));
@@ -158,7 +159,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: ServiceLimitedBanner(
-                  message: writeBlockedMessage(readOnly: readOnly, runtimeReason: _bannerReason),
+                  message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: _bannerReason),
                 ),
               ),
             const SizedBox(height: 12),

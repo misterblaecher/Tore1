@@ -9,6 +9,7 @@ import 'features/navigation/presentation/profile_screen.dart';
 import 'features/navigation/presentation/ticker_screen.dart';
 import 'features/qr/presentation/qr_scanner_screen.dart';
 import 'shared/utils/write_gate.dart';
+import 'shared/widgets/network_banner.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -33,7 +34,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     ref.watch(appContextInitProvider);
     final appCtx = ref.watch(appContextProvider);
-    final readOnly = isReadOnly(ref);
+    final canScanQr = canWrite(ref, intent: WriteIntent.critical);
 
     final eventId = appCtx.activeEventId;
     final eventConfig = eventId != null ? ref.watch(eventConfigProvider(eventId)) : null;
@@ -83,15 +84,22 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return Scaffold(
       body: SafeArea(
-        child: IndexedStack(
-          index: _index,
-          children: [for (final tab in tabs) _tabNavigator(tab.key, tab.root)],
+        child: Column(
+          children: [
+            const ToreNetworkBanner(),
+            Expanded(
+              child: IndexedStack(
+                index: _index,
+                children: [for (final tab in tabs) _tabNavigator(tab.key, tab.root)],
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        onPressed: readOnly ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
-        tooltip: readOnly ? readOnlyModeReasonMessage : 'Scanner QR',
+        onPressed: canScanQr ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())) : null,
+        tooltip: canScanQr ? 'Scanner QR' : (writeDisabledReason(ref, intent: WriteIntent.critical) ?? 'Scanner QR indisponible'),
         child: const Icon(Icons.qr_code_scanner_outlined),
       ),
       bottomNavigationBar: BottomAppBar(

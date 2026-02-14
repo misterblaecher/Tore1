@@ -12,7 +12,6 @@ import 'package:tore/features/wallet/presentation/wallet_screen.dart';
 import 'package:tore/state.dart';
 import 'package:tore/ui/components/components.dart';
 import 'package:tore/shared/utils/write_gate.dart';
-import 'package:tore/shared/widgets/service_limited_banner.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -26,6 +25,7 @@ class HomeHubScreen extends ConsumerWidget {
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
     final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
     final readOnly = isReadOnly(ref);
+    final canScanQr = canWrite(ref, intent: WriteIntent.critical);
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -49,18 +49,13 @@ class HomeHubScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: readOnly ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+        onPressed: canScanQr ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())) : null,
         icon: const Icon(Icons.qr_code_scanner_outlined),
         label: const Text('Scanner QR'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (readOnly)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: ServiceLimitedBanner(message: readOnlyModeReasonMessage),
-            ),
           _EventHeader(
             title: hasEvent ? (ctx.activeEventName ?? 'Event #${ctx.activeEventId}') : 'Aucun event actif',
             status: hasEvent ? eventState : 'OFF',

@@ -7,9 +7,9 @@ class HealthRepository {
   HealthRepository(this.api);
 
   Future<bool> ping() async {
-    // Dans ton backend: /docs répond 200, /health et / sont 404
+    // Endpoint santé backend
     try {
-      final r = await api.dio.get('/docs');
+      final r = await api.dio.get('/healthz');
       final code = r.statusCode ?? 0;
       return code >= 200 && code < 300;
     } on DioException {

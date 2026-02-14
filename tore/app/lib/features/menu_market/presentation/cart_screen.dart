@@ -20,13 +20,11 @@ class CartScreen extends ConsumerStatefulWidget {
     required this.eventId,
     required this.tickets,
     required this.eventState,
-    required this.isOffline,
   });
 
   final int eventId;
   final int? tickets;
   final String eventState;
-  final bool isOffline;
 
   @override
   ConsumerState<CartScreen> createState() => _CartScreenState();
@@ -42,10 +40,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final userId = ref.watch(userIdProvider);
     final runtimeWriteBlocked = isWriteBlockedByEventState(widget.eventState);
     final readOnly = isReadOnly(ref);
-    final writeBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: runtimeWriteBlocked);
+    final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeWriteBlocked);
     final insufficientBalance = widget.tickets != null && cart.totalTickets > widget.tickets!;
     final canConfirm = !cart.isEmpty &&
-        !widget.isOffline &&
         !writeBlocked &&
         !insufficientBalance &&
         userId != null &&
@@ -57,15 +55,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            if (widget.isOffline)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: ServiceLimitedBanner(message: 'Hors-ligne : confirmation indisponible.'),
-              ),
             if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, runtimeState: widget.eventState)),
+                child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: widget.eventState)),
               ),
             if (insufficientBalance)
               const Padding(
