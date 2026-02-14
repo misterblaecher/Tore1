@@ -33,6 +33,11 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
     super.dispose();
   }
 
+  String _maskedRaw(String raw) {
+    if (raw.length <= 10) return raw;
+    return '${raw.substring(0, 6)}…${raw.substring(raw.length - 4)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,11 +52,13 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
               const SizedBox(height: 8),
               Text('Code: ${widget.reasonCode}', style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 12),
-              Text(
-                widget.raw.isEmpty ? '(aucun contenu)' : widget.raw,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 18),
+              Text('Raw (masqué): ${_maskedRaw(widget.raw)}'),
+              const SizedBox(height: 12),
+              const Text('Suggestions:'),
+              const Text('• Vérifie que le QR commence par tore://'),
+              const Text('• Vérifie si le QR appartient au bon module/event'),
+              const Text('• Demande un nouveau QR si nécessaire'),
+              const SizedBox(height: 16),
               TextField(
                 controller: _manualController,
                 decoration: const InputDecoration(
@@ -59,9 +66,9 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
                   hintText: 'Ex: tore://join_event?event_id=12',
                 ),
               ),
-              const SizedBox(height: 18),
+              const Spacer(),
               ToreCTA(
-                label: 'Copier',
+                label: 'Copier raw',
                 style: ToreCTAStyle.secondary,
                 onPressed: widget.raw.isEmpty
                     ? null
@@ -75,7 +82,7 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
               ),
               const SizedBox(height: 10),
               ToreCTA(
-                label: 'Retry scan',
+                label: 'Rescan',
                 style: ToreCTAStyle.secondary,
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -86,7 +93,7 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
               ),
               const SizedBox(height: 10),
               ToreCTA(
-                label: 'Retour home',
+                label: 'Home',
                 style: ToreCTAStyle.secondary,
                 onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
               ),

@@ -25,7 +25,6 @@ class HomeHubScreen extends ConsumerWidget {
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
     final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
     final readOnly = isReadOnly(ref);
-    final canScanQr = canWrite(ref, intent: WriteIntent.critical);
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -49,7 +48,7 @@ class HomeHubScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: canScanQr ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())) : null,
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
         icon: const Icon(Icons.qr_code_scanner_outlined),
         label: const Text('Scanner QR'),
       ),

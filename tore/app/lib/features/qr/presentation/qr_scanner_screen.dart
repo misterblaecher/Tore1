@@ -1,14 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../qr_router.dart';
 
+enum QrScannerMode { route, pickRaw }
+
 class QrScannerScreen extends ConsumerStatefulWidget {
-  const QrScannerScreen({super.key});
+  const QrScannerScreen({super.key, this.mode = QrScannerMode.route});
+
+  final QrScannerMode mode;
 
   @override
   ConsumerState<QrScannerScreen> createState() => _QrScannerScreenState();
@@ -22,7 +26,11 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
   bool _handling = false;
   bool _torchOn = false;
+  int _failedScans = 0;
+  String? _lastRaw;
+  DateTime? _lastHandledAt;
   QrRouteOutcome? _lastOutcome;
+  final List<String> _microLog = [];
 
   @override
   void dispose() {
@@ -30,12 +38,24 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     super.dispose();
   }
 
-  Future<void> _handleBarcode(BarcodeCapture capture) async {
-    if (_handling) return;
-    final raw = capture.barcodes
-        .map((b) => b.rawValue)
-        .firstWhere((v) => v != null && v.trim().isNotEmpty, orElse: () => null);
-    if (raw == null) return;
+  bool _isCooldownHit(String raw) {
+    final now = DateTime.now();
+    final isSame = _lastRaw == raw;
+    final isFast = _lastHandledAt != null && now.difference(_lastHandledAt!).inMilliseconds < 800;
+    _lastRaw = raw;
+    _lastHandledAt = now;
+    return isSame && isFast;
+  }
+
+  Future<void> _handleDetectedRaw(String raw) async {
+    if (_handling || _isCooldownHit(raw)) return;
+
+    if (widget.mode == QrScannerMode.pickRaw) {
+      await HapticFeedback.selectionClick();
+      if (!mounted) return;
+      Navigator.of(context).pop(raw.trim());
+      return;
+    }
 
     setState(() => _handling = true);
     await _controller.stop();
@@ -46,18 +66,34 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
       raw: raw,
       onOutcome: (outcome) {
         if (!mounted) return;
-        setState(() => _lastOutcome = outcome);
+        final ts = TimeOfDay.now().format(context);
+        _microLog.insert(0, '$ts · ${outcome.label}');
+        if (_microLog.length > 3) {
+          _microLog.removeRange(3, _microLog.length);
+        }
         if (outcome.status == QrRouteStatus.success) {
+          _failedScans = 0;
           HapticFeedback.lightImpact();
+          SystemSound.play(SystemSoundType.click);
         } else {
+          _failedScans += 1;
           HapticFeedback.mediumImpact();
         }
+        setState(() => _lastOutcome = outcome);
       },
     );
 
     if (!mounted) return;
     setState(() => _handling = false);
     unawaited(_controller.start());
+  }
+
+  Future<void> _handleBarcode(BarcodeCapture capture) async {
+    final raw = capture.barcodes
+        .map((b) => b.rawValue)
+        .firstWhere((v) => v != null && v.trim().isNotEmpty, orElse: () => null);
+    if (raw == null) return;
+    await _handleDetectedRaw(raw);
   }
 
   Future<void> _openManualInput() async {
@@ -84,25 +120,15 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     );
 
     if (!mounted || manual == null || manual.isEmpty) return;
-
-    setState(() => _handling = true);
-    await _controller.stop();
-    await ref.read(qrRouterServiceProvider).route(
-      context: context,
-      raw: manual,
-      onOutcome: (outcome) {
-        if (!mounted) return;
-        setState(() => _lastOutcome = outcome);
-      },
-    );
-    if (!mounted) return;
-    setState(() => _handling = false);
-    unawaited(_controller.start());
+    await _handleDetectedRaw(manual);
   }
 
   @override
   Widget build(BuildContext context) {
+    final suggestTorch = !_torchOn && _failedScans >= 3;
+
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -116,15 +142,22 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               return Center(child: Text(msg, textAlign: TextAlign.center));
             },
           ),
+          Center(
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70, width: 3),
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  IconButton.filledTonal(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
+                  IconButton.filledTonal(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
                   const Spacer(),
                   IconButton.filledTonal(
                     onPressed: () async {
@@ -156,25 +189,37 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_handling)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 10),
-                        child: CircularProgressIndicator(),
+                    if (_handling) const Padding(padding: EdgeInsets.only(bottom: 10), child: CircularProgressIndicator()),
+                    if (suggestTorch)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.9), borderRadius: BorderRadius.circular(10)),
+                        child: const Text('Luminosité faible détectée, active la lampe.'),
                       ),
                     Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text('Scanne un QR TORÈ', textAlign: TextAlign.center),
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(10)),
+                      child: const Text('Scanner QR universel TORÈ', textAlign: TextAlign.center),
                     ),
                     const SizedBox(height: 10),
                     TextButton.icon(
                       onPressed: _openManualInput,
                       icon: const Icon(Icons.keyboard_alt_outlined),
-                      label: const Text('Saisie manuelle'),
+                      label: const Text('Input manuel'),
                     ),
+                    if (_microLog.isNotEmpty)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(10)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [for (final line in _microLog) Text(line, style: const TextStyle(fontSize: 12))],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -198,11 +243,6 @@ class _ScanFeedbackBanner extends StatelessWidget {
       QrRouteStatus.denied => Colors.orangeAccent,
       QrRouteStatus.unknown => Colors.redAccent,
     };
-    final label = switch (outcome.status) {
-      QrRouteStatus.success => 'OK',
-      QrRouteStatus.denied => 'REFUS',
-      QrRouteStatus.unknown => 'INCONNU',
-    };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -211,14 +251,7 @@ class _ScanFeedbackBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.8)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, color: color, size: 10),
-          const SizedBox(width: 8),
-          Text('$label · ${outcome.label}', style: const TextStyle(fontWeight: FontWeight.w700)),
-        ],
-      ),
+      child: Text(outcome.label, style: const TextStyle(fontWeight: FontWeight.w700)),
     );
   }
 }

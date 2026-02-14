@@ -2,9 +2,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/network/error_mapper.dart';
+import '../../qr/presentation/qr_scanner_screen.dart';
 import '../data/entry_service.dart';
 
 class EntryModeScreen extends ConsumerStatefulWidget {
@@ -126,7 +126,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
   Future<void> _openScanner() async {
     final raw = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const _EntryScannerScreen()),
+      MaterialPageRoute(builder: (_) => const QrScannerScreen(mode: QrScannerMode.pickRaw)),
     );
     if (raw == null || raw.isEmpty) return;
     await _submitToken(raw);
@@ -222,57 +222,4 @@ class _ScanResult {
   final String status;
   final String reason;
   final DateTime at;
-}
-
-class _EntryScannerScreen extends StatefulWidget {
-  const _EntryScannerScreen();
-
-  @override
-  State<_EntryScannerScreen> createState() => _EntryScannerScreenState();
-}
-
-class _EntryScannerScreenState extends State<_EntryScannerScreen> {
-  final MobileScannerController _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    autoStart: true,
-  );
-
-  bool _locked = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onDetect(BarcodeCapture capture) {
-    if (_locked) return;
-    final raw = capture.barcodes
-        .map((b) => b.rawValue)
-        .firstWhere((v) => v != null && v.trim().isNotEmpty, orElse: () => null);
-    if (raw == null) return;
-    _locked = true;
-    Navigator.of(context).pop(raw.trim());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          MobileScanner(controller: _controller, onDetect: _onDetect),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: IconButton.filledTonal(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
