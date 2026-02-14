@@ -151,30 +151,29 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                        Text('My Wallet QR', style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: QrImageView(
-                            data: walletQrDeepLink,
-                            size: 170,
-                          ),
+                      Text('My Wallet QR', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: QrImageView(
+                          data: walletQrDeepLink,
+                          size: 170,
                         ),
-                        const SizedBox(height: 8),
-                        SelectableText(walletQrDeepLink, style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 8),
-                        ToreCTA(
-                          label: 'Copy',
-                          style: ToreCTAStyle.secondary,
-                          onPressed: () async {
-                            await Clipboard.setData(ClipboardData(text: walletQrDeepLink));
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('QR link copié')),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(walletQrDeepLink, style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 8),
+                      ToreCTA(
+                        label: 'Copy',
+                        style: ToreCTAStyle.secondary,
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: walletQrDeepLink));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('QR link copié')),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
                 if (kDebugMode)
@@ -239,12 +238,24 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                               idempotencyKey: 'gift-${widget.eventId}-$userId-$toUser-$amount',
                             );
                             _refresh();
-                            ref.invalidate(walletHistoryProvider(WalletHistoryArgs(eventId: widget.eventId, userId: userId)));
+                            ref.invalidate(
+                              walletHistoryProvider(
+                                WalletHistoryArgs(eventId: widget.eventId, userId: userId),
+                              ),
+                            );
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gift envoyé')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Gift envoyé')),
+                            );
                           } catch (e) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e))));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e),
+                                ),
+                              ),
+                            );
                           }
                         },
                 ),
