@@ -24,7 +24,6 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   bool _initialLoading = true;
   bool _hasError = false;
   String? _error;
-  String? _errorKind;
   String _scope = 'global';
   String _status = 'live';
   final Set<int> _seenIds = <int>{};
@@ -48,7 +47,6 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       _initialLoading = true;
       _hasError = false;
       _error = null;
-      _errorKind = null;
       _nextCursor = null;
       _items = [];
       _seenIds.clear();
@@ -89,18 +87,11 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       setState(() {
         _hasError = true;
         _error = ErrorMapper.message(e);
-        _errorKind = _resolveErrorKind(e);
         _initialLoading = false;
       });
     } finally {
       _loading = false;
     }
-  }
-
-  String _resolveErrorKind(Object e) {
-    if (ErrorMapper.isForbidden(e)) return 'denied';
-    if (ErrorMapper.isOffline(e)) return 'offline';
-    return 'generic';
   }
 
   @override
@@ -202,9 +193,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   Widget _buildList() {
     if (_initialLoading) return const Center(child: CircularProgressIndicator());
     if (_hasError) {
-      final title = _errorKind == 'offline'
-          ? 'Tu es hors-ligne.'
-          : (_errorKind == 'denied' ? 'Accès refusé.' : 'Impossible de charger les marchés.');
+      const title = 'Impossible de charger les marchés.';
       return ListView(
         children: [
           const SizedBox(height: 180),

@@ -61,7 +61,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final eventState = eventAsync.maybeWhen(data: _readEventState, orElse: () => 'LIVE');
     final runtimeWriteBlocked = isWriteBlockedByEventState(eventState);
     final readOnly = isReadOnly(ref);
-    final writeBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: runtimeWriteBlocked);
+    final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeWriteBlocked);
     final config = configAsync.maybeWhen(
       data: (value) => value,
       orElse: () => null,
@@ -138,7 +139,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 if (writeBlocked)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, runtimeState: eventState)),
+                    child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: eventState)),
                   ),
                 Text(
                   'Tickets: $balance',
