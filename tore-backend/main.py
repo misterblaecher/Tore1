@@ -2793,6 +2793,76 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
         s.close()
 
 
+def _bar_status_from_events(now: datetime, events: list[Event]) -> str | None:
+    if not events:
+        return None
+    for event in events:
+        if event.starts_at <= now <= event.ends_at:
+            return "LIVE"
+    for event in events:
+        if event.starts_at > now:
+            return "OPEN"
+    return "CLOSED"
+
+
+@app.get("/bars")
+def list_bars(limit: int = Query(100, ge=1, le=300), db: Session = Depends(get_db)):
+    now = now_utc()
+    rows = db.query(Bar).order_by(Bar.id.asc()).limit(limit).all()
+    output: list[dict[str, Any]] = []
+
+    for row in rows:
+        events = db.query(Event).filter(Event.bar_id == row.id).order_by(Event.starts_at.desc()).limit(8).all()
+        last_event = events[0] if events else None
+        status = _bar_status_from_events(now, events)
+        ticker_line = None
+        if last_event is not None:
+            ticker_line = f"Last event: {last_event.name}"
+            for event in events:
+                if event.starts_at <= now <= event.ends_at:
+                    ticker_line = f"Live now: {event.name}"
+                    break
+
+        output.append(
+            {
+                "id": row.id,
+                "name": row.name,
+                "city": row.city,
+                "status": status,
+                "location": {"city": row.city} if row.city else None,
+                "ticker_line": ticker_line,
+                "lastEvent": (
+                    {
+                        "id": last_event.id,
+                        "name": last_event.name,
+                        "starts_at": last_event.starts_at.isoformat(),
+                    }
+                    if last_event is not None
+                    else None
+                ),
+            }
+        )
+    return output
+
+
+@app.get("/bars/{bar_id}/events")
+def list_bar_events(bar_id: int, db: Session = Depends(get_db)):
+    bar = db.get(Bar, bar_id)
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+    rows = db.query(Event).filter(Event.bar_id == bar_id).order_by(Event.starts_at.asc()).all()
+    return [
+        {
+            "id": row.id,
+            "bar_id": row.bar_id,
+            "name": row.name,
+            "starts_at": row.starts_at.isoformat(),
+            "ends_at": row.ends_at.isoformat(),
+        }
+        for row in rows
+    ]
+
+
 @app.get("/events", response_model=List[EventSummaryOut])
 def list_all_events(
     limit: int = Query(50, ge=1, le=200),

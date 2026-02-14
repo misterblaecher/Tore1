@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tore/features/bars/presentation/bar_events_screen.dart';
+import 'package:tore/features/bars/presentation/bars_screen.dart';
 
 import 'app_shell.dart';
 import 'features/auth/presentation/welcome_screen.dart';
@@ -23,6 +25,27 @@ class ToreApp extends ConsumerWidget {
       theme: buildToreThemeData(ToreThemeMode.ritual),
       darkTheme: buildToreThemeData(ToreThemeMode.ritual),
       themeMode: ThemeMode.dark,
+      routes: {
+        '/bars': (_) => const BarsScreen(),
+      },
+      onGenerateRoute: (settings) {
+        final name = settings.name;
+        if (name == null) return null;
+        final uri = Uri.tryParse(name);
+        final segments = uri?.pathSegments ?? const <String>[];
+        if (segments.length == 3 &&
+            segments[0] == 'bars' &&
+            segments[2] == 'events') {
+          final barId = int.tryParse(segments[1]);
+          if (barId == null) return null;
+          final barName = settings.arguments is String ? settings.arguments! as String : 'Bar #$barId';
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => BarEventsScreen(barId: barId, barName: barName),
+          );
+        }
+        return null;
+      },
       home: const _BootEntry(),
     );
   }
