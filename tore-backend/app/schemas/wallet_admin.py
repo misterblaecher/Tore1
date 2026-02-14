@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,3 +33,8 @@ class WalletAdminLogOut(BaseModel):
     reason: str
     idempotency_key: str
     created_at: datetime
+
+
+class WalletAdminLogPageOut(BaseModel):
+    items: list[WalletAdminLogOut]
+    next_cursor: Optional[str] = None

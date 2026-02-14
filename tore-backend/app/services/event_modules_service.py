@@ -37,6 +37,5 @@ def update_event_modules(db: Session, cfg: EventModuleConfig, payload: dict, act
         cfg.updated_at = now_utc()
         cfg.updated_by_user_id = actor_user_id
         db.add(cfg)
-        db.commit()
-        db.refresh(cfg)
+        db.flush()
     return cfg

@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from typing import Iterator, List
+from datetime import datetime
+from typing import Iterator, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from sqlalchemy import func
-from models import Bet, BetDispute, WalletLedgerEntry
+from models import Bet, BetDispute
 from partner_auth import require_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
-from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminTopupIn, WalletAdminTopupOut
+from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminLogPageOut, WalletAdminTopupIn, WalletAdminTopupOut
+from app.services.audit_service import write_audit_log
 from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
-from app.services.wallet_admin_service import admin_topup
+from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
 from app.services.wallet_service import get_or_create_wallet
 
 router = APIRouter(prefix="/partner/portal", tags=["portal-event-control"])
@@ -42,9 +44,30 @@ def update_modules(
     identity=Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
     cfg = get_or_create_event_modules(db, event_id)
+    before = {
+        k: getattr(cfg, k)
+        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled"]
+    }
     cfg = update_event_modules(db, cfg, payload.model_dump(), identity["user_id"])
+    after = {
+        k: getattr(cfg, k)
+        for k in ["orders_enabled", "market_enabled", "battles_enabled", "hunt_enabled", "polymarket_enabled", "entry_enabled"]
+    }
+    if before != after:
+        write_audit_log(
+            db,
+            actor_partner_id=identity["user_id"],
+            actor_role=identity["role"],
+            action="event_modules.update",
+            entity_type="event",
+            entity_id=str(event_id),
+            event_id=event_id,
+            bar_id=event.bar_id,
+            payload={"before": before, "after": after},
+        )
+        db.commit()
     return cfg
 
 
@@ -54,7 +77,7 @@ def wallet_admin_topup(
     identity=Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
+    event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
     ledger, idempotent = admin_topup(
         db,
         event_id=payload.event_id,
@@ -64,6 +87,19 @@ def wallet_admin_topup(
         idempotency_key=payload.idempotency_key,
         actor_user_id=identity["user_id"],
     )
+    if not idempotent:
+        write_audit_log(
+            db,
+            actor_partner_id=identity["user_id"],
+            actor_role=identity["role"],
+            action="wallet_admin.topup",
+            entity_type="wallet_ledger_entry",
+            entity_id=str(ledger.id),
+            event_id=payload.event_id,
+            bar_id=event.bar_id,
+            payload={"user_id": payload.user_id, "amount_tickets": payload.amount_tickets, "reason": payload.reason},
+        )
+    db.commit()
     wallet = get_or_create_wallet(db, payload.user_id)
     return WalletAdminTopupOut(
         ledger_id=ledger.id,
@@ -77,21 +113,37 @@ def wallet_admin_topup(
     )
 
 
-@router.get("/wallet/admin/logs", response_model=List[WalletAdminLogOut])
+@router.get("/wallet/admin/logs", response_model=WalletAdminLogPageOut)
 def wallet_admin_logs(
     event_id: int,
+    user_id: Optional[str] = Query(default=None),
+    after: Optional[datetime] = Query(default=None),
+    before: Optional[datetime] = Query(default=None),
+    min_delta: Optional[int] = Query(default=None),
+    max_delta: Optional[int] = Query(default=None),
+    idempotency_key: Optional[str] = Query(default=None),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
     identity=Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, event_id, identity["bar_id"])
-    rows = (
-        db.query(WalletLedgerEntry)
-        .filter(WalletLedgerEntry.event_id == event.id)
-        .order_by(WalletLedgerEntry.created_at.desc())
-        .limit(100)
-        .all()
+    rows, next_cursor = list_wallet_admin_logs(
+        db,
+        event_id=event.id,
+        user_id=user_id,
+        after=after,
+        before=before,
+        min_delta=min_delta,
+        max_delta=max_delta,
+        idempotency_key=idempotency_key,
+        cursor=cursor,
+        limit=limit,
     )
-    return rows
+    return WalletAdminLogPageOut(
+        items=[WalletAdminLogOut(id=r.id, event_id=r.event_id, user_id=r.user_id, amount_tickets=r.amount_tickets, reason=r.reason, idempotency_key=r.idempotency_key, created_at=r.created_at) for r in rows],
+        next_cursor=next_cursor,
+    )
 
 
 @router.get("/polymarket/event/{event_id}")

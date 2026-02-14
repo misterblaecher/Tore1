@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import base64
+import json
+from datetime import datetime
+from typing import Optional
+
 from fastapi import HTTPException
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from models import AppUser, TicketBalance, WalletLedgerEntry
@@ -72,6 +78,64 @@ def admin_topup(
     db.add(ledger)
     db.add(wallet)
     db.add(ticket_balance)
-    db.commit()
-    db.refresh(ledger)
+    db.flush()
     return ledger, False
+
+
+def parse_cursor(raw: Optional[str]) -> tuple[Optional[datetime], Optional[int]]:
+    if not raw:
+        return None, None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(raw.encode("utf-8")).decode("utf-8"))
+        return datetime.fromisoformat(payload["ts"]), int(payload["id"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid cursor") from exc
+
+
+def make_cursor(ts: datetime, row_id: int) -> str:
+    return base64.urlsafe_b64encode(json.dumps({"ts": ts.isoformat(), "id": row_id}).encode("utf-8")).decode("utf-8")
+
+
+def list_wallet_admin_logs(
+    db: Session,
+    *,
+    event_id: int,
+    user_id: Optional[str],
+    after: Optional[datetime],
+    before: Optional[datetime],
+    min_delta: Optional[int],
+    max_delta: Optional[int],
+    idempotency_key: Optional[str],
+    cursor: Optional[str],
+    limit: int,
+) -> tuple[list[WalletLedgerEntry], Optional[str]]:
+    q = db.query(WalletLedgerEntry).filter(WalletLedgerEntry.event_id == event_id)
+    if user_id:
+        q = q.filter(WalletLedgerEntry.user_id == user_id)
+    if after:
+        q = q.filter(WalletLedgerEntry.created_at >= after)
+    if before:
+        q = q.filter(WalletLedgerEntry.created_at <= before)
+    if min_delta is not None:
+        q = q.filter(WalletLedgerEntry.amount_tickets >= min_delta)
+    if max_delta is not None:
+        q = q.filter(WalletLedgerEntry.amount_tickets <= max_delta)
+    if idempotency_key:
+        q = q.filter(WalletLedgerEntry.idempotency_key == idempotency_key)
+
+    cursor_ts, cursor_id = parse_cursor(cursor)
+    if cursor_ts and cursor_id:
+        q = q.filter(
+            or_(
+                WalletLedgerEntry.created_at < cursor_ts,
+                and_(WalletLedgerEntry.created_at == cursor_ts, WalletLedgerEntry.id < cursor_id),
+            )
+        )
+
+    rows = q.order_by(WalletLedgerEntry.created_at.desc(), WalletLedgerEntry.id.desc()).limit(limit + 1).all()
+    next_cursor = None
+    if len(rows) > limit:
+        last = rows[limit - 1]
+        next_cursor = make_cursor(last.created_at, last.id)
+        rows = rows[:limit]
+    return rows, next_cursor

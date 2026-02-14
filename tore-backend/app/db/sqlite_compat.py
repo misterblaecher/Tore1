@@ -62,6 +62,8 @@ def ensure_battles_tables(engine: Engine) -> None:
 def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_battles_tables(engine)
     ensure_order_items_market_item_id(engine)
+    ensure_entry_token_columns(engine)
+    ensure_audit_log_indexes(engine)
 
 
 def ensure_order_items_market_item_id(engine: Engine) -> None:
@@ -73,3 +75,26 @@ def ensure_order_items_market_item_id(engine: Engine) -> None:
         if "market_item_id" not in order_item_cols:
             conn.execute(text("ALTER TABLE order_items ADD COLUMN market_item_id INTEGER"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_order_items_market_item_id ON order_items (market_item_id)"))
+
+
+def ensure_entry_token_columns(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    scan_cols = _table_columns(engine, "entry_scan_logs")
+    with engine.begin() as conn:
+        if "token_id" not in scan_cols:
+            conn.execute(text("ALTER TABLE entry_scan_logs ADD COLUMN token_id INTEGER"))
+        if "token_hash" not in scan_cols:
+            conn.execute(text("ALTER TABLE entry_scan_logs ADD COLUMN token_hash VARCHAR(64)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_entry_scan_logs_token_id ON entry_scan_logs (token_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_entry_scan_logs_token_hash ON entry_scan_logs (token_hash)"))
+
+
+def ensure_audit_log_indexes(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_event_id ON audit_logs (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_bar_id ON audit_logs (bar_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_action ON audit_logs (action)"))

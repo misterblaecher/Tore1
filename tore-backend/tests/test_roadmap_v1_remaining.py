@@ -99,27 +99,31 @@ def test_entry_scan_guards_and_idempotency():
     event_id = _seed_event(bar_id)
     client = TestClient(app)
 
-    unauth = client.post("/entry/scan", json={"event_id": event_id, "raw_payload": "user:abc", "scan_id": "s1"})
+    issued = client.post("/entry/tokens/issue", json={"event_id": event_id, "count": 1}, headers={"Authorization": f"Bearer {manager_token}"})
+    assert issued.status_code == 200
+    token = issued.json()["issued"][0]["token"]
+
+    unauth = client.post("/entry/scan", json={"event_id": event_id, "token": token, "scan_id": "s10"})
     assert unauth.status_code == 401
 
     wrong_bar = client.post(
         "/entry/scan",
-        json={"event_id": event_id, "raw_payload": "user:abc", "scan_id": "s1"},
+        json={"event_id": event_id, "token": token, "scan_id": "s10"},
         headers={"Authorization": f"Bearer {bartender_token}"},
     )
     assert wrong_bar.status_code == 403
 
     ok = client.post(
         "/entry/scan",
-        json={"event_id": event_id, "raw_payload": f"tore://entry?event_id={event_id}", "scan_id": "s2"},
+        json={"event_id": event_id, "token": token, "scan_id": "s20"},
         headers={"Authorization": f"Bearer {manager_token}"},
     )
     assert ok.status_code == 200
-    assert ok.json()["decision"] == "ALLOW"
+    assert ok.json()["decision"] == "ACCEPT"
 
     dup = client.post(
         "/entry/scan",
-        json={"event_id": event_id, "raw_payload": f"tore://entry?event_id={event_id}", "scan_id": "s2"},
+        json={"event_id": event_id, "token": token, "scan_id": "s20"},
         headers={"Authorization": f"Bearer {manager_token}"},
     )
     assert dup.status_code == 200
@@ -128,7 +132,7 @@ def test_entry_scan_guards_and_idempotency():
 
     logs = client.get(f"/entry/logs?event_id={event_id}", headers={"Authorization": f"Bearer {manager_token}"})
     assert logs.status_code == 200
-    assert len(logs.json()) >= 1
+    assert len(logs.json()["items"]) >= 1
 
 
 def test_event_module_toggles_defaults_and_guard():

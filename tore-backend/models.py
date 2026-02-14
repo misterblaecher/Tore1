@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     Text,
+    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -269,6 +270,27 @@ class EntryScanLog(Base):
         ForeignKey("partner_users.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    token_id: Mapped[Optional[int]] = mapped_column(ForeignKey("entry_tokens.id"), nullable=True, index=True)
+    token_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+
+
+class EntryToken(Base):
+    __tablename__ = "entry_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_entry_tokens_token_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    used_by_partner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+    used_scan_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(12), default="ACTIVE", index=True)
 
 
 class EventStaff(Base):
@@ -772,6 +794,21 @@ class WalletLedgerEntry(Base):
         ForeignKey("partner_users.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    actor_partner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+    actor_role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    entity_type: Mapped[str] = mapped_column(String(64), default="")
+    entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), nullable=True, index=True)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class AppToken(Base):
