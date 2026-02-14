@@ -8,6 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../state.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../shared/utils/runtime_write_guard.dart';
+import '../../../shared/widgets/service_limited_banner.dart';
 
 class OrderQrScreen extends ConsumerStatefulWidget {
   const OrderQrScreen({super.key, required this.orderId});
@@ -26,6 +28,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
   String? _error;
   Timer? _timer;
   DateTime? _rateLimitedUntil;
+  String? _runtimeReason;
 
   @override
   void initState() {
@@ -47,7 +50,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
     });
     try {
       final api = ref.read(apiProvider);
-      final requestKey = 'order-qr-${widget.orderId}-${DateTime.now().millisecondsSinceEpoch ~/ 8000}';
+      final requestKey = 'order-qr-${widget.orderId}';
       final payload = await api.issueOrderClientQr(orderId: widget.orderId, idempotencyKey: requestKey);
       final raw = (payload['qr_raw'] ?? '').toString();
       final expires = DateTime.tryParse((payload['expires_at'] ?? '').toString())?.toLocal();
@@ -58,6 +61,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
       final mapped = _mapError(e);
       setState(() {
         _error = mapped;
+        _runtimeReason = normalizeRuntimeBlockReason(reason: _extractReason(e));
       });
     } finally {
       if (mounted) {
@@ -134,6 +138,9 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
     if (reason == 'event_paused' || reason == 'module_off') {
       return 'Service en pause.';
     }
+    if (reason == 'read_only' || reason == 'frozen' || reason == 'closed' || reason == 'event_closed') {
+      return writeBlockedReasonMessage(normalizeRuntimeBlockReason(reason: reason));
+    }
     if (reason == 'revoked') {
       return 'Service indisponible pour le moment.';
     }
@@ -147,6 +154,22 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
       return 'Trop de requêtes. Attends quelques secondes.';
     }
     return message;
+  }
+
+  String? _extractReason(Object e) {
+    if (e is ApiException) {
+      final details = e.details;
+      if (details is Map && details['detail'] is Map) {
+        return (details['detail'] as Map)['reason']?.toString();
+      }
+    }
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['detail'] is Map) {
+        return (data['detail'] as Map)['reason']?.toString();
+      }
+    }
+    return null;
   }
 
   @override
@@ -226,14 +249,16 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7F1D1D),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(_error!),
-              ),
+              _runtimeReason != null
+                  ? ServiceLimitedBanner(message: writeBlockedReasonMessage(_runtimeReason))
+                  : Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7F1D1D),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(_error!),
+                    ),
             ],
             const SizedBox(height: 12),
 

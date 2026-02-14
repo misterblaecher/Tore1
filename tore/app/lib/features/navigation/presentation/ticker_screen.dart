@@ -6,6 +6,7 @@ import '../../events/presentation/event_config_providers.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../ticker/ticker_models.dart';
 import '../../ticker/ticker_providers.dart';
+import '../../polymarket/market_detail_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 
 class TickerScreen extends ConsumerWidget {
@@ -98,9 +99,20 @@ class _TickerTile extends StatelessWidget {
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: eventId)));
             return;
           }
+          if (item.refKind == 'wallet') {
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: eventId)));
+            return;
+          }
+          if (item.refKind == 'polymarket_market') {
+            final marketId = int.tryParse(item.refId ?? '');
+            if (marketId != null) {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: marketId)));
+            }
+            return;
+          }
           if (item.refKind == 'order') {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Détail commande indisponible ici.')),
+              const SnackBar(content: Text('Commande mise à jour.')),
             );
           }
         },
