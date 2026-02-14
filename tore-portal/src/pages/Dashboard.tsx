@@ -4,6 +4,7 @@ import Layout from '../ui/Layout'
 import { api, API_BASE, ApiError } from '../lib/api'
 import { isApiUnavailable } from '../lib/errors'
 import ApiUnavailable from '../ui/ApiUnavailable'
+import { hasOrgaHubAccess } from '../lib/authz'
 
 type BarOut = {
   id: number
@@ -351,9 +352,11 @@ export default function Dashboard() {
         </Link>
         {selectedEventId ? (
           <>
-            <Link to={`/event-control/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,160,255,0.45)', background: 'rgba(255,160,255,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
-              Event Control Hub
-            </Link>
+            {hasOrgaHubAccess() ? (
+              <Link to={`/event-control/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,160,255,0.45)', background: 'rgba(255,160,255,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+                ORGA HUB (OPS)
+              </Link>
+            ) : null}
             <Link to={`/polymarket-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,120,180,0.45)', background: 'rgba(255,120,180,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
               Polymarket Admin Event
             </Link>
