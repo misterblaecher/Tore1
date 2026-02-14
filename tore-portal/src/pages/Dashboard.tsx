@@ -230,6 +230,21 @@ export default function Dashboard() {
           Orders Queue
         </Link>
         <Link
+          to="/kitchen"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,120,120,0.45)',
+            background: 'rgba(255,120,120,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Kitchen Mode
+        </Link>
+        <Link
           to="/menu-admin"
           style={{
             display: 'inline-block',

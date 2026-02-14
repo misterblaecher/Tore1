@@ -27,6 +27,7 @@ import AuditLogs from './pages/AuditLogs'
 import WifiAdmin from './pages/WifiAdmin'
 import SafetyAdmin from './pages/SafetyAdmin'
 import ZonesAdmin from './pages/ZonesAdmin'
+import Kitchen from './pages/Kitchen'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -99,6 +100,14 @@ export default function App() {
         element={
           <RequireAuth>
             <OrdersQueue />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/kitchen"
+        element={
+          <RequireAuth>
+            <Kitchen />
           </RequireAuth>
         }
       />
