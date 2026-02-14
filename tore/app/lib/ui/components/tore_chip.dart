@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/tokens.dart';
-import '../../theme/themes.dart';
+import 'package:tore/theme/theme.dart';
 
 enum ToreChipVariant { live, closed, authority, ok, warn, bad, info }
 

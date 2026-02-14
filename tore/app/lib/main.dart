@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_shell.dart';
 import 'features/auth/presentation/welcome_screen.dart';
-import 'theme/tore_theme.dart';
+import 'package:tore/theme/theme.dart';
 import 'state.dart';
 
 
@@ -22,8 +22,8 @@ class ToreApp extends ConsumerWidget {
     return MaterialApp(
       title: 'TORÈ',
       debugShowCheckedModeBanner: false,
-      theme: ToreTheme.dark(),
-      darkTheme: ToreTheme.dark(),
+      theme: buildToreThemeData(ToreThemeMode.ritual),
+      darkTheme: buildToreThemeData(ToreThemeMode.ritual),
       themeMode: ThemeMode.dark,
       home: boot.when(
         loading: () => const _Splash(),

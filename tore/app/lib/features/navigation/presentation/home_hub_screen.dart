@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../core/app_context/app_context.dart';
-import '../../../state.dart';
-import '../../events/presentation/event_config_providers.dart';
-import '../../menu_market/presentation/menu_screen.dart';
-import '../../qr/presentation/qr_scanner_screen.dart';
-import '../../ticker/ticker_providers.dart';
-import '../../wallet/presentation/wallet_screen.dart';
-import 'polymarket_tab_screen.dart';
-import 'profile_screen.dart';
-import 'ticker_screen.dart';
+import 'package:tore/core/app_context/app_context.dart';
+import 'package:tore/features/events/presentation/event_config_providers.dart';
+import 'package:tore/features/menu_market/presentation/menu_screen.dart';
+import 'package:tore/features/navigation/presentation/polymarket_tab_screen.dart';
+import 'package:tore/features/navigation/presentation/profile_screen.dart';
+import 'package:tore/features/navigation/presentation/ticker_screen.dart';
+import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
+import 'package:tore/features/ticker/ticker_providers.dart';
+import 'package:tore/features/wallet/presentation/wallet_screen.dart';
+import 'package:tore/state.dart';
+import 'package:tore/ui/components/components.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -76,11 +76,8 @@ class HomeHubScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           if (!hasEvent)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(14),
-                child: Text('Scanne un QR join_event pour activer ton event.'),
-              ),
+            const ToreCard(
+              child: Text('Scanne un QR join_event pour activer ton event.'),
             ),
           if (hasEvent && menuOn)
             _ModuleCard(
@@ -131,24 +128,23 @@ class _EventHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-                if (status != 'OFF') _EventStateBadge(status: status),
-              ],
-            ),
-            if (onLeave != null) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(onPressed: onLeave, icon: const Icon(Icons.logout), label: const Text('Quitter l’event')),
+    return ToreCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
+              if (status != 'OFF') _EventStateBadge(status: status),
             ],
+          ),
+          if (onLeave != null) ...[
+            const SizedBox(height: 8),
+            const ToreDivider(),
+            const SizedBox(height: 8),
+            TextButton.icon(onPressed: onLeave, icon: const Icon(Icons.logout), label: const Text('Quitter l’event')),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -163,9 +159,9 @@ class _EventStateBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final normalized = status.toUpperCase();
     final isPaused = normalized == 'PAUSE' || normalized == 'PAUSED' || normalized == 'READ_ONLY' || normalized == 'FROZEN';
-    return Chip(
-      label: Text(isPaused ? 'PAUSE' : 'LIVE'),
-      avatar: Icon(Icons.circle, size: 12, color: isPaused ? Colors.orangeAccent : Colors.greenAccent),
+    return ToreChip(
+      label: isPaused ? 'PAUSE' : 'LIVE',
+      variant: isPaused ? ToreChipVariant.closed : ToreChipVariant.live,
     );
   }
 }
@@ -188,14 +184,29 @@ class _ModuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
+        child: ToreCard(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(icon),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700))),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const ToreDivider(),
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerLeft, child: Text(subtitle)),
+            ],
+          ),
+        ),
       ),
     );
   }

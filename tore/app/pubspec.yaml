@@ -33,3 +33,7 @@ flutter:
 
   assets:
     - assets/da/
+
+  fonts: []
+  # TODO(TORÈ V1): déclarer Inter et SpaceMono ici dès que les fichiers TTF/OTF
+  # seront ajoutés localement (ex: assets/fonts/Inter-*.ttf, assets/fonts/SpaceMono-*.ttf).
