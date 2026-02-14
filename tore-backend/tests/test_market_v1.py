@@ -1,11 +1,13 @@
 import json
 import secrets
+from datetime import datetime
 
 from fastapi.testclient import TestClient
 
+from app.routers.market import _list_ticks_after_cursor
 from db import Base, engine, get_session
 from main import app
-from models import Bar, Event, PartnerMembership, PartnerUser
+from models import Bar, DrinkPriceTick, Event, PartnerMembership, PartnerUser
 from partner_auth import _make_token
 
 
@@ -268,3 +270,53 @@ def test_public_stream_emits_tick():
                     prices.append(payload["price_cents"])
 
         assert set_price.json()["item"]["current_price_cents"] in prices
+
+
+def test_tick_cursor_uses_ts_and_id_for_pagination_without_loss():
+    _, _, token = _seed_partner("manager")
+    client = TestClient(app)
+
+    cfg = client.post(
+        "/partner/portal/market/config",
+        json={"is_live": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert cfg.status_code == 200
+
+    item = client.post(
+        "/partner/portal/market/items",
+        json={"name": "Cola", "base_price_cents": 200},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert item.status_code == 200
+    item_id = item.json()["id"]
+
+    s = get_session()
+    try:
+        shared_ts = datetime(2025, 1, 1, 12, 0, 0)
+        for price in range(100, 160):
+            s.add(
+                DrinkPriceTick(
+                    item_id=item_id,
+                    price_cents=price,
+                    ts=shared_ts,
+                    source="manual",
+                )
+            )
+        s.commit()
+
+        page_one = _list_ticks_after_cursor(s, [item_id], last_ts=datetime.min, last_id=0, limit=50)
+        assert len(page_one) == 50
+
+        page_two = _list_ticks_after_cursor(
+            s,
+            [item_id],
+            last_ts=page_one[-1].ts,
+            last_id=page_one[-1].id,
+            limit=50,
+        )
+        shared_ts_ticks_page_two = [tick for tick in page_two if tick.ts == shared_ts]
+        assert len(shared_ts_ticks_page_two) == 10
+        assert set(tick.id for tick in page_one).isdisjoint({tick.id for tick in page_two})
+    finally:
+        s.close()

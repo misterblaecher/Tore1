@@ -7,6 +7,7 @@ from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.schemas.market import (
@@ -45,6 +46,28 @@ def get_db() -> Iterator[Session]:
     yield from _get_db()
 
 
+def _list_ticks_after_cursor(
+    db: Session,
+    item_ids: list[int],
+    last_ts: datetime,
+    last_id: int,
+    limit: int = 50,
+) -> list[DrinkPriceTick]:
+    return (
+        db.query(DrinkPriceTick)
+        .filter(
+            DrinkPriceTick.item_id.in_(item_ids),
+            or_(
+                DrinkPriceTick.ts > last_ts,
+                and_(DrinkPriceTick.ts == last_ts, DrinkPriceTick.id > last_id),
+            ),
+        )
+        .order_by(DrinkPriceTick.ts.asc(), DrinkPriceTick.id.asc())
+        .limit(limit)
+        .all()
+    )
+
+
 @router.get("/market/public", response_model=MarketPublicOut)
 def market_public(
     bar_id: int = Query(...),
@@ -78,6 +101,7 @@ async def market_public_stream(
 
     async def stream_events():
         last_ts = datetime.min
+        last_id = 0
         try:
             while True:
                 if await request.is_disconnected():
@@ -85,13 +109,7 @@ async def market_public_stream(
 
                 loop_session = get_session()
                 try:
-                    ticks = (
-                        loop_session.query(DrinkPriceTick)
-                        .filter(DrinkPriceTick.item_id.in_(item_ids), DrinkPriceTick.ts > last_ts)
-                        .order_by(DrinkPriceTick.ts.asc(), DrinkPriceTick.id.asc())
-                        .limit(50)
-                        .all()
-                    )
+                    ticks = _list_ticks_after_cursor(loop_session, item_ids, last_ts=last_ts, last_id=last_id, limit=50)
                 finally:
                     loop_session.close()
 
@@ -106,6 +124,7 @@ async def market_public_stream(
                         payload["ref_order_id"] = tick.ref_order_id
                     yield f"event: tick\ndata: {json.dumps(payload)}\n\n"
                     last_ts = tick.ts
+                    last_id = tick.id
 
                 if not ticks:
                     yield ": keepalive\n\n"
