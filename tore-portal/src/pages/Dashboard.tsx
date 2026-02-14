@@ -260,6 +260,61 @@ export default function Dashboard() {
           Hunt Admin
         </Link>
         <Link
+          to="/entry-staff"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(120,220,255,0.45)',
+            background: 'rgba(120,220,255,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Entry Staff
+        </Link>
+        <Link
+          to="/entry-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(120,255,200,0.45)',
+            background: 'rgba(120,255,200,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Entry Admin
+        </Link>
+        <Link
+          to="/wallet-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,120,0.45)',
+            background: 'rgba(255,255,120,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Wallet Admin
+        </Link>
+        {selectedEventId ? (
+          <>
+            <Link to={`/event-control/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,160,255,0.45)', background: 'rgba(255,160,255,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+              Event Control Hub
+            </Link>
+            <Link to={`/polymarket-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,120,180,0.45)', background: 'rgba(255,120,180,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+              Polymarket Admin Event
+            </Link>
+          </>
+        ) : null}
+        <Link
           to="/market-admin"
           style={{
             display: 'inline-block',
