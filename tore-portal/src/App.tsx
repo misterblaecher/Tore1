@@ -24,6 +24,8 @@ import PolymarketAdmin from './pages/PolymarketAdmin'
 import BattlesLive from './pages/BattlesLive'
 import CheckinsAdmin from './pages/CheckinsAdmin'
 import AuditLogs from './pages/AuditLogs'
+import WifiAdmin from './pages/WifiAdmin'
+import SafetyAdmin from './pages/SafetyAdmin'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -176,6 +178,22 @@ export default function App() {
         element={
           <RequireAuth>
             <AuditLogs />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/wifi-admin/:eventId"
+        element={
+          <RequireAuth>
+            <WifiAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/safety-admin/:eventId"
+        element={
+          <RequireAuth>
+            <SafetyAdmin />
           </RequireAuth>
         }
       />

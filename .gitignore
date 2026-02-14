@@ -1,0 +1,4 @@
+tore-portal/node_modules/
+tore-portal/dist/
+*.pyc
+__pycache__/

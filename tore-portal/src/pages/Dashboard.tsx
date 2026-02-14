@@ -230,7 +230,7 @@ export default function Dashboard() {
           Gérer Menu QR
         </Link>
         <Link
-          to="/battles-admin"
+          to={selectedEventId ? `/battles-admin/${selectedEventId}` : "/"}
           style={{
             display: 'inline-block',
             padding: '10px 14px',
@@ -311,6 +311,18 @@ export default function Dashboard() {
             </Link>
             <Link to={`/polymarket-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,120,180,0.45)', background: 'rgba(255,120,180,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
               Polymarket Admin Event
+            </Link>
+            <Link to={`/checkins-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(120,255,240,0.45)', background: 'rgba(120,255,240,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+              Checkins Admin
+            </Link>
+            <Link to={`/audit/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,200,120,0.45)', background: 'rgba(255,200,120,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+              Audit Logs
+            </Link>
+            <Link to={`/wifi-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(120,180,255,0.45)', background: 'rgba(120,180,255,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+              Wifi Admin
+            </Link>
+            <Link to={`/safety-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(180,255,120,0.45)', background: 'rgba(180,255,120,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+              Safety Stats
             </Link>
           </>
         ) : null}

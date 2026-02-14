@@ -16,6 +16,7 @@ from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
 from app.services.wallet_service import get_or_create_wallet
+from app.services.p3_common import is_event_live
 
 router = APIRouter(prefix="/partner/portal", tags=["portal-event-control"])
 
@@ -35,6 +36,32 @@ def get_event_modules(
     get_owned_event_or_403(db, event_id, identity["bar_id"])
     cfg = get_or_create_event_modules(db, event_id)
     return cfg
+
+
+@router.get("/event/{event_id}/status")
+def get_event_status(
+    event_id: int,
+    identity=Depends(require_role("manager")),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    cfg = get_or_create_event_modules(db, event_id)
+    return {
+        "event_id": event_id,
+        "live": is_event_live(db, event_id),
+        "modules": {
+            "orders_enabled": cfg.orders_enabled,
+            "market_enabled": cfg.market_enabled,
+            "battles_enabled": cfg.battles_enabled,
+            "hunt_enabled": cfg.hunt_enabled,
+            "polymarket_enabled": cfg.polymarket_enabled,
+            "entry_enabled": cfg.entry_enabled,
+            "checkins_enabled": cfg.checkins_enabled,
+            "wifi_enabled": cfg.wifi_enabled,
+            "safety_enabled": cfg.safety_enabled,
+        },
+    }
+
 
 
 @router.post("/event/{event_id}/modules", response_model=EventModulesOut)

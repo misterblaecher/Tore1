@@ -230,6 +230,44 @@ def drinks_checkins_event(event_id: int, db: Session = Depends(get_db)):
     return {"event_id": event_id, "top_drinks": [{"name": r[0], "count": int(r[1])} for r in rows]}
 
 
+@router.get("/partner/portal/checkins/logs")
+def portal_checkins_logs(
+    event_id: int,
+    search: Optional[str] = Query(default=None),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    identity=Depends(require_role("manager")),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    c_ts, c_id = decode_cursor(cursor)
+    q = db.query(DrinkCheckin).filter(DrinkCheckin.event_id == event_id)
+    if search:
+        q = q.filter(DrinkCheckin.name_snapshot.ilike(f"%{search.strip()}%"))
+    if c_ts and c_id:
+        q = q.filter(or_(DrinkCheckin.ts < c_ts, and_(DrinkCheckin.ts == c_ts, DrinkCheckin.id < c_id)))
+    rows = q.order_by(DrinkCheckin.ts.desc(), DrinkCheckin.id.desc()).limit(limit + 1).all()
+    next_cursor = None
+    if len(rows) > limit:
+        tail = rows[limit - 1]
+        next_cursor = encode_cursor(tail.ts, tail.id)
+        rows = rows[:limit]
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "name_snapshot": r.name_snapshot,
+                "rating": r.rating,
+                "comment": r.comment,
+                "ts": r.ts.isoformat(),
+            }
+            for r in rows
+        ],
+        "next_cursor": next_cursor,
+    }
+
+
 @router.get("/drinks/checkins/global/top")
 def drinks_checkins_global(db: Session = Depends(get_db)):
     rows = db.query(DrinkCheckin.name_snapshot, func.count(DrinkCheckin.id)).group_by(DrinkCheckin.name_snapshot).order_by(func.count(DrinkCheckin.id).desc(), DrinkCheckin.name_snapshot.asc()).limit(100).all()
@@ -327,7 +365,30 @@ def safety_stats(event_id: int, identity=Depends(require_role("manager")), db: S
     get_owned_event_or_403(db, event_id, identity["bar_id"])
     total = db.query(func.count(SafetyBuddySession.id)).filter(SafetyBuddySession.event_id == event_id).scalar() or 0
     active = db.query(func.count(SafetyBuddySession.id)).filter(SafetyBuddySession.event_id == event_id, SafetyBuddySession.status == "ACTIVE").scalar() or 0
-    return {"event_id": event_id, "total": int(total), "active": int(active)}
+    recent = (
+        db.query(SafetyBuddySession)
+        .filter(SafetyBuddySession.event_id == event_id)
+        .order_by(SafetyBuddySession.started_at.desc(), SafetyBuddySession.id.desc())
+        .limit(10)
+        .all()
+    )
+    return {
+        "event_id": event_id,
+        "total": int(total),
+        "active": int(active),
+        "recent_sessions": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "buddy_user_id": r.buddy_user_id,
+                "status": r.status,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "ended_at": r.ended_at.isoformat() if r.ended_at else None,
+            }
+            for r in recent
+        ],
+    }
 
 
 @router.get("/partner/portal/audit/logs")

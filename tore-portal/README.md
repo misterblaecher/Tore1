@@ -40,3 +40,8 @@ Ensuite, le portail consomme :
 - `GET /partner/portal/events`
 - `GET /partner/portal/events/{id}`
 - `GET/POST/DELETE /partner/portal/events/{id}/drinks`
+
+## Deploy Render (Static Site)
+- Root Directory: `tore-portal`
+- Build Command: `npm ci && npm run build`
+- Publish Directory: `dist`

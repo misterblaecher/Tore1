@@ -96,6 +96,18 @@ def scan_entry(
     if existing_scan:
         return existing_scan, True
 
+    recent_attempts = (
+        db.query(EntryScanLog)
+        .filter(
+            EntryScanLog.event_id == event_id,
+            EntryScanLog.created_by_user_id == actor_user_id,
+            EntryScanLog.created_at >= now_utc() - timedelta(seconds=60),
+        )
+        .count()
+    )
+    if recent_attempts >= 120:
+        raise HTTPException(status_code=429, detail="Too many scans, slow down")
+
     now = now_utc()
     token_hash = _token_hash(token)
     payload_hash = _token_hash(f"{token.strip()}::{scan_id}")
