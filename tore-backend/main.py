@@ -181,11 +181,24 @@ def _ensure_polymarket_v1_columns() -> None:
         s.close()
 
 
+def _ensure_wallet_indexes() -> None:
+    s = get_session()
+    try:
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_wallet_txs_user_ts ON wallet_txs (user_id, created_at)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_wallet_ledger_event_ts ON wallet_ledger_entries (event_id, created_at)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_wallet_gifts_from_ts ON wallet_gifts (from_user_id, created_at)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_wallet_gifts_to_ts ON wallet_gifts (to_user_id, created_at)"))
+        s.commit()
+    finally:
+        s.close()
+
+
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
     _ensure_market_tick_columns()
     _ensure_polymarket_v1_columns()
+    _ensure_wallet_indexes()
     ensure_sqlite_compat(engine)
     s = get_session()
     try:

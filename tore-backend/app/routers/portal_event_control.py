@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+import csv
+import io
 from typing import Iterator, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from sqlalchemy import func
@@ -16,6 +19,7 @@ from app.services.audit_service import write_audit_log
 from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
+from app.services.rate_limit_service import enforce_rate_limit
 from app.services.wallet_service import get_or_create_wallet
 from app.services.p3_common import effective_module_state, ensure_event_action_allowed, get_event_runtime_state, is_event_live
 
@@ -167,24 +171,48 @@ def update_modules(
     return cfg
 
 
+@router.post("/wallet/topup", response_model=WalletAdminTopupOut)
 @router.post("/wallet/admin/topup", response_model=WalletAdminTopupOut)
 def wallet_admin_topup(
     payload: WalletAdminTopupIn,
+    idempotency_header: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     identity=Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
-    ensure_event_action_allowed(db, payload.event_id, None, write=True)
+    ensure_event_action_allowed(db, payload.event_id, "wallet_enabled", write=True)
+    target_user_id = (payload.target_user_id or payload.user_id or "").strip()
+    if not target_user_id:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_target", "message": "target_user_id is required"})
+    amount = payload.amount_cents if payload.amount_cents is not None else payload.amount_tickets
+    if amount is None or amount < 1:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_amount", "message": "amount must be >= 1"})
+    reason = payload.note or payload.reason or "admin_topup"
+    idempotency_key = (idempotency_header or payload.client_key or payload.idempotency_key or "").strip()
+    if len(idempotency_key) < 1:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency key required"})
+    enforce_rate_limit("wallet_topup", f"{identity['user_id']}:{idempotency_key}")
     ledger, idempotent = admin_topup(
         db,
         event_id=payload.event_id,
-        user_id=payload.user_id,
-        amount_tickets=payload.amount_tickets,
-        reason=payload.reason,
-        idempotency_key=payload.idempotency_key,
+        user_id=target_user_id,
+        amount_tickets=amount,
+        reason=reason,
+        idempotency_key=idempotency_key,
         actor_user_id=identity["user_id"],
     )
     if not idempotent:
+        write_audit_log(
+            db,
+            actor_partner_id=identity["user_id"],
+            actor_role=identity["role"],
+            action="wallet.topup",
+            entity_type="wallet_ledger_entry",
+            entity_id=str(ledger.id),
+            event_id=payload.event_id,
+            bar_id=event.bar_id,
+            payload={"user_id": target_user_id, "amount_tickets": amount, "reason": reason},
+        )
         write_audit_log(
             db,
             actor_partner_id=identity["user_id"],
@@ -194,10 +222,10 @@ def wallet_admin_topup(
             entity_id=str(ledger.id),
             event_id=payload.event_id,
             bar_id=event.bar_id,
-            payload={"user_id": payload.user_id, "amount_tickets": payload.amount_tickets, "reason": payload.reason},
+            payload={"user_id": target_user_id, "amount_tickets": amount, "reason": reason},
         )
     db.commit()
-    wallet = get_or_create_wallet(db, payload.user_id)
+    wallet = get_or_create_wallet(db, target_user_id)
     return WalletAdminTopupOut(
         ledger_id=ledger.id,
         event_id=ledger.event_id,
@@ -210,6 +238,7 @@ def wallet_admin_topup(
     )
 
 
+@router.get("/wallet/logs", response_model=WalletAdminLogPageOut)
 @router.get("/wallet/admin/logs", response_model=WalletAdminLogPageOut)
 def wallet_admin_logs(
     event_id: int,
@@ -219,13 +248,15 @@ def wallet_admin_logs(
     min_delta: Optional[int] = Query(default=None),
     max_delta: Optional[int] = Query(default=None),
     idempotency_key: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    type: Optional[str] = Query(default=None),
     cursor: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     identity=Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, event_id, identity["bar_id"])
-    ensure_event_action_allowed(db, event_id, None, write=False)
+    ensure_event_action_allowed(db, event_id, "wallet_enabled", write=False)
     rows, next_cursor = list_wallet_admin_logs(
         db,
         event_id=event.id,
@@ -235,6 +266,8 @@ def wallet_admin_logs(
         min_delta=min_delta,
         max_delta=max_delta,
         idempotency_key=idempotency_key,
+        query=q,
+        tx_type=type,
         cursor=cursor,
         limit=limit,
     )
@@ -242,6 +275,50 @@ def wallet_admin_logs(
         items=[WalletAdminLogOut(id=r.id, event_id=r.event_id, user_id=r.user_id, amount_tickets=r.amount_tickets, reason=r.reason, idempotency_key=r.idempotency_key, created_at=r.created_at) for r in rows],
         next_cursor=next_cursor,
     )
+
+
+@router.get("/wallet/logs/export.csv")
+def wallet_admin_logs_export(
+    event_id: int,
+    identity=Depends(require_role("manager")),
+    db: Session = Depends(get_db),
+):
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, event_id, "wallet_enabled", write=False)
+    rows, _ = list_wallet_admin_logs(
+        db,
+        event_id=event.id,
+        user_id=None,
+        after=None,
+        before=None,
+        min_delta=None,
+        max_delta=None,
+        idempotency_key=None,
+        query=None,
+        tx_type=None,
+        cursor=None,
+        limit=10000,
+    )
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="wallet.export",
+        entity_type="wallet_ledger_entry",
+        entity_id=None,
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"rows": len(rows)},
+    )
+    db.commit()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["ts", "user_id", "type", "amount", "note", "ref_id"])
+    for row in rows:
+        writer.writerow([row.created_at.isoformat(), row.user_id, "topup", row.amount_tickets, row.reason, row.idempotency_key])
+
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=wallet_logs_event_{event_id}.csv"})
 
 
 @router.get("/polymarket/event/{event_id}")

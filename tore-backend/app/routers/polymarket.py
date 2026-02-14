@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterator, List, Optional
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -305,8 +305,18 @@ def finalize_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _gate_bet_event_state(db, bet_id, write=True)
-    out = polymarket_service.finalize_bet(db, bet_id=bet_id, actor=user)
+    try:
+        _gate_bet_event_state(db, bet_id, write=True)
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict):
+            raise HTTPException(status_code=exc.status_code, detail=str(exc.detail.get("message") or exc.detail.get("reason") or "Action blocked"))
+        raise
+    try:
+        out = polymarket_service.finalize_bet(db, bet_id=bet_id, actor=user)
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict):
+            raise HTTPException(status_code=exc.status_code, detail=str(exc.detail.get("message") or exc.detail.get("reason") or "Action blocked"))
+        raise
     polymarket_service.audit_polymarket(db, action="polymarket.finalize", user=user, bet=db.get(Bet, bet_id), payload={})
     db.commit()
     return out
@@ -319,8 +329,18 @@ def finalize_polymarket_ultra(
     db: Session = Depends(get_db),
 ):
     bet_id = int(payload.get("market_id") or 0)
-    _gate_bet_event_state(db, bet_id, write=True)
-    out = polymarket_service.finalize_bet(db, bet_id=bet_id, actor=user)
+    try:
+        _gate_bet_event_state(db, bet_id, write=True)
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict):
+            raise HTTPException(status_code=exc.status_code, detail=str(exc.detail.get("message") or exc.detail.get("reason") or "Action blocked"))
+        raise
+    try:
+        out = polymarket_service.finalize_bet(db, bet_id=bet_id, actor=user)
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict):
+            raise HTTPException(status_code=exc.status_code, detail=str(exc.detail.get("message") or exc.detail.get("reason") or "Action blocked"))
+        raise
     polymarket_service.audit_polymarket(db, action="polymarket.finalize", user=user, bet=db.get(Bet, bet_id), payload={})
     db.commit()
     return out

@@ -55,7 +55,7 @@ def admin_topup(
     wallet = get_or_create_wallet(db, user_id)
     ticket_balance = get_ticket_balance(db, event_id, user_id)
 
-    apply_wallet_tx(
+    _, tx, _ = apply_wallet_tx(
         db,
         user_id=user_id,
         amount_tickets=amount_tickets,
@@ -79,6 +79,10 @@ def admin_topup(
     db.add(wallet)
     db.add(ticket_balance)
     db.flush()
+    if tx.ref_id is None:
+        tx.ref_id = f"ledger:{ledger.id}"
+        db.add(tx)
+        db.flush()
     return ledger, False
 
 
@@ -106,33 +110,42 @@ def list_wallet_admin_logs(
     min_delta: Optional[int],
     max_delta: Optional[int],
     idempotency_key: Optional[str],
+    query: Optional[str],
+    tx_type: Optional[str],
     cursor: Optional[str],
     limit: int,
 ) -> tuple[list[WalletLedgerEntry], Optional[str]]:
-    q = db.query(WalletLedgerEntry).filter(WalletLedgerEntry.event_id == event_id)
+    stmt = db.query(WalletLedgerEntry).filter(WalletLedgerEntry.event_id == event_id)
     if user_id:
-        q = q.filter(WalletLedgerEntry.user_id == user_id)
+        stmt = stmt.filter(WalletLedgerEntry.user_id == user_id)
     if after:
-        q = q.filter(WalletLedgerEntry.created_at >= after)
+        stmt = stmt.filter(WalletLedgerEntry.created_at >= after)
     if before:
-        q = q.filter(WalletLedgerEntry.created_at <= before)
+        stmt = stmt.filter(WalletLedgerEntry.created_at <= before)
     if min_delta is not None:
-        q = q.filter(WalletLedgerEntry.amount_tickets >= min_delta)
+        stmt = stmt.filter(WalletLedgerEntry.amount_tickets >= min_delta)
     if max_delta is not None:
-        q = q.filter(WalletLedgerEntry.amount_tickets <= max_delta)
+        stmt = stmt.filter(WalletLedgerEntry.amount_tickets <= max_delta)
     if idempotency_key:
-        q = q.filter(WalletLedgerEntry.idempotency_key == idempotency_key)
+        stmt = stmt.filter(WalletLedgerEntry.idempotency_key == idempotency_key)
+    if query:
+        token = f"%{query.strip()}%"
+        stmt = stmt.filter(or_(WalletLedgerEntry.user_id.ilike(token), WalletLedgerEntry.reason.ilike(token)))
+    if tx_type:
+        normalized = tx_type.strip().lower()
+        if normalized == "topup":
+            stmt = stmt.filter(WalletLedgerEntry.amount_tickets > 0)
 
     cursor_ts, cursor_id = parse_cursor(cursor)
     if cursor_ts and cursor_id:
-        q = q.filter(
+        stmt = stmt.filter(
             or_(
                 WalletLedgerEntry.created_at < cursor_ts,
                 and_(WalletLedgerEntry.created_at == cursor_ts, WalletLedgerEntry.id < cursor_id),
             )
         )
 
-    rows = q.order_by(WalletLedgerEntry.created_at.desc(), WalletLedgerEntry.id.desc()).limit(limit + 1).all()
+    rows = stmt.order_by(WalletLedgerEntry.created_at.desc(), WalletLedgerEntry.id.desc()).limit(limit + 1).all()
     next_cursor = None
     if len(rows) > limit:
         last = rows[limit - 1]

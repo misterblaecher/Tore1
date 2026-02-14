@@ -792,6 +792,7 @@ class WalletTx(Base):
     __tablename__ = "wallet_txs"
     __table_args__ = (
         UniqueConstraint("user_id", "idempotency_key", name="uq_wallet_txs_user_idempotency"),
+        Index("ix_wallet_txs_user_ts", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -813,6 +814,7 @@ class WalletLedgerEntry(Base):
     __tablename__ = "wallet_ledger_entries"
     __table_args__ = (
         UniqueConstraint("event_id", "idempotency_key", name="uq_wallet_ledger_event_idempotency"),
+        Index("ix_wallet_ledger_event_ts", "event_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -824,6 +826,24 @@ class WalletLedgerEntry(Base):
     created_by_user_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("partner_users.id"), nullable=True
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class WalletGift(Base):
+    __tablename__ = "wallet_gifts"
+    __table_args__ = (
+        UniqueConstraint("from_user_id", "idempotency_key", name="uq_wallet_gifts_sender_idempotency"),
+        Index("ix_wallet_gifts_from_ts", "from_user_id", "created_at"),
+        Index("ix_wallet_gifts_to_ts", "to_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    from_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    to_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    amount_tickets: Mapped[int] = mapped_column(Integer)
+    message: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 

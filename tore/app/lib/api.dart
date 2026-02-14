@@ -257,6 +257,41 @@ class Api {
     }
   }
 
+  Future<Map<String, dynamic>> walletMe() async {
+    final res = await _client.dio.get('/wallet/me');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> walletLedger({String? cursor, int limit = 30}) async {
+    final res = await _client.dio.get(
+      '/wallet/me/ledger',
+      queryParameters: {
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> walletGift({
+    required String toUserId,
+    required int amountCents,
+    required String idempotencyKey,
+    int? eventId,
+  }) async {
+    final res = await _client.dio.post(
+      '/wallet/gift',
+      data: {
+        if (eventId != null) 'event_id': eventId,
+        'to_user_id': toUserId,
+        'amount_cents': amountCents,
+        'client_key': idempotencyKey,
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   // -------- ADMIN --------
 
   Future<List<dynamic>> adminPrices(int eventId) async {

@@ -23,6 +23,52 @@ class WalletMeOut(BaseModel):
     transactions: List[WalletTxOut]
 
 
+class WalletMeLiteOut(BaseModel):
+    balance_tickets: int
+    updated_at: datetime
+
+
+class WalletLedgerRowOut(BaseModel):
+    id: int
+    ts: datetime
+    type: str
+    amount: int
+    ref_id: Optional[str] = None
+    note: Optional[str] = None
+
+
+class WalletLedgerPageOut(BaseModel):
+    items: List[WalletLedgerRowOut]
+    next_cursor: Optional[str] = None
+
+
+class WalletGiftIn(BaseModel):
+    event_id: Optional[int] = None
+    to_user_id: str
+    amount_cents: int = Field(le=1000000)
+    message: Optional[str] = Field(default=None, max_length=255)
+    client_key: Optional[str] = Field(default=None, min_length=1, max_length=128)
+
+
+class WalletGiftOut(BaseModel):
+    gift_id: int
+    new_balance_sender: int
+
+
+class WalletGiftRowOut(BaseModel):
+    id: int
+    ts: datetime
+    direction: str
+    amount: int
+    counterparty_user_id: str
+    message: Optional[str] = None
+
+
+class WalletGiftPageOut(BaseModel):
+    items: List[WalletGiftRowOut]
+    next_cursor: Optional[str] = None
+
+
 class WalletTopupIn(BaseModel):
     user_id: str
     amount_tickets: int = Field(ge=1)
