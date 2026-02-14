@@ -10,6 +10,7 @@ import '../../../state.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
+import 'order_status_live_screen.dart';
 
 class OrderQrScreen extends ConsumerStatefulWidget {
   const OrderQrScreen({super.key, required this.orderId});
@@ -276,6 +277,16 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
                     },
               icon: const Icon(Icons.copy_all_outlined),
               label: const Text('Copier le deeplink'),
+            ),
+
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => OrderStatusLiveScreen(orderId: widget.orderId)),
+                );
+              },
+              icon: const Icon(Icons.track_changes_outlined),
+              label: const Text('Suivi live'),
             ),
             ElevatedButton.icon(
               onPressed: (_loading || _isRateLimited) ? null : () => _issueQr(),

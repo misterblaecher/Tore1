@@ -125,6 +125,25 @@ class Api {
 
 
 
+
+  Future<Map<String, dynamic>> getOrder(int orderId) async {
+    final res = await _client.dio.get('/orders/$orderId');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> liveOrders({required int eventId, String? status, String? cursor, int limit = 40}) async {
+    final res = await _client.dio.get(
+      '/orders/live',
+      queryParameters: {
+        'event_id': eventId,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> issueOrderClientQr({
     required int orderId,
     String? idempotencyKey,

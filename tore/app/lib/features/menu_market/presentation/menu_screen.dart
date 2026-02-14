@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,9 +13,11 @@ import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
 import '../../leaderboard/presentation/leaderboard_screen.dart';
-import '../../orders/presentation/order_qr_screen.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
+import 'cart_screen.dart';
+import 'cart_state.dart';
+import 'menu_item_detail_sheet.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key, required this.eventId});
@@ -30,7 +30,6 @@ class MenuScreen extends ConsumerStatefulWidget {
 class _MenuScreenState extends ConsumerState<MenuScreen> {
   late Future<_MenuData> _future;
   bool _didLoadWithUser = false;
-  final Map<int, bool> _ordering = <int, bool>{};
 
   @override
   void initState() {
@@ -82,50 +81,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     return 1;
   }
 
-  Future<int?> _pickQty(BuildContext context) async {
-    int qty = 1;
-    return showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Quantité'),
-        content: StatefulBuilder(
-          builder: (ctx, setState) => Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: qty <= 1 ? null : () => setState(() => qty -= 1),
-                icon: const Icon(Icons.remove_circle_outline),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(qty.toString(), style: Theme.of(ctx).textTheme.headlineSmall),
-              ),
-              IconButton(
-                onPressed: qty >= 10 ? null : () => setState(() => qty += 1),
-                icon: const Icon(Icons.add_circle_outline),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(qty),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.watch(meProvider);
-    final api = ref.read(apiProvider);
     final userId = ref.watch(userIdProvider);
+    final cart = ref.watch(cartProvider(widget.eventId));
     final configAsync = ref.watch(eventConfigProvider(widget.eventId));
     final config = configAsync.maybeWhen(
       data: (value) => value,
@@ -248,6 +208,26 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               children: [
                 const ApiStatusBadge(),
                 const Spacer(),
+                IconButton(
+                  tooltip: 'Panier',
+                  icon: Badge(
+                    isLabelVisible: cart.totalItems > 0,
+                    label: Text(cart.totalItems.toString()),
+                    child: const Icon(Icons.shopping_cart_outlined),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CartScreen(
+                          eventId: widget.eventId,
+                          tickets: tickets,
+                          eventState: data.eventState,
+                          isOffline: isOffline,
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 if (tickets != null)
                   Chip(
                     label: Text('🎟️ $tickets'),
@@ -322,9 +302,32 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     final disabledBecauseAuth = userId == null;
                     final disabledBecauseOffline = isOffline;
                     final disabledBecauseEventState = writeBlocked;
-                    final isBusy = _ordering[itemId] == true;
+                    final cartController = ref.read(cartProvider(widget.eventId).notifier);
 
                     return ListTile(
+                      onTap: () {
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => MenuItemDetailSheet(
+                            item: d,
+                            enabled: !(disabledBecauseAuth || disabledBecauseOffline || disabledBecauseEventState),
+                            onAdd: (qty) {
+                              cartController.addOrIncrement(
+                                itemId: itemId,
+                                barId: int.tryParse((d['bar_id'] ?? d['barId'] ?? '').toString()) ?? 0,
+                                name: name,
+                                subtitle: subtitle,
+                                ticketCost: requiredTickets,
+                                qty: qty,
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$name ajouté au panier (x$qty)')),
+                              );
+                            },
+                          ),
+                        );
+                      },
                       title: Text(name.isEmpty ? '(Sans nom)' : name),
                       subtitle: Text(subtitle),
                       trailing: SizedBox(
@@ -334,76 +337,19 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                   disabledBecauseAuth ||
                                   disabledBecauseOffline ||
                                   disabledBecauseEventState ||
-                                  !hasEnoughTickets ||
-                                  isBusy)
+                                  !hasEnoughTickets)
                               ? null
                               : () async {
-                                  try {
-                                    final uid = userId;
-                                    if (uid == null) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Auth en cours...')),
-                                      );
-                                      return;
-                                    }
-
-                                    final qty = await _pickQty(context) ?? 1;
-
-                                    if (tickets != null && tickets < requiredTickets * qty) {
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Tickets insuffisants (besoin: ${requiredTickets * qty})')),
-                                      );
-                                      return;
-                                    }
-
-                                    setState(() => _ordering[itemId] = true);
-                                    try {
-                                      final barIdRaw = d['bar_id'] ?? d['barId'];
-                                      final resolvedBarId = (barIdRaw is num)
-                                          ? barIdRaw.toInt()
-                                          : int.tryParse(barIdRaw?.toString() ?? '') ?? 0;
-                                      if (resolvedBarId <= 0) {
-                                        throw Exception('bar_id manquant pour commander');
-                                      }
-                                      final idemKey = 'order-${widget.eventId}-$uid-$itemId-$qty';
-                                      final order = await api.createOrder(
-                                        barId: resolvedBarId,
-                                        eventId: widget.eventId,
-                                        userId: uid,
-                                        paymentMode: 'tickets',
-                                        items: [
-                                          {'item_id': itemId, 'qty': qty},
-                                        ],
-                                        idempotencyKey: idemKey,
-                                      );
-                                      final orderId = (order['id'] as num?)?.toInt() ?? int.tryParse(order['id']?.toString() ?? '');
-                                      if (context.mounted && orderId != null) {
-                                        unawaited(Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) => OrderQrScreen(orderId: orderId),
-                                          ),
-                                        ));
-                                      }
-                                    } finally {
-                                      if (mounted) {
-                                        setState(() => _ordering[itemId] = false);
-                                      }
-                                    }
-
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('✅ Commande envoyée: $name (QR prêt)')),
-                                    );
-
-                                    _refresh();
-                                  } catch (e) {
-                                    if (!context.mounted) return;
-                                    final runtimeMessage = ErrorMapper.runtimeBlockedMessage(e);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Erreur commande: ${runtimeMessage ?? ErrorMapper.message(e)}')),
-                                    );
-                                  }
+                                  cartController.addOrIncrement(
+                                    itemId: itemId,
+                                    barId: int.tryParse((d['bar_id'] ?? d['barId'] ?? '').toString()) ?? 0,
+                                    name: name,
+                                    subtitle: subtitle,
+                                    ticketCost: requiredTickets,
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$name ajouté au panier')),
+                                  );
                                 },
                           child: Text(
                             disabledBecauseAuth
@@ -412,9 +358,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                     ? 'Hors-ligne'
                                     : (disabledBecauseEventState
                                         ? 'Bloqué'
-                                        : (isBusy
-                                            ? '...'
-                                            : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Commander')))),
+                                        : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Ajouter'))),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
