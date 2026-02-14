@@ -10,6 +10,7 @@ import '../../../core/network/error_mapper.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/widgets/offline_fallback_screen.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
+import '../../../shared/widgets/service_limited_banner.dart';
 import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
@@ -273,7 +274,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 if (writeBlocked)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: _WriteBlockedBanner(message: writeBlockedReasonMessage(data.eventState)),
+                    child: ServiceLimitedBanner(message: writeBlockedReasonMessage(data.eventState)),
                   ),
                 top,
                 const Expanded(child: Center(child: Text('Menu vide'))),
@@ -296,7 +297,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               if (writeBlocked)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: _WriteBlockedBanner(message: writeBlockedReasonMessage(data.eventState)),
+                  child: ServiceLimitedBanner(message: writeBlockedReasonMessage(data.eventState)),
                 ),
               top,
               Expanded(
@@ -398,8 +399,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                     _refresh();
                                   } catch (e) {
                                     if (!context.mounted) return;
+                                    final runtimeMessage = ErrorMapper.runtimeBlockedMessage(e);
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Erreur commande: ${ErrorMapper.message(e)}')),
+                                      SnackBar(content: Text('Erreur commande: ${runtimeMessage ?? ErrorMapper.message(e)}')),
                                     );
                                   }
                                 },
@@ -446,30 +448,6 @@ class _MenuData {
 
 class _MenuLoadTimeoutException implements Exception {
   const _MenuLoadTimeoutException();
-}
-
-class _WriteBlockedBanner extends StatelessWidget {
-  const _WriteBlockedBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.red.shade100,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.lock_clock_outlined),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _OfflineOrdersBanner extends StatelessWidget {

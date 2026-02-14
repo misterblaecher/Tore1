@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/api_exception.dart';
 import '../../core/network/error_mapper.dart';
 import '../../state.dart';
+import '../../shared/utils/runtime_write_guard.dart';
+import '../../shared/widgets/service_limited_banner.dart';
 import 'polymarket_models.dart';
 
 class MarketDetailScreen extends ConsumerStatefulWidget {
@@ -23,6 +26,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   String? _bannerReason;
   final _customCtrl = TextEditingController();
   int _amount = 100;
+  final Set<int> _historyIds = <int>{};
 
   @override
   void initState() {
@@ -44,12 +48,15 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       setState(() {
         _market = res.market;
         _history = res.myHistory;
+        _historyIds
+          ..clear()
+          ..addAll(res.myHistory.map((e) => e.id));
         _nextCursor = res.nextCursor;
       });
       await _resolveRuntimeBlock();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.message(e))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e))));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -68,14 +75,14 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   String? _extractRuntimeReason(Map<String, dynamic> json) {
     final reason = json['reason']?.toString();
     final state = (json['runtime_state'] ?? json['state'] ?? json['status'])?.toString().toLowerCase();
-    if (reason == 'event_paused' || reason == 'read_only' || reason == 'frozen') return reason;
-    if (json['event_paused'] == true || state == 'pause' || state == 'paused') return 'event_paused';
-    if (json['read_only'] == true || state == 'read_only') return 'read_only';
-    if (json['frozen'] == true || state == 'frozen') return 'frozen';
-    return null;
+    if (json['event_paused'] == true) return 'event_paused';
+    if (json['read_only'] == true) return 'read_only';
+    if (json['frozen'] == true) return 'frozen';
+    if (json['closed'] == true) return 'closed';
+    return normalizeRuntimeBlockReason(state: state, reason: reason);
   }
 
-  bool get _writeBlocked => _bannerReason == 'event_paused' || _bannerReason == 'read_only' || _bannerReason == 'frozen';
+  bool get _writeBlocked => _bannerReason != null;
 
   Future<void> _submit(String side) async {
     if (_submitting || _writeBlocked || _market == null) return;
@@ -95,10 +102,21 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       if (!mounted) return;
       final msg = ErrorMapper.message(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      if (msg.contains('pause')) setState(() => _bannerReason = 'event_paused');
+      final runtimeReason = normalizeRuntimeBlockReason(reason: _extractErrorReason(e));
+      if (runtimeReason != null) setState(() => _bannerReason = runtimeReason);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String? _extractErrorReason(Object e) {
+    if (e is ApiException) {
+      final detail = e.details;
+      if (detail is Map && detail['detail'] is Map) {
+        return (detail['detail'] as Map)['reason']?.toString();
+      }
+    }
+    return null;
   }
 
   Future<void> _loadMoreHistory() async {
@@ -107,7 +125,8 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       final page = await ref.read(apiProvider).fetchMyHistory(marketId: widget.marketId, cursor: _nextCursor);
       if (!mounted) return;
       setState(() {
-        _history = [..._history, ...page.items];
+        final fresh = page.items.where((e) => _historyIds.add(e.id)).toList();
+        _history = [..._history, ...fresh];
         _nextCursor = page.nextCursor;
       });
     } catch (_) {}
@@ -133,11 +152,11 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             const SizedBox(height: 12),
             Text('My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
             if (_bannerReason != null)
-              Container(
-                margin: const EdgeInsets.only(top: 10),
-                padding: const EdgeInsets.all(10),
-                color: Colors.amber.shade100,
-                child: Text('Trading désactivé: $_bannerReason'),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: ServiceLimitedBanner(
+                  message: writeBlockedReasonMessage(_bannerReason),
+                ),
               ),
             const SizedBox(height: 12),
             Wrap(
@@ -157,7 +176,13 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               decoration: const InputDecoration(labelText: 'Custom amount (cents)'),
               onSubmitted: (v) {
                 final parsed = int.tryParse(v);
-                if (parsed != null && parsed > 0) setState(() => _amount = parsed);
+                if (parsed == null || parsed < 1) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Montant invalide (minimum 1).')),
+                  );
+                  return;
+                }
+                setState(() => _amount = parsed);
               },
             ),
             const SizedBox(height: 10),

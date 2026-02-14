@@ -24,8 +24,11 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   bool _initialLoading = true;
   bool _hasError = false;
   String? _error;
+  String? _errorKind;
   String _scope = 'global';
   String _status = 'live';
+  final Set<int> _seenIds = <int>{};
+  final Set<String> _seenCursors = <String>{};
 
   @override
   void initState() {
@@ -45,8 +48,11 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       _initialLoading = true;
       _hasError = false;
       _error = null;
+      _errorKind = null;
       _nextCursor = null;
       _items = [];
+      _seenIds.clear();
+      _seenCursors.clear();
     });
     await _loadMore();
   }
@@ -60,6 +66,8 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   Future<void> _loadMore() async {
     if (_loading) return;
     if (!_initialLoading && (_nextCursor == null)) return;
+    if (_nextCursor != null && _seenCursors.contains(_nextCursor)) return;
+    if (_nextCursor != null) _seenCursors.add(_nextCursor!);
     _loading = true;
     final ctx = ref.read(appContextProvider);
     try {
@@ -71,8 +79,8 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
           );
       if (!mounted) return;
       setState(() {
-        final existing = _items.map((e) => e.id).toSet();
-        _items = [..._items, ...page.items.where((e) => !existing.contains(e.id))];
+        final fresh = page.items.where((e) => _seenIds.add(e.id)).toList();
+        _items = [..._items, ...fresh];
         _nextCursor = page.nextCursor;
         _initialLoading = false;
       });
@@ -81,11 +89,18 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       setState(() {
         _hasError = true;
         _error = ErrorMapper.message(e);
+        _errorKind = _resolveErrorKind(e);
         _initialLoading = false;
       });
     } finally {
       _loading = false;
     }
+  }
+
+  String _resolveErrorKind(Object e) {
+    if (ErrorMapper.isForbidden(e)) return 'denied';
+    if (ErrorMapper.isOffline(e)) return 'offline';
+    return 'generic';
   }
 
   @override
@@ -186,8 +201,29 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
 
   Widget _buildList() {
     if (_initialLoading) return const Center(child: CircularProgressIndicator());
-    if (_hasError) return ListView(children: [Padding(padding: const EdgeInsets.all(16), child: Text(_error ?? 'Erreur'))]);
-    if (_items.isEmpty) return ListView(children: const [SizedBox(height: 200), Center(child: Text('Aucun market.'))]);
+    if (_hasError) {
+      final title = _errorKind == 'offline'
+          ? 'Tu es hors-ligne.'
+          : (_errorKind == 'denied' ? 'Accès refusé.' : 'Impossible de charger les marchés.');
+      return ListView(
+        children: [
+          const SizedBox(height: 180),
+          Center(child: Text(title)),
+          const SizedBox(height: 8),
+          Center(child: Text(_error ?? 'Erreur')),
+          const SizedBox(height: 12),
+          Center(child: OutlinedButton(onPressed: _refresh, child: const Text('Réessayer'))),
+        ],
+      );
+    }
+    if (_items.isEmpty) {
+      return ListView(
+        children: const [
+          SizedBox(height: 200),
+          Center(child: Text('Aucun market disponible pour ce filtre.')),
+        ],
+      );
+    }
 
     return ListView.builder(
       controller: _scrollController,
@@ -195,9 +231,15 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       itemBuilder: (context, i) {
         if (i == _items.length) {
           if (_nextCursor == null) return const SizedBox(height: 32);
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: CircularProgressIndicator()),
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: OutlinedButton.icon(
+                onPressed: _loadMore,
+                icon: const Icon(Icons.expand_more),
+                label: const Text('Charger plus'),
+              ),
+            ),
           );
         }
         final m = _items[i];

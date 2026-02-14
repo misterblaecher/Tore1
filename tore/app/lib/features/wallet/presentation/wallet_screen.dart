@@ -5,6 +5,7 @@ import '../../../state.dart';
 import '../../../shared/utils/user_display.dart';
 import '../../../core/network/error_mapper.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
+import '../../../shared/widgets/service_limited_banner.dart';
 import 'package:flutter/foundation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../wallet_providers.dart';
@@ -131,7 +132,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 if (writeBlocked)
-                  _WriteBlockedBanner(message: writeBlockedReasonMessage(eventState)),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ServiceLimitedBanner(message: writeBlockedReasonMessage(eventState)),
+                  ),
                 Text(
                   'Tickets: $balance',
                   style: Theme.of(context).textTheme.headlineSmall,
@@ -240,7 +244,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gift envoyé')));
                           } catch (e) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.message(e))));
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e))));
                           }
                         },
                   child: const Text('Send Gift'),
@@ -330,33 +334,6 @@ class _HistoryTile extends StatelessWidget {
         title: Text(trailing, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text('$subtitle\n$time'),
         isThreeLine: true,
-      ),
-    );
-  }
-}
-
-class _WriteBlockedBanner extends StatelessWidget {
-  const _WriteBlockedBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.red.shade100,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              const Icon(Icons.lock_clock_outlined),
-              const SizedBox(width: 8),
-              Expanded(child: Text(message)),
-            ],
-          ),
-        ),
       ),
     );
   }

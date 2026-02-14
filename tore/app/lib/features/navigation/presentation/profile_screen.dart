@@ -1,17 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
-import '../../../core/auth/auth_repository.dart';
 import '../../../core/app_context/app_context.dart';
+import '../../../state.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  String? _sessionToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionToken();
+  }
+
+  Future<void> _loadSessionToken() async {
+    final token = await ref.read(authRepositoryProvider).api.tokenStorage.readToken();
+    if (!mounted) return;
+    setState(() => _sessionToken = token);
+  }
+
+  Future<void> _patchPreference(Future<void> Function() action, String okMessage) async {
+    try {
+      await action();
+      ref.invalidate(meProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(okMessage)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erreur réseau, réessaie.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final meAsync = ref.watch(meProvider);
     final ctx = ref.watch(appContextProvider);
+    final runtimeStateAsync = ctx.hasActiveEvent
+        ? ref.watch(_profileEventProvider(ctx.activeEventId!))
+        : const AsyncValue<String>.data('N/A');
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profil')),
@@ -63,69 +100,27 @@ class ProfileScreen extends ConsumerWidget {
                       SwitchListTile.adaptive(
                         value: me.showAvatar,
                         title: const Text('Afficher mon avatar'),
-                        onChanged: (v) async {
-                          final repo = ref.read(authRepositoryProvider);
-                          try {
-                            await repo.patchMe(showAvatar: v);
-                            ref.invalidate(meProvider);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Préférence enregistrée')),
-                              );
-                            }
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Erreur réseau, réessaie.')),
-                              );
-                            }
-                          }
-                        },
+                        onChanged: (v) => _patchPreference(
+                          () => ref.read(authRepositoryProvider).patchMe(showAvatar: v),
+                          'Préférence enregistrée',
+                        ),
                       ),
                       SwitchListTile.adaptive(
                         value: me.showAddress,
                         title: const Text('Afficher mon adresse'),
-                        onChanged: (v) async {
-                          final repo = ref.read(authRepositoryProvider);
-                          try {
-                            await repo.patchMe(showAddress: v);
-                            ref.invalidate(meProvider);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Préférence enregistrée')),
-                              );
-                            }
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Erreur réseau, réessaie.')),
-                              );
-                            }
-                          }
-                        },
+                        onChanged: (v) => _patchPreference(
+                          () => ref.read(authRepositoryProvider).patchMe(showAddress: v),
+                          'Préférence enregistrée',
+                        ),
                       ),
                       SwitchListTile.adaptive(
                         value: me.showIdentityToStaff,
                         title: const Text("Autoriser l'affichage de mon identité au staff"),
                         subtitle: const Text('Visible seulement si le bar active aussi ce mode.'),
-                        onChanged: (v) async {
-                          final repo = ref.read(authRepositoryProvider);
-                          try {
-                            await repo.patchMe(showIdentityToStaff: v);
-                            ref.invalidate(meProvider);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Consentement enregistré')),
-                              );
-                            }
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Erreur réseau, réessaie.')),
-                              );
-                            }
-                          }
-                        },
+                        onChanged: (v) => _patchPreference(
+                          () => ref.read(authRepositoryProvider).patchMe(showIdentityToStaff: v),
+                          'Consentement enregistré',
+                        ),
                       ),
                     ],
                   ),
@@ -135,11 +130,22 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               if (ctx.hasActiveEvent)
                 Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.logout),
-                    title: const Text('Quitter l’event'),
-                    subtitle: Text(ctx.activeEventName ?? 'Event #${ctx.activeEventId}'),
-                    onTap: () async {
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.event_available_outlined),
+                        title: const Text('Event en cours'),
+                        subtitle: Text(ctx.activeEventName ?? 'Event #${ctx.activeEventId}'),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('État runtime'),
+                        subtitle: Text(runtimeStateAsync.maybeWhen(data: (v) => v, orElse: () => 'LIVE')),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.logout),
+                        title: const Text('Quitter l’event'),
+                        onTap: () async {
                       final ok = await showDialog<bool>(
                             context: context,
                             builder: (_) => AlertDialog(
@@ -157,7 +163,9 @@ class ProfileScreen extends ConsumerWidget {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event quitté.')));
                         }
                       }
-                    },
+                        },
+                      ),
+                    ],
                   ),
                 ),
               if (ctx.hasActiveEvent) const SizedBox(height: 12),
@@ -202,6 +210,31 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Diagnostics', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final value = (_sessionToken != null && _sessionToken!.isNotEmpty) ? _sessionToken! : me.id;
+                          await Clipboard.setData(ClipboardData(text: value));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(value == me.id ? 'User ID copié' : 'Token session copié')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_all_outlined),
+                        label: Text((_sessionToken != null && _sessionToken!.isNotEmpty) ? 'Copier mon token session' : 'Copier mon user id'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           );
         },
@@ -220,6 +253,11 @@ class ProfileScreen extends ConsumerWidget {
     return (a + b).trim();
   }
 }
+
+final _profileEventProvider = FutureProvider.family<String, int>((ref, eventId) async {
+  final event = await ref.read(apiProvider).event(eventId);
+  return (event['runtime_state'] ?? event['state'] ?? event['status'] ?? 'LIVE').toString().toUpperCase();
+});
 
 class _EditField extends StatefulWidget {
   final String label;
