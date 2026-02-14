@@ -282,7 +282,8 @@ def apply_order_market_impact(s: Session, *, order: Order) -> int:
         )
         if not item:
             continue
-        next_price = normalize_price(item.current_price_cents + config.step_cents, config)
+        quantity = max(1, int(line.qty or 1))
+        next_price = normalize_price(item.current_price_cents + (config.step_cents * quantity), config)
         item.current_price_cents = next_price
         s.add(
             DrinkPriceTick(

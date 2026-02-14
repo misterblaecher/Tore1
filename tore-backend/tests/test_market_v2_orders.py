@@ -194,3 +194,43 @@ def test_served_order_does_not_tick_market_when_config_not_live():
         assert ticks == 0
     finally:
         s.close()
+
+
+def test_served_order_scales_market_impact_by_line_quantity():
+    bar_id, token = _seed_partner()
+    event_id = _seed_event(bar_id)
+    item_id = _seed_menu_item(bar_id, name="Negroni")
+    _, market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="Negroni")
+    client = TestClient(app)
+
+    created = client.post(
+        "/orders",
+        json={
+            "bar_id": bar_id,
+            "event_id": event_id,
+            "items": [{"item_id": item_id, "qty": 3}],
+            "device_id": "device-market-v2-qty",
+            "idempotency_key": "idem-market-v2-qty",
+        },
+    )
+    assert created.status_code == 200
+    order_id = created.json()["id"]
+    _mark_order_paid(order_id)
+
+    _patch_to_served(client, token, order_id)
+
+    s = get_session()
+    try:
+        market_item = s.get(DrinkMarketItem, market_item_id)
+        assert market_item is not None
+        assert market_item.current_price_cents == 350
+        order_ticks = (
+            s.query(DrinkPriceTick)
+            .filter(DrinkPriceTick.item_id == market_item.id, DrinkPriceTick.source == "order")
+            .all()
+        )
+        assert len(order_ticks) == 1
+        assert order_ticks[0].price_cents == 350
+        assert order_ticks[0].ref_order_id == order_id
+    finally:
+        s.close()
