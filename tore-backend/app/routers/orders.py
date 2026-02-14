@@ -80,7 +80,9 @@ def create_order_route(
             token_user_id = app_user.id
 
     resolved_user_id = payload.user_id or token_user_id
-    actor_key = resolved_user_id or payload.device_id or (request.client.host if request.client else "anon")
+    # Keep rate-limit actor key based on trusted identity only.
+    # `payload.user_id` is caller-controlled and can rotate per request, which weakens throttling.
+    actor_key = token_user_id or payload.device_id or (request.client.host if request.client else "anon")
     enforce_rate_limit("orders_create", actor_key)
     if token_user_id and payload.user_id and payload.user_id != token_user_id:
         raise HTTPException(403, "Forbidden")
