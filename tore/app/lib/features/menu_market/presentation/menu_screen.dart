@@ -9,6 +9,7 @@ import '../../../shared/widgets/api_status_badge.dart';
 import '../../../core/network/error_mapper.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/widgets/offline_fallback_screen.dart';
+import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../screens/organizer.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../../screens/admin_prices.dart';
@@ -40,13 +41,19 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final api = ref.read(apiProvider);
     final userId = ref.read(userIdProvider);
 
-    // Menu peut être consulté même si auth pas encore prête
-    final menuResult = await api.menuWithCacheStatus(widget.eventId);
+    final event = await api.event(widget.eventId).timeout(const Duration(seconds: 6), onTimeout: () {
+      throw const _MenuLoadTimeoutException();
+    });
+    final eventState = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'LIVE').toString();
+
+    final menuResult = await api.menuWithCacheStatus(widget.eventId).timeout(const Duration(seconds: 6), onTimeout: () {
+      throw const _MenuLoadTimeoutException();
+    });
     final items = (menuResult.items).cast<Map<String, dynamic>>();
     var isOffline = menuResult.fromCache;
 
     if (userId == null) {
-      return _MenuData(items: items, tickets: null, isOffline: isOffline);
+      return _MenuData(items: items, tickets: null, isOffline: isOffline, eventState: eventState);
     }
 
     int? tickets;
@@ -58,7 +65,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       isOffline = true;
     }
 
-    return _MenuData(items: items, tickets: tickets, isOffline: isOffline);
+    return _MenuData(items: items, tickets: tickets, isOffline: isOffline, eventState: eventState);
   }
 
   void _refresh() {
@@ -68,11 +75,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   }
 
   int _requiredTickets(Map<String, dynamic> d) {
-    // Backend fields can vary; try a few.
     final v = d['ticket_cost'] ?? d['tickets_cost'] ?? d['price_tickets'] ?? d['ticket_price'];
     if (v is num) return v.toInt();
     if (v != null) return int.tryParse(v.toString()) ?? 1;
-    return 1; // default: 1 ticket per item
+    return 1;
   }
 
   Future<int?> _pickQty(BuildContext context) async {
@@ -116,7 +122,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Déclenche auth/token dès l'ouverture
     ref.watch(meProvider);
     final api = ref.read(apiProvider);
     final userId = ref.watch(userIdProvider);
@@ -138,7 +143,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       );
     }
 
-    // Si initState a chargé sans userId, on recharge une fois dès que le user arrive.
     if (userId != null && !_didLoadWithUser) {
       _didLoadWithUser = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
@@ -169,7 +173,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   builder: (_) => WalletScreen(eventId: widget.eventId),
                 ),
               );
-              // En revenant du wallet, on refresh tickets
               _refresh();
             },
           ),
@@ -207,6 +210,21 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
           if (snap.hasError) {
             final err = snap.error;
+            if (err is _MenuLoadTimeoutException) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Réseau lent. Impossible de charger le menu.'),
+                      const SizedBox(height: 10),
+                      OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')),
+                    ],
+                  ),
+                ),
+              );
+            }
             if (err is OfflineNoCacheException) {
               return OfflineFallbackScreen(
                 title: 'Hors-ligne',
@@ -217,10 +235,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             return Center(child: Text(ErrorMapper.message(err as Object)));
           }
 
-          final data = snap.data ?? const _MenuData(items: [], tickets: null, isOffline: false);
+          final data = snap.data ?? const _MenuData(items: [], tickets: null, isOffline: false, eventState: 'LIVE');
           final items = data.items;
           final tickets = data.tickets;
           final isOffline = data.isOffline;
+          final writeBlocked = isWriteBlockedByEventState(data.eventState);
 
           final top = Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -251,6 +270,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: _OfflineOrdersBanner(),
                   ),
+                if (writeBlocked)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _WriteBlockedBanner(message: writeBlockedReasonMessage(data.eventState)),
+                  ),
                 top,
                 const Expanded(child: Center(child: Text('Menu vide'))),
               ],
@@ -268,6 +292,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: _OfflineOrdersBanner(),
+                ),
+              if (writeBlocked)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: _WriteBlockedBanner(message: writeBlockedReasonMessage(data.eventState)),
                 ),
               top,
               Expanded(
@@ -291,6 +320,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
                     final disabledBecauseAuth = userId == null;
                     final disabledBecauseOffline = isOffline;
+                    final disabledBecauseEventState = writeBlocked;
                     final isBusy = _ordering[itemId] == true;
 
                     return ListTile(
@@ -302,12 +332,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                           onPressed: (itemId == 0 ||
                                   disabledBecauseAuth ||
                                   disabledBecauseOffline ||
+                                  disabledBecauseEventState ||
                                   !hasEnoughTickets ||
                                   isBusy)
                               ? null
                               : () async {
                                   try {
-                                    final uid = userId; // non-null ici
+                                    final uid = userId;
                                     if (uid == null) {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text('Auth en cours...')),
@@ -317,7 +348,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
                                     final qty = await _pickQty(context) ?? 1;
 
-                                    // Validate tickets with chosen quantity
                                     if (tickets != null && tickets < requiredTickets * qty) {
                                       if (!context.mounted) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -335,7 +365,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                       if (resolvedBarId <= 0) {
                                         throw Exception('bar_id manquant pour commander');
                                       }
-                                      final idemKey = 'menu-${widget.eventId}-${itemId}-${DateTime.now().millisecondsSinceEpoch}';
+                                      final idemKey = 'order-${widget.eventId}-$uid-$itemId-$qty';
                                       final order = await api.createOrder(
                                         barId: resolvedBarId,
                                         eventId: widget.eventId,
@@ -365,7 +395,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                       SnackBar(content: Text('✅ Commande envoyée: $name (QR prêt)')),
                                     );
 
-                                    // Refresh balance/menu
                                     _refresh();
                                   } catch (e) {
                                     if (!context.mounted) return;
@@ -379,9 +408,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                 ? 'Auth...'
                                 : (disabledBecauseOffline
                                     ? 'Hors-ligne'
-                                    : (isBusy
-                                        ? '...'
-                                        : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Commander'))),
+                                    : (disabledBecauseEventState
+                                        ? 'Bloqué'
+                                        : (isBusy
+                                            ? '...'
+                                            : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Commander')))),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -403,12 +434,42 @@ class _MenuData {
   final List<Map<String, dynamic>> items;
   final int? tickets;
   final bool isOffline;
+  final String eventState;
 
   const _MenuData({
     required this.items,
     required this.tickets,
     required this.isOffline,
+    required this.eventState,
   });
+}
+
+class _MenuLoadTimeoutException implements Exception {
+  const _MenuLoadTimeoutException();
+}
+
+class _WriteBlockedBanner extends StatelessWidget {
+  const _WriteBlockedBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.red.shade100,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_clock_outlined),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OfflineOrdersBanner extends StatelessWidget {

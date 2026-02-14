@@ -127,8 +127,14 @@ class Api {
 
   Future<Map<String, dynamic>> issueOrderClientQr({
     required int orderId,
+    String? idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/orders/$orderId/client-qr');
+    final res = await _client.dio.post(
+      '/orders/$orderId/client-qr',
+      options: idempotencyKey == null
+          ? null
+          : Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
     return Map<String, dynamic>.from(res.data as Map);
   }
   // -------- MARKET / GRAPHS --------

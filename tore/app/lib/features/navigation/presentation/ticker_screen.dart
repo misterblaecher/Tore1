@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
 import '../../events/presentation/event_config_providers.dart';
+import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../ticker/ticker_models.dart';
 import '../../ticker/ticker_providers.dart';
 import '../../wallet/presentation/wallet_screen.dart';
@@ -24,7 +25,11 @@ class TickerScreen extends ConsumerWidget {
       orElse: () => true,
     );
     if (!tickerEnabled) {
-      return const Scaffold(body: Center(child: Text('Module indisponible pour cet event.')));
+      return const ModuleUnavailableScreen(
+        title: 'Ticker indisponible',
+        message: 'Ce module est désactivé pour cet event.',
+        reasonCode: 'module_off',
+      );
     }
 
     final state = ref.watch(tickerControllerProvider(eventId));
@@ -91,6 +96,12 @@ class _TickerTile extends StatelessWidget {
         onTap: () {
           if (item.refKind == 'wallet_tx' || item.refKind == 'wallet_gift') {
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: eventId)));
+            return;
+          }
+          if (item.refKind == 'order') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Détail commande indisponible ici.')),
+            );
           }
         },
         title: Text(item.title),
