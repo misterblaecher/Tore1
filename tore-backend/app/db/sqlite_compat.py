@@ -71,6 +71,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_identity_consent_columns(engine)
     ensure_order_client_qr_scan_table(engine)
     ensure_orders_zone_id(engine)
+    ensure_event_join_tables(engine)
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
@@ -139,6 +140,51 @@ def ensure_orders_zone_id(engine: Engine) -> None:
         if "zone_id" not in order_cols:
             conn.execute(text("ALTER TABLE orders ADD COLUMN zone_id INTEGER"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_zone_id ON orders (zone_id)"))
+
+
+def ensure_event_join_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    event_cols = _table_columns(engine, "events")
+    with engine.begin() as conn:
+        if "event_code" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN event_code VARCHAR(16)"))
+        if "charter_enabled" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN charter_enabled BOOLEAN DEFAULT 0"))
+        if "charter_version" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN charter_version VARCHAR(32)"))
+        if "charter_text" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN charter_text TEXT"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_events_event_code ON events (event_code)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_joins (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                device_id VARCHAR(120),
+                joined_at DATETIME,
+                idempotency_key VARCHAR(128),
+                accepted_charter_version VARCHAR(32),
+                CONSTRAINT uq_event_joins_event_user UNIQUE (event_id, user_id),
+                CONSTRAINT uq_event_joins_event_idempotency UNIQUE (event_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_joins_event_id ON event_joins (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_joins_user_id ON event_joins (user_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_charter_acceptances (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                charter_version VARCHAR(32) NOT NULL,
+                accepted_at DATETIME,
+                CONSTRAINT uq_event_charter_acceptance UNIQUE (event_id, user_id, charter_version)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_charter_acceptances_event_id ON event_charter_acceptances (event_id)"))
 
 def ensure_entry_token_columns(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":

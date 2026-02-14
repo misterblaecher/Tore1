@@ -6,6 +6,7 @@ import 'package:tore/features/menu_market/presentation/menu_screen.dart';
 import 'package:tore/features/navigation/presentation/polymarket_tab_screen.dart';
 import 'package:tore/features/navigation/presentation/profile_screen.dart';
 import 'package:tore/features/navigation/presentation/ticker_screen.dart';
+import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
 import 'package:tore/features/ticker/ticker_providers.dart';
 import 'package:tore/features/wallet/presentation/wallet_screen.dart';
@@ -80,8 +81,19 @@ class HomeHubScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           if (!hasEvent)
-            const ToreCard(
-              child: Text('Scanne un QR join_event pour activer ton event.'),
+            ToreCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Scanne un QR join_event pour activer ton event.'),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
+                    icon: const Icon(Icons.login_outlined),
+                    label: const Text('Join event'),
+                  ),
+                ],
+              ),
             ),
           if (hasEvent && menuOn)
             _ModuleCard(

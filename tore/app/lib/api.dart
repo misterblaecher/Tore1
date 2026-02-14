@@ -35,6 +35,42 @@ class Api {
         (await _client.dio.get('/events/$eventId')).data as Map,
       );
 
+  Future<Map<String, dynamic>> joinEvent({
+    required int eventId,
+    String? idempotencyKey,
+    String? acceptedCharterVersion,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/join',
+      data: {
+        if (acceptedCharterVersion != null) 'accepted_charter_version': acceptedCharterVersion,
+      },
+      options: idempotencyKey == null ? null : Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> joinEventByCode({
+    required String code,
+    String? idempotencyKey,
+    String? acceptedCharterVersion,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/join_by_code',
+      data: {
+        'code': code,
+        if (acceptedCharterVersion != null) 'accepted_charter_version': acceptedCharterVersion,
+      },
+      options: idempotencyKey == null ? null : Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> eventCharter(int eventId) async {
+    final res = await _client.dio.get('/events/$eventId/charter');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<List<dynamic>> menu(int eventId) async {
     final result = await menuWithCacheStatus(eventId);
     return result.items;

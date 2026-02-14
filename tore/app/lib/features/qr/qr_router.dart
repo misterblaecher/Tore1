@@ -9,7 +9,7 @@ import '../../state.dart';
 import '../entry/presentation/entry_mode_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
-import '../qr/presentation/join_event_confirm_screen.dart';
+import '../qr/presentation/join_event_screen.dart';
 import '../qr/presentation/module_unavailable_screen.dart';
 import '../qr/presentation/qr_expired_screen.dart';
 import '../qr/presentation/qr_invalid_screen.dart';
@@ -62,10 +62,9 @@ class QrRouterService {
           await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
           return;
         }
-        _enterEvent(payload.eventId!);
         onOutcome?.call(const QrRouteOutcome.success('Join event'));
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => JoinEventConfirmScreen(eventId: payload.eventId!)),
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => JoinEventScreen(prefillEventId: payload.eventId)),
         );
         return;
       case QrType.menu:
@@ -162,8 +161,7 @@ class QrRouterService {
   bool _isWriteBlockedForPayload(QrPayload payload) {
     final readOnly = _ref.read(isReadOnlyProvider) || _ref.read(networkStatusProvider) == NetworkState.offline;
     if (!readOnly) return false;
-    return payload.type == QrType.joinEvent ||
-        payload.type == QrType.staffEntry ||
+    return payload.type == QrType.staffEntry ||
         payload.type == QrType.staffBar ||
         payload.type == QrType.order;
   }
