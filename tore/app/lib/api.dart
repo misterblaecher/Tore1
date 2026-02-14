@@ -98,19 +98,26 @@ class Api {
   }
 
   Future<Map<String, dynamic>> createOrder({
+    required int barId,
     required int eventId,
     required String userId,
-    required String payMode,
+    required String paymentMode,
     required List<Map<String, dynamic>> items,
+    String? zoneId,
+    required String idempotencyKey,
   }) async {
     final res = await _client.dio.post(
       '/orders',
       data: {
+        'bar_id': barId,
         'event_id': eventId,
         'user_id': userId,
-        'pay_mode': payMode,
+        'payment_mode': paymentMode,
         'items': items,
+        if (zoneId != null && zoneId.isNotEmpty) 'zone_id': int.tryParse(zoneId),
+        'idempotency_key': idempotencyKey,
       },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
   }

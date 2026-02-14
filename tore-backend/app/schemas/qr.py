@@ -16,6 +16,7 @@ class QrResolveOut(BaseModel):
     bar_id: Optional[int] = None
     item_id: Optional[int] = None
     category_id: Optional[int] = None
+    zone_id: Optional[int] = None
     bet_id: Optional[int] = None
     order_id: Optional[int] = None
     battle_id: Optional[int] = None

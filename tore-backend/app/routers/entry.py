@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime
 from typing import Iterator, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,6 +17,7 @@ from app.schemas.entry import (
     EntryScanLogOut,
     EntryScanLogPageOut,
     EntryScanOut,
+    EntryStatsOut,
     EntryTokenIssueIn,
     EntryTokenIssueOut,
     EntryTokenIssuedOut,
@@ -22,13 +26,16 @@ from app.schemas.entry import (
     EntryTokenStatsOut,
 )
 from app.services.audit_service import write_audit_log
-from app.services.p3_common import ensure_event_action_allowed
+from app.services.authz_service import ensure_partner_role
+from app.services.rate_limit_service import enforce_rate_limit
+from app.services.p3_common import effective_module_state, ensure_event_action_allowed, get_event_runtime_state
 from app.services.entry_service import (
+    accepted_count,
+    accepted_last_10_min,
+    create_denied_scan_log,
     filter_entry_logs,
     get_owned_event_or_403,
     issue_tokens,
-    require_partner_manager,
-    require_partner_staff,
     revoke_tokens,
     scan_entry,
 )
@@ -42,13 +49,36 @@ def get_db() -> Iterator[Session]:
     yield from _get_db()
 
 
+def _scan_status_from_log(log: EntryScanLog, *, idempotent: bool) -> str:
+    if idempotent or log.reason == "already_used":
+        return "duplicate"
+    if log.decision == "ACCEPT":
+        return "accepted"
+    return "denied"
+
+
+def _entry_log_out(row: EntryScanLog) -> EntryScanLogOut:
+    return EntryScanLogOut(
+        id=row.id,
+        event_id=row.event_id,
+        scan_id=row.scan_id,
+        payload_raw=row.payload_raw,
+        user_id=row.user_id,
+        token_id=row.token_id,
+        decision=row.decision,
+        reason=row.reason,
+        created_at=row.created_at,
+        staff_id=row.created_by_user_id,
+    )
+
+
 @router.post("/entry/tokens/issue", response_model=EntryTokenIssueOut)
 def issue_entry_tokens(
     payload: EntryTokenIssueIn,
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
 ):
-    require_partner_manager(identity)
+    ensure_partner_role(identity, {"manager"})
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
     ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
     issued = issue_tokens(
@@ -86,7 +116,7 @@ def revoke_entry_tokens(
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
 ):
-    require_partner_manager(identity)
+    ensure_partner_role(identity, {"manager"})
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
     ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
     revoked = revoke_tokens(db, event_id=payload.event_id, token_ids=payload.token_ids)
@@ -108,12 +138,59 @@ def revoke_entry_tokens(
 @router.post("/entry/scan", response_model=EntryScanOut)
 def entry_scan(
     payload: EntryScanIn,
+    request: Request,
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
 ):
-    require_partner_staff(identity)
+    ensure_partner_role(identity, {"manager", "bartender"})
+    enforce_rate_limit("entry_scan", str(identity.get("user_id") or (request.client.host if request.client else "anon")))
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
-    ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
+
+    blocked_reason = None
+    try:
+        ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        blocked_reason = str(detail.get("reason") or "event_blocked")
+
+    if blocked_reason is not None:
+        log = create_denied_scan_log(
+            db,
+            event_id=payload.event_id,
+            token=payload.token,
+            scan_id=payload.scan_id,
+            actor_user_id=identity["user_id"],
+            reason=blocked_reason,
+        )
+        status_label = _scan_status_from_log(log, idempotent=False)
+        write_audit_log(
+            db,
+            actor_partner_id=identity["user_id"],
+            actor_role=identity["role"],
+            action="entry.scan",
+            entity_type="entry_scan_log",
+            entity_id=str(log.id),
+            event_id=payload.event_id,
+            bar_id=event.bar_id,
+            payload={"scan_id": payload.scan_id, "status": status_label, "reason": log.reason},
+        )
+        db.commit()
+        total = accepted_count(db, payload.event_id)
+        return EntryScanOut(
+            log_id=log.id,
+            event_id=log.event_id,
+            decision=log.decision,
+            reason=log.reason,
+            user_id=log.user_id,
+            token_id=log.token_id,
+            created_at=log.created_at,
+            idempotent=False,
+            ok=False,
+            status="denied",
+            entry_count=total,
+            last_scan=log.created_at,
+        )
+
     log, idempotent = scan_entry(
         db,
         event_id=payload.event_id,
@@ -121,7 +198,26 @@ def entry_scan(
         scan_id=payload.scan_id,
         actor_user_id=identity["user_id"],
     )
-    if not idempotent:
+
+    status_label = _scan_status_from_log(log, idempotent=idempotent)
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="entry.scan",
+        entity_type="entry_scan_log",
+        entity_id=str(log.id),
+        event_id=payload.event_id,
+        bar_id=event.bar_id,
+        payload={
+            "scan_id": payload.scan_id,
+            "decision": log.decision,
+            "status": status_label,
+            "reason": log.reason,
+            "idempotent": idempotent,
+        },
+    )
+    if (not idempotent) and log.decision == "ACCEPT":
         write_audit_log(
             db,
             actor_partner_id=identity["user_id"],
@@ -133,7 +229,9 @@ def entry_scan(
             bar_id=event.bar_id,
             payload={"scan_id": payload.scan_id, "decision": log.decision, "reason": log.reason},
         )
-        db.commit()
+    db.commit()
+
+    total = accepted_count(db, payload.event_id)
     return EntryScanOut(
         log_id=log.id,
         event_id=log.event_id,
@@ -143,7 +241,73 @@ def entry_scan(
         token_id=log.token_id,
         created_at=log.created_at,
         idempotent=idempotent,
+        ok=status_label == "accepted",
+        status=status_label,
+        entry_count=total,
+        last_scan=log.created_at,
     )
+
+
+@router.get("/entry/stats", response_model=EntryStatsOut)
+def entry_stats(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+
+    effective_state, runtime_reason = effective_module_state(db, event_id, "entry_enabled")
+    runtime_status = get_event_runtime_state(db, event_id)
+    total = accepted_count(db, event_id)
+    delta_10 = accepted_last_10_min(db, event_id)
+    cap = None
+    cap_percent = None
+
+    return EntryStatsOut(
+        event_id=event_id,
+        entry_count=total,
+        accepted_last_10_min=delta_10,
+        cap=cap,
+        cap_percent=cap_percent,
+        runtime_status=runtime_status if effective_state != "OFF" else "MODULE_OFF",
+        runtime_reason=runtime_reason,
+    )
+
+
+@router.get("/entry/logs/export")
+def entry_logs_export(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager"})
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+
+    rows = (
+        db.query(EntryScanLog)
+        .filter(EntryScanLog.event_id == event_id)
+        .order_by(EntryScanLog.created_at.desc(), EntryScanLog.id.desc())
+        .all()
+    )
+
+    stream = io.StringIO()
+    writer = csv.writer(stream)
+    writer.writerow(["timestamp", "ticket_id", "status", "reason", "staff_id", "scan_id"])
+    for row in rows:
+        status = "accepted" if row.decision == "ACCEPT" else ("duplicate" if row.reason == "already_used" else "denied")
+        writer.writerow([
+            row.created_at.isoformat(),
+            row.token_id or "",
+            status,
+            row.reason,
+            row.created_by_user_id or "",
+            row.scan_id or "",
+        ])
+
+    payload = io.BytesIO(stream.getvalue().encode("utf-8"))
+    headers = {"Content-Disposition": f'attachment; filename="entry_logs_event_{event_id}.csv"'}
+    return StreamingResponse(payload, media_type="text/csv", headers=headers)
 
 
 @router.get("/entry/tokens/stats", response_model=EntryTokenStatsOut)
@@ -152,7 +316,7 @@ def entry_token_stats(
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
 ):
-    require_partner_manager(identity)
+    ensure_partner_role(identity, {"manager"})
     get_owned_event_or_403(db, event_id, identity["bar_id"])
     ensure_event_action_allowed(db, event_id, "entry_enabled", write=False)
 
@@ -175,7 +339,7 @@ def entry_token_stats(
     return EntryTokenStatsOut(
         event_id=event_id,
         counts=counts,
-        recent_uses=[EntryScanLogOut(id=row.id, event_id=row.event_id, scan_id=row.scan_id, payload_raw=row.payload_raw, user_id=row.user_id, token_id=row.token_id, decision=row.decision, reason=row.reason, created_at=row.created_at) for row in recent],
+        recent_uses=[_entry_log_out(row) for row in recent],
     )
 
 
@@ -192,7 +356,7 @@ def entry_logs(
     identity=Depends(current_partner_identity),
     db: Session = Depends(get_db),
 ):
-    require_partner_manager(identity)
+    ensure_partner_role(identity, {"manager", "bartender"})
     get_owned_event_or_403(db, event_id, identity["bar_id"])
 
     rows, next_cursor = filter_entry_logs(
@@ -206,4 +370,4 @@ def entry_logs(
         cursor=cursor,
         limit=limit,
     )
-    return EntryScanLogPageOut(items=[EntryScanLogOut(id=r.id, event_id=r.event_id, scan_id=r.scan_id, payload_raw=r.payload_raw, user_id=r.user_id, token_id=r.token_id, decision=r.decision, reason=r.reason, created_at=r.created_at) for r in rows], next_cursor=next_cursor)
+    return EntryScanLogPageOut(items=[_entry_log_out(r) for r in rows], next_cursor=next_cursor)

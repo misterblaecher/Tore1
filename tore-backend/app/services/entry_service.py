@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from db import now_utc
@@ -80,6 +80,43 @@ def revoke_tokens(db: Session, *, event_id: int, token_ids: list[int]) -> int:
     return count
 
 
+def create_denied_scan_log(
+    db: Session,
+    *,
+    event_id: int,
+    token: str,
+    scan_id: str,
+    actor_user_id: int,
+    reason: str,
+) -> EntryScanLog:
+    token_hash = _token_hash(token)
+    existing_by_scan = (
+        db.query(EntryScanLog)
+        .filter(EntryScanLog.event_id == event_id, EntryScanLog.scan_id == scan_id)
+        .first()
+    )
+    if existing_by_scan:
+        return existing_by_scan
+
+    payload_hash = _token_hash(f"{token.strip()}::{scan_id}")
+
+    log = EntryScanLog(
+        event_id=event_id,
+        scan_id=scan_id,
+        payload_raw=token.strip(),
+        payload_hash=payload_hash,
+        token_hash=token_hash,
+        token_id=None,
+        user_id=None,
+        decision="DENY",
+        reason=reason,
+        created_by_user_id=actor_user_id,
+    )
+    db.add(log)
+    db.flush()
+    return log
+
+
 def scan_entry(
     db: Session,
     *,
@@ -96,21 +133,21 @@ def scan_entry(
     if existing_scan:
         return existing_scan, True
 
+    now = now_utc()
+    token_hash = _token_hash(token)
+
     recent_attempts = (
         db.query(EntryScanLog)
         .filter(
             EntryScanLog.event_id == event_id,
             EntryScanLog.created_by_user_id == actor_user_id,
-            EntryScanLog.created_at >= now_utc() - timedelta(seconds=60),
+            EntryScanLog.created_at >= now - timedelta(seconds=60),
         )
         .count()
     )
     if recent_attempts >= 120:
-        raise HTTPException(status_code=429, detail="Too many scans, slow down")
+        raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Too many scans, slow down"})
 
-    now = now_utc()
-    token_hash = _token_hash(token)
-    payload_hash = _token_hash(f"{token.strip()}::{scan_id}")
     entry_token = (
         db.query(EntryToken)
         .filter(EntryToken.event_id == event_id, EntryToken.token_hash == token_hash)
@@ -159,6 +196,8 @@ def scan_entry(
             else:
                 reason = "already_used"
 
+    payload_hash = _token_hash(f"{token.strip()}::{scan_id}")
+
     log = EntryScanLog(
         event_id=event_id,
         scan_id=scan_id,
@@ -174,6 +213,29 @@ def scan_entry(
     db.add(log)
     db.flush()
     return log, False
+
+
+def accepted_count(db: Session, event_id: int) -> int:
+    return int(
+        db.query(func.count(EntryScanLog.id))
+        .filter(EntryScanLog.event_id == event_id, EntryScanLog.decision == "ACCEPT")
+        .scalar()
+        or 0
+    )
+
+
+def accepted_last_10_min(db: Session, event_id: int) -> int:
+    since = now_utc() - timedelta(minutes=10)
+    return int(
+        db.query(func.count(EntryScanLog.id))
+        .filter(
+            EntryScanLog.event_id == event_id,
+            EntryScanLog.decision == "ACCEPT",
+            EntryScanLog.created_at >= since,
+        )
+        .scalar()
+        or 0
+    )
 
 
 def parse_cursor(raw: Optional[str]) -> tuple[Optional[datetime], Optional[int]]:

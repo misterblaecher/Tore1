@@ -7,29 +7,24 @@ class EntryService {
 
   final Dio _dio;
 
-  Future<Map<String, dynamic>> postEntryScan({
+  Future<Map<String, dynamic>> scanEntry({
     required int eventId,
-    required int delta,
-    required String source,
-    required String deviceId,
-    required String idempotencyKey,
-    String? rawQr,
+    required String token,
+    required String scanId,
   }) async {
     final res = await _dio.post(
-      '/events/$eventId/entry/scans',
+      '/entry/scan',
       data: {
-        'delta': delta,
-        'source': source,
-        'device_id': deviceId,
-        'idempotency_key': idempotencyKey,
-        if (rawQr != null && rawQr.isNotEmpty) 'raw_qr': rawQr,
+        'event_id': eventId,
+        'token': token,
+        'scan_id': scanId,
       },
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<Map<String, dynamic>> getEntryStats(int eventId) async {
-    final res = await _dio.get('/events/$eventId/entry/stats');
+    final res = await _dio.get('/entry/stats', queryParameters: {'event_id': eventId});
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -38,10 +33,12 @@ class EntryService {
     int limit = 20,
   }) async {
     final res = await _dio.get(
-      '/events/$eventId/entry/logs',
-      queryParameters: {'limit': limit},
+      '/entry/logs',
+      queryParameters: {'event_id': eventId, 'limit': limit},
     );
-    return (res.data as List<dynamic>)
+    final payload = Map<String, dynamic>.from(res.data as Map);
+    final items = (payload['items'] as List<dynamic>? ?? const []);
+    return items
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
   }

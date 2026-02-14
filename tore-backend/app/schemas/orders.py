@@ -52,3 +52,8 @@ class OrderOut(BaseModel):
 
 class OrderStatusPatchIn(BaseModel):
     status: str
+
+
+class OrdersLiveOut(BaseModel):
+    items: List[OrderOut]
+    next_cursor: Optional[str] = None

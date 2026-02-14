@@ -17,6 +17,15 @@ type EventOut = {
   entry_enabled?: boolean
 }
 
+type EventCostOut = {
+  id: number
+  event_id: number
+  label: string
+  amount_cents: number
+  category: string
+  created_at?: string
+}
+
 type EventDrinkOut = {
   drink_id: number
   name: string
@@ -41,6 +50,8 @@ export default function EventDetail() {
     entry_price_cents: 0,
   })
   const [settingsStatus, setSettingsStatus] = useState<{ ok: boolean; message: string } | null>(null)
+  const [costs, setCosts] = useState<EventCostOut[]>([])
+  const [costInput, setCostInput] = useState({ label: '', amount_cents: 0, category: 'other' })
 
   const grouped = useMemo(() => {
     const m = new Map<string, EventDrinkOut[]>()
@@ -57,8 +68,10 @@ export default function EventDetail() {
       setError(null)
       const e = await api<EventOut>(`/partner/portal/events/${id}`)
       const d = await api<EventDrinkOut[]>(`/partner/portal/events/${id}/drinks`)
+      const c = await api<EventCostOut[]>(`/events/${id}/costs`)
       setEvent(e)
       setDrinks(d)
+      setCosts(c)
       setSettings({
         name: e.name,
         tickets_enabled: e.tickets_enabled ?? e.ticket_mode ?? false,
@@ -94,6 +107,47 @@ export default function EventDetail() {
     } catch (e: any) {
       setError(e?.message ?? 'Erreur')
     }
+  }
+
+
+
+  async function addCost(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      setError(null)
+      await api<EventCostOut>(`/events/${id}/costs`, {
+        method: 'POST',
+        body: JSON.stringify(costInput),
+      })
+      setCostInput((p) => ({ ...p, label: '', amount_cents: 0 }))
+      await load()
+    } catch (err: any) {
+      setError(err?.message ?? 'Erreur coûts')
+    }
+  }
+
+  async function deleteCost(costId: number) {
+    try {
+      setError(null)
+      await api(`/events/${id}/costs/${costId}`, { method: 'DELETE' })
+      await load()
+    } catch (err: any) {
+      setError(err?.message ?? 'Erreur suppression coût')
+    }
+  }
+
+  async function downloadExport(path: string, filename: string) {
+    const res = await fetch((import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_BASE ?? 'http://localhost:8000') + path, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('tore_partner_token') || ''}` },
+    })
+    if (!res.ok) throw new Error(`Export HTTP ${res.status}`)
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function patchEvent(body: Partial<{ name: string; tickets_enabled: boolean; entry_enabled: boolean; entry_price_cents: number }>) {
@@ -298,6 +352,46 @@ export default function EventDetail() {
             {settingsStatus.message}
           </div>
         ) : null}
+      </div>
+
+
+      <h2 style={{ marginTop: 22 }}>Exports fin de soirée</h2>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, background: 'rgba(255,255,255,0.04)' }}>
+        <button onClick={() => downloadExport(`/events/${id}/exports/attendance.csv`, `attendance_event_${id}.csv`)}>Attendance CSV</button>
+        <button onClick={() => downloadExport(`/events/${id}/exports/report.pdf`, `report_event_${id}.pdf`)}>Report PDF</button>
+        <button onClick={() => downloadExport(`/events/${id}/costs/export.csv`, `costs_event_${id}.csv`)}>Costs CSV</button>
+      </div>
+
+      <h2 style={{ marginTop: 22 }}>Costs</h2>
+      <form onSubmit={addCost} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10, alignItems: 'end', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, background: 'rgba(255,255,255,0.04)' }}>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ opacity: 0.85 }}>Label</span>
+          <input value={costInput.label} onChange={(e) => setCostInput((p) => ({ ...p, label: e.target.value }))} style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }} />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ opacity: 0.85 }}>Amount cents</span>
+          <input type="number" min="0" value={costInput.amount_cents} onChange={(e) => setCostInput((p) => ({ ...p, amount_cents: Number(e.target.value || 0) }))} style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }} />
+        </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ opacity: 0.85 }}>Category</span>
+          <select value={costInput.category} onChange={(e) => setCostInput((p) => ({ ...p, category: e.target.value }))} style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: '#111', color: '#fff' }}>
+            <option value="stock">stock</option>
+            <option value="location">location</option>
+            <option value="staff">staff</option>
+            <option value="other">other</option>
+          </select>
+        </label>
+        <button type="submit">Add cost</button>
+      </form>
+
+      <div style={{ marginTop: 10, fontWeight: 800 }}>Total costs: {costs.reduce((acc, c) => acc + c.amount_cents, 0)} cents</div>
+      <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+        {costs.map((cost) => (
+          <div key={cost.id} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>{cost.label} — {cost.category} — {cost.amount_cents}c</div>
+            <button onClick={() => deleteCost(cost.id)}>Delete</button>
+          </div>
+        ))}
       </div>
 
       <h2 style={{ marginTop: 22 }}>Menu (drinks)</h2>

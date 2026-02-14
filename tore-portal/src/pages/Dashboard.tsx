@@ -200,6 +200,21 @@ export default function Dashboard() {
           Ops Analytics
         </Link>
         <Link
+          to="/zones-admin"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(120,200,255,0.45)',
+            background: 'rgba(120,200,255,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Zones QR
+        </Link>
+        <Link
           to="/orders-queue"
           style={{
             display: 'inline-block',

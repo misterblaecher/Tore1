@@ -3,10 +3,30 @@ import 'package:dio/dio.dart';
 import 'api_exception.dart';
 
 class ErrorMapper {
+  static String _mapReason(String? reason) {
+    switch (reason) {
+      case 'event_paused':
+        return 'Event en pause. Réessaie dans un instant.';
+      case 'module_off':
+        return 'Fonction désactivée pour cet event.';
+      case 'revoked':
+        return 'Accès révoqué. Contacte un manager.';
+      case 'rate_limited':
+        return 'Trop de requêtes, réessaie.';
+      default:
+        return '';
+    }
+  }
+
   /// Converts any thrown error into a user-friendly message.
   static String message(Object e) {
     if (e is ApiException) {
-      // Backend provided message
+      final detail = e.details;
+      if (detail is Map && detail['detail'] is Map) {
+        final reason = (detail['detail'] as Map)['reason']?.toString();
+        final mapped = _mapReason(reason);
+        if (mapped.isNotEmpty) return mapped;
+      }
       return e.message;
     }
 
@@ -29,6 +49,12 @@ class ErrorMapper {
           return 'Requête annulée.';
         case DioExceptionType.badResponse:
           final code = e.response?.statusCode;
+          final data = e.response?.data;
+          if (data is Map && data['detail'] is Map) {
+            final reason = (data['detail'] as Map)['reason']?.toString();
+            final mapped = _mapReason(reason);
+            if (mapped.isNotEmpty) return mapped;
+          }
           if (code == 401) return 'Session expirée. Reconnexion en cours...';
           if (code == 403) return 'Accès refusé.';
           if (code == 404) return 'Ressource introuvable.';

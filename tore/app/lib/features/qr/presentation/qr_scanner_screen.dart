@@ -19,9 +19,8 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     autoStart: true,
   );
 
-  bool _handled = false;
+  bool _handling = false;
   bool _torchOn = false;
-  CameraFacing _facing = CameraFacing.back;
 
   @override
   void dispose() {
@@ -30,87 +29,127 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   }
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {
-    if (_handled) return;
+    if (_handling) return;
     final raw = capture.barcodes
         .map((b) => b.rawValue)
         .firstWhere((v) => v != null && v.trim().isNotEmpty, orElse: () => null);
     if (raw == null) return;
 
-    setState(() => _handled = true);
+    setState(() => _handling = true);
     await _controller.stop();
     if (!mounted) return;
 
-    await handleQr(context: context, ref: ref, raw: raw);
+    await ref.read(qrRouterServiceProvider).route(context: context, raw: raw);
 
     if (!mounted) return;
-    Navigator.of(context).pop();
+    setState(() => _handling = false);
+    unawaited(_controller.start());
+  }
+
+  Future<void> _openManualInput() async {
+    final manual = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('Saisie manuelle'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Code ou tore://...'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Annuler')),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              child: const Text('Valider'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || manual == null || manual.isEmpty) return;
+
+    setState(() => _handling = true);
+    await _controller.stop();
+    await ref.read(qrRouterServiceProvider).route(context: context, raw: manual);
+    if (!mounted) return;
+    setState(() => _handling = false);
+    unawaited(_controller.start());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scanner QR'),
-        actions: [
-          IconButton(
-            tooltip: _torchOn ? 'Éteindre le flash' : 'Allumer le flash',
-            icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
-            onPressed: () async {
-              await _controller.toggleTorch();
-              setState(() => _torchOn = !_torchOn);
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: _handleBarcode,
+            errorBuilder: (context, error, child) {
+              final msg = error.errorCode == MobileScannerErrorCode.permissionDenied
+                  ? 'Permission caméra refusée.'
+                  : 'Erreur caméra: ${error.errorCode.name}';
+              return Center(child: Text(msg, textAlign: TextAlign.center));
             },
           ),
-          IconButton(
-            tooltip: 'Switch caméra',
-            icon: const Icon(Icons.cameraswitch_outlined),
-            onPressed: () async {
-              await _controller.switchCamera();
-              setState(() {
-                _facing = _facing == CameraFacing.back
-                    ? CameraFacing.front
-                    : CameraFacing.back;
-              });
-            },
-          ),
-        ],
-      ),
-      body: MobileScanner(
-        controller: _controller,
-        onDetect: _handleBarcode,
-        errorBuilder: (context, error, child) {
-          final msg = error.errorCode == MobileScannerErrorCode.permissionDenied
-              ? 'Permission caméra refusée. Active-la dans les réglages.'
-              : 'Erreur scanner: ${error.errorCode.name}';
-          return Center(
+          SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              padding: const EdgeInsets.all(12),
+              child: Row(
                 children: [
-                  const Icon(Icons.qr_code_scanner_outlined, size: 48),
-                  const SizedBox(height: 12),
-                  Text(msg, textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
+                  IconButton.filledTonal(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Retour'),
+                    icon: const Icon(Icons.close),
+                  ),
+                  const Spacer(),
+                  IconButton.filledTonal(
+                    onPressed: () async {
+                      await _controller.toggleTorch();
+                      if (!mounted) return;
+                      setState(() => _torchOn = !_torchOn);
+                    },
+                    icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
                   ),
                 ],
               ),
             ),
-          );
-        },
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text(
-            'Caméra: ${_facing == CameraFacing.back ? 'Arrière' : 'Avant'}',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
           ),
-        ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_handling)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 10),
+                        child: CircularProgressIndicator(),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('Scanne un QR TORÈ', textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: _openManualInput,
+                      icon: const Icon(Icons.keyboard_alt_outlined),
+                      label: const Text('Saisie manuelle'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
