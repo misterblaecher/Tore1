@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import json
+from datetime import datetime
 from typing import Iterator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.schemas.market import (
@@ -28,6 +32,7 @@ from app.services.market_service import (
     update_item,
     upsert_config,
 )
+from db import get_session
 from models import DrinkMarketItem, DrinkPriceTick
 from partner_auth import current_identity as current_partner_identity
 
@@ -50,6 +55,71 @@ def market_public(
     items = list_scope_items(db, config_id=config.id)
     ticker = list_public_ticker(db, config_id=config.id, limit=30)
     return {"config": config, "items": items, "ticker": ticker}
+
+
+@router.get("/market/public/stream")
+async def market_public_stream(
+    request: Request,
+    bar_id: int = Query(...),
+    event_id: Optional[int] = Query(default=None),
+    once: bool = Query(default=False),
+):
+    session = get_session()
+    try:
+        config = get_config_for_scope(session, bar_id=bar_id, event_id=event_id)
+        if not config.is_live:
+            return Response(status_code=204)
+        item_ids = [item.id for item in list_scope_items(session, config_id=config.id)]
+    finally:
+        session.close()
+
+    if not item_ids:
+        return Response(status_code=204)
+
+    async def stream_events():
+        last_ts = datetime.min
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                loop_session = get_session()
+                try:
+                    ticks = (
+                        loop_session.query(DrinkPriceTick)
+                        .filter(DrinkPriceTick.item_id.in_(item_ids), DrinkPriceTick.ts > last_ts)
+                        .order_by(DrinkPriceTick.ts.asc(), DrinkPriceTick.id.asc())
+                        .limit(50)
+                        .all()
+                    )
+                finally:
+                    loop_session.close()
+
+                for tick in ticks:
+                    payload = {
+                        "item_id": tick.item_id,
+                        "price_cents": tick.price_cents,
+                        "ts": tick.ts.isoformat(),
+                        "source": tick.source,
+                    }
+                    if tick.ref_order_id is not None:
+                        payload["ref_order_id"] = tick.ref_order_id
+                    yield f"event: tick\ndata: {json.dumps(payload)}\n\n"
+                    last_ts = tick.ts
+
+                if not ticks:
+                    yield ": keepalive\n\n"
+                if once:
+                    break
+                await asyncio.sleep(1)
+        except GeneratorExit:
+            return
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.get("/market/public/items/{item_id}", response_model=MarketItemHistoryOut)
@@ -162,4 +232,3 @@ def partner_market_set_price(
         idempotency_key=payload.idempotency_key,
     )
     return {"item": item, "tick": tick}
-

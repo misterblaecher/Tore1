@@ -1,3 +1,4 @@
+import json
 import secrets
 
 from fastapi.testclient import TestClient
@@ -203,3 +204,67 @@ def test_public_history_and_idempotency():
     history = client.get(f"/market/public/items/{item_id}")
     assert history.status_code == 200
     assert len(history.json()["history"]) >= 2
+
+
+def test_public_stream_endpoint_exists_and_content_type():
+    bar_id, _, token = _seed_partner("manager")
+    client = TestClient(app)
+
+    cfg = client.post(
+        "/partner/portal/market/config",
+        json={"is_live": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert cfg.status_code == 200
+    item = client.post(
+        "/partner/portal/market/items",
+        json={"name": "Pils", "base_price_cents": 200},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert item.status_code == 200
+
+    with client.stream("GET", f"/market/public/stream?bar_id={bar_id}&once=true") as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+
+
+def test_public_stream_emits_tick():
+    bar_id, _, token = _seed_partner("manager")
+    client = TestClient(app)
+
+    cfg = client.post(
+        "/partner/portal/market/config",
+        json={"is_live": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert cfg.status_code == 200
+    item = client.post(
+        "/partner/portal/market/items",
+        json={"name": "Mate", "base_price_cents": 250},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert item.status_code == 200
+
+    set_price = client.post(
+        f"/partner/portal/market/items/{item.json()['id']}/price",
+        json={"price_cents": 310},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert set_price.status_code == 200
+
+    with client.stream("GET", f"/market/public/stream?bar_id={bar_id}&once=true") as response:
+        assert response.status_code == 200
+        prices = []
+        current_event = ""
+        for line in response.iter_lines():
+            if not line:
+                continue
+            if line.startswith("event: "):
+                current_event = line.removeprefix("event: ")
+                continue
+            if line.startswith("data: ") and current_event == "tick":
+                payload = json.loads(line.removeprefix("data: "))
+                if payload["item_id"] == item.json()["id"]:
+                    prices.append(payload["price_cents"])
+
+        assert set_price.json()["item"]["current_price_cents"] in prices
