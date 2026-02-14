@@ -6,6 +6,7 @@ import '../../events/presentation/event_config_providers.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../ticker/ticker_models.dart';
 import '../../ticker/ticker_providers.dart';
+import '../../ticker/ticker_filter_provider.dart';
 import '../../polymarket/market_detail_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 
@@ -34,6 +35,21 @@ class TickerScreen extends ConsumerWidget {
     }
 
     final state = ref.watch(tickerControllerProvider(eventId));
+    final selectedFilter = ref.watch(tickerFilterProvider(eventId));
+    final filteredItems = state.items.where((item) {
+      switch (selectedFilter) {
+        case TickerFilter.all:
+          return true;
+        case TickerFilter.prices:
+          return item.type.toLowerCase().contains('price') || item.refKind == 'market';
+        case TickerFilter.orders:
+          return item.type.toLowerCase().contains('order') || item.refKind == 'order';
+        case TickerFilter.events:
+          return item.type.toLowerCase().contains('event');
+        case TickerFilter.alerts:
+          return item.severity == 'warning' || item.severity == 'error';
+      }
+    }).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ticker'),
@@ -49,6 +65,24 @@ class TickerScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            SizedBox(
+              height: 40,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: TickerFilter.values.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final filter = TickerFilter.values[index];
+                  final active = filter == selectedFilter;
+                  return ChoiceChip(
+                    selected: active,
+                    label: Text(filter.label),
+                    onSelected: (_) => ref.read(tickerFilterProvider(eventId).notifier).state = filter,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
             if (state.unstableConnection)
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
@@ -59,13 +93,13 @@ class TickerScreen extends ConsumerWidget {
                 padding: EdgeInsets.only(top: 100),
                 child: Center(child: CircularProgressIndicator()),
               )
-            else if (state.items.isEmpty)
+            else if (filteredItems.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 100),
                 child: Center(child: Text('Aucune activité.')),
               )
             else
-              ...state.items.map((item) => _TickerTile(item: item, eventId: eventId)),
+              ...filteredItems.map((item) => _TickerTile(item: item, eventId: eventId)),
           ],
         ),
       ),
