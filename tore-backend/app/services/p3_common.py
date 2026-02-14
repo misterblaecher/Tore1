@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import Event, EventModuleConfig, EventRuntimeState
+from models import Event, EventConfig, EventModuleConfig, EventRuntimeState
 
 
 def decode_cursor(raw: Optional[str]) -> tuple[Optional[datetime], Optional[int]]:
@@ -61,8 +61,12 @@ def effective_module_state(db: Session, event_id: int, module_field: Optional[st
     if module_field is None:
         return "ON", "live"
 
-    cfg = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == event_id).first()
-    enabled = True if cfg is None else bool(getattr(cfg, module_field, False))
+    if module_field == "wallet_enabled":
+        cfg = db.query(EventConfig).filter(EventConfig.event_id == event_id).first()
+        enabled = True if cfg is None else bool(cfg.wallet_enabled)
+    else:
+        cfg = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == event_id).first()
+        enabled = True if cfg is None else bool(getattr(cfg, module_field, False))
     if not enabled:
         return "OFF", "module_off"
     return "ON", "live"

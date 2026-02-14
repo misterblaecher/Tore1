@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../wallet_providers.dart';
 import '../wallet_models.dart';
 import '../../events/presentation/event_config_providers.dart';
-import '../../qr/presentation/qr_feature_disabled_screen.dart';
+import '../../qr/presentation/module_unavailable_screen.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key, required this.eventId});
@@ -36,7 +36,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       return Future.value(const <String, dynamic>{});
     }
 
-    return api.ticketBalance(eventId: widget.eventId, userId: userId);
+    return api.walletMe();
   }
 
   void _refresh() {
@@ -58,7 +58,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     );
 
     if (config != null && !config.walletEnabled) {
-      return const QrFeatureDisabledScreen(featureLabel: 'Wallet');
+      return const ModuleUnavailableScreen(
+        title: 'Wallet indisponible',
+        message: 'Ce module est désactivé pour cet event.',
+      );
     }
 
     // tant que userId null => loader simple
@@ -157,6 +160,48 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     },
                     child: const Text('Ajouter 10 tickets'),
                   ),
+
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    final toCtrl = TextEditingController();
+                    final amountCtrl = TextEditingController(text: '1');
+                    final result = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Send Gift'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextField(controller: toCtrl, decoration: const InputDecoration(labelText: 'User ID')),
+                            TextField(controller: amountCtrl, decoration: const InputDecoration(labelText: 'Amount')),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send')),
+                        ],
+                      ),
+                    );
+                    if (result != true) return;
+                    try {
+                      await api.walletGift(
+                        eventId: widget.eventId,
+                        toUserId: toCtrl.text.trim(),
+                        amountCents: int.tryParse(amountCtrl.text.trim()) ?? 0,
+                        idempotencyKey: 'gift-${DateTime.now().microsecondsSinceEpoch}',
+                      );
+                      _refresh();
+                      ref.invalidate(walletHistoryProvider(WalletHistoryArgs(eventId: widget.eventId, userId: userId)));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gift envoyé')));
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.message(e))));
+                    }
+                  },
+                  child: const Text('Send Gift'),
+                ),
 
                 const SizedBox(height: 8),
                 OutlinedButton(

@@ -29,7 +29,8 @@ final walletHistoryProvider =
   Timer(const Duration(minutes: 2), link.close);
 
   final api = ref.watch(apiProvider);
-  final raw = await api.walletHistory(eventId: args.eventId, userId: args.userId, limit: args.limit);
+  final page = await api.walletLedger(limit: args.limit);
+  final raw = (page['items'] as List<dynamic>? ?? const []);
   final list = raw.cast<Map<String, dynamic>>();
   final entries = list.map(WalletHistoryEntry.fromJson).toList();
   entries.sort((a, b) => b.ts.compareTo(a.ts));
