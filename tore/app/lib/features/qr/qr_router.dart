@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_context/app_context.dart';
-import '../entry/presentation/entry_mode_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
-import '../navigation/presentation/home_hub_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
+import '../navigation/presentation/ticker_screen.dart';
+import '../qr/presentation/join_event_confirm_screen.dart';
+import '../qr/presentation/module_unavailable_screen.dart';
 import '../qr/presentation/qr_forbidden_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
-import '../qr/presentation/module_unavailable_screen.dart';
 import '../qr/qr_resolve_service.dart';
-import '../staff/presentation/bar_staff_screen.dart';
 
 class QrRouterService {
   QrRouterService(this._ref);
@@ -20,24 +19,24 @@ class QrRouterService {
   Future<void> route({required BuildContext context, required String raw}) async {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
-      await _openUnknown(context: context, raw: trimmed, reason: 'QR vide.');
+      await _openUnknown(context: context, raw: trimmed, reason: 'QR invalide ou non supporté.');
       return;
     }
 
     final resolver = _ref.read(qrResolveServiceProvider);
     QrResolveResult result;
-
     try {
       result = await resolver.resolve(trimmed);
     } catch (_) {
-      result = _localResolve(trimmed);
+      await _openUnknown(context: context, raw: trimmed, reason: 'Service indisponible. Réessaie.');
+      return;
     }
 
     if (!result.valid) {
       if (result.reason == 'forbidden') {
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => QrForbiddenScreen(roleRequired: result.requiredRole ?? 'entry'),
+            builder: (_) => QrForbiddenScreen(roleRequired: result.requiredRole ?? 'staff'),
           ),
         );
         return;
@@ -57,16 +56,21 @@ class QrRouterService {
       return;
     }
 
-    final normalizedType = _normalizeType(result.type);
+    final target = _routeTarget(result);
 
-    switch (normalizedType) {
-      case 'menu':
+    switch (target) {
+      case _QrTarget.joinEvent:
         if (result.eventId == null) {
-          await _openUnknown(
-            context: context,
-            raw: trimmed,
-            reason: 'QR menu incomplet (event_id requis).',
-          );
+          await _openUnknown(context: context, raw: trimmed, reason: 'QR event invalide.');
+          return;
+        }
+        await Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => JoinEventConfirmScreen(eventId: result.eventId!)),
+        );
+        return;
+      case _QrTarget.menu:
+        if (result.eventId == null) {
+          await _openUnknown(context: context, raw: trimmed, reason: 'QR menu incomplet.');
           return;
         }
         _enterEvent(result.eventId!);
@@ -74,54 +78,44 @@ class QrRouterService {
           MaterialPageRoute(builder: (_) => MenuScreen(eventId: result.eventId!)),
         );
         return;
-      case 'join_event':
-        if (result.eventId == null) {
-          await _openUnknown(context: context, raw: trimmed, reason: 'QR event invalide.');
-          return;
-        }
-        _enterEvent(result.eventId!);
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeHubScreen()),
-        );
-        return;
-      case 'entry_staff':
-        if (result.eventId == null) {
-          await _openUnknown(context: context, raw: trimmed, reason: 'QR staff entrée invalide.');
-          return;
-        }
-        _enterEvent(result.eventId!);
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => EntryModeScreen(eventId: result.eventId)),
-        );
-        return;
-      case 'polymarket':
-        if (result.reason == 'module_off') {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const ModuleUnavailableScreen(
-                title: 'Module indisponible',
-                message: 'Ce module est désactivé pour cet event.',
-              ),
-            ),
-          );
-          return;
-        }
+      case _QrTarget.polymarket:
+        if (result.eventId != null) _enterEvent(result.eventId!);
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PolymarketTabScreen()),
         );
         return;
-      case 'bar_staff':
+      case _QrTarget.ticker:
         if (result.eventId == null) {
-          await _openUnknown(context: context, raw: trimmed, reason: 'QR staff bar invalide.');
+          await _openUnknown(context: context, raw: trimmed, reason: 'QR ticker invalide.');
           return;
         }
         _enterEvent(result.eventId!);
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => BarStaffScreen(eventId: result.eventId!)),
+          MaterialPageRoute(builder: (_) => const TickerScreen()),
         );
         return;
-      default:
-        await _openUnknown(context: context, raw: trimmed, reason: 'QR non supporté.');
+      case _QrTarget.orderRestricted:
+        await Navigator.of(context).push(
+          const MaterialPageRoute(
+            builder: (_) => ModuleUnavailableScreen(
+              title: 'Module indisponible',
+              message: 'Module indisponible.',
+            ),
+          ),
+        );
+        return;
+      case _QrTarget.userRestricted:
+        await Navigator.of(context).push(
+          const MaterialPageRoute(
+            builder: (_) => ModuleUnavailableScreen(
+              title: 'Module indisponible',
+              message: 'Module indisponible.',
+            ),
+          ),
+        );
+        return;
+      case _QrTarget.unknown:
+        await _openUnknown(context: context, raw: trimmed, reason: 'QR invalide ou non supporté.');
         return;
     }
   }
@@ -152,6 +146,27 @@ class QrRouterService {
   }
 }
 
+enum _QrTarget { joinEvent, menu, polymarket, ticker, orderRestricted, userRestricted, unknown }
+
+_QrTarget _routeTarget(QrResolveResult result) {
+  final routeFront = (result.routeFront ?? '').toLowerCase();
+  final type = result.type.toLowerCase();
+
+  if (type == 'join' || type == 'join_event') return _QrTarget.joinEvent;
+  if (type == 'menu' || routeFront.startsWith('/menu/')) return _QrTarget.menu;
+  if (type == 'ticker' || routeFront.startsWith('/events/')) return _QrTarget.ticker;
+  if (type == 'polymarket' || type == 'polymarket_bet' || type == 'pm' || routeFront.startsWith('/polymarket/')) {
+    return _QrTarget.polymarket;
+  }
+  if (type == 'order_client' || type == 'order') {
+    return _QrTarget.orderRestricted;
+  }
+  if (type == 'user' || type == 'wallet_user' || routeFront == 'topup_target') {
+    return _QrTarget.userRestricted;
+  }
+  return _QrTarget.unknown;
+}
+
 final qrRouterServiceProvider = Provider<QrRouterService>((ref) {
   return QrRouterService(ref);
 });
@@ -164,98 +179,18 @@ Future<void> handleQr({
   await ref.read(qrRouterServiceProvider).route(context: context, raw: raw);
 }
 
-String _normalizeType(String type) {
-  switch (type) {
-    case 'join':
-    case 'join_event':
-      return 'join_event';
-    case 'entry':
-    case 'staff_entry':
-    case 'entry_staff':
-      return 'entry_staff';
-    case 'bar_staff':
-      return 'bar_staff';
-    case 'pm':
-    case 'polymarket':
-      return 'polymarket';
-    default:
-      return type;
-  }
-}
-
-QrResolveResult _localResolve(String raw) {
-  final uri = Uri.tryParse(raw);
-  if (uri == null || uri.scheme.toLowerCase() != 'tore') {
-    return const QrResolveResult(
-      valid: false,
-      type: 'unknown',
-      eventId: null,
-      barId: null,
-      token: null,
-      routeFront: null,
-      reason: 'invalid',
-      requiredRole: null,
-      grantedRole: null,
-    );
-  }
-
-  final rawType = (uri.host.isNotEmpty ? uri.host : uri.path).replaceFirst('/', '').toLowerCase();
-  final type = _normalizeType(rawType);
-  final eventId = int.tryParse(uri.queryParameters['event_id'] ?? '');
-
-  if (type == 'polymarket') {
-    return QrResolveResult(
-      valid: true,
-      type: type,
-      eventId: eventId,
-      barId: null,
-      token: null,
-      routeFront: null,
-      reason: null,
-      requiredRole: null,
-      grantedRole: 'guest',
-    );
-  }
-
-  if (type == 'menu' || type == 'join_event' || type == 'entry_staff' || type == 'bar_staff') {
-    return QrResolveResult(
-      valid: eventId != null,
-      type: type,
-      eventId: eventId,
-      barId: null,
-      token: null,
-      routeFront: null,
-      reason: eventId == null ? 'invalid' : null,
-      requiredRole: null,
-      grantedRole: 'guest',
-    );
-  }
-
-  return const QrResolveResult(
-    valid: false,
-    type: 'unknown',
-    eventId: null,
-    barId: null,
-    token: null,
-    routeFront: null,
-    reason: 'invalid',
-    requiredRole: null,
-    grantedRole: null,
-  );
-}
-
 String _reasonMessage(String? reason) {
   switch (reason) {
-    case 'expired':
-      return 'QR expiré.';
     case 'module_off':
-      return 'Ce module est désactivé pour cet event.';
+      return 'Module indisponible.';
     case 'event_paused':
-      return 'Event temporairement en pause.';
+      return 'Service en pause.';
+    case 'rate_limited':
+      return 'Trop de requêtes. Réessaie.';
+    case 'insufficient_balance':
+      return 'Solde insuffisant.';
     case 'event_closed':
-      return 'Event terminé.';
-    case 'forbidden':
-      return 'Accès non autorisé.';
+      return 'Service en pause.';
     default:
       return 'QR invalide ou non supporté.';
   }

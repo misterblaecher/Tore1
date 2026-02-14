@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/app_context/app_context.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -10,6 +11,7 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final meAsync = ref.watch(meProvider);
+    final ctx = ref.watch(appContextProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profil')),
@@ -131,6 +133,34 @@ class ProfileScreen extends ConsumerWidget {
               ),
 
               const SizedBox(height: 12),
+              if (ctx.hasActiveEvent)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Quitter l’event'),
+                    subtitle: Text(ctx.activeEventName ?? 'Event #${ctx.activeEventId}'),
+                    onTap: () async {
+                      final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Quitter l’event ?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                                FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
+                              ],
+                            ),
+                          ) ??
+                          false;
+                      if (ok) {
+                        ref.read(appContextProvider.notifier).leaveEvent();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event quitté.')));
+                        }
+                      }
+                    },
+                  ),
+                ),
+              if (ctx.hasActiveEvent) const SizedBox(height: 12),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
