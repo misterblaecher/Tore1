@@ -66,6 +66,8 @@ from models import (
     AppUserPrivacySetting,
     EventModuleConfig,
     EventRuntimeState,
+    EventJoin,
+    EventCharterAcceptance,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -969,6 +971,22 @@ class EventSummaryOut(BaseModel):
     entry_price_cents: int
     ticket_mode: bool
     ticket_value_cents: int
+
+
+class JoinByCodeIn(BaseModel):
+    code: str
+    accepted_charter_version: Optional[str] = None
+
+
+class JoinEventIn(BaseModel):
+    accepted_charter_version: Optional[str] = None
+
+
+class EventCharterOut(BaseModel):
+    event_id: int
+    enabled: bool
+    version: Optional[str] = None
+    text: Optional[str] = None
 
 
 class PartnerEventCreateIn(BaseModel):
@@ -2899,6 +2917,126 @@ def list_bar_events(bar_id: int, db: Session = Depends(get_db)):
     return output
 
 
+def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
+    cfg = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == event_id).first()
+    if cfg is None:
+        return {
+            "menu": True,
+            "wallet": True,
+            "entry": False,
+            "checkin": False,
+            "battles": False,
+            "hunt": False,
+            "report": True,
+            "polymarket": False,
+        }
+    return {
+        "menu": bool(cfg.menu_enabled),
+        "wallet": bool(cfg.wallet_enabled),
+        "entry": bool(cfg.entry_enabled),
+        "checkin": bool(cfg.checkin_enabled),
+        "battles": bool(cfg.battles_enabled),
+        "hunt": bool(cfg.hunt_enabled),
+        "report": bool(cfg.report_enabled),
+        "polymarket": bool(cfg.allow_user_bets),
+    }
+
+
+def _event_join_payload(db: Session, event: Event) -> dict[str, Any]:
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
+    bar_name = None
+    if event.bar_id is not None:
+        bar = db.get(Bar, event.bar_id)
+        bar_name = bar.name if bar else None
+    return {
+        "event": {
+            "id": event.id,
+            "bar_id": event.bar_id,
+            "name": event.name,
+            "starts_at": event.starts_at.isoformat(),
+            "ends_at": event.ends_at.isoformat(),
+            "venue": bar_name,
+            "event_code": event.event_code,
+        },
+        "modulesOn": _event_modules_on(db, event.id),
+        "eventState": ((runtime.state if runtime else None) or "LIVE").upper(),
+        "flags": {
+            "charterEnabled": bool(event.charter_enabled),
+            "charterVersion": event.charter_version,
+        },
+    }
+
+
+def _ensure_event_join_allowed(db: Session, event: Event) -> None:
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
+    runtime_state = ((runtime.state if runtime else None) or "LIVE").upper()
+    if runtime_state in {"CLOSED", "FROZEN"}:
+        raise HTTPException(status_code=403, detail={"reason": runtime_state.lower(), "message": "join_not_allowed"})
+
+
+def _apply_event_join(
+    db: Session,
+    *,
+    event: Event,
+    user: AppUser,
+    idempotency_key: str,
+    accepted_charter_version: Optional[str],
+) -> dict[str, Any]:
+    _ensure_event_join_allowed(db, event)
+
+    accepted_version = accepted_charter_version
+    if event.charter_enabled:
+        if not event.charter_version:
+            raise HTTPException(status_code=409, detail={"reason": "charter_version_missing"})
+        acceptance = db.query(EventCharterAcceptance).filter(
+            EventCharterAcceptance.event_id == event.id,
+            EventCharterAcceptance.user_id == user.id,
+            EventCharterAcceptance.charter_version == event.charter_version,
+        ).first()
+        if acceptance is None and accepted_charter_version != event.charter_version:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "reason": "charter_acceptance_required",
+                    "event_id": event.id,
+                    "charter_version": event.charter_version,
+                },
+            )
+        if acceptance is None:
+            db.add(
+                EventCharterAcceptance(
+                    event_id=event.id,
+                    user_id=user.id,
+                    charter_version=event.charter_version,
+                    accepted_at=now_utc(),
+                )
+            )
+        accepted_version = event.charter_version
+
+    existing = db.query(EventJoin).filter(EventJoin.event_id == event.id, EventJoin.user_id == user.id).first()
+    if existing is None:
+        join = EventJoin(
+            event_id=event.id,
+            user_id=user.id,
+            device_id=None,
+            idempotency_key=idempotency_key,
+            joined_at=now_utc(),
+            accepted_charter_version=accepted_version,
+        )
+        db.add(join)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+    else:
+        if existing.accepted_charter_version is None and accepted_version is not None:
+            existing.accepted_charter_version = accepted_version
+            db.add(existing)
+            db.commit()
+
+    return _event_join_payload(db, event)
+
+
 @app.get("/events", response_model=List[EventSummaryOut])
 def list_all_events(
     limit: int = Query(50, ge=1, le=200),
@@ -2937,9 +3075,71 @@ def get_event(event_id: int):
             "ticket_mode": e.ticket_mode,
             "ticket_value_cents": e.ticket_value_cents,
             "allow_self_ticket_adjust": e.allow_self_ticket_adjust,
+            "event_code": e.event_code,
+            "charter_enabled": e.charter_enabled,
+            "charter_version": e.charter_version,
         }
     finally:
         s.close()
+
+
+@app.get("/events/{event_id}/charter", response_model=EventCharterOut)
+def get_event_charter(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    return {
+        "event_id": event_id,
+        "enabled": bool(event.charter_enabled),
+        "version": event.charter_version,
+        "text": event.charter_text,
+    }
+
+
+@app.post("/events/{event_id}/join")
+def join_event(
+    event_id: int,
+    payload: JoinEventIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    key = idempotency_key or f"join-{user.id}-{event_id}"
+    return _apply_event_join(
+        db,
+        event=event,
+        user=user,
+        idempotency_key=key,
+        accepted_charter_version=payload.accepted_charter_version,
+    )
+
+
+@app.post("/events/join_by_code")
+def join_event_by_code(
+    payload: JoinByCodeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    code = payload.code.strip().upper()
+    event = db.query(Event).filter(Event.event_code == code).first()
+    if event is None:
+        raise HTTPException(404, detail={"reason": "invalid_code"})
+    key = idempotency_key or f"join-code-{user.id}-{event.id}"
+    return _apply_event_join(
+        db,
+        event=event,
+        user=user,
+        idempotency_key=key,
+        accepted_charter_version=payload.accepted_charter_version,
+    )
 
 
 @app.post("/events", response_model=CreateEventOut)
@@ -2958,6 +3158,7 @@ def create_event(
         name=payload.name,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
+        event_code=random_code(6),
     )
     db.add(event)
     db.flush()
@@ -2981,6 +3182,7 @@ def create_event(
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat(),
         "bar_id": event.bar_id,
+        "event_code": event.event_code,
     }
 
 

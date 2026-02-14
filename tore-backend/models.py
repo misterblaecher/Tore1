@@ -59,6 +59,10 @@ class Event(Base):
     ticket_value_cents: Mapped[int] = mapped_column(Integer, default=200)
 
     allow_self_ticket_adjust: Mapped[bool] = mapped_column(Boolean, default=True)
+    event_code: Mapped[Optional[str]] = mapped_column(String(16), unique=True, index=True, nullable=True)
+    charter_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    charter_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    charter_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     bar: Mapped["Bar"] = relationship(back_populates="events")
     drinks: Mapped[List["EventDrink"]] = relationship(back_populates="event")
@@ -325,6 +329,35 @@ class EventStaff(Base):
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     revoked_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class EventJoin(Base):
+    __tablename__ = "event_joins"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_joins_event_user"),
+        UniqueConstraint("event_id", "idempotency_key", name="uq_event_joins_event_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    device_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    accepted_charter_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+
+class EventCharterAcceptance(Base):
+    __tablename__ = "event_charter_acceptances"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", "charter_version", name="uq_event_charter_acceptance"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    charter_version: Mapped[str] = mapped_column(String(32), default="v1")
+    accepted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class StaffInviteToken(Base):
