@@ -197,6 +197,8 @@ def create_polymarket_position_ultra(
     key = (idempotency_key or payload.get("client_key") or "").strip()
     if not key:
         raise polymarket_service.polymarket_error(422, "invalid_market", "Missing idempotency key")
+    if amount < 1:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "amount_cents must be >= 1")
     _gate_bet_event_state(db, market_id, write=True)
     rate_limit_service.enforce_rate_limit("polymarket.position", user.id)
     try:
@@ -411,7 +413,7 @@ def export_polymarket_positions(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    csv_text = polymarket_service.export_positions_csv(db, user_id=None, scope=scope, event_id=event_id)
+    csv_text = polymarket_service.export_positions_csv(db, user_id=user.id, scope=scope, event_id=event_id)
     polymarket_service.audit_polymarket(db, action="polymarket.export.positions", user=user, bet=None, payload={"scope": scope, "event_id": event_id})
     db.commit()
     return StreamingResponse(iter([csv_text]), media_type="text/csv")

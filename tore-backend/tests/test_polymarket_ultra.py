@@ -25,6 +25,13 @@ def test_markets_positions_and_exports_ultra(monkeypatch):
     assert pos.status_code == 200
     trade_id = pos.json()["trade_id"]
 
+    invalid = client.post(
+        "/polymarket/position",
+        json={"market_id": bet_id, "side": "yes", "amount_cents": -5, "client_key": "ultra-bad"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert invalid.status_code == 422
+
     pos_dup = client.post(
         "/polymarket/position",
         json={"market_id": bet_id, "side": "yes", "amount_cents": 25, "client_key": "ultra-k1"},
@@ -54,6 +61,21 @@ def test_markets_positions_and_exports_ultra(monkeypatch):
     assert p_csv.status_code == 200
     assert "text/csv" in p_csv.headers["content-type"]
     assert "position_id" in p_csv.text
+    assert user_id in p_csv.text
+
+    other_token, other_user_id = _create_guest(client)
+    _topup_wallet(client, manager_token, other_user_id, 100)
+    other_pos = client.post(
+        "/polymarket/position",
+        json={"market_id": bet_id, "side": "no", "amount_cents": 15, "client_key": "ultra-k2"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert other_pos.status_code == 200
+
+    p_csv_after = client.get("/polymarket/exports/positions.csv", headers={"Authorization": f"Bearer {user_token}"})
+    assert p_csv_after.status_code == 200
+    assert user_id in p_csv_after.text
+    assert other_user_id not in p_csv_after.text
 
 
 def test_runtime_and_balance_reason_codes_ultra(monkeypatch):
