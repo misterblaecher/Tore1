@@ -106,7 +106,7 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                       SwitchListTile.adaptive(
                         value: me.showIdentityToStaff,
-                        title: const Text('Autoriser l'affichage de mon identité au staff'),
+                        title: const Text("Autoriser l'affichage de mon identité au staff"),
                         subtitle: const Text('Visible seulement si le bar active aussi ce mode.'),
                         onChanged: (v) async {
                           final repo = ref.read(authRepositoryProvider);

@@ -88,6 +88,7 @@ class TickerController extends StateNotifier<TickerState> {
         options: Options(responseType: ResponseType.stream),
       );
       _sseSub = response.data!.stream
+          .map((chunk) => chunk.toList())
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen(_handleSseLine, onError: (_) {
