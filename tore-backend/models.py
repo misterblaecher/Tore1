@@ -539,6 +539,7 @@ class Order(Base):
     bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
     event_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     user_id: Mapped[Optional[str]] = mapped_column(String, index=True, nullable=True)
+    zone_id: Mapped[Optional[int]] = mapped_column(ForeignKey("zones.id"), index=True, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="NEW", index=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="menu_qr")

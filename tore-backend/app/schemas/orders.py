@@ -18,6 +18,7 @@ class CreateOrderIn(BaseModel):
     device_id: Optional[str] = None
     items: List[CreateOrderItem]
     note: Optional[str] = None
+    zone_id: Optional[int] = None
     payment_mode: Literal["pay_later", "tickets"] = "pay_later"
     idempotency_key: str = Field(min_length=4, max_length=120)
 
@@ -43,6 +44,8 @@ class OrderOut(BaseModel):
     total_cents: int
     total_tickets: int
     note: Optional[str] = None
+    zone_id: Optional[int] = None
+    zone_name: Optional[str] = None
     source: str
     idempotency_key: Optional[str] = None
     created_at: datetime
