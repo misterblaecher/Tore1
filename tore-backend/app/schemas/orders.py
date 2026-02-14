@@ -57,3 +57,20 @@ class OrderStatusPatchIn(BaseModel):
 class OrdersLiveOut(BaseModel):
     items: List[OrderOut]
     next_cursor: Optional[str] = None
+
+
+class OrderClientQrOut(BaseModel):
+    order_id: int
+    qr_raw: str
+    expires_at: datetime
+
+
+class OrderClientQrScanIn(BaseModel):
+    raw: str = Field(min_length=8)
+    idempotency_key: str = Field(min_length=4, max_length=120)
+
+
+class OrderClientQrScanOut(BaseModel):
+    idempotent: bool
+    order: OrderOut
+    user_visible_to_staff: bool

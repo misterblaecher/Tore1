@@ -68,6 +68,54 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_audit_log_indexes(engine)
     ensure_event_module_columns(engine)
     ensure_p3_tables(engine)
+    ensure_identity_consent_columns(engine)
+    ensure_order_client_qr_scan_table(engine)
+
+
+def ensure_identity_consent_columns(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bar_privacy_settings (
+                id INTEGER NOT NULL PRIMARY KEY,
+                bar_id INTEGER NOT NULL,
+                staff_identity_consent_required BOOLEAN DEFAULT 0,
+                updated_at DATETIME,
+                CONSTRAINT uq_bar_privacy_settings_bar UNIQUE (bar_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_bar_privacy_settings_bar_id ON bar_privacy_settings (bar_id)"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS app_user_privacy_settings (
+                id INTEGER NOT NULL PRIMARY KEY,
+                user_id VARCHAR NOT NULL,
+                show_identity_to_staff BOOLEAN DEFAULT 0,
+                updated_at DATETIME,
+                CONSTRAINT uq_app_user_privacy_settings_user UNIQUE (user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_app_user_privacy_settings_user_id ON app_user_privacy_settings (user_id)"))
+
+
+def ensure_order_client_qr_scan_table(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS order_client_qr_scans (
+                id INTEGER NOT NULL PRIMARY KEY,
+                bar_id INTEGER NOT NULL,
+                order_id INTEGER NOT NULL,
+                event_id INTEGER,
+                staff_user_id INTEGER,
+                idempotency_key VARCHAR(120) NOT NULL,
+                scanned_at DATETIME,
+                CONSTRAINT uq_order_client_qr_scan_bar_idem UNIQUE (bar_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_order_client_qr_scans_bar ON order_client_qr_scans (bar_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_order_client_qr_scans_order ON order_client_qr_scans (order_id)"))
 
 
 def ensure_order_items_market_item_id(engine: Engine) -> None:

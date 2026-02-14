@@ -62,6 +62,8 @@ from models import (
     MenuItem,
     MenuItemVariant,
     MenuTrackEvent,
+    BarPrivacySetting,
+    AppUserPrivacySetting,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -657,6 +659,11 @@ class PatchMeIn(BaseModel):
     address_text: Optional[str] = None
     show_address: Optional[bool] = None
     show_avatar: Optional[bool] = None
+    show_identity_to_staff: Optional[bool] = None
+
+
+class IdentityConsentBarPatchIn(BaseModel):
+    staff_identity_consent_required: bool
 
 
 class CreditTicketsIn(BaseModel):
@@ -1202,6 +1209,34 @@ def partner_portal_events(
         config_rows = db.query(EventConfig).filter(EventConfig.event_id.in_(event_ids)).all()
         configs = {config.event_id: config for config in config_rows}
     return [_partner_event_out(row, configs.get(row.id)) for row in rows]
+
+
+@app.get("/partner/portal/settings/identity-consent")
+def partner_portal_identity_consent(identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    bar = db.get(Bar, identity["bar_id"])
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+    settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == bar.id).first()
+    return {"staff_identity_consent_required": bool(settings and settings.staff_identity_consent_required)}
+
+
+@app.patch("/partner/portal/settings/identity-consent")
+def partner_portal_identity_consent_patch(
+    payload: IdentityConsentBarPatchIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    bar = db.get(Bar, identity["bar_id"])
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+    settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == bar.id).first()
+    if not settings:
+        settings = BarPrivacySetting(bar_id=bar.id)
+    settings.staff_identity_consent_required = payload.staff_identity_consent_required
+    db.add(settings)
+    db.commit()
+    return {"staff_identity_consent_required": settings.staff_identity_consent_required}
 
 
 @app.post("/partner/portal/events", response_model=PartnerEventOut)
@@ -2628,6 +2663,7 @@ def auth_guest(payload: GuestIn):
                 "address_text": u.address_text,
                 "show_address": u.show_address,
                 "show_avatar": u.show_avatar,
+                "show_identity_to_staff": False,
             },
         }
     finally:
@@ -2636,14 +2672,20 @@ def auth_guest(payload: GuestIn):
 
 @app.get("/auth/me")
 def me(user: AppUser = Depends(get_current_user)):
-    return {
-        "id": user.id,
-        "display_name": user.display_name,
-        "avatar_url": user.avatar_url,
-        "address_text": user.address_text,
-        "show_address": user.show_address,
-        "show_avatar": user.show_avatar,
-    }
+    s = get_session()
+    try:
+        settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user.id).first()
+        return {
+            "id": user.id,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "address_text": user.address_text,
+            "show_address": user.show_address,
+            "show_avatar": user.show_avatar,
+            "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
+        }
+    finally:
+        s.close()
 
 
 @app.patch("/auth/me")
@@ -2664,10 +2706,17 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             u.show_address = payload.show_address
         if payload.show_avatar is not None:
             u.show_avatar = payload.show_avatar
+        settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()
+        if payload.show_identity_to_staff is not None:
+            if not settings:
+                settings = AppUserPrivacySetting(user_id=u.id)
+            settings.show_identity_to_staff = payload.show_identity_to_staff
+            s.add(settings)
 
         s.add(u)
         s.commit()
 
+        refreshed_settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()
         return {
             "id": u.id,
             "display_name": u.display_name,
@@ -2675,6 +2724,7 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             "address_text": u.address_text,
             "show_address": u.show_address,
             "show_avatar": u.show_avatar,
+            "show_identity_to_staff": bool(refreshed_settings and refreshed_settings.show_identity_to_staff),
         }
     finally:
         s.close()

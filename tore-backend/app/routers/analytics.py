@@ -212,3 +212,33 @@ def partner_portal_analytics_orders_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/menu-tracking.csv")
+def partner_portal_analytics_menu_tracking_csv(
+    event_id: Optional[int] = Query(default=None),
+    days: int = Query(default=7),
+    identity=Depends(require_role("manager")),
+    db: Session = Depends(get_db),
+):
+    bar_id = identity["bar_id"]
+    scoped_event_id, since = _analytics_base_filters(db, bar_id=bar_id, event_id=event_id, days=days)
+    filters = [MenuTrackEvent.bar_id == bar_id, MenuTrackEvent.created_at >= since]
+    if scoped_event_id is not None:
+        filters.append(MenuTrackEvent.event_id == scoped_event_id)
+
+    rows = (
+        db.query(MenuTrackEvent.created_at, MenuTrackEvent.event_id, MenuTrackEvent.item_id, MenuTrackEvent.action, MenuTrackEvent.device_id)
+        .filter(*filters)
+        .order_by(MenuTrackEvent.created_at.desc(), MenuTrackEvent.id.desc())
+        .limit(5000)
+        .all()
+    )
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["created_at", "event_id", "item_id", "action", "device_id"])
+    for row in rows:
+        writer.writerow([row[0].isoformat() if row[0] else "", row[1], row[2], row[3], row[4] or ""])
+    buffer.seek(0)
+    filename = f"menu-tracking-{bar_id}-{days}d.csv"
+    return StreamingResponse(iter([buffer.getvalue()]), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
