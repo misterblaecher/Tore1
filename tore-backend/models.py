@@ -63,9 +63,64 @@ class Event(Base):
     charter_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     charter_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     charter_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    venue: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Brussels")
+    event_state: Mapped[str] = mapped_column(String(24), default="LIVE", index=True)
+    modules_on: Mapped[dict] = mapped_column(JSON, default=dict)
+    rules_flags: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    last_state_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
     bar: Mapped["Bar"] = relationship(back_populates="events")
     drinks: Mapped[List["EventDrink"]] = relationship(back_populates="event")
+
+
+
+
+class EventCreateIdempotency(Base):
+    __tablename__ = "event_create_idempotency"
+    __table_args__ = (
+        UniqueConstraint("bar_id", "idempotency_key", name="uq_event_create_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventQrToken(Base):
+    __tablename__ = "event_qr_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_id", name="uq_event_qr_tokens_token_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    qr_type: Mapped[str] = mapped_column(String(32), index=True)
+    token_id: Mapped[str] = mapped_column(String(64), index=True)
+    nonce: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[str] = mapped_column(Text)
+    signature: Mapped[str] = mapped_column(String(128))
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class EventQrPackIdempotency(Base):
+    __tablename__ = "event_qr_pack_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_event_qr_pack_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    pack_json: Mapped[dict] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class EventModuleConfig(Base):
