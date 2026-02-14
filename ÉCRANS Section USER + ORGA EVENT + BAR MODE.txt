@@ -1,0 +1,3212 @@
+TORÈ — SPECIFICATION PRODUIT (BLOC 2)
+_Bloc 2/4 — Écrans USER + ORGA EVENT + BAR MODE (objectif: 50+ écrans)_
+
+PARTIE 4 — ÉCRANS (Section: USER + ORGA EVENT + BAR MODE)
+
+> Règle: modules OFF invisibles côté USER. Toute action sensible exige confirmation forte + raison obligatoire.
+
+Splash / Boot
+
+1.	Nom écran
+-	Splash / Boot
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Splash / Boot’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App lancée (cold start / warm start)
+-	Aucun login requis
+-	Assets locaux disponibles
+5.	Éléments UI détaillés (liste exhaustive)
+-	Logo TORÈ centré + glow rubis
+-	Loader fin jaune (progress/indeterminate) en bas
+-	Version build + environnement (prod/stage) discret [ASSUMPTION]
+-	Bouton ‘Diagnostic’ long-press (5s) [ASSUMPTION]
+-	Écran noir profond + grain léger [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	Aucune action (sauf Diagnostic long-press)
+-	Retry auto si crash init
+-	Si init > 8s: bouton ‘Relancer’ [ASSUMPTION]
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	app.boot.start
+-	app.boot.end{duration_ms}
+-	app.boot.fail{reason}
+9.	Dépendances backend
+-	Config fetch (feature flags)
+ 
+-	Auth refresh token (si session)
+-	Status endpoint (health)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun
+
+Consentement & Charte (join)
+
+1.	Nom écran
+-	Consentement & Charte (join)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Consentement & Charte (join)’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+ 
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Login / Création profil
+
+1.	Nom écran
+-	Login / Création profil
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Login / Création profil’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+ 
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Home / Hub
+
+1.	Nom écran
+-	Home / Hub
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Home / Hub’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+ 
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+QR Scanner universel
+
+1.	Nom écran
+-	QR Scanner universel
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Scanner un QR et router vers le module exact (menu/join/staff/order/bet/hunt/wifi/safe).
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Caméra plein écran + frame rubis
+ 
+-	Texte guidance minimal (‘Scanne un QR TORÈ’)
+-	Bottom sheet: lampe, saisie code manuel, aide
+-	Indicateur anti-replay (icône bouclier) quand QR signé
+-	Mode faible lumière: auto-torch + toggle manuel
+-	Zone debug cachée (latence, fps) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	Tap lampe: torch on/off
+-	Tap ‘Code’: ouvre saisie alphanum
+-	Tap ‘Aide’: ouvre FAQ scanner
+-	Scan détecté: haptique + freeze 300ms + route
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+-	qr.scan{qr_type, signed, expires_in_s}
+-	qr.route{target, success}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+-	QR verification service (signature/expiry/anti-replay)
+-	Router service
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+-	QR screenshot: si sensible  expiry courte + nonce
+-	Caméra refusée  fallback code manuel + instructions OS
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+QR Résultat — Router
+
+1.	Nom écran
+ 
+-	QR Résultat — Router
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘QR Résultat — Router’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+ 
+-	Aucun (par défaut)
+
+Bars — grille cards
+
+1.	Nom écran
+-	Bars — grille cards
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Bars — grille cards’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+ 
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Bar — détails + events
+
+1.	Nom écran
+-	Bar — détails + events
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Bar — détails + events’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+ 
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Events (d’un bar)
+
+1.	Nom écran
+-	Events (d’un bar)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Events (d’un bar)’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+ 
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Join Event
+
+1.	Nom écran
+-	Join Event
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Join Event’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+ 
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Event Hub
+
+1.	Nom écran
+-	Event Hub
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Event Hub’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+ 
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Event Annonce / Broadcast
+
+1.	Nom écran
+-	Event Annonce / Broadcast
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Event Annonce / Broadcast’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+ 
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Menu Event — liste
+
+1.	Nom écran
+-	Menu Event — liste
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Menu Event — liste’ dans le scope USER avec contraintes terrain.
+ 
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Menu Event — item détail
+
+1.	Nom écran
+ 
+-	Menu Event — item détail
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Menu Event — item détail’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+ 
+-	Aucun (par défaut)
+
+Panier
+
+1.	Nom écran
+-	Panier
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Panier’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+ 
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Confirmation commande
+
+1.	Nom écran
+-	Confirmation commande
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Confirmation commande’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+ 
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Commande — QR à présenter
+
+1.	Nom écran
+-	Commande — QR à présenter
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Commande — QR à présenter’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+ 
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Commande — statut live
+
+1.	Nom écran
+-	Commande — statut live
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Commande — statut live’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+ 
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Wallet — solde
+
+1.	Nom écran
+-	Wallet — solde
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Wallet — solde’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+ 
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Wallet — historique
+
+1.	Nom écran
+-	Wallet — historique
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Wallet — historique’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+ 
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Top-up (réception via staff)
+
+1.	Nom écran
+-	Top-up (réception via staff)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Top-up (réception via staff)’ dans le scope USER avec contraintes terrain.
+ 
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Gift P2P — envoyer
+
+1.	Nom écran
+ 
+-	Gift P2P — envoyer
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Gift P2P — envoyer’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+ 
+-	Aucun (par défaut)
+
+Gift P2P — recevoir
+
+1.	Nom écran
+-	Gift P2P — recevoir
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Gift P2P — recevoir’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+ 
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Ticker Live
+
+1.	Nom écran
+-	Ticker Live
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Ticker Live’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+ 
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Ticker — filtres
+
+1.	Nom écran
+-	Ticker — filtres
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Ticker — filtres’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+ 
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Polymarket Global — liste
+
+1.	Nom écran
+-	Polymarket Global — liste
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Polymarket Global — liste’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+ 
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Polymarket Event — liste
+
+1.	Nom écran
+-	Polymarket Event — liste
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Polymarket Event — liste’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+ 
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Bet Detail
+
+1.	Nom écran
+-	Bet Detail
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Bet Detail’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+ 
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Bet Placement
+
+1.	Nom écran
+-	Bet Placement
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Bet Placement’ dans le scope USER avec contraintes terrain.
+ 
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Dispute Bet
+
+1.	Nom écran
+ 
+-	Dispute Bet
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Dispute Bet’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+ 
+-	Aucun (par défaut)
+
+Classement
+
+1.	Nom écran
+-	Classement
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Classement’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+ 
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Profil
+
+1.	Nom écran
+-	Profil
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Profil’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+ 
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Settings — privacy
+
+1.	Nom écran
+-	Settings — privacy
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Settings — privacy’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+ 
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Settings — accessibilité
+
+1.	Nom écran
+-	Settings — accessibilité
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Settings — accessibilité’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+ 
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+Offline Center
+
+1.	Nom écran
+-	Offline Center
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	USER
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘Offline Center’ dans le scope USER avec contraintes terrain.
+4.	Conditions d’accès
+-	App installée + permissions caméra (scanner) si applicable
+-	Profil ACTIVE (sauf Splash/Consentement/Login)
+-	Contexte scope: Global / Bar / Event selon route QR
+-	Modules OFF invisibles: l’écran n’est accessible que si module ON ou via route explicite
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+ 
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Event Control Hub
+
+1.	Nom écran
+-	ORGA — Event Control Hub
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Event Control Hub’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+ 
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Modules Toggles
+
+1.	Nom écran
+-	ORGA — Modules Toggles
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Modules Toggles’ dans le scope ORGA avec contraintes terrain.
+ 
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Urgence / Freeze Center
+
+1.	Nom écran
+ 
+-	ORGA — Urgence / Freeze Center
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Urgence / Freeze Center’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+ 
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Entry Staff (rush scan)
+
+1.	Nom écran
+-	ORGA — Entry Staff (rush scan)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Scanner des entrants en rush avec feedback instantané et compteur géant.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Layout plein écran sans scroll
+-	Header compact: nom event + badge LIVE + heure + ■■
+-	Compteur géant ENTRÉES (Space Mono) + delta 10min + cap/%
+-	Zone scan plein écran + frame
+-	Barre état: ONLINE/DEGRADED/OFFLINE + queue size
+-	Log minimal 3 dernières validations (ok/deny)
+6.	Actions possibles (boutons + effets)
+-	Scan entrant: flash vert 100–150ms + bip/haptique
+-	Scan refusé: flash rouge + raison (expiré/déjà entré/banni)
+-	Tap ■■: ouvre settings (lamp, mode manuel, sons)
+-	Long-press compteur: bascule ‘mode discret’ (cacher chiffres) [ASSUMPTION]
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+-	entry.scan{ticket_id, outcome, reason_code}
+-	entry.counter.update{value}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+ 
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+-	Entry validation service
+-	Offline queue sync
+-	Ban list service
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+-	Double scan même ticket  idempotence sur ticket_id
+-	Offline: queue locale + conflit lors resync (résolution: first_seen_ts) [ASSUMPTION]
+11.	Export lié (si applicable)
+-	Export attendance (CSV/PDF) via ORGA Exports Event
+
+ORGA — Entry Staff (manual override)
+
+1.	Nom écran
+-	ORGA — Entry Staff (manual override)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Entry Staff (manual override)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+ 
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Entry Logs
+
+1.	Nom écran
+-	ORGA — Entry Logs
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Entry Logs’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+ 
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Rentabilité Live
+
+1.	Nom écran
+-	ORGA — Rentabilité Live
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Rentabilité Live’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+ 
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Coûts Event (input)
+
+1.	Nom écran
+-	ORGA — Coûts Event (input)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Coûts Event (input)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+ 
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Menu Admin (simplifié)
+
+1.	Nom écran
+-	ORGA — Menu Admin (simplifié)
+ 
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Menu Admin (simplifié)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+ 
+ORGA — Stock & Ruptures (event)
+
+1.	Nom écran
+-	ORGA — Stock & Ruptures (event)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Stock & Ruptures (event)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+ 
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Broadcast Message
+
+1.	Nom écran
+-	ORGA — Broadcast Message
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Broadcast Message’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+ 
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Polymarket Admin (liste)
+
+1.	Nom écran
+-	ORGA — Polymarket Admin (liste)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Polymarket Admin (liste)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+ 
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Create Bet
+
+1.	Nom écran
+-	ORGA — Create Bet
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Create Bet’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+ 
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Resolve Bet
+
+1.	Nom écran
+-	ORGA — Resolve Bet
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Resolve Bet’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+ 
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Dispute Queue
+
+1.	Nom écran
+-	ORGA — Dispute Queue
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Dispute Queue’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+ 
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Incident Console (event)
+
+1.	Nom écran
+-	ORGA — Incident Console (event)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Incident Console (event)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+ 
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+ORGA — Exports Event
+
+1.	Nom écran
+-	ORGA — Exports Event
+ 
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Exports Event’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+ 
+ORGA — Staff Management (event)
+
+1.	Nom écran
+-	ORGA — Staff Management (event)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	ORGA
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘ORGA — Staff Management (event)’ dans le scope ORGA avec contraintes terrain.
+4.	Conditions d’accès
+-	Rôle staff valide dans l’Event scope (QR rôle ou assignation console)
+-	Event en SCHEDULED/LIVE/PAUSE/MENU_ONLY selon l’écran
+-	Device mode ‘Staff’ activé (pin/biométrie) [ASSUMPTION]
+-	Connexion backend requise sauf écrans explicitement offline queue
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+ 
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Dashboard
+
+1.	Nom écran
+-	BAR — Dashboard
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Dashboard’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+ 
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Orders Live
+
+1.	Nom écran
+-	BAR — Orders Live
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Lister commandes live et permettre traitement rapide (accept/in_progress/ready).
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: Bar name + shift badge + filtre (All/New/Ready)
+-	KPI strip: commandes en attente, temps moyen, backlog
+-	Liste dense: item = #order, heure, items, total, status chip, flag identité si opt-in
+-	Swipe actions (si autorisé): Accept / Ready / Cancel
+-	Auto-refresh avec backoff (DEGRADED)
+-	Bouton ‘Scan QR’ flottant
+6.	Actions possibles (boutons + effets)
+-	Tap order: ouvre Order Detail
+-	Swipe accept: passe à ACCEPTED (confirm si rupture)
+-	Tap Scan QR: ouvre Scan Order QR
+-	Tap Cancel: modal raison obligatoire + option refund
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+ 
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+-	order.list.view{filter}
+-	order.status.change{from,to}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+-	Orders service (list/patch)
+-	Inventory service
+-	Ledger (refund)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+-	Burst 200 commandes: pagination + virtualized list
+-	Rupture: conflit stock multi-staff  lock optimiste + retry
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Order Detail
+
+1.	Nom écran
+-	BAR — Order Detail
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Order Detail’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+ 
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Scan Order QR
+
+1.	Nom écran
+-	BAR — Scan Order QR
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Scan Order QR’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+ 
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Full Menu Admin
+
+1.	Nom écran
+-	BAR — Full Menu Admin
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+ 
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Full Menu Admin’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Product Editor
+ 
+1.	Nom écran
+-	BAR — Product Editor
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Product Editor’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+ 
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Category Manager
+
+1.	Nom écran
+-	BAR — Category Manager
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Category Manager’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+ 
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Market Settings (bourse)
+
+1.	Nom écran
+-	BAR — Market Settings (bourse)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Market Settings (bourse)’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+ 
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Zones & QR Packs
+
+1.	Nom écran
+-	BAR — Zones & QR Packs
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Zones & QR Packs’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+ 
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Staff Roles (bar)
+
+1.	Nom écran
+-	BAR — Staff Roles (bar)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Staff Roles (bar)’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+ 
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Analytics
+
+1.	Nom écran
+-	BAR — Analytics
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Analytics’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+ 
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Payouts / Cash-out
+
+1.	Nom écran
+-	BAR — Payouts / Cash-out
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Payouts / Cash-out’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+ 
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Ardoise (tab) Settings
+
+1.	Nom écran
+-	BAR — Ardoise (tab) Settings
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+ 
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Ardoise (tab) Settings’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Refunds (exception)
+ 
+1.	Nom écran
+-	BAR — Refunds (exception)
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Refunds (exception)’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+ 
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
+
+BAR — Wi-Fi Module Setup
+
+1.	Nom écran
+-	BAR — Wi-Fi Module Setup
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Configurer l’accès Wi■Fi via QR (tokens temporaires, quotas, revoke).
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Form SSID (read-only si existant) + mode (open/captive/token) [ASSUMPTION]
+-	Durée token (min) + quota device par user
+-	Bouton ‘Générer QR Wi■Fi’ (pack)
+-	Liste tokens actifs + revoke
+-	Stat: connexions, taux échec
+-	Avertissement légal (pas surveillance, usage limité) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	Save config: confirmation + log
+-	Generate QR: export PDF pack
+-	Revoke token: raison obligatoire
+7.	États possibles (loading / error / empty / success)
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+-	wifi.config.update
+-	wifi.qr.generate
+-	wifi.token.revoke{reason}
+9.	Dépendances backend
+ 
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+-	Wi-Fi token service
+-	QR generator
+-	Policy/quota service
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Export QR Pack Wi■Fi (PDF)
+
+BAR — Safe Kit Setup
+
+1.	Nom écran
+-	BAR — Safe Kit Setup
+2.	Contexte (USER / ORGA / BAR / COMITÉ / ADMIN)
+-	BAR
+3.	Objectif
+-	Permettre l’usage opérationnel de ‘BAR — Safe Kit Setup’ dans le scope BAR avec contraintes terrain.
+4.	Conditions d’accès
+-	Compte Bar (Owner/Manager/Staff Bar) + tenant bar_id
+-	Accès via Portail Web ou App Staff selon écran [ASSUMPTION]
+-	Modules Bar activés (Menu/Orders/Wi-Fi/Safe Kit…) selon écran
+-	2FA obligatoire pour actions financières (payout/refund) [ASSUMPTION]
+5.	Éléments UI détaillés (liste exhaustive)
+-	Header: titre + scope badge (Global/Bar/Event) + état réseau (ONLINE/DEGRADED/OFFLINE)
+-	Zone principale: contenu spécifique écran (list/detail/form)
+-	Feedback immédiat: toast court + haptique (mobile) [ASSUMPTION]
+-	Bannière état Event (LIVE/PAUSE/MENU_ONLY/CLOSED) quand applicable
+-	Accès support: lien ‘Aide’ + diagnostic (QR id, version, latence) [ASSUMPTION]
+6.	Actions possibles (boutons + effets)
+-	CTA principal (jaune) quand action confirmante (JOIN / CONFIRMER / VALIDER)
+-	Secondary CTA (outline rubis) pour annuler/retour
+-	Gestes: pull-to-refresh (si scroll) + swipe (si liste) selon permissions
+-	Confirmations fortes pour actions sensibles (freeze, refund, resolve bet) avec raison obligatoire
+7.	États possibles (loading / error / empty / success)
+ 
+-	loading: skeleton + disable actions
+-	error: message court + code + retry + fallback offline si possible
+-	empty: état vide contextualisé (pas de données / module OFF / pas d’events)
+-	success: animation courte + retour état stable + log visible (orga/bar)
+8.	Logs générés (si applicable)
+-	ui.view{screen_name, scope, device_state}
+-	ui.action{action, outcome, latency_ms}
+9.	Dépendances backend
+-	Auth service (token + roles + scopes)
+-	Permissions service (RBAC/ABAC) + module registry
+-	Event/Bar/Committee service selon contexte
+-	Logging + Ledger (si valeur/état)
+10.	Risques & edge cases
+-	Réseau instable: double tap / double submit  idempotency key obligatoire
+-	Désynchronisation state machine: UI doit afficher l’état serveur authoritative
+-	Confusion scope (bar vs event): badge scope obligatoire + couleurs distinctes
+-	Accessibilité: contraste + tailles texte (mode high contrast)
+11.	Export lié (si applicable)
+-	Aucun (par défaut)
