@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tore
+      POSTGRES_USER: tore
+      POSTGRES_PASSWORD: tore
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tore -d tore"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend-dev:
+    profiles: ["dev"]
+    build:
+      context: ./tore-backend
+    environment:
+      DATABASE_URL: postgresql://tore:tore@postgres:5432/tore
+      TORE_AUTO_DB_BOOTSTRAP: "0"
+      TORE_CORS_ORIGINS: "http://localhost:5173"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+  backend-prodlike:
+    profiles: ["prod-like"]
+    build:
+      context: ./tore-backend
+    environment:
+      DATABASE_URL: postgresql://tore:tore@postgres:5432/tore
+      TORE_AUTO_DB_BOOTSTRAP: "0"
+      TORE_CORS_ORIGINS: "https://portal.example"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  pgdata:
