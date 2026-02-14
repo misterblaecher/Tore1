@@ -47,7 +47,8 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
     });
     try {
       final api = ref.read(apiProvider);
-      final payload = await api.issueOrderClientQr(orderId: widget.orderId);
+      final requestKey = 'order-qr-${widget.orderId}-${DateTime.now().millisecondsSinceEpoch ~/ 8000}';
+      final payload = await api.issueOrderClientQr(orderId: widget.orderId, idempotencyKey: requestKey);
       final raw = (payload['qr_raw'] ?? '').toString();
       final expires = DateTime.tryParse((payload['expires_at'] ?? '').toString())?.toLocal();
       final ttl = payload['ttl_seconds'] is num ? (payload['ttl_seconds'] as num).toInt() : null;
