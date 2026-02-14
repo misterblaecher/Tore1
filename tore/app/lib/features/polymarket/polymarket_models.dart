@@ -129,21 +129,39 @@ class PositionRow {
 }
 
 class TradeRow {
+  final String? rawId;
+  final int? marketId;
+  final String? kind;
+  final String? outcome;
   final String side;
   final int amount;
   final DateTime ts;
   final String status;
 
   const TradeRow({
+    required this.rawId,
+    required this.marketId,
+    required this.kind,
+    required this.outcome,
     required this.side,
     required this.amount,
     required this.ts,
     required this.status,
   });
 
+  String get id {
+    if (rawId != null && rawId!.isNotEmpty) return rawId!;
+    final normalizedSide = side.isNotEmpty ? side : (outcome ?? 'unknown');
+    return '${marketId ?? 0}|${ts.toUtc().toIso8601String()}|${kind ?? 'trade'}|$normalizedSide|$amount';
+  }
+
   factory TradeRow.fromJson(Map<String, dynamic> json) {
     final rawTs = json['created_at']?.toString();
     return TradeRow(
+      rawId: json['id']?.toString(),
+      marketId: (json['market_id'] as num?)?.toInt(),
+      kind: json['kind']?.toString() ?? json['type']?.toString(),
+      outcome: json['outcome']?.toString(),
       side: json['side']?.toString() ?? 'yes',
       amount: (json['amount_cents'] as num?)?.toInt() ?? 0,
       ts: DateTime.tryParse(rawTs ?? '') ?? DateTime.now(),
