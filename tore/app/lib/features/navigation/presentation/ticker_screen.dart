@@ -1,163 +1,65 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
-import '../../../core/network/error_mapper.dart';
+import '../../events/presentation/event_config_providers.dart';
 import '../../ticker/ticker_models.dart';
 import '../../ticker/ticker_providers.dart';
-import '../../leaderboard/presentation/leaderboard_screen.dart';
+import '../../wallet/presentation/wallet_screen.dart';
 
-class TickerScreen extends ConsumerStatefulWidget {
+class TickerScreen extends ConsumerWidget {
   const TickerScreen({super.key});
 
   @override
-  ConsumerState<TickerScreen> createState() => _TickerScreenState();
-}
-
-class _TickerScreenState extends ConsumerState<TickerScreen> {
-  Timer? _timer;
-  bool _paused = false;
-  int? _eventId;
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _startTimer(int eventId) {
-    if (_eventId == eventId && _timer != null) return;
-    _eventId = eventId;
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (_paused) return;
-      ref.invalidate(tickerProvider(eventId));
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ctx = ref.watch(appContextProvider);
     final eventId = ctx.activeEventId;
-
     if (eventId == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Ticker')),
-        body: const Center(child: Text('Sélectionne un event pour voir le feed live.')),
-      );
+      return const Scaffold(body: Center(child: Text('Sélectionne un event pour voir le ticker.')));
     }
 
-    // start/refresh timer once we know the eventId
-    _startTimer(eventId);
+    final configAsync = ref.watch(eventConfigProvider(eventId));
+    final tickerEnabled = configAsync.maybeWhen(
+      data: (cfg) => cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
+      orElse: () => true,
+    );
+    if (!tickerEnabled) {
+      return const Scaffold(body: Center(child: Text('Module indisponible pour cet event.')));
+    }
 
-    final asyncItems = ref.watch(tickerProvider(eventId));
-
+    final state = ref.watch(tickerControllerProvider(eventId));
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ticker'),
         actions: [
           IconButton(
-            tooltip: _paused ? 'Reprendre' : 'Pause',
-            icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
-            onPressed: () => setState(() => _paused = !_paused),
-          ),
-          IconButton(
-            tooltip: 'Rafraîchir',
+            onPressed: () => ref.read(tickerControllerProvider(eventId).notifier).refresh(),
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(tickerProvider(eventId)),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(tickerProvider(eventId)),
-        child: asyncItems.when(
-          loading: () => ListView(
-            children: const [
-              SizedBox(height: 240),
-              Center(child: CircularProgressIndicator()),
-            ],
-          ),
-          error: (e, _) => ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(ErrorMapper.message(e)),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(tickerProvider(eventId)),
-                child: const Text('Réessayer'),
-              ),
-            ],
-          ),
-          data: (items) {
-            if (items.isEmpty) {
-              return ListView(
-                children: const [
-                  SizedBox(height: 220),
-                  Center(child: Text('Aucune activité pour le moment.')),
-                ],
-              );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: items.length + 1,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                if (i == 0) {
-                  return _TickerHeader(
-                    eventLabel: ctx.activeEventName ?? '#$eventId',
-                    paused: _paused,
-                    onOpenLeaderboard: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => LeaderboardScreen(eventId: eventId),
-                        ),
-                      );
-                    },
-                  );
-                }
-                final item = items[i - 1];
-                return _TickerTile(item: item);
-              },
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _TickerHeader extends StatelessWidget {
-  final String eventLabel;
-  final bool paused;
-  final VoidCallback onOpenLeaderboard;
-
-  const _TickerHeader({
-    required this.eventLabel,
-    required this.paused,
-    required this.onOpenLeaderboard,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        onRefresh: () => ref.read(tickerControllerProvider(eventId).notifier).refresh(),
+        child: ListView(
+          padding: const EdgeInsets.all(12),
           children: [
-            const Icon(Icons.toll_outlined),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Event : $eventLabel\n${paused ? '⏸️ Pause' : '🔴 Live'}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+            if (state.unstableConnection)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text('connexion instable', style: TextStyle(color: Colors.orange)),
               ),
-            ),
-            TextButton(
-              onPressed: onOpenLeaderboard,
-              child: const Text('Classement'),
-            ),
+            if (state.loading && state.items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 100),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (state.items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 100),
+                child: Center(child: Text('Aucune activité.')),
+              )
+            else
+              ...state.items.map((item) => _TickerTile(item: item, eventId: eventId)),
           ],
         ),
       ),
@@ -166,33 +68,44 @@ class _TickerHeader extends StatelessWidget {
 }
 
 class _TickerTile extends StatelessWidget {
-  final TickerItem item;
-  const _TickerTile({required this.item});
+  const _TickerTile({required this.item, required this.eventId});
 
-  IconData _iconForType(String type) {
-    switch (type) {
-      case 'order':
-        return Icons.shopping_bag_outlined;
-      case 'checkin':
-        return Icons.qr_code_scanner_outlined;
-      case 'move':
-      case 'price_move':
-        return Icons.show_chart_outlined;
-      case 'leaderboard':
-        return Icons.emoji_events_outlined;
+  final TickerItem item;
+  final int eventId;
+
+  Color _severityColor(BuildContext context) {
+    switch (item.severity) {
+      case 'warning':
+        return Colors.orange;
+      case 'success':
+        return Colors.green;
       default:
-        return Icons.bolt_outlined;
+        return Theme.of(context).colorScheme.primary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final time = TimeOfDay.fromDateTime(item.ts).format(context);
-    return ListTile(
-      leading: Icon(_iconForType(item.type)),
-      title: Text(item.title),
-      subtitle: Text(item.subtitle ?? time),
-      trailing: Text(time),
+    return Card(
+      child: ListTile(
+        onTap: () {
+          if (item.refKind == 'wallet_tx' || item.refKind == 'wallet_gift') {
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: eventId)));
+          }
+        },
+        title: Text(item.title),
+        subtitle: Text(item.body),
+        trailing: Wrap(
+          spacing: 6,
+          children: [
+            Chip(label: Text(item.type, style: const TextStyle(fontSize: 11))),
+            Chip(
+              label: Text(item.severity, style: const TextStyle(fontSize: 11)),
+              backgroundColor: _severityColor(context).withOpacity(0.16),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

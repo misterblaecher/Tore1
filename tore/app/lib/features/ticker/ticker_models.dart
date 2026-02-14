@@ -1,52 +1,43 @@
 class TickerItem {
+  final String id;
   final String type;
   final DateTime ts;
   final String title;
-  final String? subtitle;
-  final Map<String, dynamic> payload;
+  final String body;
+  final String severity;
+  final String? refKind;
+  final String? refId;
 
   const TickerItem({
+    required this.id,
     required this.type,
     required this.ts,
     required this.title,
-    this.subtitle,
-    required this.payload,
+    required this.body,
+    required this.severity,
+    required this.refKind,
+    required this.refId,
   });
 
   static TickerItem fromJson(Map<String, dynamic> m) {
-    final type = (m['type'] ?? m['kind'] ?? 'event').toString();
-    final tRaw = m['ts'] ?? m['timestamp'] ?? m['time'];
-    DateTime ts = DateTime.now();
-    if (tRaw is String) ts = DateTime.tryParse(tRaw) ?? DateTime.now();
-    if (tRaw is int) {
-      ts = tRaw > 2000000000
-          ? DateTime.fromMillisecondsSinceEpoch(tRaw)
-          : DateTime.fromMillisecondsSinceEpoch(tRaw * 1000);
-    }
-
-    String title = (m['title'] ?? m['message'] ?? type).toString();
-    String? subtitle = m['subtitle']?.toString();
-
-    final payload = (m['payload'] is Map)
-        ? Map<String, dynamic>.from(m['payload'] as Map)
-        : Map<String, dynamic>.from(m);
-
-    if (title == type) {
-      if (type == 'order') {
-        final drink = payload['drink_name'] ?? payload['name'] ?? 'Commande';
-        final qty = payload['qty'] ?? payload['quantity'];
-        title = qty != null ? 'Commande ×$qty — $drink' : 'Commande — $drink';
-      } else if (type == 'move' || type == 'price_move') {
-        final drink = payload['drink_name'] ?? payload['name'] ?? 'Boisson';
-        final pct = payload['pct'] ?? payload['change_pct'] ?? payload['change'];
-        title = pct != null ? '$drink ${pct.toString()}%' : 'Variation — $drink';
-      } else if (type == 'leaderboard') {
-        title = 'Classement mis à jour';
-      } else if (type == 'checkin') {
-        final drink = payload['drink_name'] ?? payload['name'] ?? 'Check-in';
-        title = 'Check-in — $drink';
-      }
-    }
-    return TickerItem(type: type, ts: ts, title: title, subtitle: subtitle, payload: payload);
+    final tRaw = m['ts'];
+    final ts = tRaw is String ? (DateTime.tryParse(tRaw) ?? DateTime.now()) : DateTime.now();
+    return TickerItem(
+      id: (m['id'] ?? '').toString(),
+      type: (m['type'] ?? 'event').toString(),
+      ts: ts,
+      title: (m['title'] ?? '').toString(),
+      body: (m['body'] ?? '').toString(),
+      severity: (m['severity'] ?? 'info').toString(),
+      refKind: m['ref_kind']?.toString(),
+      refId: m['ref_id']?.toString(),
+    );
   }
+}
+
+class TickerPage {
+  final List<TickerItem> items;
+  final String? nextCursor;
+
+  const TickerPage({required this.items, required this.nextCursor});
 }

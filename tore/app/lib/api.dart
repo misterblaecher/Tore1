@@ -177,17 +177,15 @@ class Api {
 
   // -------- TICKER --------
 
-  Future<List<dynamic>> ticker(int eventId) async {
-    try {
-      final res = await _client.dio.get('/events/$eventId/ticker');
-      return res.data as List<dynamic>;
-    } catch (e) {
-      final res = await _client.dio.get(
-        '/ticker',
-        queryParameters: {'event_id': eventId},
-      );
-      return res.data as List<dynamic>;
-    }
+  Future<Map<String, dynamic>> tickerFeed(int eventId, {String? cursor, int limit = 30}) async {
+    final res = await _client.dio.get(
+      '/events/$eventId/ticker',
+      queryParameters: {
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    return Map<String, dynamic>.from(res.data as Map);
   }
 
   // -------- CHECK-IN --------
