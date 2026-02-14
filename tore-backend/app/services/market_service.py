@@ -271,15 +271,23 @@ def apply_order_market_impact(s: Session, *, order: Order) -> int:
 
     impacted = 0
     for line in order.items:
-        item = (
-            s.query(DrinkMarketItem)
-            .filter(
-                DrinkMarketItem.config_id == config.id,
-                DrinkMarketItem.is_active.is_(True),
-                DrinkMarketItem.name == line.name_snapshot,
+        item = None
+        if line.market_item_id is not None:
+            direct_item = s.get(DrinkMarketItem, line.market_item_id)
+            if direct_item and direct_item.config_id == config.id and direct_item.is_active:
+                item = direct_item
+            else:
+                continue
+        else:
+            item = (
+                s.query(DrinkMarketItem)
+                .filter(
+                    DrinkMarketItem.config_id == config.id,
+                    DrinkMarketItem.is_active.is_(True),
+                    DrinkMarketItem.name == line.name_snapshot,
+                )
+                .first()
             )
-            .first()
-        )
         if not item:
             continue
         next_price = normalize_price(item.current_price_cents + config.step_cents, config)

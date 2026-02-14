@@ -36,6 +36,7 @@ def order_out(order: Order) -> OrderOut:
                 price_cents_snapshot=item.price_cents_snapshot,
                 qty=item.qty,
                 line_total_cents=item.line_total_cents,
+                market_item_id=item.market_item_id,
             )
             for item in order.items
         ],
@@ -111,6 +112,7 @@ def create_order(
                 "qty": row.qty,
                 "line_total_cents": line_total,
                 "unit_price_cents": unit_price,
+                "market_item_id": row.market_item_id,
             }
         )
 
@@ -162,6 +164,7 @@ def create_order(
                 line_total_cents=item["line_total_cents"],
                 drink_id=None,
                 unit_price_cents=item["unit_price_cents"],
+                market_item_id=item["market_item_id"],
             )
         )
 

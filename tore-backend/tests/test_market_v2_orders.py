@@ -112,11 +112,11 @@ def _patch_to_served(client: TestClient, token: str, order_id: int):
         assert res.status_code == 200
 
 
-def test_served_paid_order_updates_market_and_is_idempotent():
+def test_served_paid_order_updates_market_using_market_item_id_and_is_idempotent():
     bar_id, token = _seed_partner()
     event_id = _seed_event(bar_id)
     item_id = _seed_menu_item(bar_id, name="Spritz")
-    _, market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="Spritz")
+    _, market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="NotTheMenuName")
     client = TestClient(app)
 
     created = client.post(
@@ -124,13 +124,15 @@ def test_served_paid_order_updates_market_and_is_idempotent():
         json={
             "bar_id": bar_id,
             "event_id": event_id,
-            "items": [{"item_id": item_id, "qty": 1}],
+            "items": [{"item_id": item_id, "qty": 1, "market_item_id": market_item_id}],
             "device_id": "device-market-v2",
             "idempotency_key": "idem-market-v2-live",
         },
     )
     assert created.status_code == 200
-    order_id = created.json()["id"]
+    payload = created.json()
+    assert payload["items"][0]["market_item_id"] == market_item_id
+    order_id = payload["id"]
     _mark_order_paid(order_id)
 
     _patch_to_served(client, token, order_id)
@@ -158,11 +160,97 @@ def test_served_paid_order_updates_market_and_is_idempotent():
         s.close()
 
 
-def test_served_order_does_not_tick_market_when_config_not_live():
+def test_served_paid_order_fallbacks_to_name_snapshot_when_market_item_id_missing():
     bar_id, token = _seed_partner()
     event_id = _seed_event(bar_id)
     item_id = _seed_menu_item(bar_id, name="Mojito")
-    _, market_item_id = _seed_market(bar_id, event_id, is_live=False, item_name="Mojito")
+    _, market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="Mojito")
+    client = TestClient(app)
+
+    created = client.post(
+        "/orders",
+        json={
+            "bar_id": bar_id,
+            "event_id": event_id,
+            "items": [{"item_id": item_id, "qty": 1}],
+            "device_id": "device-market-v2-fallback",
+            "idempotency_key": "idem-market-v2-fallback",
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["items"][0]["market_item_id"] is None
+    order_id = created.json()["id"]
+    _mark_order_paid(order_id)
+
+    _patch_to_served(client, token, order_id)
+
+    s = get_session()
+    try:
+        market_item = s.get(DrinkMarketItem, market_item_id)
+        assert market_item is not None
+        assert market_item.current_price_cents == 250
+        ticks = (
+            s.query(DrinkPriceTick)
+            .filter(DrinkPriceTick.item_id == market_item.id, DrinkPriceTick.source == "order")
+            .count()
+        )
+        assert ticks == 1
+    finally:
+        s.close()
+
+
+def test_served_paid_order_ignores_mismatched_market_item_id_from_other_bar():
+    bar_id, token = _seed_partner()
+    event_id = _seed_event(bar_id)
+    item_id = _seed_menu_item(bar_id, name="Negroni")
+    _, own_market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="Negroni")
+
+    other_bar_id, _ = _seed_partner()
+    other_event_id = _seed_event(other_bar_id)
+    _, foreign_market_item_id = _seed_market(other_bar_id, other_event_id, is_live=True, item_name="Negroni")
+
+    client = TestClient(app)
+    created = client.post(
+        "/orders",
+        json={
+            "bar_id": bar_id,
+            "event_id": event_id,
+            "items": [{"item_id": item_id, "qty": 1, "market_item_id": foreign_market_item_id}],
+            "device_id": "device-market-v2-mismatch",
+            "idempotency_key": "idem-market-v2-mismatch",
+        },
+    )
+    assert created.status_code == 200
+    order_id = created.json()["id"]
+    _mark_order_paid(order_id)
+
+    _patch_to_served(client, token, order_id)
+
+    s = get_session()
+    try:
+        own_item = s.get(DrinkMarketItem, own_market_item_id)
+        assert own_item is not None
+        assert own_item.current_price_cents == 200
+
+        foreign_item = s.get(DrinkMarketItem, foreign_market_item_id)
+        assert foreign_item is not None
+        assert foreign_item.current_price_cents == 200
+
+        ticks = (
+            s.query(DrinkPriceTick)
+            .filter(DrinkPriceTick.source == "order", DrinkPriceTick.ref_order_id == order_id)
+            .count()
+        )
+        assert ticks == 0
+    finally:
+        s.close()
+
+
+def test_served_order_does_not_tick_market_when_config_not_live():
+    bar_id, token = _seed_partner()
+    event_id = _seed_event(bar_id)
+    item_id = _seed_menu_item(bar_id, name="Margarita")
+    _, market_item_id = _seed_market(bar_id, event_id, is_live=False, item_name="Margarita")
     client = TestClient(app)
 
     created = client.post(

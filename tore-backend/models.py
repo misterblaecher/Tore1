@@ -486,6 +486,7 @@ class OrderItem(Base):
     line_total_cents: Mapped[int] = mapped_column(Integer, default=0)
     drink_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     unit_price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    market_item_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="items")
 
