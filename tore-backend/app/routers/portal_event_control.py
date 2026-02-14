@@ -17,7 +17,7 @@ from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
 from app.services.wallet_service import get_or_create_wallet
-from app.services.p3_common import is_event_live
+from app.services.p3_common import effective_module_state, ensure_event_action_allowed, get_event_runtime_state, is_event_live
 
 router = APIRouter(prefix="/partner/portal", tags=["portal-event-control"])
 
@@ -50,26 +50,6 @@ def _get_or_create_runtime_state(db: Session, event_id: int) -> EventRuntimeStat
     db.refresh(row)
     return row
 
-
-def _effective_event_state(event: Event, runtime: EventRuntimeState) -> str:
-    now = now_utc()
-    if event.ends_at and now >= event.ends_at:
-        return "CLOSED"
-    if event.starts_at and now < event.starts_at:
-        return "SCHEDULED"
-    return runtime.state or "LIVE"
-
-
-def _module_state(is_enabled: bool, event_state: str, module_name: str) -> str:
-    if not is_enabled:
-        return "OFF"
-    if event_state == "PAUSE":
-        return "READ_ONLY"
-    if event_state == "CLOSED":
-        return "READ_ONLY"
-    if event_state == "MENU_ONLY" and module_name != "orders_enabled":
-        return "READ_ONLY"
-    return "ON"
 
 
 @router.get("/event/{event_id}/modules", response_model=EventModulesOut)
@@ -104,18 +84,18 @@ def event_state_snapshot(
     identity=Depends(require_role("manager")),
     db: Session = Depends(get_db),
 ):
-    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
     cfg = get_or_create_event_modules(db, event_id)
     runtime = _get_or_create_runtime_state(db, event_id)
-    event_state = _effective_event_state(event, runtime)
+    event_state = get_event_runtime_state(db, event_id)
     modules = {}
     warnings = []
     for field in MODULE_FIELDS:
+        effective, reason = effective_module_state(db, event_id, field)
         enabled = bool(getattr(cfg, field))
-        effective = _module_state(enabled, event_state, field)
-        modules[field] = {"configured_enabled": enabled, "effective_state": effective}
+        modules[field] = {"configured_enabled": enabled, "effective_state": effective, "reason": reason}
         if effective in {"READ_ONLY", "OFF"}:
-            warnings.append(f"{field}:{effective}")
+            warnings.append(f"{field}:{effective}:{reason}")
     return {
         "event_id": event_id,
         "event_state": event_state,
@@ -194,6 +174,7 @@ def wallet_admin_topup(
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, payload.event_id, None, write=True)
     ledger, idempotent = admin_topup(
         db,
         event_id=payload.event_id,
@@ -244,6 +225,7 @@ def wallet_admin_logs(
     db: Session = Depends(get_db),
 ):
     event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, event_id, None, write=False)
     rows, next_cursor = list_wallet_admin_logs(
         db,
         event_id=event.id,

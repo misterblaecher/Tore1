@@ -22,6 +22,7 @@ from app.schemas.entry import (
     EntryTokenStatsOut,
 )
 from app.services.audit_service import write_audit_log
+from app.services.p3_common import ensure_event_action_allowed
 from app.services.entry_service import (
     filter_entry_logs,
     get_owned_event_or_403,
@@ -49,6 +50,7 @@ def issue_entry_tokens(
 ):
     require_partner_manager(identity)
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
     issued = issue_tokens(
         db,
         event_id=payload.event_id,
@@ -86,6 +88,7 @@ def revoke_entry_tokens(
 ):
     require_partner_manager(identity)
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
     revoked = revoke_tokens(db, event_id=payload.event_id, token_ids=payload.token_ids)
     write_audit_log(
         db,
@@ -110,6 +113,7 @@ def entry_scan(
 ):
     require_partner_staff(identity)
     event = get_owned_event_or_403(db, payload.event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, payload.event_id, "entry_enabled", write=True)
     log, idempotent = scan_entry(
         db,
         event_id=payload.event_id,
@@ -150,6 +154,7 @@ def entry_token_stats(
 ):
     require_partner_manager(identity)
     get_owned_event_or_403(db, event_id, identity["bar_id"])
+    ensure_event_action_allowed(db, event_id, "entry_enabled", write=False)
 
     rows = (
         db.query(EntryToken.status, func.count(EntryToken.id))

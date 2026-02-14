@@ -23,6 +23,7 @@ from app.schemas.polymarket import (
     BetTimelinePointOut,
 )
 from app.services import polymarket_service
+from app.services.p3_common import ensure_event_action_allowed
 
 router = APIRouter()
 
@@ -31,6 +32,14 @@ def get_db() -> Iterator[Session]:
     from main import get_db as _get_db
 
     yield from _get_db()
+
+
+def _gate_bet_event_state(db: Session, bet_id: int, write: bool = True) -> None:
+    bet = db.get(Bet, bet_id)
+    if not bet:
+        return
+    if bet.event_id is not None:
+        ensure_event_action_allowed(db, bet.event_id, "polymarket_enabled", write=write)
 
 
 @router.get("/polymarket/bets", response_model=List[BetOut])
@@ -80,6 +89,8 @@ def create_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if payload.scope.upper() == "EVENT" and payload.event_id is not None:
+        ensure_event_action_allowed(db, payload.event_id, "polymarket_enabled", write=True)
     return polymarket_service.create_bet(db, payload=payload, user=user)
 
 
@@ -114,6 +125,7 @@ def create_polymarket_position(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _gate_bet_event_state(db, bet_id, write=True)
     side = polymarket_service.ensure_bet_side(payload.side)
     return polymarket_service.create_position(
         db,
@@ -132,6 +144,7 @@ def resolve_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _gate_bet_event_state(db, bet_id, write=True)
     outcome = polymarket_service.ensure_bet_side(payload.outcome)
     return polymarket_service.resolve_bet(db, bet_id=bet_id, outcome=outcome, actor=user)
 
@@ -144,6 +157,7 @@ def finalize_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _gate_bet_event_state(db, bet_id, write=True)
     return polymarket_service.finalize_bet(db, bet_id=bet_id, actor=user)
 
 
@@ -154,6 +168,7 @@ def dispute_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _gate_bet_event_state(db, bet_id, write=True)
     return polymarket_service.create_dispute(db, bet_id=bet_id, user=user, reason=payload.reason)
 
 
@@ -171,6 +186,7 @@ def cancel_polymarket_bet(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _gate_bet_event_state(db, bet_id, write=True)
     return polymarket_service.cancel_bet(db, bet_id=bet_id, actor=user)
 
 

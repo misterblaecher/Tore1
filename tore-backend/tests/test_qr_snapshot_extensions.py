@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+import secrets
+
 from db import Base, engine, get_session
 from main import app
 from models import Bar, Event, PartnerMembership, PartnerUser
@@ -10,7 +12,8 @@ def _seed_manager_with_event():
     Base.metadata.create_all(engine)
     s = get_session()
     try:
-        bar = Bar(name='Snapshot Bar', city='Liege', partner_code='SNAP001')
+        suffix = secrets.token_hex(4)
+        bar = Bar(name='Snapshot Bar', city='Liege', partner_code=f'SNAP{suffix}')
         s.add(bar)
         s.flush()
         user = PartnerUser(display_name='Mgr', pin_hash='hash')
