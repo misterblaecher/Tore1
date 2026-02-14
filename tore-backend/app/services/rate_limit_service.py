@@ -8,8 +8,8 @@ from typing import Deque
 
 from fastapi import HTTPException
 
-_RATE_LIMIT_MAX = int(os.getenv("TORE_RATE_LIMIT_MAX", "20"))
-_RATE_LIMIT_WINDOW_S = int(os.getenv("TORE_RATE_LIMIT_WINDOW_S", "10"))
+_RATE_LIMIT_MAX = int(os.getenv("TORE_RATE_LIMIT_MAX", "25"))
+_RATE_LIMIT_WINDOW_S = int(os.getenv("TORE_RATE_LIMIT_WINDOW_S", "5"))
 
 _lock = threading.Lock()
 _store: dict[str, Deque[float]] = defaultdict(deque)
