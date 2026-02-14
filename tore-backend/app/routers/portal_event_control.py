@@ -5,21 +5,23 @@ import csv
 import io
 from typing import Iterator, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from sqlalchemy import func
 from db import now_utc
-from models import Bet, BetDispute, Event, EventRuntimeState
+from models import Bet, BetDispute, Event, EventCreateIdempotency, EventQrPackIdempotency, EventRuntimeState
 from partner_auth import current_identity, require_role
 from app.services.authz_service import ensure_partner_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
+from app.schemas.orga_events import EventTemplateOut, OrgaEventCreateIn, OrgaEventOut, QrPackOut
 from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminLogPageOut, WalletAdminTopupIn, WalletAdminTopupOut
 from app.services.audit_service import write_audit_log
 from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
+from app.services.qr_pack_service import generate_qr_pack
 from app.services.rate_limit_service import enforce_rate_limit
 from app.services.wallet_service import get_or_create_wallet
 from app.services.p3_common import effective_module_state, ensure_event_action_allowed, get_event_runtime_state, is_event_live
@@ -37,6 +39,95 @@ MODULE_FIELDS = [
     "wifi_enabled",
     "safety_enabled",
 ]
+
+
+WIZARD_MODULE_MAP = {
+    "menu": "orders_enabled",
+    "wallet": "orders_enabled",
+    "ticker": "market_enabled",
+    "entry": "entry_enabled",
+    "broadcast": "checkins_enabled",
+    "music": "checkins_enabled",
+    "vote": "battles_enabled",
+    "polymarket": "polymarket_enabled",
+    "hunt": "hunt_enabled",
+    "battles": "battles_enabled",
+    "wifi": "wifi_enabled",
+    "safety": "safety_enabled",
+}
+
+DEFAULT_MODULES_ON = {
+    "menu": True,
+    "wallet": True,
+    "ticker": True,
+    "entry": False,
+    "broadcast": False,
+    "music": False,
+    "vote": False,
+    "polymarket": False,
+    "hunt": False,
+    "battles": False,
+    "wifi": False,
+    "safety": False,
+}
+
+EVENT_TEMPLATES = [
+    {
+        "id": "chapi",
+        "name": "Chapi",
+        "defaultModulesOn": {**DEFAULT_MODULES_ON, "entry": True, "broadcast": True},
+        "defaultRules": {"charter_enabled": True, "require_charter_accept": True, "minors_policy": "restricted"},
+        "durationPreset": "6h",
+    },
+    {
+        "id": "bar-night",
+        "name": "Bar night",
+        "defaultModulesOn": {**DEFAULT_MODULES_ON, "entry": True, "wifi": True},
+        "defaultRules": {"charter_enabled": True, "require_charter_accept": False, "minors_policy": "allowed"},
+        "durationPreset": "8h",
+    },
+    {
+        "id": "comite",
+        "name": "Comité",
+        "defaultModulesOn": {**DEFAULT_MODULES_ON, "entry": True, "battles": True, "hunt": True},
+        "defaultRules": {"charter_enabled": True, "require_charter_accept": True, "minors_policy": "restricted"},
+        "durationPreset": "10h",
+    },
+]
+
+
+def _serialize_orga_event(event: Event) -> dict:
+    return {
+        "id": event.id,
+        "name": event.name,
+        "venue": event.venue,
+        "startAt": event.starts_at,
+        "endAt": event.ends_at,
+        "timezone": event.timezone or "Europe/Brussels",
+        "eventState": event.event_state or "LIVE",
+        "modulesOn": event.modules_on or DEFAULT_MODULES_ON.copy(),
+        "rulesFlags": event.rules_flags or {},
+        "createdBy": event.created_by,
+        "lastStateUpdatedAt": event.last_state_updated_at or event.starts_at,
+        "lastUpdatedAt": event.last_updated_at or event.starts_at,
+    }
+
+
+def _materialize_modules(payload: dict[str, bool]) -> dict[str, bool]:
+    merged = DEFAULT_MODULES_ON.copy()
+    for key, value in (payload or {}).items():
+        if key in merged:
+            merged[key] = bool(value)
+    return merged
+
+
+def _template_defaults(template_id: str | None) -> tuple[dict[str, bool], dict]:
+    if not template_id:
+        return DEFAULT_MODULES_ON.copy(), {}
+    for item in EVENT_TEMPLATES:
+        if item["id"] == template_id:
+            return dict(item["defaultModulesOn"]), dict(item["defaultRules"])
+    return DEFAULT_MODULES_ON.copy(), {}
 
 
 def get_db() -> Iterator[Session]:
@@ -150,6 +241,122 @@ def set_event_runtime_state(
     )
     db.commit()
     return {"ok": True, "event_id": event_id, "state": runtime.state, "reason": runtime.reason}
+
+
+
+@router.get("/orga/event_templates", response_model=list[EventTemplateOut])
+def list_event_templates(
+    identity=Depends(_require_orga_identity),
+):
+    return EVENT_TEMPLATES
+
+
+@router.post("/orga/events", response_model=OrgaEventOut)
+def create_orga_event(
+    payload: OrgaEventCreateIn,
+    idempotency_header: str | None = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    key = (idempotency_header or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency key required"})
+    if payload.endAt <= payload.startAt:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_dates", "message": "endAt must be after startAt"})
+
+    existing = db.query(EventCreateIdempotency).filter(EventCreateIdempotency.bar_id == identity["bar_id"], EventCreateIdempotency.idempotency_key == key).first()
+    if existing:
+        event = db.get(Event, existing.event_id)
+        if not event:
+            raise HTTPException(status_code=409, detail={"reason": "stale_idempotency", "message": "Idempotency points to missing event"})
+        return _serialize_orga_event(event)
+
+    tpl_modules, tpl_rules = _template_defaults(payload.templateId)
+    modules_on = _materialize_modules({**tpl_modules, **(payload.modulesOn or {})})
+    rules_flags = {**tpl_rules, **(payload.rulesFlags or {})}
+
+    now = now_utc()
+    event = Event(
+        bar_id=identity["bar_id"],
+        name=payload.name.strip(),
+        venue=payload.venue.strip(),
+        starts_at=payload.startAt,
+        ends_at=payload.endAt,
+        timezone=payload.timezone,
+        event_state="LIVE",
+        modules_on=modules_on,
+        rules_flags=rules_flags,
+        created_by=f"partner:{identity['user_id']}",
+        last_state_updated_at=now,
+        last_updated_at=now,
+        charter_enabled=bool(rules_flags.get("charter_enabled", False)),
+    )
+    db.add(event)
+    db.flush()
+
+    idem = EventCreateIdempotency(bar_id=identity["bar_id"], idempotency_key=key, event_id=event.id)
+    db.add(idem)
+
+    runtime = EventRuntimeState(event_id=event.id, state="LIVE", updated_by_user_id=identity["user_id"], updated_at=now)
+    db.add(runtime)
+
+    cfg = get_or_create_event_modules(db, event.id)
+    update_payload = {}
+    for module_key, field in WIZARD_MODULE_MAP.items():
+        if field in MODULE_FIELDS:
+            update_payload[field] = bool(modules_on.get(module_key, False))
+    cfg = update_event_modules(db, cfg, update_payload, identity["user_id"])
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="orga.event.create",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"name": event.name, "modules_on": modules_on, "rules_flags": rules_flags, "template_id": payload.templateId},
+    )
+    db.commit()
+    db.refresh(event)
+    return _serialize_orga_event(event)
+
+
+@router.post("/orga/events/{event_id}/qr_pack", response_model=QrPackOut)
+def create_orga_qr_pack(
+    event_id: int = Path(..., ge=1),
+    idempotency_header: str | None = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    key = (idempotency_header or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency key required"})
+
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+
+    existing = db.query(EventQrPackIdempotency).filter(EventQrPackIdempotency.event_id == event_id, EventQrPackIdempotency.idempotency_key == key).first()
+    if existing:
+        return {"eventId": event_id, "items": existing.pack_json or []}
+
+    pack_items = generate_qr_pack(db, event=event, actor_user_id=identity["user_id"])
+    idem = EventQrPackIdempotency(event_id=event_id, idempotency_key=key, pack_json=pack_items)
+    db.add(idem)
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="orga.qr_pack.generate",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"types": [item["type"] for item in pack_items], "idempotency_key": key},
+    )
+    db.commit()
+    return {"eventId": event_id, "items": pack_items}
 
 
 @router.get("/orga/events/active")

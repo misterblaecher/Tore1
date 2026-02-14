@@ -335,6 +335,23 @@ export default function Dashboard() {
         >
           Entry Admin
         </Link>
+        {hasOrgaHubAccess() ? (
+          <Link
+            to="/orga/create-event"
+            style={{
+              display: 'inline-block',
+              padding: '10px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(140,200,255,0.45)',
+              background: 'rgba(140,200,255,0.2)',
+              color: '#fff',
+              fontWeight: 800,
+              textDecoration: 'none',
+            }}
+          >
+            Créer event (~60s)
+          </Link>
+        ) : null}
         <Link
           to="/wallet-admin"
           style={{
@@ -353,9 +370,11 @@ export default function Dashboard() {
         {selectedEventId ? (
           <>
             {hasOrgaHubAccess() ? (
-              <Link to={`/event-control/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,160,255,0.45)', background: 'rgba(255,160,255,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
-                ORGA HUB (OPS)
-              </Link>
+              <>
+                <Link to={`/event-control/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,160,255,0.45)', background: 'rgba(255,160,255,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
+                  ORGA HUB (OPS)
+                </Link>
+              </>
             ) : null}
             <Link to={`/polymarket-admin/${selectedEventId}`} style={{ display: 'inline-block', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,120,180,0.45)', background: 'rgba(255,120,180,0.2)', color: '#fff', fontWeight: 800, textDecoration: 'none' }}>
               Polymarket Admin Event

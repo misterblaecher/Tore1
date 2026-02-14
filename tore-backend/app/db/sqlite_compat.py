@@ -72,6 +72,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_order_client_qr_scan_table(engine)
     ensure_orders_zone_id(engine)
     ensure_event_join_tables(engine)
+    ensure_event_wizard_tables(engine)
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
@@ -293,3 +294,69 @@ def ensure_p3_tables(engine: Engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_safety_buddy_sessions_user ON safety_buddy_sessions (user_id, status)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_safety_buddy_sessions_event ON safety_buddy_sessions (event_id, status)"))
+
+
+def ensure_event_wizard_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    event_cols = _table_columns(engine, "events")
+    with engine.begin() as conn:
+        if "venue" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN venue VARCHAR(180)"))
+        if "timezone" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN timezone VARCHAR(64) DEFAULT 'Europe/Brussels'"))
+        if "event_state" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN event_state VARCHAR(24) DEFAULT 'LIVE'"))
+        if "modules_on" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN modules_on JSON"))
+        if "rules_flags" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN rules_flags JSON"))
+        if "created_by" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN created_by VARCHAR(120)"))
+        if "last_state_updated_at" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN last_state_updated_at DATETIME"))
+        if "last_updated_at" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN last_updated_at DATETIME"))
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_event_state ON events (event_state)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_create_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                bar_id INTEGER NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                event_id INTEGER NOT NULL,
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_create_idempotency ON event_create_idempotency (bar_id, idempotency_key)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_qr_tokens (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                qr_type VARCHAR(32) NOT NULL,
+                token_id VARCHAR(64) NOT NULL,
+                nonce VARCHAR(64) NOT NULL,
+                payload TEXT NOT NULL,
+                signature VARCHAR(128) NOT NULL,
+                issued_at DATETIME,
+                expires_at DATETIME,
+                revoked_at DATETIME,
+                created_by_user_id INTEGER
+            )
+        """))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_qr_tokens_token_id ON event_qr_tokens (token_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_qr_tokens_event ON event_qr_tokens (event_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_qr_pack_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                pack_json JSON,
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_qr_pack_idempotency ON event_qr_pack_idempotency (event_id, idempotency_key)"))

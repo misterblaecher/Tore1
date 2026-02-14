@@ -30,6 +30,8 @@ import SafetyAdmin from './pages/SafetyAdmin'
 import ZonesAdmin from './pages/ZonesAdmin'
 import Kitchen from './pages/Kitchen'
 import BarDashboard from './pages/BarDashboard'
+import CreateEventWizard from './pages/CreateEventWizard'
+import EventQrPack from './pages/EventQrPack'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -164,6 +166,26 @@ export default function App() {
           <RequireAuth>
             <RequireOrga>
               <EventControlHub />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/create-event"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <CreateEventWizard />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/qr-pack"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <EventQrPack />
             </RequireOrga>
           </RequireAuth>
         }
