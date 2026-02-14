@@ -13,6 +13,11 @@ class ErrorMapper {
         return 'Accès révoqué. Contacte un manager.';
       case 'rate_limited':
         return 'Trop de requêtes, réessaie.';
+      case 'insufficient_balance':
+      case 'insuff_toggle':
+        return 'Solde tickets insuffisant.';
+      case 'already_resolved':
+        return 'Marché déjà résolu.';
       case 'expired':
       case 'invalid':
       case 'invalid_qr':

@@ -1,20 +1,28 @@
 from __future__ import annotations
 
+import csv
+import io
 import os
 import json
 from datetime import timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, Bet, BetDispute, BetPosition, BetResolutionLog, Event
+from app.services.audit_service import write_audit_log
+from app.services.p3_common import decode_cursor, encode_cursor
 
 
 POLYMARKET_TIMELINE_MAX_POINTS = 200
+
+
+def polymarket_error(status_code: int, reason: str, message: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"reason": reason, "message": message})
 
 
 def _normalize_upper(value: Optional[str]) -> str:
@@ -138,11 +146,13 @@ def create_position(
     try:
         bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
         if not bet:
-            raise HTTPException(status_code=404, detail="Bet not found")
+            raise polymarket_error(404, "invalid_market", "Bet not found")
         if bet.status != "LIVE":
-            raise HTTPException(status_code=409, detail="Bet not live")
+            if bet.status in {"RESOLVED_PENDING", "FINALIZED"}:
+                raise polymarket_error(409, "already_resolved", "Bet already resolved")
+            raise polymarket_error(409, "invalid_market", "Bet not live")
         if bet.deadline_at and now_utc() > bet.deadline_at:
-            raise HTTPException(status_code=409, detail="Bet closed")
+            raise polymarket_error(409, "invalid_market", "Bet closed")
 
         wallet = get_or_create_wallet(db, user_id)
         if wallet.balance_tickets < stake:
@@ -208,7 +218,7 @@ def create_position(
             raise
         bet = db.get(Bet, bet_id)
         if not bet:
-            raise HTTPException(status_code=404, detail="Bet not found")
+            raise polymarket_error(404, "invalid_market", "Bet not found")
         return {
             "bet": bet_out(bet),
             "position": {
@@ -227,13 +237,13 @@ def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Di
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
-        raise HTTPException(status_code=404, detail="Bet not found")
+        raise polymarket_error(404, "invalid_market", "Bet not found")
     if bet.status == "FINALIZED":
         return bet_out(bet)
     if bet.status == "RESOLVED_PENDING" and bet.resolved_outcome == outcome:
         return bet_out(bet)
     if bet.status != "LIVE":
-        raise HTTPException(status_code=409, detail="Bet not live")
+        raise polymarket_error(409, "already_resolved", "Bet not live")
 
     is_admin = is_polymarket_admin(actor.id)
     if bet.scope == "EVENT" and bet.event_id is not None:
@@ -271,11 +281,11 @@ def finalize_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
-        raise HTTPException(status_code=404, detail="Bet not found")
+        raise polymarket_error(404, "invalid_market", "Bet not found")
     if bet.status == "FINALIZED":
         return bet_out(bet)
     if bet.status != "RESOLVED_PENDING":
-        raise HTTPException(status_code=409, detail="Bet not pending resolution")
+        raise polymarket_error(409, "invalid_market", "Bet not pending resolution")
 
     is_admin = is_polymarket_admin(actor.id)
     if bet.scope == "EVENT" and bet.event_id is not None:
@@ -291,19 +301,19 @@ def finalize_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
             raise HTTPException(status_code=403, detail="Forbidden")
 
     if not bet.resolved_at:
-        raise HTTPException(status_code=400, detail="Bet has no resolved_at")
+        raise polymarket_error(400, "invalid_market", "Bet has no resolved_at")
 
     lock_at = bet.resolved_at + timedelta(minutes=int(bet.dispute_window_minutes or 0))
     if now_utc() < lock_at:
-        raise HTTPException(status_code=400, detail="Dispute window not expired")
+        raise polymarket_error(400, "invalid_market", "Dispute window not expired")
 
     disputes_count = db.scalar(select(func.count()).select_from(BetDispute).where(BetDispute.bet_id == bet.id)) or 0
     if disputes_count > 0:
-        raise HTTPException(status_code=403, detail="Bet has disputes")
+        raise polymarket_error(403, "forbidden", "Bet has disputes")
 
     outcome = bet.resolved_outcome
     if outcome not in {"YES", "NO"}:
-        raise HTTPException(status_code=400, detail="Invalid resolved outcome")
+        raise polymarket_error(400, "invalid_market", "Invalid resolved outcome")
 
     positions = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet_id)).all()
     total_pool = bet_total_pool(bet)
@@ -350,11 +360,11 @@ def cancel_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
-        raise HTTPException(status_code=404, detail="Bet not found")
+        raise polymarket_error(404, "invalid_market", "Bet not found")
     if bet.status == "CANCELLED":
         return bet_out(bet)
     if bet.status not in {"LIVE", "RESOLVED_PENDING"}:
-        raise HTTPException(status_code=409, detail="Bet not live")
+        raise polymarket_error(409, "invalid_market", "Bet not live")
 
     is_admin = is_polymarket_admin(actor.id)
     if bet.scope == "EVENT" and bet.event_id is not None:
@@ -663,3 +673,240 @@ def get_bet_logs(db: Session, *, bet_id: int) -> Dict[str, Any]:
         ],
         "positions_summary": positions_summary,
     }
+
+
+def audit_polymarket(
+    db: Session,
+    *,
+    action: str,
+    user: Optional[AppUser],
+    bet: Optional[Bet],
+    payload: Dict[str, Any],
+) -> None:
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="user",
+        action=action,
+        entity_type="polymarket",
+        entity_id=str(bet.id) if bet else None,
+        event_id=bet.event_id if bet else None,
+        bar_id=None,
+        payload=payload,
+    )
+
+
+def map_scope(scope: Optional[str]) -> Optional[str]:
+    if scope is None:
+        return None
+    s = scope.strip().upper()
+    if s in {"GLOBAL", "EVENT"}:
+        return s
+    raise polymarket_error(422, "invalid_market", "Invalid scope")
+
+
+def map_status(status: Optional[str]) -> Optional[str]:
+    if status is None:
+        return None
+    s = status.strip().lower()
+    allowed = {"live", "resolved", "cancelled", "open"}
+    if s not in allowed:
+        raise polymarket_error(422, "invalid_market", "Invalid status")
+    return s
+
+
+def market_snapshot_for_user(db: Session, bet: Bet, user_id: Optional[str]) -> Dict[str, Any]:
+    total = bet_total_pool(bet)
+    yes_price = bet_pct_yes(bet)
+    no_price = 1.0 - yes_price if total > 0 else 0.5
+    my_yes = 0
+    my_no = 0
+    if user_id:
+        rows = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet.id, BetPosition.user_id == user_id)).all()
+        my_yes = sum(r.stake_tickets for r in rows if r.side == "YES")
+        my_no = sum(r.stake_tickets for r in rows if r.side == "NO")
+    return {
+        "id": bet.id,
+        "question": bet.question,
+        "scope": bet.scope.lower(),
+        "event_id": bet.event_id,
+        "status": ("resolved" if bet.status in {"FINALIZED", "RESOLVED_PENDING"} else bet.status.lower()),
+        "yes_price": yes_price,
+        "no_price": no_price,
+        "volume": total,
+        "liquidity": total,
+        "closes_at": bet.deadline_at.isoformat() if bet.deadline_at else None,
+        "resolves_at": bet.resolved_at.isoformat() if bet.resolved_at else None,
+        "my_position_yes": my_yes,
+        "my_position_no": my_no,
+        "my_total": my_yes + my_no,
+        "resolved_outcome": (bet.resolved_outcome or "").lower() or None,
+    }
+
+
+def list_markets_cursor(
+    db: Session,
+    *,
+    scope: Optional[str],
+    event_id: Optional[int],
+    status: Optional[str],
+    cursor: Optional[str],
+    limit: int,
+    user_id: Optional[str],
+) -> Tuple[list[Dict[str, Any]], Optional[str]]:
+    scope_norm = map_scope(scope)
+    status_norm = map_status(status)
+    after_ts, after_id = decode_cursor(cursor)
+
+    q = select(Bet)
+    if scope_norm:
+        q = q.where(Bet.scope == scope_norm)
+    if event_id is not None:
+        q = q.where(Bet.event_id == event_id)
+    if status_norm == "live":
+        q = q.where(Bet.status == "LIVE")
+    elif status_norm == "resolved":
+        q = q.where(Bet.status.in_(["FINALIZED", "RESOLVED_PENDING"]))
+    elif status_norm == "cancelled":
+        q = q.where(Bet.status == "CANCELLED")
+
+    if after_ts is not None and after_id is not None:
+        q = q.where(or_(Bet.created_at < after_ts, (Bet.created_at == after_ts) & (Bet.id < after_id)))
+
+    rows = db.scalars(q.order_by(Bet.created_at.desc(), Bet.id.desc()).limit(limit + 1)).all()
+    page_rows = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit and page_rows:
+        tail = page_rows[-1]
+        next_cursor = encode_cursor(tail.created_at, tail.id)
+
+    return [market_snapshot_for_user(db, row, user_id) for row in page_rows], next_cursor
+
+
+def list_my_positions_cursor(
+    db: Session,
+    *,
+    user_id: str,
+    scope: Optional[str],
+    event_id: Optional[int],
+    status: Optional[str],
+    cursor: Optional[str],
+    limit: int,
+) -> Tuple[list[Dict[str, Any]], Optional[str]]:
+    scope_norm = map_scope(scope)
+    status_norm = map_status(status)
+    after_ts, after_id = decode_cursor(cursor)
+
+    q = select(BetPosition, Bet).join(Bet, Bet.id == BetPosition.bet_id).where(BetPosition.user_id == user_id)
+    if scope_norm:
+        q = q.where(Bet.scope == scope_norm)
+    if event_id is not None:
+        q = q.where(Bet.event_id == event_id)
+    if status_norm == "open":
+        q = q.where(Bet.status == "LIVE")
+    elif status_norm == "resolved":
+        q = q.where(Bet.status.in_(["FINALIZED", "RESOLVED_PENDING", "CANCELLED"]))
+
+    if after_ts is not None and after_id is not None:
+        q = q.where(or_(BetPosition.created_at < after_ts, (BetPosition.created_at == after_ts) & (BetPosition.id < after_id)))
+
+    rows = db.execute(q.order_by(BetPosition.created_at.desc(), BetPosition.id.desc()).limit(limit + 1)).all()
+    page_rows = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit and page_rows:
+        tail = page_rows[-1][0]
+        next_cursor = encode_cursor(tail.created_at, tail.id)
+
+    items = []
+    for pos, bet in page_rows:
+        mine = db.scalars(select(BetPosition).where(BetPosition.bet_id == bet.id, BetPosition.user_id == user_id)).all()
+        yes_total = sum(p.stake_tickets for p in mine if p.side == "YES")
+        no_total = sum(p.stake_tickets for p in mine if p.side == "NO")
+        items.append(
+            {
+                "market_id": bet.id,
+                "question": bet.question,
+                "side_totals": {"yes": yes_total, "no": no_total},
+                "avg_price": None,
+                "pnl": None,
+                "status": ("resolved" if bet.status in {"FINALIZED", "RESOLVED_PENDING"} else bet.status.lower()),
+                "resolved_outcome": (bet.resolved_outcome or "").lower() or None,
+            }
+        )
+    return items, next_cursor
+
+
+def user_market_history(
+    db: Session,
+    *,
+    market_id: int,
+    user_id: str,
+    cursor: Optional[str],
+    limit: int,
+) -> Tuple[list[Dict[str, Any]], Optional[str]]:
+    after_ts, after_id = decode_cursor(cursor)
+    q = select(BetPosition).where(BetPosition.bet_id == market_id, BetPosition.user_id == user_id)
+    if after_ts is not None and after_id is not None:
+        q = q.where(or_(BetPosition.created_at < after_ts, (BetPosition.created_at == after_ts) & (BetPosition.id < after_id)))
+    rows = db.scalars(q.order_by(BetPosition.created_at.desc(), BetPosition.id.desc()).limit(limit + 1)).all()
+    page_rows = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit and page_rows:
+        tail = page_rows[-1]
+        next_cursor = encode_cursor(tail.created_at, tail.id)
+    items = [
+        {
+            "trade_id": row.id,
+            "side": row.side.lower(),
+            "amount_cents": row.stake_tickets,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in page_rows
+    ]
+    return items, next_cursor
+
+
+def export_markets_csv(db: Session, *, scope: Optional[str], event_id: Optional[int], status: Optional[str]) -> str:
+    markets, _ = list_markets_cursor(
+        db,
+        scope=scope,
+        event_id=event_id,
+        status=status,
+        cursor=None,
+        limit=1000,
+        user_id=None,
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "question", "scope", "event_id", "status", "yes_price", "no_price", "volume", "resolved_outcome"])
+    for row in markets:
+        writer.writerow([
+            row["id"],
+            row["question"],
+            row["scope"],
+            row["event_id"],
+            row["status"],
+            row["yes_price"],
+            row["no_price"],
+            row["volume"],
+            row.get("resolved_outcome") or "",
+        ])
+    return output.getvalue()
+
+
+def export_positions_csv(db: Session, *, user_id: Optional[str], scope: Optional[str], event_id: Optional[int]) -> str:
+    q = select(BetPosition, Bet).join(Bet, Bet.id == BetPosition.bet_id)
+    scope_norm = map_scope(scope)
+    if scope_norm:
+        q = q.where(Bet.scope == scope_norm)
+    if event_id is not None:
+        q = q.where(Bet.event_id == event_id)
+    if user_id:
+        q = q.where(BetPosition.user_id == user_id)
+    rows = db.execute(q.order_by(BetPosition.created_at.desc())).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["position_id", "market_id", "question", "user_id", "side", "stake_tickets", "created_at"])
+    for pos, bet in rows:
+        writer.writerow([pos.id, bet.id, bet.question, pos.user_id, pos.side, pos.stake_tickets, pos.created_at.isoformat() if pos.created_at else ""])
+    return output.getvalue()
