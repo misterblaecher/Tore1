@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../state.dart';
-import '../../../shared/utils/user_display.dart';
-import '../../../core/network/error_mapper.dart';
-import '../../../shared/utils/runtime_write_guard.dart';
-import '../../../shared/widgets/service_limited_banner.dart';
+import 'package:tore/core/network/error_mapper.dart';
+import 'package:tore/shared/utils/runtime_write_guard.dart';
+import 'package:tore/shared/utils/user_display.dart';
+import 'package:tore/shared/widgets/service_limited_banner.dart';
+import 'package:tore/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../wallet_providers.dart';
-import '../wallet_models.dart';
-import '../../events/presentation/event_config_providers.dart';
-import '../../qr/presentation/module_unavailable_screen.dart';
+import 'package:tore/features/events/presentation/event_config_providers.dart';
+import 'package:tore/features/qr/presentation/module_unavailable_screen.dart';
+import 'package:tore/features/wallet/wallet_models.dart';
+import 'package:tore/features/wallet/wallet_providers.dart';
+import 'package:tore/ui/components/components.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key, required this.eventId});
@@ -115,7 +116,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 children: [
                   Center(child: Text(ErrorMapper.message(snap.error as Object))),
                   const SizedBox(height: 8),
-                  OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')),
+                  ToreCTA(label: 'Réessayer', style: ToreCTAStyle.secondary, onPressed: _refresh),
                 ],
               );
             }
@@ -146,12 +147,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                ToreCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                         Text('My Wallet QR', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 8),
                         Center(
@@ -163,7 +162,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                         const SizedBox(height: 8),
                         SelectableText(walletQrDeepLink, style: Theme.of(context).textTheme.bodySmall),
                         const SizedBox(height: 8),
-                        OutlinedButton.icon(
+                        ToreCTA(
+                          label: 'Copy',
+                          style: ToreCTAStyle.secondary,
                           onPressed: () async {
                             await Clipboard.setData(ClipboardData(text: walletQrDeepLink));
                             if (!context.mounted) return;
@@ -171,15 +172,13 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                               const SnackBar(content: Text('QR link copié')),
                             );
                           },
-                          icon: const Icon(Icons.copy_outlined),
-                          label: const Text('Copy'),
                         ),
                       ],
                     ),
                   ),
                 ),
                 if (kDebugMode)
-                  ElevatedButton(
+                  ToreCTA(
                     onPressed: () async {
                       try {
                         await api.creditTickets(
@@ -202,10 +201,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                         );
                       }
                     },
-                    child: const Text('Ajouter 10 tickets'),
+                    label: 'Ajouter 10 tickets',
                   ),
                 const SizedBox(height: 8),
-                ElevatedButton(
+                ToreCTA(
+                  label: 'Send Gift',
                   onPressed: writeBlocked
                       ? null
                       : () async {
@@ -247,12 +247,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e))));
                           }
                         },
-                  child: const Text('Send Gift'),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton(
+                ToreCTA(
+                  label: 'Rafraîchir',
+                  style: ToreCTAStyle.secondary,
                   onPressed: _refresh,
-                  child: const Text('Rafraîchir'),
                 ),
                 const SizedBox(height: 18),
                 Text(
@@ -328,7 +328,7 @@ class _HistoryTile extends StatelessWidget {
     final subtitle = entry.note ?? entry.type;
     final trailing = entry.balanceAfter == null ? '$sign$delta' : '$sign$delta  →  ${entry.balanceAfter}';
 
-    return Card(
+    return ToreCard(
       child: ListTile(
         leading: Icon(_icon(entry.type, delta)),
         title: Text(trailing, style: const TextStyle(fontWeight: FontWeight.w700)),

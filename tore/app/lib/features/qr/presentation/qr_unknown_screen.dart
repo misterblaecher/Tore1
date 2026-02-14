@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tore/ui/components/components.dart';
 
 class QrUnknownScreen extends StatefulWidget {
   const QrUnknownScreen({
@@ -38,29 +39,30 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
       appBar: AppBar(title: const Text('QR inconnu')),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.reason, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('Code: ${widget.reasonCode}', style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            Text(
-              widget.raw.isEmpty ? '(aucun contenu)' : widget.raw,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _manualController,
-              decoration: const InputDecoration(
-                labelText: 'Code manuel',
-                hintText: 'Ex: tore://join_event?event_id=12',
+        child: ToreCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.reason, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text('Code: ${widget.reasonCode}', style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 12),
+              Text(
+                widget.raw.isEmpty ? '(aucun contenu)' : widget.raw,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
+              const SizedBox(height: 18),
+              TextField(
+                controller: _manualController,
+                decoration: const InputDecoration(
+                  labelText: 'Code manuel',
+                  hintText: 'Ex: tore://join_event?event_id=12',
+                ),
+              ),
+              const SizedBox(height: 18),
+              ToreCTA(
+                label: 'Copier',
+                style: ToreCTAStyle.secondary,
                 onPressed: widget.raw.isEmpty
                     ? null
                     : () async {
@@ -70,38 +72,26 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
                           const SnackBar(content: Text('QR copié.')),
                         );
                       },
-                icon: const Icon(Icons.copy),
-                label: const Text('Copier'),
               ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
+              const SizedBox(height: 10),
+              ToreCTA(
+                label: 'Retry scan',
+                style: ToreCTAStyle.secondary,
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.qr_code_scanner_outlined),
-                label: const Text('Retry scan'),
               ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
+              const SizedBox(height: 10),
+              ToreCTA(
+                label: 'Valider saisie manuelle',
                 onPressed: () => Navigator.of(context).pop(_manualController.text.trim()),
-                icon: const Icon(Icons.keyboard_alt_outlined),
-                label: const Text('Valider saisie manuelle'),
               ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
+              const SizedBox(height: 10),
+              ToreCTA(
+                label: 'Retour home',
+                style: ToreCTAStyle.secondary,
                 onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-                icon: const Icon(Icons.home_outlined),
-                label: const Text('Retour home'),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

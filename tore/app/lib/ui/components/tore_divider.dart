@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/tokens.dart';
+import 'package:tore/theme/theme.dart';
 
 class ToreDivider extends StatelessWidget {
   final bool gold;
