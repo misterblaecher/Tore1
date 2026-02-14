@@ -8,6 +8,7 @@ class CreateOrderItem(BaseModel):
     item_id: int
     variant_id: Optional[int] = None
     qty: int = Field(ge=1, le=50)
+    market_item_id: Optional[int] = None
 
 
 class CreateOrderIn(BaseModel):
@@ -29,6 +30,7 @@ class OrderItemOut(BaseModel):
     price_cents_snapshot: int
     qty: int
     line_total_cents: int
+    market_item_id: Optional[int] = None
 
 
 class OrderOut(BaseModel):

@@ -1,28 +1,58 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Layout, { cardStyle } from '../ui/Layout'
 import { API_BASE } from '../lib/api'
 
 type MenuItem = { id: number; name: string; description: string; price_cents: number }
 type MenuCategory = { id: number; name: string; items: MenuItem[] }
 type MenuPublic = { bar: { id: number; name: string; city: string }; categories: MenuCategory[] }
-type CartLine = { item: MenuItem; qty: number }
+type CartLine = { item: MenuItem; qty: number; market_item_id?: number }
+type MarketPublic = { items: { id: number; name: string }[] }
+
+const normalizeName = (value: string) => value.trim().toLowerCase()
 
 export default function MenuPublic() {
   const { barId, itemId } = useParams()
+  const [searchParams] = useSearchParams()
+  const eventId = searchParams.get('event_id')
+
   const [data, setData] = useState<MenuPublic | null>(null)
   const [item, setItem] = useState<MenuItem | null>(null)
   const [cart, setCart] = useState<Record<number, CartLine>>({})
   const [statusMsg, setStatusMsg] = useState<string>('')
   const [payWithTickets, setPayWithTickets] = useState<boolean>(false)
+  const [marketByName, setMarketByName] = useState<Record<string, number>>({})
 
   useEffect(() => {
     if (!barId) return
-    fetch(`${API_BASE}/menu/public/${barId}`).then((r) => r.json()).then((payload) => {
+
+    const menuPromise = fetch(`${API_BASE}/menu/public/${barId}`).then((r) => r.json())
+    const marketQuery = new URLSearchParams({ bar_id: barId })
+    if (eventId) {
+      marketQuery.set('event_id', eventId)
+    }
+    const marketPromise = fetch(`${API_BASE}/market/public?${marketQuery.toString()}`)
+
+    Promise.all([menuPromise, marketPromise]).then(([payload, marketRes]) => {
       setData(payload)
       fetch(`${API_BASE}/menu/track`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bar_id: Number(barId), action: 'view' }) })
+
+      if (marketRes.status === 404) {
+        setMarketByName({})
+        return
+      }
+      if (!marketRes.ok) {
+        return
+      }
+      marketRes.json().then((marketPayload: MarketPublic) => {
+        const mapping: Record<string, number> = {}
+        marketPayload.items.forEach((marketItem) => {
+          mapping[normalizeName(marketItem.name)] = marketItem.id
+        })
+        setMarketByName(mapping)
+      })
     })
-  }, [barId])
+  }, [barId, eventId])
 
   useEffect(() => {
     if (!barId || !itemId) {
@@ -41,11 +71,13 @@ export default function MenuPublic() {
   const addToCart = (menuItem: MenuItem) => {
     setCart((prev) => {
       const existing = prev[menuItem.id]
+      const marketItemId = marketByName[normalizeName(menuItem.name)]
       return {
         ...prev,
         [menuItem.id]: {
           item: menuItem,
           qty: existing ? existing.qty + 1 : 1,
+          market_item_id: marketItemId,
         },
       }
     })
@@ -67,10 +99,11 @@ export default function MenuPublic() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         bar_id: Number(barId),
+        event_id: eventId ? Number(eventId) : undefined,
         device_id: 'web-menu',
         idempotency_key: idempotency,
         payment_mode: payWithTickets ? 'tickets' : 'pay_later',
-        items: cartLines.map((line) => ({ item_id: line.item.id, qty: line.qty })),
+        items: cartLines.map((line) => ({ item_id: line.item.id, qty: line.qty, market_item_id: line.market_item_id })),
       }),
     })
     if (!res.ok) {
@@ -79,7 +112,7 @@ export default function MenuPublic() {
     }
     const payload = await res.json()
     setCart({})
-    setStatusMsg(`Commande #${payload.id} envoyée (${payload.payment_status})`) 
+    setStatusMsg(`Commande #${payload.id} envoyée (${payload.payment_status})`)
   }
 
   return (

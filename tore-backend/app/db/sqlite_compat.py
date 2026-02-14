@@ -61,3 +61,15 @@ def ensure_battles_tables(engine: Engine) -> None:
 
 def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_battles_tables(engine)
+    ensure_order_items_market_item_id(engine)
+
+
+def ensure_order_items_market_item_id(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    order_item_cols = _table_columns(engine, "order_items")
+    with engine.begin() as conn:
+        if "market_item_id" not in order_item_cols:
+            conn.execute(text("ALTER TABLE order_items ADD COLUMN market_item_id INTEGER"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_order_items_market_item_id ON order_items (market_item_id)"))
