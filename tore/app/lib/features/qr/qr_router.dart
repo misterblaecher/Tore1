@@ -129,7 +129,7 @@ class QrRouterService {
       case _QrTarget.orderRestricted:
         onOutcome?.call(const QrRouteOutcome.denied('Réservé staff'));
         await Navigator.of(context).push(
-          const MaterialPageRoute(
+          MaterialPageRoute(
             builder: (_) => ModuleUnavailableScreen(
               title: 'Module indisponible',
               message: 'Module indisponible.',
@@ -141,7 +141,7 @@ class QrRouterService {
       case _QrTarget.userRestricted:
         onOutcome?.call(const QrRouteOutcome.denied('Hors scope user'));
         await Navigator.of(context).push(
-          const MaterialPageRoute(
+          MaterialPageRoute(
             builder: (_) => ModuleUnavailableScreen(
               title: 'Module indisponible',
               message: 'Module indisponible.',
