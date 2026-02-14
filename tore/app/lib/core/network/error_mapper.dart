@@ -13,6 +13,12 @@ class ErrorMapper {
         return 'Accès révoqué. Contacte un manager.';
       case 'rate_limited':
         return 'Trop de requêtes, réessaie.';
+      case 'forbidden':
+        return 'Action non autorisée.';
+      case 'read_only':
+        return 'Event en lecture seule pour le moment.';
+      case 'frozen':
+        return 'Trading temporairement gelé.';
       case 'insufficient_balance':
       case 'insuff_toggle':
         return 'Solde tickets insuffisant.';

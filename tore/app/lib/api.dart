@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import 'core/network/api_client.dart';
+import 'features/polymarket/polymarket_models.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
 
@@ -285,6 +286,105 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+
+
+  Future<CursorPage<MarketLite>> fetchPolymarketMarkets({
+    required String scope,
+    int? eventId,
+    required String status,
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final res = await _client.dio.get(
+      '/polymarket/markets',
+      queryParameters: {
+        'scope': scope,
+        if (eventId != null) 'event_id': eventId,
+        'status': status,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = ((data['items'] as List?) ?? const [])
+        .map((e) => MarketLite.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
+  }
+
+  Future<MarketDetailResponse> fetchPolymarketMarket(int marketId, {String? cursor, int limit = 20}) async {
+    final res = await _client.dio.get(
+      '/polymarket/markets/$marketId',
+      queryParameters: {
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    final data = Map<String, dynamic>.from(res.data as Map);
+    return MarketDetailResponse.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> postPolymarketPosition({
+    required int marketId,
+    required String side,
+    required int amountCents,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/polymarket/position',
+      data: {
+        'market_id': marketId,
+        'side': side,
+        'amount_cents': amountCents,
+        'client_key': idempotencyKey,
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<CursorPage<PositionRow>> fetchMyPositions({
+    required String scope,
+    int? eventId,
+    String status = 'open',
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final res = await _client.dio.get(
+      '/polymarket/positions',
+      queryParameters: {
+        'scope': scope,
+        if (eventId != null) 'event_id': eventId,
+        'status': status,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = ((data['items'] as List?) ?? const [])
+        .map((e) => PositionRow.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
+  }
+
+  Future<CursorPage<TradeRow>> fetchMyHistory({
+    required int marketId,
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final res = await _client.dio.get(
+      '/polymarket/markets/$marketId/my-history',
+      queryParameters: {
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = ((data['items'] as List?) ?? const [])
+        .map((e) => TradeRow.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
+  }
   Future<Map<String, dynamic>> getEvent(int eventId) async {
     final res = await _client.dio.get('/events/$eventId');
     return Map<String, dynamic>.from(res.data as Map);
