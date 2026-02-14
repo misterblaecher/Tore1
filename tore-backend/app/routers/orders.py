@@ -4,9 +4,9 @@ from typing import Iterator, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from models import AppUserPrivacySetting, BarPrivacySetting, Order, OrderClientQrScan
+from models import AppUserPrivacySetting, BarPrivacySetting, Order, OrderClientQrScan, Zone
 from partner_auth import current_identity as current_partner_identity
 from app.schemas.orders import (
     CreateOrderIn,
@@ -99,6 +99,7 @@ def create_order_route(
         note=payload.note,
         payment_mode=payload.payment_mode,
         idempotency_key=idem_key,
+        zone_id=payload.zone_id,
     )
     return order_out(order)
 
@@ -214,7 +215,12 @@ def get_orders_live(
     db: Session = Depends(get_db),
 ):
     c_ts, c_id = decode_cursor(cursor)
-    query = db.query(Order).filter(Order.event_id == event_id)
+    query = (
+        db.query(Order, Zone.name.label("zone_name"))
+        .outerjoin(Zone, Zone.id == Order.zone_id)
+        .options(selectinload(Order.items))
+        .filter(Order.event_id == event_id)
+    )
     runtime_status = get_event_runtime_state(db, event_id)
     if status:
         mapped = LIVE_STATUS_MAP.get(status.lower(), status.upper())
@@ -225,11 +231,11 @@ def get_orders_live(
     rows = query.order_by(Order.created_at.desc(), Order.id.desc()).limit(limit + 1).all()
     next_cursor = None
     if len(rows) > limit:
-        last = rows[limit - 1]
-        next_cursor = encode_cursor(last.created_at, last.id)
+        last_order, _ = rows[limit - 1]
+        next_cursor = encode_cursor(last_order.created_at, last_order.id)
         rows = rows[:limit]
 
-    payload = [order_out(r).model_dump() for r in rows]
+    payload = [order_out(order, zone_name=zone_name).model_dump() for order, zone_name in rows]
     for row in payload:
         row["status_alias"] = {
             "NEW": "pending",

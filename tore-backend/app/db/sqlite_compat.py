@@ -70,6 +70,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_p3_tables(engine)
     ensure_identity_consent_columns(engine)
     ensure_order_client_qr_scan_table(engine)
+    ensure_orders_zone_id(engine)
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
@@ -128,6 +129,16 @@ def ensure_order_items_market_item_id(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE order_items ADD COLUMN market_item_id INTEGER"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_order_items_market_item_id ON order_items (market_item_id)"))
 
+
+def ensure_orders_zone_id(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    order_cols = _table_columns(engine, "orders")
+    with engine.begin() as conn:
+        if "zone_id" not in order_cols:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN zone_id INTEGER"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_zone_id ON orders (zone_id)"))
 
 def ensure_entry_token_columns(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":

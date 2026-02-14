@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem
+from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem, Zone
 from app.schemas.orders import OrderItemOut, OrderOut
 from app.services.audit_service import write_audit_log
 from app.services.market_service import apply_order_market_impact
@@ -35,7 +35,7 @@ def _status_alias(status: str) -> str:
     }.get(status.upper(), status.lower())
 
 
-def order_out(order: Order) -> OrderOut:
+def order_out(order: Order, *, zone_name: Optional[str] = None) -> OrderOut:
     return OrderOut(
         id=order.id,
         bar_id=order.bar_id,
@@ -46,6 +46,8 @@ def order_out(order: Order) -> OrderOut:
         total_cents=order.total_cents,
         total_tickets=order.total_tickets,
         note=order.note,
+        zone_id=order.zone_id,
+        zone_name=zone_name,
         source=order.source,
         idempotency_key=order.idempotency_key,
         created_at=order.created_at,
@@ -77,6 +79,7 @@ def create_order(
     note: Optional[str],
     payment_mode: str,
     idempotency_key: str,
+    zone_id: Optional[int] = None,
 ) -> Order:
     bar = db.get(Bar, bar_id)
     if not bar:
@@ -99,6 +102,15 @@ def create_order(
         dedupe_query = dedupe_query.filter(Order.user_id == user_id)
     else:
         dedupe_query = dedupe_query.filter(Order.device_id == device_id)
+
+
+    zone: Optional[Zone] = None
+    if zone_id is not None:
+        zone = db.get(Zone, zone_id)
+        if not zone:
+            raise HTTPException(404, "Zone not found")
+        if zone.bar_id != bar_id:
+            raise HTTPException(403, "Zone does not belong to bar")
 
     existing = dedupe_query.first()
     if existing:
@@ -161,6 +173,7 @@ def create_order(
         bar_id=bar_id,
         event_id=event_id,
         user_id=user_id,
+        zone_id=zone.id if zone else None,
         status="NEW",
         payment_status=payment_status,
         note=note,
@@ -213,7 +226,7 @@ def create_order(
         entity_id=str(order.id),
         event_id=event_id,
         bar_id=bar_id,
-        payload={"status": "NEW", "idempotency_key": idempotency_key, "items_count": len(items)},
+        payload={"status": "NEW", "idempotency_key": idempotency_key, "items_count": len(items), "zone_id": zone.id if zone else None},
     )
 
     order.updated_at = now_utc()

@@ -4,7 +4,7 @@ import secrets
 
 from db import Base, engine, get_session
 from main import app
-from models import AuditLog, Bar, Event, EventRuntimeState, MenuCategory, MenuItem, Order, PartnerMembership, PartnerUser
+from models import AuditLog, Bar, Event, EventRuntimeState, MenuCategory, MenuItem, Order, PartnerMembership, PartnerUser, Zone
 from partner_auth import _make_token
 
 
@@ -51,10 +51,22 @@ def _seed_event(bar_id: int) -> int:
         s.close()
 
 
+def _seed_zone(bar_id: int, event_id: int) -> int:
+    s = get_session()
+    try:
+        zone = Zone(bar_id=bar_id, event_id=event_id, name="Terrasse", slug=f"terrasse-{event_id}", enabled=True)
+        s.add(zone)
+        s.commit()
+        return zone.id
+    finally:
+        s.close()
+
+
 def test_orders_live_idempotence_pause_and_audit():
     bar_id, _, staff_token = _seed_partner(role="bartender")
     item_id = _seed_item(bar_id)
     event_id = _seed_event(bar_id)
+    zone_id = _seed_zone(bar_id, event_id)
     client = TestClient(app)
 
     body = {
@@ -63,6 +75,7 @@ def test_orders_live_idempotence_pause_and_audit():
         "items": [{"item_id": item_id, "qty": 2}],
         "device_id": "phone-1",
         "idempotency_key": "order-live-1",
+        "zone_id": zone_id,
     }
     first = client.post('/orders', json=body)
     second = client.post('/orders', json=body, headers={'Idempotency-Key': 'order-live-1'})
@@ -72,7 +85,10 @@ def test_orders_live_idempotence_pause_and_audit():
 
     live = client.get(f'/orders/live?event_id={event_id}&status=pending')
     assert live.status_code == 200
-    assert any(row['id'] == first.json()['id'] for row in live.json()['items'])
+    matching = [row for row in live.json()['items'] if row['id'] == first.json()['id']]
+    assert matching
+    assert matching[0]['zone_id'] == zone_id
+    assert matching[0]['zone_name'] == 'Terrasse'
 
     patched = client.patch(
         f"/orders/{first.json()['id']}/status",
@@ -81,6 +97,23 @@ def test_orders_live_idempotence_pause_and_audit():
     )
     assert patched.status_code == 200
     assert patched.json()['status'] == 'IN_PROGRESS'
+
+
+    no_zone = client.post('/orders', json={
+        'bar_id': bar_id,
+        'event_id': event_id,
+        'items': [{'item_id': item_id, 'qty': 1}],
+        'device_id': 'phone-no-zone',
+        'idempotency_key': 'order-live-no-zone',
+    })
+    assert no_zone.status_code == 200
+
+    live_all = client.get(f'/orders/live?event_id={event_id}&status=pending')
+    assert live_all.status_code == 200
+    row_no_zone = next(row for row in live_all.json()['items'] if row['id'] == no_zone.json()['id'])
+    assert row_no_zone['zone_id'] is None
+    assert row_no_zone['zone_name'] is None
+
 
     s = get_session()
     try:
@@ -99,6 +132,7 @@ def test_orders_live_idempotence_pause_and_audit():
         s.commit()
     finally:
         s.close()
+
 
     blocked = client.post('/orders', json={
         'bar_id': bar_id,
