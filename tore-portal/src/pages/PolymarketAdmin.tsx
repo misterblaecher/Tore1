@@ -18,15 +18,12 @@ export default function PolymarketAdmin() {
   }, [eventId])
 
   const resolveBet = async (betId: number) => {
-    await api(`/partner/portal/polymarket/bets/${betId}/resolve`, {
-      method: 'POST',
-      body: JSON.stringify({ outcome: 'YES' }),
-    })
+    await api(`/polymarket/bets/${betId}/resolve`, { method: 'POST', body: JSON.stringify({ outcome: 'YES' }) })
     load()
   }
 
   const finalizeBet = async (betId: number) => {
-    await api(`/partner/portal/polymarket/bets/${betId}/finalize`, { method: 'POST' })
+    await api(`/polymarket/bets/${betId}/finalize`, { method: 'POST' })
     load()
   }
 

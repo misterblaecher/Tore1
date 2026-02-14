@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Iterator, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from sqlalchemy import func
 from models import Bet, BetDispute, WalletLedgerEntry
-from app.schemas.polymarket import BetFinalizeOut, BetOut, BetResolveIn
 from partner_auth import require_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
 from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminTopupIn, WalletAdminTopupOut
@@ -16,7 +14,6 @@ from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup
 from app.services.wallet_service import get_or_create_wallet
-from app.services import polymarket_service
 
 router = APIRouter(prefix="/partner/portal", tags=["portal-event-control"])
 
@@ -120,47 +117,3 @@ def portal_polymarket_event_view(
         bet["status_compat"] = "RESOLVED" if status == "FINALIZED" else status
         bet["disputes_count"] = dispute_map.get(bet.get("id"), 0)
     return {"event_id": event_id, "bets": bets}
-
-
-@router.post("/polymarket/bets/{bet_id}/resolve", response_model=BetOut)
-def portal_resolve_polymarket_bet(
-    bet_id: int,
-    payload: BetResolveIn,
-    identity=Depends(require_role("manager")),
-    db: Session = Depends(get_db),
-):
-    bet = db.get(Bet, bet_id)
-    if not bet:
-        raise HTTPException(status_code=404, detail="Bet not found")
-    if bet.scope != "EVENT" or bet.event_id is None:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    get_owned_event_or_403(db, bet.event_id, identity["bar_id"])
-    actor = SimpleNamespace(id=f"partner:{identity['user_id']}")
-
-    outcome = polymarket_service.ensure_bet_side(payload.outcome)
-    return polymarket_service.resolve_bet(
-        db,
-        bet_id=bet_id,
-        outcome=outcome,
-        actor=actor,
-        force_admin=True,
-    )
-
-
-@router.post("/polymarket/bets/{bet_id}/finalize", response_model=BetFinalizeOut)
-def portal_finalize_polymarket_bet(
-    bet_id: int,
-    identity=Depends(require_role("manager")),
-    db: Session = Depends(get_db),
-):
-    bet = db.get(Bet, bet_id)
-    if not bet:
-        raise HTTPException(status_code=404, detail="Bet not found")
-    if bet.scope != "EVENT" or bet.event_id is None:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    get_owned_event_or_403(db, bet.event_id, identity["bar_id"])
-    actor = SimpleNamespace(id=f"partner:{identity['user_id']}")
-
-    return polymarket_service.finalize_bet(db, bet_id=bet_id, actor=actor, force_admin=True)
