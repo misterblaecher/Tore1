@@ -57,3 +57,43 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return (await res.json()) as T
 }
+
+export async function apiText(path: string, init: RequestInit = {}): Promise<string> {
+  const token = getToken()
+  const headers = new Headers(init.headers)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let res: Response
+  const url = `${API_BASE}${path}`
+  try {
+    res = await fetch(url, { ...init, headers })
+  } catch {
+    throw new ApiError('API indisponible. Vérifie la connexion.', undefined, url)
+  }
+
+  if (res.status === 401) {
+    clearToken()
+  }
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    let reason: string | undefined
+    try {
+      const data = await res.json()
+      const detail = data?.detail
+      if (typeof detail === 'string') {
+        msg = detail
+      } else if (detail && typeof detail === 'object') {
+        reason = String((detail as { reason?: string }).reason ?? '') || undefined
+        msg = String((detail as { message?: string }).message ?? reason ?? JSON.stringify(detail))
+      } else {
+        msg = JSON.stringify(data)
+      }
+    } catch {
+      // ignore
+    }
+    throw new ApiError(msg, res.status, url, reason)
+  }
+
+  return res.text()
+}
