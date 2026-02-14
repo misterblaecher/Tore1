@@ -11,6 +11,8 @@ import 'package:tore/features/ticker/ticker_providers.dart';
 import 'package:tore/features/wallet/presentation/wallet_screen.dart';
 import 'package:tore/state.dart';
 import 'package:tore/ui/components/components.dart';
+import 'package:tore/shared/utils/write_gate.dart';
+import 'package:tore/shared/widgets/service_limited_banner.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -23,6 +25,7 @@ class HomeHubScreen extends ConsumerWidget {
     final eventAsync = hasEvent ? ref.watch(_eventDetailsProvider(ctx.activeEventId!)) : null;
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
     final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
+    final readOnly = isReadOnly(ref);
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -46,32 +49,39 @@ class HomeHubScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+        onPressed: readOnly ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
         icon: const Icon(Icons.qr_code_scanner_outlined),
         label: const Text('Scanner QR'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (readOnly)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: ServiceLimitedBanner(message: readOnlyModeReasonMessage),
+            ),
           _EventHeader(
             title: hasEvent ? (ctx.activeEventName ?? 'Event #${ctx.activeEventId}') : 'Aucun event actif',
             status: hasEvent ? eventState : 'OFF',
             onLeave: hasEvent
-                ? () async {
-                    final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Quitter l’event ?'),
-                            content: const Text('Tu vas revenir en mode libre.'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-                              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
-                            ],
-                          ),
-                        ) ??
-                        false;
-                    if (ok) ref.read(appContextProvider.notifier).leaveEvent();
-                  }
+                ? (readOnly
+                    ? null
+                    : () async {
+                        final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Quitter l’event ?'),
+                                content: const Text('Tu vas revenir en mode libre.'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                                  FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
+                                ],
+                              ),
+                            ) ??
+                            false;
+                        if (ok) ref.read(appContextProvider.notifier).leaveEvent();
+                      })
                 : null,
           ),
           const SizedBox(height: 14),

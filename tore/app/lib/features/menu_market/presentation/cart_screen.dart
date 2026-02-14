@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/error_mapper.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
+import '../../../shared/utils/write_gate.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
 import '../../../state.dart';
 import '../../../ui/components/tore_card.dart';
@@ -39,7 +40,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final cart = ref.watch(cartProvider(widget.eventId));
     final controller = ref.read(cartProvider(widget.eventId).notifier);
     final userId = ref.watch(userIdProvider);
-    final writeBlocked = isWriteBlockedByEventState(widget.eventState);
+    final runtimeWriteBlocked = isWriteBlockedByEventState(widget.eventState);
+    final readOnly = isReadOnly(ref);
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: runtimeWriteBlocked);
     final insufficientBalance = widget.tickets != null && cart.totalTickets > widget.tickets!;
     final canConfirm = !cart.isEmpty &&
         !widget.isOffline &&
@@ -62,7 +65,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: ServiceLimitedBanner(message: writeBlockedReasonMessage(widget.eventState)),
+                child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, runtimeState: widget.eventState)),
               ),
             if (insufficientBalance)
               const Padding(
@@ -123,7 +126,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             ToreCTA(
               label: 'Vider',
               style: ToreCTAStyle.secondary,
-              onPressed: cart.isEmpty ? null : controller.clear,
+              onPressed: (cart.isEmpty || writeBlocked) ? null : controller.clear,
             ),
           ],
         ),

@@ -8,6 +8,7 @@ import 'features/navigation/presentation/polymarket_tab_screen.dart';
 import 'features/navigation/presentation/profile_screen.dart';
 import 'features/navigation/presentation/ticker_screen.dart';
 import 'features/qr/presentation/qr_scanner_screen.dart';
+import 'shared/utils/write_gate.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -32,6 +33,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     ref.watch(appContextInitProvider);
     final appCtx = ref.watch(appContextProvider);
+    final readOnly = isReadOnly(ref);
 
     final eventId = appCtx.activeEventId;
     final eventConfig = eventId != null ? ref.watch(eventConfigProvider(eventId)) : null;
@@ -88,7 +90,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+        onPressed: readOnly ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+        tooltip: readOnly ? readOnlyModeReasonMessage : 'Scanner QR',
         child: const Icon(Icons.qr_code_scanner_outlined),
       ),
       bottomNavigationBar: BottomAppBar(

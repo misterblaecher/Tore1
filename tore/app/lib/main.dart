@@ -17,50 +17,79 @@ class ToreApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final boot = ref.watch(appBootProvider);
-
     return MaterialApp(
       title: 'TORÈ',
       debugShowCheckedModeBanner: false,
       theme: buildToreThemeData(ToreThemeMode.ritual),
       darkTheme: buildToreThemeData(ToreThemeMode.ritual),
       themeMode: ThemeMode.dark,
-      home: boot.when(
-        loading: () => const _Splash(),
-        error: (e, _) => _BootError(error: e.toString()),
-        data: (state) => state.status == AppBootStatus.needsWelcome ? const WelcomeScreen() : const AppShell(),
-      ),
+      home: const _BootEntry(),
     );
   }
 }
 
-class _Splash extends StatelessWidget {
-  const _Splash();
+class _BootEntry extends ConsumerStatefulWidget {
+  const _BootEntry();
+
+  @override
+  ConsumerState<_BootEntry> createState() => _BootEntryState();
+}
+
+class _BootEntryState extends ConsumerState<_BootEntry> {
+  bool _continueReadOnly = false;
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    final boot = ref.watch(appBootProvider);
+
+    if (boot.bootStatus == BootStatus.bootLoading) {
+      return const _BootSplash(
+        title: 'TORÈ',
+        status: 'Connexion…',
+      );
+    }
+
+    if (boot.bootStatus == BootStatus.bootErrorRetry) {
+      return _BootSplash(
+        title: 'TORÈ',
+        status: 'Erreur de démarrage',
+        details: boot.errorMessage,
+        onRetry: () => ref.read(appBootProvider.notifier).bootstrap(),
+        onContinueReadOnly: () => setState(() => _continueReadOnly = true),
+      );
+    }
+
+    if (boot.bootStatus == BootStatus.bootOfflineReadOnly && !_continueReadOnly) {
+      return _BootSplash(
+        title: 'TORÈ',
+        status: 'Mode lecture (réseau indisponible)',
+        details: 'Les actions d’écriture sont bloquées tant que le réseau est indisponible.',
+        onRetry: () => ref.read(appBootProvider.notifier).bootstrap(),
+        onContinueReadOnly: () => setState(() => _continueReadOnly = true),
+      );
+    }
+
+    return boot.status == AppBootStatus.needsWelcome ? const WelcomeScreen() : const AppShell();
   }
 }
 
-class _BootError extends StatelessWidget {
-  final String error;
-  const _BootError({required this.error});
+class _BootSplash extends StatelessWidget {
+  const _BootSplash({
+    required this.title,
+    required this.status,
+    this.details,
+    this.onRetry,
+    this.onContinueReadOnly,
+  });
+
+  final String title;
+  final String status;
+  final String? details;
+  final VoidCallback? onRetry;
+  final VoidCallback? onContinueReadOnly;
 
   @override
   Widget build(BuildContext context) {
-    return _BootErrorBody(error: error);
-  }
-}
-
-class _BootErrorBody extends ConsumerWidget {
-  final String error;
-  const _BootErrorBody({required this.error});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: Center(
         child: Padding(
@@ -68,12 +97,28 @@ class _BootErrorBody extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Erreur démarrage: $error', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(appBootProvider),
-                child: const Text('Réessayer'),
-              ),
+              Text(title, style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 16),
+              if (onRetry == null) ...[
+                const CircularProgressIndicator(),
+                const SizedBox(height: 12),
+              ],
+              Text(status, textAlign: TextAlign.center),
+              if (details != null) ...[
+                const SizedBox(height: 8),
+                Text(details!, textAlign: TextAlign.center),
+              ],
+              if (onRetry != null) ...[
+                const SizedBox(height: 14),
+                FilledButton(onPressed: onRetry, child: const Text('Retry')),
+              ],
+              if (onContinueReadOnly != null) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: onContinueReadOnly,
+                  child: const Text('Continuer en mode lecture'),
+                ),
+              ]
             ],
           ),
         ),
