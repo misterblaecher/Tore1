@@ -1,135 +1,142 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tore/theme/theme.dart';
+import 'package:tore/ui/components/components.dart';
 
-import '../../../state.dart';
-import '../../../shared/widgets/app_background.dart';
-import '../../../shared/widgets/ticker_strip.dart';
-import '../../../shared/widgets/trading_card.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
-import '../../events/presentation/events_screen.dart';
+import '../../../shared/models/bar.dart';
+import 'bars_providers.dart';
 
 class BarsScreen extends ConsumerWidget {
   const BarsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final api = ref.watch(apiProvider);
+    final barsAsync = ref.watch(barsFutureProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TORÈ'),
+        title: const Text('Bars'),
+        actions: [
+          IconButton(
+            tooltip: 'Search',
+            onPressed: () {},
+            icon: const Icon(Icons.search),
+          ),
+        ],
       ),
-      body: AppBackground(
+      body: RefreshIndicator(
+        onRefresh: () async => ref.refresh(barsFutureProvider.future),
+        child: barsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => ListView(
+            children: [
+              const SizedBox(height: 80),
+              const Center(child: Text('Impossible de charger les bars.')),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  ErrorMapper.message(error),
+                  style: ToreType.meta.copyWith(color: ToreSemantic.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+          data: (bars) {
+            if (bars.isEmpty) {
+              return ListView(
+                children: const [
+                  SizedBox(height: 80),
+                  Center(child: Text('Aucun bar disponible.')),
+                ],
+              );
+            }
+
+            return ListView.separated(
+              padding: const EdgeInsets.all(ToreSpace.s4),
+              itemCount: bars.length,
+              separatorBuilder: (_, __) => const SizedBox(height: ToreSpace.s3),
+              itemBuilder: (context, index) => _BarCompactCard(bar: bars[index]),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _BarCompactCard extends ConsumerWidget {
+  const _BarCompactCard({required this.bar});
+
+  final Bar bar;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = bar.status?.toUpperCase();
+    final metadata = [bar.district, bar.style].whereType<String>().where((value) => value.trim().isNotEmpty).join(' · ');
+    final ticker = bar.tickerLine ?? bar.lastEvent;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(ToreRadii.md),
+      onTap: () {
+        ref.read(appContextProvider.notifier).setBar(
+              barId: bar.id,
+              barName: bar.name,
+            );
+        Navigator.of(context).pushNamed('/bars/${bar.id}/events', arguments: bar.name);
+      },
+      child: ToreCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TickerStrip(
-              items: const [
-                TickerItem('Dealer Beer', '+1.8%', Color(0xFF2ECC71)),
-                TickerItem('Jupiler', '+3.0%', Color(0xFFF5C400)),
-                TickerItem('CRASH', 'Shots', Color(0xFFCA005D)),
+            ToreListRow(
+              title: bar.name,
+              subtitle: metadata.isEmpty ? (bar.city.isEmpty ? null : bar.city) : metadata,
+              trailing: const Icon(Icons.chevron_right),
+            ),
+            const ToreDivider(),
+            const SizedBox(height: ToreSpace.s2),
+            Row(
+              children: [
+                if (bar.distanceLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: ToreSpace.s2),
+                    child: Text(bar.distanceLabel!, style: ToreType.monoMetric),
+                  ),
+                if (status != null)
+                  ToreChip(
+                    label: status,
+                    variant: _variantForStatus(status),
+                  ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Bar selector',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: FutureBuilder<List<dynamic>>(
-                future: api.bars(),
-                builder: (context, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snap.hasError) {
-                    return Center(child: Text(ErrorMapper.message(snap.error as Object)));
-                  }
-
-                  final bars = snap.data ?? const [];
-                  if (bars.isEmpty) {
-                    return const Center(child: Text('Aucun bar'));
-                  }
-
-                  return ListView.separated(
-                    itemCount: bars.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) {
-                      final b = Map<String, dynamic>.from(bars[i] as Map);
-                      final id = (b['id'] as num?)?.toInt() ?? 0;
-                      final name = (b['name'] as String?) ?? '';
-                      final city = (b['city'] as String?) ?? '';
-
-                      return TradingCard(
-                        onTap: () {
-                          ref.read(appContextProvider.notifier).setBar(
-                                barId: id,
-                                barName: name.isEmpty ? 'Bar #$id' : name,
-                              );
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => EventsScreen(
-                                barId: id,
-                                barName: name.isEmpty ? 'Bar #$id' : name,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFCA005D).withOpacity(0.16),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: const Color(0xFFCA005D).withOpacity(0.35),
-                                ),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${i + 1}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(color: Colors.white),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name.isEmpty ? '(Sans nom)' : name,
-                                    style: Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    city,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(color: const Color(0xFF9AA4B2)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
+            if (ticker != null) ...[
+              const SizedBox(height: ToreSpace.s2),
+              Text(
+                ticker,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ToreType.meta.copyWith(color: ToreSemantic.textSecondary),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  ToreChipVariant _variantForStatus(String status) {
+    switch (status) {
+      case 'OPEN':
+        return ToreChipVariant.ok;
+      case 'LIVE':
+        return ToreChipVariant.live;
+      case 'CLOSED':
+        return ToreChipVariant.closed;
+      default:
+        return ToreChipVariant.info;
+    }
   }
 }

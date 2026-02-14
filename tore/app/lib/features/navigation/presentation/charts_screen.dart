@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
-import '../../bars/presentation/bars_screen.dart';
 import '../../charts/chart_detail_screen.dart';
 import '../../charts/chart_models.dart';
 import '../../charts/chart_providers.dart';
@@ -39,9 +38,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
               ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BarsScreen()),
-                ),
+                onPressed: () => Navigator.of(context).pushNamed('/bars'),
                 icon: const Icon(Icons.near_me_outlined),
                 label: const Text('Choisir un bar / event'),
               ),
