@@ -274,7 +274,12 @@ def apply_order_market_impact(s: Session, *, order: Order) -> int:
         item = None
         if line.market_item_id is not None:
             direct_item = s.get(DrinkMarketItem, line.market_item_id)
-            if direct_item and direct_item.config_id == config.id and direct_item.is_active:
+            if (
+                direct_item
+                and direct_item.config_id == config.id
+                and direct_item.is_active
+                and direct_item.name == line.name_snapshot
+            ):
                 item = direct_item
             else:
                 continue

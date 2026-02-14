@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -65,11 +66,14 @@ def ensure_sqlite_compat(engine: Engine) -> None:
 
 
 def ensure_order_items_market_item_id(engine: Engine) -> None:
-    if engine.dialect.name != "sqlite":
+    inspector = inspect(engine)
+    if not inspector.has_table("order_items"):
         return
 
-    order_item_cols = _table_columns(engine, "order_items")
+    order_item_cols = {col["name"] for col in inspector.get_columns("order_items")}
+    order_item_indexes = {idx["name"] for idx in inspector.get_indexes("order_items")}
     with engine.begin() as conn:
         if "market_item_id" not in order_item_cols:
             conn.execute(text("ALTER TABLE order_items ADD COLUMN market_item_id INTEGER"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_order_items_market_item_id ON order_items (market_item_id)"))
+        if "ix_order_items_market_item_id" not in order_item_indexes:
+            conn.execute(text("CREATE INDEX ix_order_items_market_item_id ON order_items (market_item_id)"))

@@ -6,10 +6,40 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem
+from models import Bar, DrinkMarketConfig, DrinkMarketItem, Event, MenuItem, MenuItemVariant, Order, OrderItem
 from app.schemas.orders import OrderItemOut, OrderOut
 from app.services.market_service import apply_order_market_impact
 from app.services.wallet_service import apply_wallet_tx, get_or_create_wallet
+
+
+def _resolve_valid_market_item_id(
+    db: Session,
+    *,
+    bar_id: int,
+    event_id: Optional[int],
+    name_snapshot: str,
+    market_item_id: Optional[int],
+) -> Optional[int]:
+    if market_item_id is None:
+        return None
+
+    config = (
+        db.query(DrinkMarketConfig)
+        .filter(DrinkMarketConfig.bar_id == bar_id)
+        .filter(DrinkMarketConfig.event_id == event_id if event_id is not None else DrinkMarketConfig.event_id.is_(None))
+        .first()
+    )
+    if not config:
+        return None
+
+    market_item = db.get(DrinkMarketItem, market_item_id)
+    if not market_item:
+        return None
+    if market_item.config_id != config.id or not market_item.is_active:
+        return None
+    if market_item.name != name_snapshot:
+        return None
+    return market_item.id
 
 
 def order_out(order: Order) -> OrderOut:
@@ -112,7 +142,13 @@ def create_order(
                 "qty": row.qty,
                 "line_total_cents": line_total,
                 "unit_price_cents": unit_price,
-                "market_item_id": row.market_item_id,
+                "market_item_id": _resolve_valid_market_item_id(
+                    db,
+                    bar_id=bar_id,
+                    event_id=event_id,
+                    name_snapshot=name_snapshot,
+                    market_item_id=row.market_item_id,
+                ),
             }
         )
 

@@ -116,7 +116,7 @@ def test_served_paid_order_updates_market_using_market_item_id_and_is_idempotent
     bar_id, token = _seed_partner()
     event_id = _seed_event(bar_id)
     item_id = _seed_menu_item(bar_id, name="Spritz")
-    _, market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="NotTheMenuName")
+    _, market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="Spritz")
     client = TestClient(app)
 
     created = client.post(
@@ -230,7 +230,7 @@ def test_served_paid_order_ignores_mismatched_market_item_id_from_other_bar():
     try:
         own_item = s.get(DrinkMarketItem, own_market_item_id)
         assert own_item is not None
-        assert own_item.current_price_cents == 200
+        assert own_item.current_price_cents == 250
 
         foreign_item = s.get(DrinkMarketItem, foreign_market_item_id)
         assert foreign_item is not None
@@ -241,7 +241,60 @@ def test_served_paid_order_ignores_mismatched_market_item_id_from_other_bar():
             .filter(DrinkPriceTick.source == "order", DrinkPriceTick.ref_order_id == order_id)
             .count()
         )
-        assert ticks == 0
+        assert ticks == 1
+    finally:
+        s.close()
+
+
+def test_served_paid_order_ignores_mismatched_market_item_id_for_another_product_in_same_scope():
+    bar_id, token = _seed_partner()
+    event_id = _seed_event(bar_id)
+    item_id = _seed_menu_item(bar_id, name="Mule")
+    config_id, own_market_item_id = _seed_market(bar_id, event_id, is_live=True, item_name="Mule")
+    s = get_session()
+    try:
+        wrong_item = DrinkMarketItem(
+            config_id=config_id,
+            name="Gin Tonic",
+            is_active=True,
+            base_price_cents=200,
+            current_price_cents=200,
+            unit="unit",
+            sort_order=1,
+        )
+        s.add(wrong_item)
+        s.commit()
+        wrong_market_item_id = wrong_item.id
+    finally:
+        s.close()
+
+    client = TestClient(app)
+    created = client.post(
+        "/orders",
+        json={
+            "bar_id": bar_id,
+            "event_id": event_id,
+            "items": [{"item_id": item_id, "qty": 1, "market_item_id": wrong_market_item_id}],
+            "device_id": "device-market-v2-same-scope-mismatch",
+            "idempotency_key": "idem-market-v2-same-scope-mismatch",
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["items"][0]["market_item_id"] is None
+    order_id = created.json()["id"]
+    _mark_order_paid(order_id)
+
+    _patch_to_served(client, token, order_id)
+
+    s = get_session()
+    try:
+        own_item = s.get(DrinkMarketItem, own_market_item_id)
+        assert own_item is not None
+        assert own_item.current_price_cents == 250
+
+        wrong_item = s.get(DrinkMarketItem, wrong_market_item_id)
+        assert wrong_item is not None
+        assert wrong_item.current_price_cents == 200
     finally:
         s.close()
 
