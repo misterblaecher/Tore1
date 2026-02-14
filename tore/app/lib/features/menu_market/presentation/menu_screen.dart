@@ -270,7 +270,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   itemBuilder: (_, i) {
                     final d = items[i];
 
-                    final drinkId = (d['drink_id'] as int?) ?? 0;
+                    final itemId = ((d['id'] as int?) ?? (d['item_id'] as int?) ?? (d['drink_id'] as int?) ?? 0);
                     final name = (d['name'] ?? '').toString();
                     final type = (d['type'] ?? '').toString();
                     final base = (d['base_price_cents'] as int?) ?? 0;
@@ -284,7 +284,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
                     final disabledBecauseAuth = userId == null;
                     final disabledBecauseOffline = isOffline;
-                    final isBusy = _ordering[drinkId] == true;
+                    final isBusy = _ordering[itemId] == true;
 
                     return ListTile(
                       title: Text(name.isEmpty ? '(Sans nom)' : name),
@@ -292,7 +292,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       trailing: SizedBox(
                         width: 130,
                         child: ElevatedButton(
-                          onPressed: (drinkId == 0 ||
+                          onPressed: (itemId == 0 ||
                                   disabledBecauseAuth ||
                                   disabledBecauseOffline ||
                                   !hasEnoughTickets ||
@@ -319,19 +319,29 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                       return;
                                     }
 
-                                    setState(() => _ordering[drinkId] = true);
+                                    setState(() => _ordering[itemId] = true);
                                     try {
+                                      final barIdRaw = d['bar_id'] ?? d['barId'];
+                                      final resolvedBarId = (barIdRaw is num)
+                                          ? barIdRaw.toInt()
+                                          : int.tryParse(barIdRaw?.toString() ?? '') ?? 0;
+                                      if (resolvedBarId <= 0) {
+                                        throw Exception('bar_id manquant pour commander');
+                                      }
+                                      final idemKey = 'menu-${widget.eventId}-${itemId}-${DateTime.now().millisecondsSinceEpoch}';
                                       await api.createOrder(
+                                        barId: resolvedBarId,
                                         eventId: widget.eventId,
                                         userId: uid,
-                                        payMode: 'tickets',
+                                        paymentMode: 'tickets',
                                         items: [
-                                          {'drink_id': drinkId, 'qty': qty},
+                                          {'item_id': itemId, 'qty': qty},
                                         ],
+                                        idempotencyKey: idemKey,
                                       );
                                     } finally {
                                       if (mounted) {
-                                        setState(() => _ordering[drinkId] = false);
+                                        setState(() => _ordering[itemId] = false);
                                       }
                                     }
 

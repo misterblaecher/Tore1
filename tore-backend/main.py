@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import logging
+import csv
+import io
 import secrets
 import string
 import hashlib
@@ -13,7 +15,7 @@ from typing import List, Optional, Dict, Any, Literal
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -22,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
+from app.services.rate_limit_service import record_status_code
 from models import (
     Bar,
     Event,
@@ -32,6 +35,7 @@ from models import (
     Ban,
     Entry,
     EntryLog,
+    EntryScanLog,
     EventStaff,
     StaffInviteToken,
     EventAuditLog,
@@ -1111,6 +1115,17 @@ app = FastAPI(
 logging.basicConfig(level=logging.INFO)
 logging.info(f"BOOT commit={os.getenv('RENDER_GIT_COMMIT')} db={DATABASE_URL}")
 
+
+
+@app.middleware("http")
+async def _metrics_lite_middleware(request, call_next):
+    response = await call_next(request)
+    try:
+        record_status_code(int(response.status_code))
+    except Exception:
+        pass
+    return response
+
 app.include_router(partner_auth_router, prefix="/partner")
 from app.routers.orders import router as orders_router
 from app.routers.wallet import router as wallet_router
@@ -1123,6 +1138,8 @@ from app.routers.market import router as market_router
 from app.routers.entry import router as entry_router
 from app.routers.portal_event_control import router as portal_event_control_router
 from app.routers.p3 import router as p3_router
+from app.routers.zones import router as zones_router
+from app.routers.ops import router as ops_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1134,6 +1151,8 @@ app.include_router(market_router)
 app.include_router(entry_router)
 app.include_router(portal_event_control_router)
 app.include_router(p3_router)
+app.include_router(zones_router)
+app.include_router(ops_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -2962,19 +2981,7 @@ def delete_event_cost(
     return {"ok": True}
 
 
-@app.get("/events/{event_id}/report")
-def get_event_report(
-    event_id: int,
-    user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    event = db.get(Event, event_id)
-    if not event:
-        raise HTTPException(404, "Event not found")
-
-    require_role_for_event(db, user.id, event_id, "admin")
-    require_feature(db, event_id, "report_enabled")
-
+def _build_event_report_payload(db: Session, event_id: int) -> Dict[str, Any]:
     total_orders = (
         db.scalar(select(func.count()).select_from(Order).where(Order.event_id == event_id)) or 0
     )
@@ -3070,6 +3077,140 @@ def get_event_report(
         "costs": {"total_cost_cents": int(total_cost_cents), "lines": cost_lines},
         "profit": {"gross_profit_cents": int(gross_revenue_cents) - int(total_cost_cents)},
     }
+
+
+@app.get("/events/{event_id}/report")
+def get_event_report(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+    return _build_event_report_payload(db, event_id)
+
+
+@app.get("/events/{event_id}/exports/attendance.csv")
+def export_attendance_csv(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    rows = (
+        db.query(EntryScanLog)
+        .filter(EntryScanLog.event_id == event_id)
+        .order_by(EntryScanLog.created_at.desc(), EntryScanLog.id.desc())
+        .all()
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "ticket_id", "status", "reason", "staff_id", "scan_id"])
+    for row in rows:
+        status = "accepted" if row.decision == "ACCEPT" else ("duplicate" if row.reason == "already_used" else "denied")
+        writer.writerow([
+            row.created_at.isoformat(),
+            row.token_id or "",
+            status,
+            row.reason,
+            row.created_by_user_id or "",
+            row.scan_id or "",
+        ])
+
+    log_event_action(db, event_id, user.id, "exports.attendance_download", {"rows": len(rows)})
+    db.commit()
+    payload = io.BytesIO(output.getvalue().encode("utf-8"))
+    headers = {"Content-Disposition": f'attachment; filename="attendance_event_{event_id}.csv"'}
+    return StreamingResponse(payload, media_type="text/csv", headers=headers)
+
+
+@app.get("/events/{event_id}/costs/export.csv")
+def export_costs_csv(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    rows = (
+        db.query(EventCost)
+        .filter(EventCost.event_id == event_id)
+        .order_by(EventCost.created_at.desc(), EventCost.id.desc())
+        .all()
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "label", "category", "amount_cents"])
+    for row in rows:
+        writer.writerow([
+            row.created_at.isoformat() if row.created_at else "",
+            row.label,
+            row.category,
+            row.amount_cents,
+        ])
+    payload = io.BytesIO(output.getvalue().encode("utf-8"))
+    headers = {"Content-Disposition": f'attachment; filename="costs_event_{event_id}.csv"'}
+    return StreamingResponse(payload, media_type="text/csv", headers=headers)
+
+
+@app.get("/events/{event_id}/exports/report.pdf")
+@app.post("/events/{event_id}/exports/report.pdf")
+def export_report_pdf(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    require_role_for_event(db, user.id, event_id, "admin")
+    require_feature(db, event_id, "report_enabled")
+
+    report = _build_event_report_payload(db, event_id)
+
+    lines = [
+        f"TORE REPORT EVENT #{event_id}",
+        f"Generated at: {report['generated_at']}",
+        "",
+        "SUMMARY",
+        f"Total orders: {report['sales']['total_orders']}",
+        f"Gross revenue (cents): {report['sales']['gross_revenue_cents']}",
+        f"Gross profit (cents): {report['profit']['gross_profit_cents']}",
+        "",
+        "ATTENDANCE",
+        f"Accepted scans: {int(db.query(func.count(EntryScanLog.id)).filter(EntryScanLog.event_id == event_id, EntryScanLog.decision == 'ACCEPT').scalar() or 0)}",
+    ]
+
+    if report["costs"]["lines"]:
+        lines.extend([
+            "",
+            "COSTS",
+            f"Total costs (cents): {report['costs']['total_cost_cents']}",
+        ])
+        for row in report["costs"]["lines"][:25]:
+            lines.append(f"- {row['label']} ({row['category']}): {row['amount_cents']}")
+
+    pdf_like = ("%PDF-1.4\n" + "\n".join(lines) + "\n%%EOF\n").encode("utf-8")
+    log_event_action(db, event_id, user.id, "exports.report_generate", {"costs": len(report['costs']['lines'])})
+    db.commit()
+
+    payload = io.BytesIO(pdf_like)
+    headers = {"Content-Disposition": f'attachment; filename="event_report_{event_id}.pdf"'}
+    return StreamingResponse(payload, media_type="application/pdf", headers=headers)
 
 
 @app.post("/events/{event_id}/staff/invite", response_model=StaffInviteOut)

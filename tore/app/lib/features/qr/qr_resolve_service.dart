@@ -7,7 +7,9 @@ class QrResolveResult {
   final bool valid;
   final String type;
   final int? eventId;
+  final int? barId;
   final String? token;
+  final String? routeFront;
   final String? reason;
   final String? requiredRole;
   final String? grantedRole;
@@ -16,7 +18,9 @@ class QrResolveResult {
     required this.valid,
     required this.type,
     required this.eventId,
+    required this.barId,
     required this.token,
+    required this.routeFront,
     required this.reason,
     required this.requiredRole,
     required this.grantedRole,
@@ -27,7 +31,9 @@ class QrResolveResult {
       valid: json['valid'] == true,
       type: (json['type'] ?? 'unknown').toString(),
       eventId: json['event_id'] is num ? (json['event_id'] as num).toInt() : null,
+      barId: json['bar_id'] is num ? (json['bar_id'] as num).toInt() : null,
       token: json['token']?.toString(),
+      routeFront: json['route_front']?.toString(),
       reason: json['reason']?.toString(),
       requiredRole: json['required_role']?.toString(),
       grantedRole: json['granted_role']?.toString(),

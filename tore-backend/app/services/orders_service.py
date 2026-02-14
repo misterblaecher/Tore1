@@ -8,8 +8,31 @@ from sqlalchemy.orm import Session
 from db import now_utc
 from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem
 from app.schemas.orders import OrderItemOut, OrderOut
+from app.services.audit_service import write_audit_log
 from app.services.market_service import apply_order_market_impact
+from app.services.p3_common import ensure_event_action_allowed
 from app.services.wallet_service import apply_wallet_tx, get_or_create_wallet
+
+STATUS_INPUT_MAP = {
+    "PENDING": "NEW",
+    "ACCEPTED": "IN_PROGRESS",
+    "COMPLETED": "SERVED",
+    "NEW": "NEW",
+    "IN_PROGRESS": "IN_PROGRESS",
+    "READY": "READY",
+    "SERVED": "SERVED",
+    "CANCELLED": "CANCELLED",
+}
+
+
+def _status_alias(status: str) -> str:
+    return {
+        "NEW": "pending",
+        "IN_PROGRESS": "accepted",
+        "READY": "ready",
+        "SERVED": "completed",
+        "CANCELLED": "cancelled",
+    }.get(status.upper(), status.lower())
 
 
 def order_out(order: Order) -> OrderOut:
@@ -66,6 +89,7 @@ def create_order(
             raise HTTPException(404, "Event not found")
         if event.bar_id != bar_id:
             raise HTTPException(403, "Event does not belong to bar")
+        ensure_event_action_allowed(db, event_id, "orders_enabled", write=True)
 
     dedupe_query = db.query(Order).filter(
         Order.bar_id == bar_id,
@@ -180,6 +204,18 @@ def create_order(
             created_by_user_id=None,
         )
 
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="user",
+        action="orders.create",
+        entity_type="order",
+        entity_id=str(order.id),
+        event_id=event_id,
+        bar_id=bar_id,
+        payload={"status": "NEW", "idempotency_key": idempotency_key, "items_count": len(items)},
+    )
+
     order.updated_at = now_utc()
     db.add(order)
     db.commit()
@@ -187,12 +223,22 @@ def create_order(
     return order
 
 
-def patch_order_status(db: Session, *, order_id: int, bar_id: int, status: str) -> Order:
+def patch_order_status(
+    db: Session,
+    *,
+    order_id: int,
+    bar_id: int,
+    status: str,
+    actor_partner_id: Optional[int] = None,
+    actor_role: Optional[str] = None,
+) -> Order:
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(404, "Order not found")
     if order.bar_id != bar_id:
         raise HTTPException(403, "Forbidden")
+    if order.event_id is not None:
+        ensure_event_action_allowed(db, order.event_id, "orders_enabled", write=True)
 
     valid_flow = {
         "NEW": {"IN_PROGRESS", "CANCELLED"},
@@ -201,7 +247,7 @@ def patch_order_status(db: Session, *, order_id: int, bar_id: int, status: str) 
         "SERVED": set(),
         "CANCELLED": set(),
     }
-    next_status = status.upper()
+    next_status = STATUS_INPUT_MAP.get(status.upper(), "")
     if next_status not in valid_flow:
         raise HTTPException(400, "Invalid status")
     if next_status == order.status:
@@ -209,10 +255,22 @@ def patch_order_status(db: Session, *, order_id: int, bar_id: int, status: str) 
     if next_status not in valid_flow.get(order.status, set()):
         raise HTTPException(400, "Invalid transition")
 
+    prev = order.status
     order.status = next_status
     order.updated_at = now_utc()
     if next_status == "SERVED" and (order.payment_status == "PAID" or (order.pay_mode or "") == "PAY_WITH_TICKETS"):
         apply_order_market_impact(db, order=order)
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner_id,
+        actor_role=actor_role,
+        action="orders.status_update",
+        entity_type="order",
+        entity_id=str(order.id),
+        event_id=order.event_id,
+        bar_id=order.bar_id,
+        payload={"from": prev, "to": next_status, "to_alias": _status_alias(next_status)},
+    )
     db.add(order)
     db.commit()
     db.refresh(order)

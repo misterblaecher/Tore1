@@ -20,6 +20,11 @@ from sqlalchemy.orm import Session
 from db import get_db  # <- si ton fichier s'appelle autrement, change ici
 from models import Bar  # <- si ton modèle Bar est dans models.py
 from models import PartnerInvite, PartnerMembership, PartnerUser
+from app.services.authz_service import (
+    ensure_partner_membership_active,
+    ensure_partner_token_not_revoked,
+    revoke_partner_token,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -158,6 +163,7 @@ def current_identity(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     token = authorization.split(" ", 1)[1].strip()
+    ensure_partner_token_not_revoked(db, token=token)
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
     except jwt.PyJWTError:
@@ -169,15 +175,9 @@ def current_identity(
     name = payload.get("name")
 
     # Vérifie que membership existe encore
-    m = (
-        db.query(PartnerMembership)
-        .filter(PartnerMembership.user_id == user_id, PartnerMembership.bar_id == bar_id)
-        .first()
-    )
-    if not m:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Membership not found")
+    ensure_partner_membership_active(db, user_id=user_id, bar_id=bar_id)
 
-    return {"user_id": user_id, "bar_id": bar_id, "role": role, "display_name": name}
+    return {"user_id": user_id, "bar_id": bar_id, "role": role, "display_name": name, "token": token}
 
 
 def require_role(required: str):
@@ -382,3 +382,17 @@ def me(identity=Depends(current_identity)):
         role=identity["role"],
         display_name=identity["display_name"],
     )
+
+
+@router.post("/revoke-token")
+def revoke_token(
+    authorization: Optional[str] = Header(default=None),
+    identity=Depends(current_identity),
+    db: Session = Depends(get_db),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"reason": "forbidden", "message": "Missing token"})
+    token = authorization.split(" ", 1)[1].strip()
+    revoke_partner_token(db, token=token, actor_partner_id=identity["user_id"])
+    db.commit()
+    return {"ok": True, "reason": "revoked"}

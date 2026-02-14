@@ -51,6 +51,12 @@ class EntryScanOut(BaseModel):
     created_at: datetime
     idempotent: bool = False
 
+    # MVP rush-proof contract additions (backward-compatible)
+    ok: bool = True
+    status: str = "accepted"  # accepted|duplicate|denied
+    entry_count: Optional[int] = None
+    last_scan: Optional[datetime] = None
+
 
 class EntryScanLogOut(BaseModel):
     id: int
@@ -62,6 +68,7 @@ class EntryScanLogOut(BaseModel):
     decision: str
     reason: str
     created_at: datetime
+    staff_id: Optional[int] = None
 
 
 class EntryScanLogPageOut(BaseModel):
@@ -73,3 +80,13 @@ class EntryTokenStatsOut(BaseModel):
     event_id: int
     counts: dict[str, int]
     recent_uses: list[EntryScanLogOut]
+
+
+class EntryStatsOut(BaseModel):
+    event_id: int
+    entry_count: int
+    accepted_last_10_min: int
+    cap: Optional[int] = None
+    cap_percent: Optional[float] = None
+    runtime_status: str = "LIVE"
+    runtime_reason: Optional[str] = None

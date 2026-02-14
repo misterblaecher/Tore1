@@ -26,6 +26,7 @@ import CheckinsAdmin from './pages/CheckinsAdmin'
 import AuditLogs from './pages/AuditLogs'
 import WifiAdmin from './pages/WifiAdmin'
 import SafetyAdmin from './pages/SafetyAdmin'
+import ZonesAdmin from './pages/ZonesAdmin'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -194,6 +195,14 @@ export default function App() {
         element={
           <RequireAuth>
             <SafetyAdmin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/zones-admin"
+        element={
+          <RequireAuth>
+            <ZonesAdmin />
           </RequireAuth>
         }
       />

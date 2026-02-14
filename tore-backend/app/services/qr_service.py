@@ -81,26 +81,31 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
 
     if qr_type == "menu":
         raw_bar_id = (params.get("bar_id") or [None])[0]
+        raw_event_id = (params.get("event_id") or [None])[0]
         raw_item_id = (params.get("item_id") or [None])[0]
         raw_category_id = (params.get("category_id") or [None])[0]
+        raw_zone_id = (params.get("zone_id") or [None])[0]
         try:
             bar_id = int(raw_bar_id) if raw_bar_id is not None else None
+            event_id = int(raw_event_id) if raw_event_id is not None else None
             item_id = int(raw_item_id) if raw_item_id is not None else None
             category_id = int(raw_category_id) if raw_category_id is not None else None
+            zone_id = int(raw_zone_id) if raw_zone_id is not None else None
         except (TypeError, ValueError):
             return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        if bar_id is None:
+        if bar_id is None and event_id is None:
             return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
-        route_front = f"/menu/{bar_id}"
-        if item_id is not None:
+        route_front = f"/menu/{bar_id}" if bar_id is not None else None
+        if bar_id is not None and item_id is not None:
             route_front = f"/menu/{bar_id}/item/{item_id}"
         return {
             "valid": True,
             "type": "menu",
-            "event_id": None,
+            "event_id": event_id,
             "bar_id": bar_id,
             "item_id": item_id,
             "category_id": category_id,
+            "zone_id": zone_id,
             "route_front": route_front,
             "reason": None,
             "data": {
@@ -210,7 +215,7 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
             },
         }
 
-    if qr_type not in {"join", "entry", "admin_config", "staff_entry", "staff_invite"}:
+    if qr_type not in {"join", "join_event", "entry", "admin_config", "staff_entry", "entry_staff", "staff_invite", "bar_staff"}:
         return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
 
     raw_event_id = (params.get("event_id") or [None])[0]

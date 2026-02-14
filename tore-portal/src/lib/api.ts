@@ -9,12 +9,14 @@ export const API_BASE =
 export class ApiError extends Error {
   status?: number
   url?: string
+  reason?: string
 
-  constructor(message: string, status?: number, url?: string) {
+  constructor(message: string, status?: number, url?: string, reason?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.url = url
+    this.reason = reason
   }
 }
 
@@ -36,13 +38,22 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
+    let reason: string | undefined
     try {
       const data = await res.json()
-      msg = data?.detail ? String(data.detail) : JSON.stringify(data)
+      const detail = data?.detail
+      if (typeof detail === 'string') {
+        msg = detail
+      } else if (detail && typeof detail === 'object') {
+        reason = String((detail as { reason?: string }).reason ?? '') || undefined
+        msg = String((detail as { message?: string }).message ?? reason ?? JSON.stringify(detail))
+      } else {
+        msg = JSON.stringify(data)
+      }
     } catch {
       // ignore
     }
-    throw new ApiError(msg, res.status, url)
+    throw new ApiError(msg, res.status, url, reason)
   }
   return (await res.json()) as T
 }

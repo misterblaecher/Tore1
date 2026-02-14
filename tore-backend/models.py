@@ -13,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Text,
     JSON,
+    Index,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -530,6 +531,10 @@ class EventCost(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        Index("ix_orders_event_created", "event_id", "created_at"),
+        Index("ix_orders_event_status_created", "event_id", "status", "created_at"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
     event_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
@@ -731,6 +736,15 @@ class PartnerMembership(Base):
     bar: Mapped["Bar"] = relationship()
 
 
+class PartnerTokenRevocation(Base):
+    __tablename__ = "partner_token_revocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    revoked_by_partner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
 class PartnerInvite(Base):
     __tablename__ = "partner_invites"
 
@@ -815,6 +829,9 @@ class WalletLedgerEntry(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_event_ts", "event_id", "ts"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
@@ -858,6 +875,22 @@ class DrinkCheckin(Base):
     bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
+
+
+
+class Zone(Base):
+    __tablename__ = "zones"
+    __table_args__ = (
+        UniqueConstraint("bar_id", "slug", name="uq_zones_bar_slug"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), index=True, nullable=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    slug: Mapped[str] = mapped_column(String(120), default="", index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 class WifiConfig(Base):
     __tablename__ = "wifi_configs"
