@@ -1,6 +1,7 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { getToken } from './lib/auth'
+import { hasOrgaHubAccess } from './lib/authz'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import EventDetail from './pages/EventDetail'
@@ -33,6 +34,11 @@ import BarDashboard from './pages/BarDashboard'
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
   if (!token) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function RequireOrga({ children }: { children: React.ReactNode }) {
+  if (!hasOrgaHubAccess()) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -156,7 +162,9 @@ export default function App() {
         path="/event-control/:eventId"
         element={
           <RequireAuth>
-            <EventControlHub />
+            <RequireOrga>
+              <EventControlHub />
+            </RequireOrga>
           </RequireAuth>
         }
       />

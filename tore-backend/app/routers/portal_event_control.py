@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db import now_utc
 from models import Bet, BetDispute, Event, EventRuntimeState
-from partner_auth import require_role
+from partner_auth import current_identity, require_role
+from app.services.authz_service import ensure_partner_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
 from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminLogPageOut, WalletAdminTopupIn, WalletAdminTopupOut
 from app.services.audit_service import write_audit_log
@@ -53,6 +54,11 @@ def _get_or_create_runtime_state(db: Session, event_id: int) -> EventRuntimeStat
     db.commit()
     db.refresh(row)
     return row
+
+
+def _require_orga_identity(identity=Depends(current_identity)):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    return identity
 
 
 
@@ -119,12 +125,15 @@ def set_event_runtime_state(
 ):
     event = get_owned_event_or_403(db, event_id, identity["bar_id"])
     state = str(payload.get("state") or "").upper()
-    if state not in {"LIVE", "PAUSE", "MENU_ONLY", "CLOSED"}:
+    if state not in {"LIVE", "PAUSE", "MENU_ONLY", "DEGRADED", "FROZEN", "CLOSED"}:
         return {"ok": False, "code": "INVALID_STATE", "message": "Etat event invalide."}
     runtime = _get_or_create_runtime_state(db, event_id)
     before = {"state": runtime.state, "reason": runtime.reason}
+    reason = (payload.get("reason") or "").strip()[:180]
+    if runtime.state != state and not reason:
+        raise HTTPException(status_code=400, detail={"reason": "reason_required", "message": "Reason is required for runtime state change"})
     runtime.state = state
-    runtime.reason = (payload.get("reason") or "")[:180] or None
+    runtime.reason = reason or None
     runtime.updated_by_user_id = identity["user_id"]
     runtime.updated_at = now_utc()
     db.add(runtime)
@@ -141,6 +150,37 @@ def set_event_runtime_state(
     )
     db.commit()
     return {"ok": True, "event_id": event_id, "state": runtime.state, "reason": runtime.reason}
+
+
+@router.get("/orga/events/active")
+def get_active_event_for_orga(
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    now = now_utc()
+    event = (
+        db.query(Event)
+        .filter(Event.bar_id == identity["bar_id"], Event.starts_at <= now, Event.ends_at >= now)
+        .order_by(Event.starts_at.desc())
+        .first()
+    )
+    if not event:
+        event = (
+            db.query(Event)
+            .filter(Event.bar_id == identity["bar_id"])
+            .order_by(Event.starts_at.desc())
+            .first()
+        )
+    if not event:
+        raise HTTPException(status_code=404, detail={"reason": "event_not_found", "message": "No event for this bar"})
+    cfg = get_or_create_event_modules(db, event.id)
+    runtime = _get_or_create_runtime_state(db, event.id)
+    return {
+        "event": {"id": event.id, "name": event.name, "starts_at": event.starts_at, "ends_at": event.ends_at},
+        "event_state": runtime.state,
+        "runtime_reason": runtime.reason,
+        "modulesOn": {field: bool(getattr(cfg, field)) for field in MODULE_FIELDS},
+    }
 
 
 @router.post("/event/{event_id}/modules", response_model=EventModulesOut)

@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { api } from '../lib/api'
 import { Badge, Button, Card, InlineAlert, Skeleton } from '../lib/ui'
 
 const fields = ['orders_enabled', 'market_enabled', 'battles_enabled', 'hunt_enabled', 'polymarket_enabled', 'entry_enabled', 'checkins_enabled', 'wifi_enabled', 'safety_enabled']
+const stateOptions = ['LIVE', 'PAUSE', 'MENU_ONLY', 'DEGRADED', 'FROZEN', 'CLOSED'] as const
+
+type RuntimeState = (typeof stateOptions)[number] | 'SCHEDULED'
 
 type Snapshot = {
-  event_state: 'LIVE' | 'PAUSE' | 'MENU_ONLY' | 'CLOSED' | 'SCHEDULED'
+  event_state: RuntimeState
   runtime_reason?: string | null
   warnings: string[]
   modules: Record<string, { configured_enabled: boolean; effective_state: 'ON' | 'OFF' | 'READ_ONLY'; reason?: string | null }>
@@ -17,29 +20,55 @@ type AuditItem = {
   id: number
   action: string
   created_at: string
-  payload?: Record<string, unknown>
+}
+
+function isCriticalModule(field: string) {
+  return ['entry_enabled', 'checkins_enabled', 'wifi_enabled', 'safety_enabled'].includes(field)
 }
 
 export default function EventControlHub() {
   const { eventId } = useParams()
   const [state, setState] = useState<Record<string, boolean>>({})
-  const [live, setLive] = useState<boolean | null>(null)
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
-  const [runtimeState, setRuntimeState] = useState('LIVE')
+  const [runtimeState, setRuntimeState] = useState<RuntimeState>('LIVE')
   const [runtimeReason, setRuntimeReason] = useState('')
   const [auditItems, setAuditItems] = useState<AuditItem[]>([])
   const [savingState, setSavingState] = useState(false)
+  const [savingModules, setSavingModules] = useState(false)
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true)
+    const onOffline = () => setIsOnline(false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
+
+  const networkMode = useMemo<'ONLINE' | 'OFFLINE' | 'DEGRADED'>(() => {
+    if (!isOnline) return 'OFFLINE'
+    if (snapshot?.event_state === 'DEGRADED') return 'DEGRADED'
+    return 'ONLINE'
+  }, [isOnline, snapshot?.event_state])
+
+  const canWriteModule = (field: string) => {
+    if (networkMode === 'OFFLINE') return false
+    if (networkMode === 'DEGRADED' && isCriticalModule(field)) return false
+    return true
+  }
 
   const refresh = async () => {
     if (!eventId) return
-    const [modules, status, snap, audit] = await Promise.all([
+    const [modules, snap, audit] = await Promise.all([
       api<any>(`/partner/portal/event/${eventId}/modules`),
-      api<any>(`/partner/portal/event/${eventId}/status`),
       api<Snapshot>(`/partner/portal/event/${eventId}/state-snapshot`),
       api<{ items: AuditItem[] }>(`/partner/portal/audit/logs?event_id=${eventId}&limit=8`),
     ])
     setState(modules)
-    setLive(Boolean(status.live))
     setSnapshot(snap)
     setRuntimeState(snap.event_state)
     setRuntimeReason(snap.runtime_reason || '')
@@ -47,90 +76,106 @@ export default function EventControlHub() {
   }
 
   useEffect(() => {
-    refresh()
+    refresh().catch((e: any) => setError(e?.message ?? 'Erreur chargement ORGA HUB'))
   }, [eventId])
 
   const save = async () => {
-    if (!eventId) return
-    const data = await api<any>(`/partner/portal/event/${eventId}/modules`, {
-      method: 'POST',
-      body: JSON.stringify(state),
-    })
-    setState(data)
-    refresh()
+    if (!eventId || networkMode === 'OFFLINE') return
+    setSavingModules(true)
+    setError(null)
+    try {
+      const payload = Object.fromEntries(fields.map((field) => [field, canWriteModule(field) ? Boolean(state[field]) : Boolean(snapshot?.modules?.[field]?.configured_enabled)]))
+      const data = await api<any>(`/partner/portal/event/${eventId}/modules`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      setState(data)
+      await refresh()
+    } catch (e: any) {
+      setError(e?.message ?? 'Erreur sauvegarde modules')
+    } finally {
+      setSavingModules(false)
+    }
   }
 
   const saveRuntime = async () => {
-    if (!eventId) return
+    if (!eventId || networkMode === 'OFFLINE') return
+    if (!runtimeReason.trim()) {
+      setError('Raison obligatoire pour action sensible.')
+      return
+    }
     setSavingState(true)
+    setError(null)
     try {
       await api(`/partner/portal/event/${eventId}/state`, {
         method: 'POST',
-        body: JSON.stringify({ state: runtimeState, reason: runtimeReason.trim() || null }),
+        body: JSON.stringify({ state: runtimeState, reason: runtimeReason.trim() }),
       })
       await refresh()
+    } catch (e: any) {
+      setError(e?.message ?? 'Erreur changement état')
     } finally {
       setSavingState(false)
     }
   }
 
   return (
-    <Layout title="Event Control Hub">
+    <Layout title="ORGA HUB (OPS)">
       {!snapshot ? <Skeleton height={64} /> : null}
-      {snapshot ? (
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span>Event live: <b>{live ? 'YES' : 'NO'}</b></span>
-            <Badge label={`STATE ${snapshot.event_state}`} tone={snapshot.event_state === 'LIVE' ? 'success' : 'warning'} />
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+      {networkMode === 'OFFLINE' ? <InlineAlert tone="warning">OFFLINE: lecture seule. Les writes sont bloqués par le write gate global.</InlineAlert> : null}
+      {networkMode === 'DEGRADED' ? <InlineAlert tone="warning">DEGRADED: les writes critiques (entry/checkins/wifi/safety) sont bloqués.</InlineAlert> : null}
+
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Badge label={`STATE ${snapshot?.event_state ?? '...'}`} tone={snapshot?.event_state === 'LIVE' ? 'success' : 'warning'} />
+          <Badge label={`NET ${networkMode}`} tone={networkMode === 'ONLINE' ? 'success' : 'warning'} />
+        </div>
+        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+          <strong>Event state</strong>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={runtimeState} onChange={(e) => setRuntimeState(e.target.value as RuntimeState)} disabled={networkMode === 'OFFLINE'}>
+              {stateOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+            <input
+              value={runtimeReason}
+              onChange={(e) => setRuntimeReason(e.target.value)}
+              placeholder="Raison obligatoire (audit)"
+              style={{ minWidth: 260 }}
+              disabled={networkMode === 'OFFLINE'}
+            />
+            <Button onClick={saveRuntime} disabled={savingState || networkMode === 'OFFLINE'}>{savingState ? 'Saving…' : 'Set state'}</Button>
           </div>
-          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-            <strong>Runtime manager</strong>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select value={runtimeState} onChange={(e) => setRuntimeState(e.target.value)}>
-                <option value="LIVE">LIVE</option>
-                <option value="PAUSE">PAUSE</option>
-                <option value="MENU_ONLY">MENU_ONLY</option>
-                <option value="CLOSED">CLOSED</option>
-              </select>
-              <input
-                value={runtimeReason}
-                onChange={(e) => setRuntimeReason(e.target.value)}
-                placeholder="Raison (audit)"
-                style={{ minWidth: 260 }}
-              />
-              <Button onClick={saveRuntime} disabled={savingState}>{savingState ? 'Saving…' : 'Set state'}</Button>
-            </div>
-          </div>
-        </Card>
-      ) : null}
-      {snapshot?.event_state !== 'LIVE' ? (
-        <InlineAlert tone="warning">Certaines actions peuvent être forcées en READ_ONLY par l'état event.</InlineAlert>
-      ) : null}
-      {!state.entry_enabled || !state.wifi_enabled || !state.safety_enabled ? (
-        <InlineAlert tone="error">Modules critiques manquants: entry / wifi / safety.</InlineAlert>
-      ) : null}
+        </div>
+      </Card>
+
+      <Card>
+        <strong>Cockpit</strong>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginTop: 10 }}>
+          <Link to="/" className="btn">Créer</Link>
+          <Link to={`/event-control/${eventId}`} className="btn">Gérer live</Link>
+          <Link to="/entry-staff" className="btn">Scanner entrées</Link>
+          <Link to="/menu-admin" className="btn">Menu</Link>
+          <Link to="/entry-admin" className="btn">Staff</Link>
+          <Link to={`/audit/${eventId}`} className="btn">Logs</Link>
+          <Link to={`/safety-admin/${eventId}`} className="btn">Règles</Link>
+        </div>
+      </Card>
+
       {fields.map((field) => (
         <label key={field} style={{ display: 'block', marginBottom: 8 }}>
           <input
             type="checkbox"
             checked={!!state[field]}
             onChange={(e) => setState((prev) => ({ ...prev, [field]: e.target.checked }))}
+            disabled={!canWriteModule(field)}
           />{' '}
           {field}
           {snapshot?.modules?.[field] ? <span style={{ marginLeft: 8, opacity: 0.75 }}>({snapshot.modules[field].effective_state}{snapshot.modules[field].reason ? `/${snapshot.modules[field].reason}` : ''})</span> : null}
         </label>
       ))}
-      <Button onClick={save}>Save toggles</Button>
-      {snapshot?.warnings?.length ? (
-        <div style={{ marginTop: 14 }}>
-          <Card>
-          <strong>Warnings runtime override</strong>
-          <ul>
-            {snapshot.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-          </ul>
-          </Card>
-        </div>
-      ) : null}
+      <Button onClick={save} disabled={savingModules || networkMode === 'OFFLINE'}>{savingModules ? 'Saving…' : 'Save toggles'}</Button>
+
       <div style={{ marginTop: 14 }}>
         <Card>
           <strong>Audit récent</strong>
