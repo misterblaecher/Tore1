@@ -67,7 +67,14 @@ def _seed_user(user_id: str = "guest-v1") -> str:
         s.close()
 
 
-def _seed_event_bet(event_id: int, resolver_user_id: str) -> int:
+def _seed_event_bet(
+    event_id: int,
+    resolver_user_id: str,
+    *,
+    status: str = "RESOLVED_PENDING",
+    dispute_window_minutes: int = 60,
+    resolved_at=None,
+) -> int:
     s = get_session()
     try:
         bet = Bet(
@@ -75,14 +82,14 @@ def _seed_event_bet(event_id: int, resolver_user_id: str) -> int:
             event_id=event_id,
             question="Will queue be > 10?",
             kind="OBJECTIVE",
-            status="RESOLVED_PENDING",
+            status=status,
             deadline_at=now_utc() - timedelta(hours=1),
             resolver_user_id=resolver_user_id,
             rules_text="rule",
-            dispute_window_minutes=60,
+            dispute_window_minutes=dispute_window_minutes,
             created_by_user_id="creator",
-            resolved_outcome="YES",
-            resolved_at=now_utc(),
+            resolved_outcome="YES" if status == "RESOLVED_PENDING" else None,
+            resolved_at=(resolved_at if status == "RESOLVED_PENDING" else None),
         )
         s.add(bet)
         s.commit()
@@ -229,7 +236,7 @@ def test_polymarket_event_listing_guard_and_finalize_disputed():
     assert guest.status_code == 200
     guest_token = guest.json()["token"]
     guest_user_id = guest.json()["user"]["id"]
-    bet_id = _seed_event_bet(event_id, guest_user_id)
+    bet_id = _seed_event_bet(event_id, guest_user_id, resolved_at=now_utc())
 
     list_ok = client.get(
         f"/partner/portal/polymarket/event/{event_id}",
@@ -262,3 +269,34 @@ def test_polymarket_event_listing_guard_and_finalize_disputed():
         headers={"Authorization": f"Bearer {guest_token}"},
     )
     assert finalize_res.status_code == 403
+
+
+def test_partner_portal_polymarket_actions_use_partner_auth_routes():
+    Base.metadata.create_all(engine)
+    bar_id, manager_token = _seed_partner("manager")
+    event_id = _seed_event(bar_id)
+    resolver_user_id = _seed_user(f"resolver-{secrets.token_hex(4)}")
+    client = TestClient(app)
+
+    live_bet_id = _seed_event_bet(event_id, resolver_user_id, status="LIVE")
+    resolve_res = client.post(
+        f"/partner/portal/polymarket/bets/{live_bet_id}/resolve",
+        json={"outcome": "YES"},
+        headers={"Authorization": f"Bearer {manager_token}"},
+    )
+    assert resolve_res.status_code == 200
+    assert resolve_res.json()["status"] == "RESOLVED_PENDING"
+
+    pending_bet_id = _seed_event_bet(
+        event_id,
+        resolver_user_id,
+        status="RESOLVED_PENDING",
+        dispute_window_minutes=0,
+        resolved_at=now_utc() - timedelta(hours=2),
+    )
+    finalize_res = client.post(
+        f"/partner/portal/polymarket/bets/{pending_bet_id}/finalize",
+        headers={"Authorization": f"Bearer {manager_token}"},
+    )
+    assert finalize_res.status_code == 200
+    assert finalize_res.json()["status"] == "FINALIZED"
