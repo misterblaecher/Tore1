@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
+import '../../../state.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../menu_market/presentation/menu_screen.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
@@ -19,7 +20,9 @@ class HomeHubScreen extends ConsumerWidget {
     final ctx = ref.watch(appContextProvider);
     final hasEvent = ctx.hasActiveEvent;
     final configAsync = hasEvent ? ref.watch(eventConfigProvider(ctx.activeEventId!)) : null;
+    final eventAsync = hasEvent ? ref.watch(_eventDetailsProvider(ctx.activeEventId!)) : null;
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
+    final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -52,7 +55,7 @@ class HomeHubScreen extends ConsumerWidget {
         children: [
           _EventHeader(
             title: hasEvent ? (ctx.activeEventName ?? 'Event #${ctx.activeEventId}') : 'Aucun event actif',
-            live: hasEvent,
+            status: hasEvent ? eventState : 'OFF',
             onLeave: hasEvent
                 ? () async {
                     final ok = await showDialog<bool>(
@@ -120,10 +123,10 @@ class HomeHubScreen extends ConsumerWidget {
 }
 
 class _EventHeader extends StatelessWidget {
-  const _EventHeader({required this.title, required this.live, this.onLeave});
+  const _EventHeader({required this.title, required this.status, this.onLeave});
 
   final String title;
-  final bool live;
+  final String status;
   final VoidCallback? onLeave;
 
   @override
@@ -137,11 +140,7 @@ class _EventHeader extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-                if (live)
-                  const Chip(
-                    label: Text('LIVE'),
-                    avatar: Icon(Icons.circle, size: 12, color: Colors.greenAccent),
-                  ),
+                if (status != 'OFF') _EventStateBadge(status: status),
               ],
             ),
             if (onLeave != null) ...[
@@ -153,6 +152,31 @@ class _EventHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EventStateBadge extends StatelessWidget {
+  const _EventStateBadge({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = status.toUpperCase();
+    final isPaused = normalized == 'PAUSE' || normalized == 'PAUSED' || normalized == 'READ_ONLY' || normalized == 'FROZEN';
+    return Chip(
+      label: Text(isPaused ? 'PAUSE' : 'LIVE'),
+      avatar: Icon(Icons.circle, size: 12, color: isPaused ? Colors.orangeAccent : Colors.greenAccent),
+    );
+  }
+}
+
+final _eventDetailsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, eventId) async {
+  return ref.read(apiProvider).event(eventId);
+});
+
+String _readEventState(Map<String, dynamic> event) {
+  final value = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'LIVE').toString().toUpperCase();
+  return value;
 }
 
 class _ModuleCard extends StatelessWidget {

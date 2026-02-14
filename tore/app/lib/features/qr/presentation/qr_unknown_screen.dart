@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class QrUnknownScreen extends StatefulWidget {
-  const QrUnknownScreen({super.key, required this.raw, required this.reason});
+  const QrUnknownScreen({
+    super.key,
+    required this.raw,
+    required this.reason,
+    this.reasonCode = 'unknown',
+  });
 
   final String raw;
   final String reason;
+  final String reasonCode;
 
   @override
   State<QrUnknownScreen> createState() => _QrUnknownScreenState();
@@ -36,6 +42,8 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.reason, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text('Code: ${widget.reasonCode}', style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
             Text(
               widget.raw.isEmpty ? '(aucun contenu)' : widget.raw,
@@ -50,32 +58,30 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
               ),
             ),
             const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: widget.raw.isEmpty
-                        ? null
-                        : () async {
-                            await Clipboard.setData(ClipboardData(text: widget.raw));
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('QR copié.')),
-                            );
-                          },
-                    icon: const Icon(Icons.copy),
-                    label: const Text('Copier'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.qr_code_scanner_outlined),
-                    label: const Text('Retry scan'),
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: widget.raw.isEmpty
+                    ? null
+                    : () async {
+                        await Clipboard.setData(ClipboardData(text: widget.raw));
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('QR copié.')),
+                        );
+                      },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copier'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.qr_code_scanner_outlined),
+                label: const Text('Retry scan'),
+              ),
             ),
             const SizedBox(height: 10),
             SizedBox(
@@ -84,6 +90,15 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
                 onPressed: () => Navigator.of(context).pop(_manualController.text.trim()),
                 icon: const Icon(Icons.keyboard_alt_outlined),
                 label: const Text('Valider saisie manuelle'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                icon: const Icon(Icons.home_outlined),
+                label: const Text('Retour home'),
               ),
             ),
           ],

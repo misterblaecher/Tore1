@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
 class ModuleUnavailableScreen extends StatelessWidget {
-  const ModuleUnavailableScreen({super.key, required this.title, required this.message});
+  const ModuleUnavailableScreen({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.reasonCode,
+  });
 
   final String title;
   final String message;
+  final String reasonCode;
 
   @override
   Widget build(BuildContext context) {
@@ -25,11 +31,28 @@ class ModuleUnavailableScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(
+                'Code: $reasonCode',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Retour'),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.qr_code_scanner_outlined),
+                  label: const Text('Retry scan'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                  icon: const Icon(Icons.home_outlined),
+                  label: const Text('Retour home'),
+                ),
               ),
             ],
           ),

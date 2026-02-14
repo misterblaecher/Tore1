@@ -65,6 +65,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       return const ModuleUnavailableScreen(
         title: 'Wallet indisponible',
         message: 'Ce module est désactivé pour cet event.',
+        reasonCode: 'module_off',
       );
     }
 
