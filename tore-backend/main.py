@@ -64,6 +64,8 @@ from models import (
     MenuTrackEvent,
     BarPrivacySetting,
     AppUserPrivacySetting,
+    EventModuleConfig,
+    EventRuntimeState,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -2850,17 +2852,51 @@ def list_bar_events(bar_id: int, db: Session = Depends(get_db)):
     bar = db.get(Bar, bar_id)
     if not bar:
         raise HTTPException(404, "Bar not found")
+    now = now_utc()
     rows = db.query(Event).filter(Event.bar_id == bar_id).order_by(Event.starts_at.asc()).all()
-    return [
-        {
-            "id": row.id,
-            "bar_id": row.bar_id,
-            "name": row.name,
-            "starts_at": row.starts_at.isoformat(),
-            "ends_at": row.ends_at.isoformat(),
-        }
-        for row in rows
-    ]
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == row.id).first()
+        modules = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == row.id).first()
+
+        status = "ENDED"
+        if row.starts_at <= now <= row.ends_at:
+            status = "LIVE"
+        elif row.starts_at > now:
+            status = "UPCOMING"
+
+        modules_on = None
+        if modules is not None:
+            modules_on = {
+                "orders": bool(modules.orders_enabled),
+                "market": bool(modules.market_enabled),
+                "battles": bool(modules.battles_enabled),
+                "hunt": bool(modules.hunt_enabled),
+                "polymarket": bool(modules.polymarket_enabled),
+                "entry": bool(modules.entry_enabled),
+                "checkins": bool(modules.checkins_enabled),
+                "wifi": bool(modules.wifi_enabled),
+                "safety": bool(modules.safety_enabled),
+            }
+
+        output.append(
+            {
+                "id": row.id,
+                "bar_id": row.bar_id,
+                "name": row.name,
+                "startAt": row.starts_at.isoformat(),
+                "endAt": row.ends_at.isoformat(),
+                "starts_at": row.starts_at.isoformat(),
+                "ends_at": row.ends_at.isoformat(),
+                "status": status,
+                "venue": bar.name,
+                "shortName": bar.name,
+                "eventState": ((runtime.state if runtime else None) or "LIVE").upper(),
+                "modulesOn": modules_on,
+            }
+        )
+
+    return output
 
 
 @app.get("/events", response_model=List[EventSummaryOut])
