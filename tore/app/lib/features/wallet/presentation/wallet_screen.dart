@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state.dart';
 import '../../../shared/utils/user_display.dart';
 import '../../../core/network/error_mapper.dart';
 import 'package:flutter/foundation.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../wallet_providers.dart';
 import '../wallet_models.dart';
 import '../../events/presentation/event_config_providers.dart';
@@ -56,6 +58,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       data: (value) => value,
       orElse: () => null,
     );
+
+    final walletQrDeepLink = 'tore://user?uid=$userId&event_id=${widget.eventId}';
 
     if (config != null && !config.walletEnabled) {
       return const ModuleUnavailableScreen(
@@ -133,6 +137,38 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('My Wallet QR', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: QrImageView(
+                            data: walletQrDeepLink,
+                            size: 170,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(walletQrDeepLink, style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(ClipboardData(text: walletQrDeepLink));
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('QR link copié')),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_outlined),
+                          label: const Text('Copy'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
                 if (kDebugMode)
                   ElevatedButton(

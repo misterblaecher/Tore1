@@ -78,3 +78,10 @@ class WalletTopupIn(BaseModel):
 
 class WalletTopupFromQrIn(BaseModel):
     raw_qr: str
+
+
+class WalletMyQrOut(BaseModel):
+    user_id: str
+    event_id: int
+    qr_type: str
+    deeplink: str
