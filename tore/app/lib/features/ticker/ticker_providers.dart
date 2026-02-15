@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/network/providers.dart';
+import '../../api.dart';
+import '../../core/network/network_state_provider.dart';
 import '../../state.dart';
+import '../../shared/cache/cache_providers.dart';
 import 'ticker_models.dart';
 
 class TickerState {
@@ -14,6 +15,7 @@ class TickerState {
   final bool loading;
   final String? error;
   final bool unstableConnection;
+  final DateTime? lastSyncAt;
 
   const TickerState({
     this.items = const [],
@@ -21,6 +23,7 @@ class TickerState {
     this.loading = false,
     this.error,
     this.unstableConnection = false,
+    this.lastSyncAt,
   });
 
   TickerState copyWith({
@@ -29,6 +32,7 @@ class TickerState {
     bool? loading,
     String? error,
     bool? unstableConnection,
+    DateTime? lastSyncAt,
   }) {
     return TickerState(
       items: items ?? this.items,
@@ -36,6 +40,7 @@ class TickerState {
       loading: loading ?? this.loading,
       error: error,
       unstableConnection: unstableConnection ?? this.unstableConnection,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
     );
   }
 }
@@ -48,84 +53,89 @@ class TickerController extends StateNotifier<TickerState> {
   final Ref ref;
   final int eventId;
   Timer? _pollTimer;
-  StreamSubscription<String>? _sseSub;
-  int _pollSeconds = 5;
+  static const int _maxItems = 100;
+
+  String get _cacheKey => 'ticker_$eventId';
 
   Future<void> _bootstrap() async {
+    await _loadCache();
     await refresh();
-    await _connectSse();
     _startPolling();
+  }
+
+  Future<void> _loadCache() async {
+    final cache = ref.read(cacheStoreProvider);
+    final cached = await cache.getJson(_cacheKey);
+    if (cached == null) return;
+    final raw = (cached['items'] as List<dynamic>? ?? const []);
+    final parsed = raw
+        .whereType<Map>()
+        .map((e) => TickerItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    state = state.copyWith(items: _dedup(parsed), loading: false);
+  }
+
+  Future<void> _saveCache() async {
+    final cache = ref.read(cacheStoreProvider);
+    await cache.setJson(_cacheKey, {
+      'items': state.items.take(_maxItems).map((e) => {
+        'id': e.id,
+        'type': e.type,
+        'ts': e.ts.toIso8601String(),
+        'severity': e.severity,
+        'moduleKey': e.moduleKey,
+        'payloadCompact': switch (e.payload) {
+          BroadcastTickerPayload p => {'message': p.message, 'level': p.level},
+          OrderTickerPayload p => {'kind': p.kind, 'orderId': p.orderId, 'status': p.status, 'totalTickets': p.totalTickets, 'userLabel': p.userLabel},
+          PriceTickerPayload p => {'drinkName': p.drinkName, 'fromPrice': p.fromPrice, 'toPrice': p.toPrice, 'direction': p.direction},
+          GiftTickerPayload p => {'amount': p.amount, 'fromLabel': p.fromLabel, 'toLabel': p.toLabel},
+          _ => <String, dynamic>{},
+        }
+      }).toList(),
+      'lastSyncAt': state.lastSyncAt?.toIso8601String(),
+    }, ttl: const Duration(days: 1));
   }
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, error: null);
+    final network = ref.read(networkStatusProvider);
+    if (network == NetworkState.offline) {
+      state = state.copyWith(loading: false, unstableConnection: true);
+      return;
+    }
     try {
       final api = ref.read(apiProvider);
-      final page = await api.tickerFeed(eventId, limit: 40);
+      final since = state.items.isNotEmpty ? state.items.first.ts.toIso8601String() : null;
+      final page = await api.tickerFeed(eventId, since: since, limit: 50);
       final raw = (page['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
       final parsed = raw.map(TickerItem.fromJson).toList();
-      final broadcasts = await api.broadcasts(eventId, limit: 20);
-      final bRaw = (broadcasts['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
-      for (final row in bRaw) {
-        parsed.add(TickerItem.fromJson({
-          'id': 'broadcast:${row['id']}',
-          'type': 'broadcast',
-          'ts': row['created_at'],
-          'title': 'Broadcast event',
-          'body': row['message'],
-          'severity': row['level'] == 'urgent' ? 'error' : (row['level'] == 'warn' ? 'warning' : 'info'),
-          'ref_kind': 'broadcast',
-          'ref_id': row['id']?.toString(),
-        }));
-      }
-      parsed.sort((a, b) => b.ts.compareTo(a.ts));
+      final merged = _dedup([...parsed, ...state.items])..sort((a, b) => b.ts.compareTo(a.ts));
+      final clipped = merged.take(_maxItems).toList();
       state = state.copyWith(
-        items: _dedup(parsed),
-        nextCursor: page['next_cursor']?.toString(),
+        items: clipped,
+        nextCursor: page['nextCursor']?.toString() ?? page['next_cursor']?.toString(),
         loading: false,
         unstableConnection: false,
+        lastSyncAt: DateTime.now(),
       );
+      await _saveCache();
     } on DioException catch (e) {
       if (e.response?.statusCode == 429) {
-        _pollSeconds = (_pollSeconds * 2).clamp(5, 30);
+        state = state.copyWith(loading: false, error: 'rate limited', unstableConnection: true);
+      } else {
+        state = state.copyWith(loading: false, error: 'connexion instable', unstableConnection: true);
       }
-      state = state.copyWith(loading: false, error: 'connexion instable', unstableConnection: true);
     } catch (_) {
       state = state.copyWith(loading: false, error: 'connexion instable', unstableConnection: true);
     }
-  }
-
-  Future<void> _connectSse() async {
-    final dio = ref.read(apiClientProvider).dio;
-    try {
-      final response = await dio.get<ResponseBody>(
-        '/events/$eventId/ticker/stream',
-        options: Options(responseType: ResponseType.stream),
-      );
-      _sseSub = response.data!.stream
-          .map((chunk) => chunk.toList())
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(_handleSseLine, onError: (_) {
-        state = state.copyWith(unstableConnection: true);
-      });
-    } catch (_) {
-      state = state.copyWith(unstableConnection: true);
-    }
-  }
-
-  void _handleSseLine(String line) {
-    if (!line.startsWith('data: ')) return;
-    final payload = line.substring(6).trim();
-    if (payload.isEmpty) return;
-    final parsed = TickerItem.fromJson(Map<String, dynamic>.from(jsonDecode(payload) as Map));
-    final merged = _dedup([parsed, ...state.items])..sort((a, b) => b.ts.compareTo(a.ts));
-    state = state.copyWith(items: merged, unstableConnection: false);
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(Duration(seconds: _pollSeconds), (_) => refresh());
+    final network = ref.read(networkStatusProvider);
+    if (network == NetworkState.offline) return;
+    final seconds = network == NetworkState.degraded ? 5 : 2;
+    _pollTimer = Timer.periodic(Duration(seconds: seconds), (_) => refresh());
   }
 
   List<TickerItem> _dedup(List<TickerItem> values) {
@@ -136,12 +146,14 @@ class TickerController extends StateNotifier<TickerState> {
   @override
   void dispose() {
     _pollTimer?.cancel();
-    _sseSub?.cancel();
     super.dispose();
   }
 }
 
 final tickerControllerProvider = StateNotifierProvider.autoDispose
     .family<TickerController, TickerState, int>((ref, eventId) {
+  ref.listen(networkStatusProvider, (_, __) {
+    ref.read(tickerControllerProvider(eventId).notifier)._startPolling();
+  });
   return TickerController(ref, eventId);
 });

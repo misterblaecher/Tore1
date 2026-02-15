@@ -13,10 +13,23 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import AppToken, AppUser, AuditLog, Event, EventBroadcast, Order, WalletGift, WalletTx
+from models import (
+    AppToken,
+    AppUser,
+    AppUserPrivacySetting,
+    BarPrivacySetting,
+    Drink,
+    Event,
+    EventBroadcast,
+    Order,
+    PriceHistory,
+    TicketTransfer,
+)
 
 router = APIRouter(tags=["ticker"])
 security = HTTPBearer(auto_error=False)
+
+_ALLOWED_TYPES = {"broadcast", "order", "price", "gift", "battles", "hunt", "bets", "alerts", "crash"}
 
 
 def get_db() -> Iterator[Session]:
@@ -64,128 +77,166 @@ def _decode_cursor(cursor: Optional[str]) -> tuple[Optional[datetime], Optional[
         raise HTTPException(status_code=400, detail="Invalid cursor") from exc
 
 
-def _ticker_rows(db: Session, event_id: int, user_id: str, scan_limit: int = 200) -> list[dict[str, Any]]:
+def _parse_since(since: Optional[str]) -> Optional[datetime]:
+    if not since:
+        return None
+    try:
+        return datetime.fromisoformat(since)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid since") from exc
+
+
+def _parse_types(raw: Optional[str]) -> Optional[set[str]]:
+    if not raw:
+        return None
+    values = {chunk.strip().lower() for chunk in raw.split(",") if chunk.strip()}
+    unknown = sorted(values.difference(_ALLOWED_TYPES))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown ticker type(s): {', '.join(unknown)}")
+    return values
+
+
+def _module_enabled(event: Event, module_keys: list[str], default_value: bool = True) -> bool:
+    modules = event.modules_on or {}
+    for key in module_keys:
+        if key in modules:
+            return bool(modules.get(key))
+    return default_value
+
+
+def _masked_label(user_id: Optional[str], fallback_id: int) -> str:
+    if user_id:
+        tail = user_id[-4:] if len(user_id) >= 4 else user_id
+        return f"U***{tail}"
+    return f"Guest-{fallback_id % 1000:03d}"
+
+
+def _can_show_identity_in_bar(db: Session, event: Event, user_id: Optional[str]) -> bool:
+    if not user_id or not event.bar_id:
+        return False
+    bar_settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == event.bar_id).first()
+    user_settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user_id).first()
+    visibility = (user_settings.visibility if user_settings and user_settings.visibility else "public").lower()
+    if visibility == "private":
+        return False
+    if not (bar_settings and bar_settings.staff_identity_consent_required):
+        return False
+    return bool(user_settings and (user_settings.show_identity_in_bar or user_settings.show_identity_to_staff))
+
+
+def _user_label(db: Session, event: Event, user_id: Optional[str], fallback_id: int) -> str:
+    if user_id and _can_show_identity_in_bar(db, event, user_id):
+        app_user = db.get(AppUser, user_id)
+        if app_user and app_user.display_name:
+            return app_user.display_name
+    return _masked_label(user_id, fallback_id)
+
+
+def _ticker_rows(db: Session, event: Event, scan_limit: int = 200) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    event_id = event.id
 
-    orders = (
-        db.query(Order)
-        .filter(Order.event_id == event_id, Order.user_id == user_id)
-        .order_by(Order.updated_at.desc(), Order.id.desc())
-        .limit(scan_limit)
-        .all()
-    )
-    for order in orders:
-        rows.append(
-            {
-                "id": f"order:{order.id}:{order.updated_at.isoformat()}",
-                "ts": order.updated_at,
-                "type": "order_status",
-                "title": f"Commande #{order.id}",
-                "body": f"Statut: {order.status}",
-                "severity": "info",
-                "ref_kind": "order",
-                "ref_id": str(order.id),
-            }
+    if _module_enabled(event, ["menu", "orders_enabled"], default_value=True):
+        orders = (
+            db.query(Order)
+            .filter(Order.event_id == event_id)
+            .order_by(Order.updated_at.desc(), Order.id.desc())
+            .limit(scan_limit)
+            .all()
         )
-
-    topups = (
-        db.query(WalletTx)
-        .filter(
-            WalletTx.user_id == user_id,
-            WalletTx.kind == "CREDIT",
-            WalletTx.ref_type.in_(["TOPUP_QR", "ADMIN_TOPUP"]),
-        )
-        .order_by(WalletTx.created_at.desc(), WalletTx.id.desc())
-        .limit(scan_limit)
-        .all()
-    )
-    for tx in topups:
-        rows.append(
-            {
-                "id": f"wallet_topup:{tx.id}",
-                "ts": tx.created_at,
-                "type": "wallet_topup",
-                "title": "Top-up wallet",
-                "body": f"+{tx.amount_tickets} tickets",
-                "severity": "success",
-                "ref_kind": "wallet_tx",
-                "ref_id": str(tx.id),
-            }
-        )
-
-    gifts = (
-        db.query(WalletGift)
-        .filter(
-            and_(
-                WalletGift.event_id == event_id,
-                or_(WalletGift.from_user_id == user_id, WalletGift.to_user_id == user_id),
+        for order in orders:
+            label = _user_label(db, event, order.user_id, order.id)
+            rows.append(
+                {
+                    "id": f"order:{order.id}:created:{order.created_at.isoformat()}",
+                    "ts": order.created_at,
+                    "type": "order",
+                    "severity": "info",
+                    "moduleKey": "menu",
+                    "payloadCompact": {
+                        "kind": "order_created",
+                        "orderId": str(order.id),
+                        "status": "created",
+                        "totalTickets": int(order.total_tickets or 0),
+                        "userLabel": label,
+                    },
+                }
             )
-        )
-        .order_by(WalletGift.created_at.desc(), WalletGift.id.desc())
-        .limit(scan_limit)
-        .all()
-    )
-    for gift in gifts:
-        incoming = gift.to_user_id == user_id
-        rows.append(
-            {
-                "id": f"gift:{gift.id}",
-                "ts": gift.created_at,
-                "type": "gift_in" if incoming else "gift_out",
-                "title": "Cadeau reçu" if incoming else "Cadeau envoyé",
-                "body": f"{gift.amount_tickets} tickets",
-                "severity": "info",
-                "ref_kind": "wallet_gift",
-                "ref_id": str(gift.id),
-            }
-        )
+            if order.updated_at and order.updated_at > order.created_at:
+                rows.append(
+                    {
+                        "id": f"order:{order.id}:{order.status}:{order.updated_at.isoformat()}",
+                        "ts": order.updated_at,
+                        "type": "order",
+                        "severity": "info",
+                        "moduleKey": "menu",
+                        "payloadCompact": {
+                            "kind": "status_changed",
+                            "orderId": str(order.id),
+                            "status": (order.status or "").lower(),
+                            "totalTickets": int(order.total_tickets or 0),
+                            "userLabel": label,
+                        },
+                    }
+                )
 
-    audits = (
-        db.query(AuditLog)
-        .filter(
-            AuditLog.event_id == event_id,
-            AuditLog.action.in_([
-                "event_state.update",
-                "event_modules.update",
-                "polymarket.create",
-                "polymarket.position",
-                "polymarket.resolve",
-                "polymarket.finalize",
-                "polymarket.cancel",
-            ]),
+    if _module_enabled(event, ["ticker", "market", "prices_enabled"], default_value=True):
+        history = (
+            db.query(PriceHistory, Drink.name)
+            .join(Drink, Drink.id == PriceHistory.drink_id)
+            .filter(PriceHistory.event_id == event_id)
+            .order_by(PriceHistory.ts.asc(), PriceHistory.id.asc())
+            .limit(scan_limit)
+            .all()
         )
-        .order_by(AuditLog.ts.desc(), AuditLog.id.desc())
-        .limit(scan_limit)
-        .all()
-    )
-    for row in audits:
-        if row.action == "event_state.update":
-            kind = "event_state_change"
-            title = "Etat event mis à jour"
-            severity = "warning"
-        elif row.action == "event_modules.update":
-            kind = "module_toggle"
-            title = "Modules event mis à jour"
-            severity = "warning"
-        else:
-            kind = "polymarket_market_update"
-            title = "Polymarket mis à jour"
-            severity = "info"
-        rows.append(
-            {
-                "id": f"audit:{row.id}",
-                "ts": row.ts,
-                "type": kind,
-                "title": title,
-                "body": row.action,
-                "severity": severity,
-                "ref_kind": row.entity_type,
-                "ref_id": row.entity_id,
-            }
-        )
+        previous_price_by_drink: dict[int, int] = {}
+        for row, drink_name in history:
+            prev = previous_price_by_drink.get(row.drink_id)
+            if prev is not None and prev != row.price_cents:
+                rows.append(
+                    {
+                        "id": f"price:{row.id}",
+                        "ts": row.ts,
+                        "type": "price",
+                        "severity": "info",
+                        "moduleKey": "ticker",
+                        "payloadCompact": {
+                            "drinkName": drink_name,
+                            "fromPrice": prev,
+                            "toPrice": row.price_cents,
+                            "direction": "up" if row.price_cents > prev else "down",
+                            "ts": row.ts.isoformat(),
+                        },
+                    }
+                )
+            previous_price_by_drink[row.drink_id] = row.price_cents
 
-    event = db.get(Event, event_id)
-    if event and bool((event.modules_on or {}).get("broadcast")):
+    if _module_enabled(event, ["gifts_enabled", "gifts", "wallet"], default_value=True):
+        gifts = (
+            db.query(TicketTransfer)
+            .filter(TicketTransfer.event_id == event_id)
+            .order_by(TicketTransfer.created_at.desc(), TicketTransfer.id.desc())
+            .limit(scan_limit)
+            .all()
+        )
+        for gift in gifts:
+            rows.append(
+                {
+                    "id": f"gift:{gift.id}",
+                    "ts": gift.created_at,
+                    "type": "gift",
+                    "severity": "info",
+                    "moduleKey": "gifts",
+                    "payloadCompact": {
+                        "amount": int(gift.amount or 0),
+                        "fromLabel": _user_label(db, event, gift.from_user_id, gift.id),
+                        "toLabel": _user_label(db, event, gift.to_user_id, gift.id),
+                        "ts": gift.created_at.isoformat(),
+                    },
+                }
+            )
+
+    if _module_enabled(event, ["broadcast"], default_value=False):
         broadcasts = (
             db.query(EventBroadcast)
             .filter(EventBroadcast.event_id == event_id)
@@ -197,16 +248,18 @@ def _ticker_rows(db: Session, event_id: int, user_id: str, scan_limit: int = 200
         for row in broadcasts:
             if row.expires_at and row.expires_at <= now:
                 continue
+            sev = "error" if row.level == "urgent" else ("warning" if row.level == "warn" else "info")
             rows.append(
                 {
                     "id": f"broadcast:{row.id}",
                     "ts": row.created_at,
                     "type": "broadcast",
-                    "title": "Broadcast event",
-                    "body": row.message,
-                    "severity": "error" if row.level == "urgent" else ("warning" if row.level == "warn" else "info"),
-                    "ref_kind": "broadcast",
-                    "ref_id": str(row.id),
+                    "severity": sev,
+                    "moduleKey": "broadcast",
+                    "payloadCompact": {
+                        "level": row.level,
+                        "message": row.message,
+                    },
                 }
             )
 
@@ -218,22 +271,48 @@ def _ticker_rows(db: Session, event_id: int, user_id: str, scan_limit: int = 200
 def get_ticker_feed(
     event_id: int,
     cursor: Optional[str] = Query(default=None),
-    limit: int = Query(default=30, ge=1, le=100),
+    since: Optional[str] = Query(default=None),
+    types: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _ = user
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
     cursor_ts, cursor_id = _decode_cursor(cursor)
-    rows = _ticker_rows(db, event_id=event_id, user_id=user.id)
+    since_ts = _parse_since(since)
+    type_filters = _parse_types(types)
+
+    rows = _ticker_rows(db, event=event)
+    if type_filters is not None:
+        rows = [r for r in rows if r["type"] in type_filters]
+    if since_ts is not None:
+        rows = [r for r in rows if r["ts"] > since_ts]
     if cursor_ts is not None and cursor_id is not None:
         rows = [r for r in rows if (r["ts"], r["id"]) < (cursor_ts, cursor_id)]
 
     items = rows[:limit]
     next_cursor = _encode_cursor(items[-1]["ts"], items[-1]["id"]) if len(rows) > limit and items else None
-    return {"items": items, "next_cursor": next_cursor}
+    wire_items = [
+        {
+            "id": item["id"],
+            "type": item["type"],
+            "ts": item["ts"].isoformat(),
+            "payloadCompact": item["payloadCompact"],
+            "severity": item.get("severity"),
+            "moduleKey": item.get("moduleKey"),
+        }
+        for item in items
+    ]
+    return {
+        "items": wire_items,
+        "nextCursor": next_cursor,
+        "next_cursor": next_cursor,
+        "serverTime": now_utc().isoformat(),
+    }
 
 
 @router.get("/events/{event_id}/ticker/stream")
@@ -244,6 +323,7 @@ async def stream_ticker_feed(
     once: bool = Query(default=False),
     user: AppUser = Depends(get_current_user),
 ):
+    _ = user
     session = get_db().__next__()
     try:
         event = session.get(Event, event_id)
@@ -262,7 +342,8 @@ async def stream_ticker_feed(
                     break
                 s = get_db().__next__()
                 try:
-                    rows = _ticker_rows(s, event_id=event_id, user_id=user.id, scan_limit=60)
+                    event_row = s.get(Event, event_id)
+                    rows = _ticker_rows(s, event=event_row, scan_limit=60) if event_row else []
                 finally:
                     s.close()
 
@@ -270,8 +351,14 @@ async def stream_ticker_feed(
                 for item in rows:
                     if last_ts is not None and last_id is not None and (item["ts"], item["id"]) <= (last_ts, last_id):
                         continue
-                    payload = dict(item)
-                    payload["ts"] = item["ts"].isoformat()
+                    payload = {
+                        "id": item["id"],
+                        "type": item["type"],
+                        "ts": item["ts"].isoformat(),
+                        "payloadCompact": item["payloadCompact"],
+                        "severity": item.get("severity"),
+                        "moduleKey": item.get("moduleKey"),
+                    }
                     yield f"event: ticker\ndata: {json.dumps(payload)}\n\n"
                     emitted += 1
                 if emitted:
