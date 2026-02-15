@@ -136,6 +136,51 @@ def ensure_identity_consent_columns(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_app_user_privacy_settings_user_id ON app_user_privacy_settings (user_id)"))
+        cols = _table_columns(engine, "app_user_privacy_settings")
+        if "visibility" not in cols:
+            conn.execute(text("ALTER TABLE app_user_privacy_settings ADD COLUMN visibility VARCHAR(16) DEFAULT 'public'"))
+        if "show_identity_in_bar" not in cols:
+            conn.execute(text("ALTER TABLE app_user_privacy_settings ADD COLUMN show_identity_in_bar BOOLEAN DEFAULT 0"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS ticket_transfers (
+                id INTEGER NOT NULL PRIMARY KEY,
+                from_user_id VARCHAR NOT NULL,
+                to_user_id VARCHAR NOT NULL,
+                amount INTEGER NOT NULL,
+                event_id INTEGER,
+                reason VARCHAR(255),
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ticket_transfers_from_ts ON ticket_transfers (from_user_id, created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ticket_transfers_to_ts ON ticket_transfers (to_user_id, created_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS ticket_transfer_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                from_user_id VARCHAR NOT NULL,
+                idempotency_key VARCHAR(128) NOT NULL,
+                transfer_id INTEGER NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_ticket_transfer_sender_idem UNIQUE (from_user_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ticket_transfer_idempotency_sender ON ticket_transfer_idempotency (from_user_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_gift_codes (
+                id INTEGER NOT NULL PRIMARY KEY,
+                user_id VARCHAR NOT NULL,
+                code VARCHAR(16) NOT NULL,
+                created_at DATETIME,
+                updated_at DATETIME,
+                CONSTRAINT uq_user_gift_codes_code UNIQUE (code),
+                CONSTRAINT uq_user_gift_codes_user UNIQUE (user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_gift_codes_code ON user_gift_codes (code)"))
 
 
 def ensure_order_client_qr_scan_table(engine: Engine) -> None:

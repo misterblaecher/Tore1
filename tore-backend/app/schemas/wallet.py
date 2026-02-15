@@ -85,3 +85,50 @@ class WalletMyQrOut(BaseModel):
     event_id: int
     qr_type: str
     deeplink: str
+
+
+class WalletTransferIn(BaseModel):
+    to_user_id: Optional[str] = None
+    to_qr_token: Optional[str] = None
+    to_code: Optional[str] = None
+    amount: int = Field(ge=1, le=1000000)
+    event_id: Optional[int] = None
+    reason: Optional[str] = Field(default=None, max_length=255)
+
+
+class WalletTransferOut(BaseModel):
+    transfer_id: int
+    new_balance_sender: int
+    recipient_user_id: str
+    idempotent: bool = False
+
+
+class WalletTransferRowOut(BaseModel):
+    id: int
+    ts: datetime
+    direction: str
+    amount: int
+    counterparty_user_id: str
+    reason: Optional[str] = None
+    event_id: Optional[int] = None
+
+
+class WalletTransferPageOut(BaseModel):
+    items: List[WalletTransferRowOut]
+    next_cursor: Optional[str] = None
+
+
+class WalletReceiveGiftQrOut(BaseModel):
+    token: str
+    deeplink: str
+    expires_at: datetime
+
+
+class UserPrivacyOut(BaseModel):
+    visibility: str
+    show_identity_in_bar: bool
+
+
+class UserPrivacyIn(BaseModel):
+    visibility: str = Field(pattern='^(public|private)$')
+    show_identity_in_bar: bool

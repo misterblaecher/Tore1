@@ -702,6 +702,8 @@ class PatchMeIn(BaseModel):
     show_address: Optional[bool] = None
     show_avatar: Optional[bool] = None
     show_identity_to_staff: Optional[bool] = None
+    visibility: Optional[str] = None
+    show_identity_in_bar: Optional[bool] = None
 
 
 class IdentityConsentBarPatchIn(BaseModel):
@@ -2754,6 +2756,8 @@ def auth_guest(payload: GuestIn):
                 "show_address": u.show_address,
                 "show_avatar": u.show_avatar,
                 "show_identity_to_staff": False,
+                "visibility": "public",
+                "show_identity_in_bar": False,
             },
         }
     finally:
@@ -2781,6 +2785,8 @@ def me(
             "show_address": user.show_address,
             "show_avatar": user.show_avatar,
             "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
+            "visibility": (settings.visibility if settings and settings.visibility else "public"),
+            "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
             "bar_show_identity_to_staff": (
                 bool(bar_settings and bar_settings.staff_identity_consent_required)
                 if bar_id is not None
@@ -2810,10 +2816,16 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
         if payload.show_avatar is not None:
             u.show_avatar = payload.show_avatar
         settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()
-        if payload.show_identity_to_staff is not None:
+        if payload.show_identity_to_staff is not None or payload.visibility is not None or payload.show_identity_in_bar is not None:
             if not settings:
                 settings = AppUserPrivacySetting(user_id=u.id)
-            settings.show_identity_to_staff = payload.show_identity_to_staff
+            if payload.show_identity_to_staff is not None:
+                settings.show_identity_to_staff = payload.show_identity_to_staff
+            if payload.visibility in {"public", "private"}:
+                settings.visibility = payload.visibility
+            if payload.show_identity_in_bar is not None:
+                settings.show_identity_in_bar = payload.show_identity_in_bar
+                settings.show_identity_to_staff = payload.show_identity_in_bar
             s.add(settings)
 
         s.add(u)
@@ -2835,6 +2847,8 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
                 ),
                 "show_address": payload.show_address,
                 "show_avatar": payload.show_avatar,
+                "visibility": payload.visibility,
+                "show_identity_in_bar": payload.show_identity_in_bar,
             },
         )
         s.commit()
@@ -2848,6 +2862,8 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             "show_address": u.show_address,
             "show_avatar": u.show_avatar,
             "show_identity_to_staff": bool(refreshed_settings and refreshed_settings.show_identity_to_staff),
+            "visibility": (refreshed_settings.visibility if refreshed_settings and refreshed_settings.visibility else "public"),
+            "show_identity_in_bar": bool(refreshed_settings and (refreshed_settings.show_identity_in_bar or refreshed_settings.show_identity_to_staff)),
         }
     finally:
         s.close()

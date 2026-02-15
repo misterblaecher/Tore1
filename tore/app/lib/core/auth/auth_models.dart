@@ -6,6 +6,8 @@ class AppUser {
   final bool showAddress;
   final bool showAvatar;
   final bool showIdentityToStaff;
+  final String visibility;
+  final bool showIdentityInBar;
 
   const AppUser({
     required this.id,
@@ -15,6 +17,8 @@ class AppUser {
     required this.showAddress,
     required this.showAvatar,
     required this.showIdentityToStaff,
+    required this.visibility,
+    required this.showIdentityInBar,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -26,6 +30,8 @@ class AppUser {
       showAddress: (json['show_address'] as bool?) ?? false,
       showAvatar: (json['show_avatar'] as bool?) ?? true,
       showIdentityToStaff: (json['show_identity_to_staff'] as bool?) ?? false,
+      visibility: (json['visibility'] ?? 'public').toString(),
+      showIdentityInBar: (json['show_identity_in_bar'] as bool?) ?? false,
     );
   }
 
@@ -37,6 +43,8 @@ class AppUser {
       'show_address': showAddress,
       'show_avatar': showAvatar,
       'show_identity_to_staff': showIdentityToStaff,
+      'visibility': visibility,
+      'show_identity_in_bar': showIdentityInBar,
     };
   }
 
@@ -47,6 +55,8 @@ class AppUser {
     bool? showAddress,
     bool? showAvatar,
     bool? showIdentityToStaff,
+    String? visibility,
+    bool? showIdentityInBar,
   }) {
     return AppUser(
       id: id,
@@ -56,6 +66,8 @@ class AppUser {
       showAddress: showAddress ?? this.showAddress,
       showAvatar: showAvatar ?? this.showAvatar,
       showIdentityToStaff: showIdentityToStaff ?? this.showIdentityToStaff,
+      visibility: visibility ?? this.visibility,
+      showIdentityInBar: showIdentityInBar ?? this.showIdentityInBar,
     );
   }
 }

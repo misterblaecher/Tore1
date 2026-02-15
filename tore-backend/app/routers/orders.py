@@ -12,7 +12,7 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from db import now_utc
-from models import AppUserPrivacySetting, BarPrivacySetting, Event, Order, OrderClientQrScan, OrderItem, OrderStatusTransitionIdempotency, Zone
+from models import AppUser, AppUserPrivacySetting, BarPrivacySetting, Event, Order, OrderClientQrScan, OrderItem, OrderStatusTransitionIdempotency, Zone
 from partner_auth import current_identity as current_partner_identity
 from app.schemas.orders import (
     CreateOrderIn,
@@ -302,16 +302,39 @@ def _masked_customer_label(user_id: Optional[str], order_id: int) -> str:
     return f"Guest-{order_id % 1000:03d}"
 
 
-def _order_live_payload(order: Order) -> dict[str, Any]:
+def _order_live_payload(order: Order, customer_label: Optional[str] = None) -> dict[str, Any]:
     return {
         "id": order.id,
         "createdAt": order.created_at,
         "status": ORDER_STATUS_TO_LIVE.get(order.status, "pending"),
         "totalTickets": int(order.total_tickets or 0),
         "itemsSummary": _compact_items_summary(order),
-        "customerLabel": _masked_customer_label(order.user_id, order.id),
+        "customerLabel": customer_label or _masked_customer_label(order.user_id, order.id),
         "expiresAt": None,
     }
+
+
+
+
+def _can_show_identity_in_bar(db: Session, order: Order) -> bool:
+    if not order.user_id:
+        return False
+    bar_settings = db.query(BarPrivacySetting).filter(BarPrivacySetting.bar_id == order.bar_id).first() if order.bar_id else None
+    user_settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == order.user_id).first()
+    visibility = (user_settings.visibility if user_settings and user_settings.visibility else "public").lower()
+    if visibility == "private":
+        return False
+    if not (bar_settings and bar_settings.staff_identity_consent_required):
+        return False
+    return bool(user_settings and (user_settings.show_identity_in_bar or user_settings.show_identity_to_staff))
+
+
+def _customer_label_for_bar(db: Session, order: Order) -> str:
+    if _can_show_identity_in_bar(db, order):
+        app_user = db.get(AppUser, order.user_id) if order.user_id else None
+        if app_user and app_user.display_name:
+            return app_user.display_name
+    return _masked_customer_label(order.user_id, order.id)
 
 
 def _assert_bar_event_access(db: Session, event_id: int, identity: dict) -> Event:
@@ -523,7 +546,7 @@ def partner_portal_bar_orders_live(
             raise HTTPException(400, "Invalid status filter")
         query = query.filter(Order.status == mapped)
     rows = query.order_by(Order.created_at.desc(), Order.id.desc()).limit(300).all()
-    return {"items": [_order_live_payload(row) for row in rows]}
+    return {"items": [_order_live_payload(row, customer_label=_customer_label_for_bar(db, row)) for row in rows]}
 
 
 @router.post("/partner/portal/bar/orders/{order_id}/accept")
