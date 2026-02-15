@@ -4154,6 +4154,15 @@ def event_menu(event_id: int):
         require_feature(s, event_id, "menu_enabled")
         apply_decay(s, event_id)
 
+        ticket_value = max(1, int(e.ticket_value_cents or 100))
+        menu_items_by_name = {}
+        menu_items = []
+        if e.bar_id is not None:
+            menu_items = s.scalars(
+                select(MenuItem).where(MenuItem.bar_id == e.bar_id, MenuItem.is_active == True)
+            ).all()
+            menu_items_by_name = {item.name.strip().lower(): item for item in menu_items if item.name}
+
         rows = s.scalars(select(EventDrink).where(EventDrink.event_id == event_id)).all()
         out = []
         for ed in rows:
@@ -4165,15 +4174,44 @@ def event_menu(event_id: int):
                 if ed.override_price_cents is not None
                 else ed.current_price_cents
             )
+            linked = menu_items_by_name.get(d.name.strip().lower())
             out.append(
                 {
+                    "id": linked.id if linked else d.id,
+                    "item_id": linked.id if linked else d.id,
                     "drink_id": d.id,
                     "name": d.name,
                     "type": d.type,
                     "base_price_cents": ed.base_price_cents,
                     "effective_price_cents": effective,
+                    "priceTickets": int(round(effective / ticket_value)),
+                    "available": linked.is_available if linked else None,
+                    "stockStatus": linked.stock_status if linked else None,
+                    "bar_id": e.bar_id,
                 }
             )
+
+        if out:
+            return out
+
+        if menu_items:
+            return [
+                {
+                    "id": item.id,
+                    "item_id": item.id,
+                    "drink_id": item.id,
+                    "name": item.name,
+                    "type": "",
+                    "base_price_cents": int(item.price_cents),
+                    "effective_price_cents": int(item.price_cents),
+                    "priceTickets": int(round(int(item.price_cents) / ticket_value)),
+                    "available": item.is_available,
+                    "stockStatus": item.stock_status,
+                    "bar_id": item.bar_id,
+                }
+                for item in menu_items
+            ]
+
         return out
     finally:
         s.close()
