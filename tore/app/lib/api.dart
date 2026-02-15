@@ -19,6 +19,13 @@ class EventRankingFetchResult {
   const EventRankingFetchResult({required this.payload, required this.fromCache});
 }
 
+class CommitteeFetchResult {
+  final dynamic payload;
+  final bool fromCache;
+
+  const CommitteeFetchResult({required this.payload, required this.fromCache});
+}
+
 class Api {
   final ApiClient _client;
   final CacheStore _cache;
@@ -195,6 +202,102 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+
+
+  Future<Map<String, dynamic>> modulesState() async =>
+      Map<String, dynamic>.from((await _client.dio.get('/modules')).data as Map);
+
+  Future<CommitteeFetchResult> committeesWithCacheStatus() async {
+    const cacheKey = 'committees_list';
+    try {
+      final data = (await _client.dio.get('/committees')).data as List<dynamic>;
+      await _cache.setJson(cacheKey, {'items': data}, ttl: const Duration(days: 1));
+      return CommitteeFetchResult(payload: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      final items = cached?['items'];
+      if (items is List<dynamic>) return CommitteeFetchResult(payload: items, fromCache: true);
+      throw const OfflineNoCacheException('committees_list');
+    }
+  }
+
+  Future<Map<String, dynamic>> committee(int committeeId) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId')).data as Map);
+
+  Future<List<dynamic>> committeeYears(int committeeId) async =>
+      (await _client.dio.get('/committees/$committeeId/years')).data as List<dynamic>;
+
+  Future<CommitteeFetchResult> committeeMeWithCacheStatus(int committeeId) async {
+    final cacheKey = 'committee_me_$committeeId';
+    try {
+      final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/me')).data as Map);
+      await _cache.setJson(cacheKey, data, ttl: const Duration(days: 1));
+      return CommitteeFetchResult(payload: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      throw const OfflineNoCacheException('committee_me');
+    }
+  }
+
+  Future<Map<String, dynamic>> committeeJoinByCode({
+    required int committeeId,
+    required String code,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/join_by_code',
+      data: {'code': code},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeMembers(int committeeId) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/members')).data as Map);
+
+  Future<Map<String, dynamic>> createCommitteeInviteCode({
+    required int committeeId,
+    String? expiresAtIso,
+    int? usesLeft,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/invite_codes',
+      data: {'expiresAt': expiresAtIso, 'usesLeft': usesLeft},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> setCommitteeMemberRole({
+    required int committeeId,
+    required String userId,
+    required String role,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/members/$userId/role',
+      data: {'role': role, 'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> revokeCommitteeMember({
+    required int committeeId,
+    required String userId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/members/$userId/revoke',
+      data: {'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
   Future<List<dynamic>> menu(int eventId) async {
     final result = await menuWithCacheStatus(eventId);
     return result.items;

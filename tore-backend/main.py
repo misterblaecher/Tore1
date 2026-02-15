@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
-from app.services.rate_limit_service import record_status_code
+from app.services.rate_limit_service import record_status_code, enforce_rate_limit
 from models import (
     Bar,
     Event,
@@ -69,6 +69,12 @@ from models import (
     EventJoin,
     EventCharterAcceptance,
     TicketTransfer,
+    Committee,
+    CommitteeYear,
+    CommitteeMembership,
+    CommitteeInviteCode,
+    CommitteeRolePermission,
+    CommitteeAdminIdempotency,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -1017,6 +1023,24 @@ class JoinByCodeIn(BaseModel):
 
 class JoinEventIn(BaseModel):
     accepted_charter_version: Optional[str] = None
+
+
+class CommitteeJoinByCodeIn(BaseModel):
+    code: str
+
+
+class CommitteeInviteCodeIn(BaseModel):
+    expiresAt: Optional[datetime] = None
+    usesLeft: Optional[int] = Field(default=None, ge=1)
+
+
+class CommitteeSetRoleIn(BaseModel):
+    role: Literal["OWNER", "ADMIN", "MOD", "MEMBER"]
+    reason: str = Field(min_length=2, max_length=280)
+
+
+class CommitteeRevokeIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=280)
 
 
 class EventCharterOut(BaseModel):
@@ -3475,6 +3499,460 @@ def join_event_by_code(
         accepted_charter_version=payload.accepted_charter_version,
     )
 
+
+
+
+def _committee_module_enabled() -> bool:
+    return _env_bool("TORE_MODULE_COMMITTEE_OS", default=True)
+
+
+def _require_committee_module() -> None:
+    if not _committee_module_enabled():
+        raise HTTPException(status_code=404, detail={"reason": "module_off"})
+
+
+def _committee_default_permissions(role: str) -> dict[str, bool]:
+    role_norm = (role or "MEMBER").upper()
+    mapping = {
+        "OWNER": {
+            "can_manage_members": True,
+            "can_post_forum": True,
+            "can_manage_finances": True,
+            "can_manage_bapteme": True,
+        },
+        "ADMIN": {
+            "can_manage_members": True,
+            "can_post_forum": True,
+            "can_manage_finances": False,
+            "can_manage_bapteme": False,
+        },
+        "MOD": {
+            "can_manage_members": False,
+            "can_post_forum": True,
+            "can_manage_finances": False,
+            "can_manage_bapteme": False,
+        },
+        "MEMBER": {
+            "can_manage_members": False,
+            "can_post_forum": True,
+            "can_manage_finances": False,
+            "can_manage_bapteme": False,
+        },
+    }
+    return mapping.get(role_norm, mapping["MEMBER"])
+
+
+def _committee_permissions(db: Session, committee_id: int, role: str) -> dict[str, bool]:
+    custom = db.query(CommitteeRolePermission).filter(
+        CommitteeRolePermission.committee_id == committee_id,
+        CommitteeRolePermission.role == role.upper(),
+    ).first()
+    if custom:
+        return {
+            "can_manage_members": bool(custom.permissions_json.get("can_manage_members")),
+            "can_post_forum": bool(custom.permissions_json.get("can_post_forum")),
+            "can_manage_finances": bool(custom.permissions_json.get("can_manage_finances")),
+            "can_manage_bapteme": bool(custom.permissions_json.get("can_manage_bapteme")),
+        }
+    return _committee_default_permissions(role)
+
+
+def _committee_active_year(db: Session, committee_id: int) -> Optional[CommitteeYear]:
+    return db.query(CommitteeYear).filter(
+        CommitteeYear.committee_id == committee_id,
+        CommitteeYear.is_active.is_(True),
+    ).order_by(CommitteeYear.id.desc()).first()
+
+
+def _committee_membership(db: Session, committee_id: int, user_id: str) -> Optional[CommitteeMembership]:
+    return db.query(CommitteeMembership).filter(
+        CommitteeMembership.committee_id == committee_id,
+        CommitteeMembership.user_id == user_id,
+        CommitteeMembership.is_active.is_(True),
+    ).first()
+
+
+def _committee_me_payload(db: Session, committee_id: int, user: AppUser) -> dict[str, Any]:
+    membership = _committee_membership(db, committee_id, user.id)
+    active_year = _committee_active_year(db, committee_id)
+    if membership is None:
+        return {
+            "committeeId": committee_id,
+            "isMember": False,
+            "membership": None,
+            "permissions": _committee_default_permissions("MEMBER"),
+            "activeYear": active_year.year_label if active_year else None,
+        }
+    return {
+        "committeeId": committee_id,
+        "isMember": True,
+        "membership": {
+            "userId": membership.user_id,
+            "role": membership.role,
+            "joinedAt": membership.joined_at.isoformat(),
+            "isActive": bool(membership.is_active),
+        },
+        "permissions": _committee_permissions(db, committee_id, membership.role),
+        "activeYear": active_year.year_label if active_year else None,
+    }
+
+
+def _require_committee_admin(db: Session, committee_id: int, user: AppUser) -> CommitteeMembership:
+    membership = _committee_membership(db, committee_id, user.id)
+    if membership is None:
+        raise HTTPException(status_code=403, detail={"reason": "not_member"})
+    perms = _committee_permissions(db, committee_id, membership.role)
+    if not perms.get("can_manage_members", False):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    return membership
+
+
+@app.get("/modules")
+def app_modules_state():
+    return {"committee_os": _committee_module_enabled()}
+
+
+@app.get("/committees")
+def committees_list(db: Session = Depends(get_db)):
+    _require_committee_module()
+    rows = db.query(Committee).order_by(Committee.name.asc()).all()
+    return [
+        {
+            "id": row.id,
+            "name": row.name,
+            "slug": row.slug,
+            "descriptionPublic": row.description_public,
+            "logoUrl": row.logo_url,
+            "createdAt": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+
+
+@app.get("/committees/{committee_id}")
+def committees_get(committee_id: int, db: Session = Depends(get_db)):
+    _require_committee_module()
+    row = db.get(Committee, committee_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    active_year = _committee_active_year(db, committee_id)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "slug": row.slug,
+        "descriptionPublic": row.description_public,
+        "logoUrl": row.logo_url,
+        "createdAt": row.created_at.isoformat(),
+        "activeYear": active_year.year_label if active_year else None,
+    }
+
+
+@app.get("/committees/{committee_id}/years")
+def committees_years(committee_id: int, db: Session = Depends(get_db)):
+    _require_committee_module()
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    rows = db.query(CommitteeYear).filter(CommitteeYear.committee_id == committee_id).order_by(CommitteeYear.year_label.desc()).all()
+    return [
+        {
+            "id": row.id,
+            "committeeId": row.committee_id,
+            "yearLabel": row.year_label,
+            "isActive": bool(row.is_active),
+            "createdAt": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+
+
+@app.post("/committees/{committee_id}/join_by_code")
+def committees_join_by_code(
+    committee_id: int,
+    payload: CommitteeJoinByCodeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    enforce_rate_limit("committee_join", f"{committee_id}:{user.id}")
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "join_by_code",
+        CommitteeAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+
+    code = payload.code.strip().upper()
+    invite = db.query(CommitteeInviteCode).filter(
+        CommitteeInviteCode.committee_id == committee_id,
+        CommitteeInviteCode.code == code,
+    ).first()
+    now = now_utc()
+    if invite is None or (invite.expires_at is not None and invite.expires_at < now) or (invite.uses_left is not None and invite.uses_left <= 0):
+        raise HTTPException(status_code=404, detail={"reason": "invalid_code"})
+
+    membership = db.query(CommitteeMembership).filter(
+        CommitteeMembership.committee_id == committee_id,
+        CommitteeMembership.user_id == user.id,
+    ).first()
+    if membership is None:
+        membership = CommitteeMembership(
+            committee_id=committee_id,
+            user_id=user.id,
+            role="MEMBER",
+            joined_at=now,
+            is_active=True,
+        )
+        db.add(membership)
+    else:
+        membership.is_active = True
+        if not membership.role:
+            membership.role = "MEMBER"
+
+    if invite.uses_left is not None:
+        invite.uses_left = max(0, invite.uses_left - 1)
+
+    db.flush()
+    response = _committee_me_payload(db, committee_id, user)
+    db.add(CommitteeAdminIdempotency(
+        committee_id=committee_id,
+        action="join_by_code",
+        idempotency_key=idempotency_key,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="app_user",
+        action="committee.join_by_code",
+        entity_type="committee_membership",
+        entity_id=f"{committee_id}:{user.id}",
+        event_id=None,
+        bar_id=None,
+        payload={"committee_id": committee_id, "user_id": user.id, "code": code},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/me")
+def committees_me(
+    committee_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    return _committee_me_payload(db, committee_id, user)
+
+
+@app.get("/committees/{committee_id}/members")
+def committees_members(
+    committee_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    _require_committee_admin(db, committee_id, user)
+    rows = db.query(CommitteeMembership).filter(
+        CommitteeMembership.committee_id == committee_id,
+        CommitteeMembership.is_active.is_(True),
+    ).order_by(CommitteeMembership.joined_at.asc()).all()
+    return {
+        "items": [
+            {
+                "userId": row.user_id,
+                "role": row.role,
+                "joinedAt": row.joined_at.isoformat(),
+                "isActive": bool(row.is_active),
+            }
+            for row in rows
+        ]
+    }
+
+
+@app.post("/committees/{committee_id}/invite_codes")
+def committees_invite_codes(
+    committee_id: int,
+    payload: CommitteeInviteCodeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    admin = _require_committee_admin(db, committee_id, user)
+
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "invite_code_create",
+        CommitteeAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+
+    code = random_code(8)
+    invite = CommitteeInviteCode(
+        committee_id=committee_id,
+        code=code,
+        expires_at=payload.expiresAt,
+        created_by=user.id,
+        uses_left=payload.usesLeft,
+    )
+    db.add(invite)
+    response = {
+        "committeeId": committee_id,
+        "code": code,
+        "expiresAt": payload.expiresAt.isoformat() if payload.expiresAt else None,
+        "usesLeft": payload.usesLeft,
+    }
+    db.add(CommitteeAdminIdempotency(
+        committee_id=committee_id,
+        action="invite_code_create",
+        idempotency_key=idempotency_key,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role=admin.role,
+        action="committee.invite_code.create",
+        entity_type="committee_invite_code",
+        entity_id=f"{committee_id}:{code}",
+        event_id=None,
+        bar_id=None,
+        payload={"committee_id": committee_id, "expires_at": response["expiresAt"], "uses_left": payload.usesLeft},
+    )
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/members/{user_id}/role")
+def committees_set_member_role(
+    committee_id: int,
+    user_id: str,
+    payload: CommitteeSetRoleIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    admin = _require_committee_admin(db, committee_id, user)
+
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "member_role_set",
+        CommitteeAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+
+    membership = db.query(CommitteeMembership).filter(
+        CommitteeMembership.committee_id == committee_id,
+        CommitteeMembership.user_id == user_id,
+    ).first()
+    if membership is None:
+        raise HTTPException(status_code=404, detail={"reason": "member_not_found"})
+    membership.role = payload.role
+    membership.is_active = True
+    response = {"committeeId": committee_id, "userId": user_id, "role": payload.role, "isActive": True}
+
+    db.add(CommitteeAdminIdempotency(
+        committee_id=committee_id,
+        action="member_role_set",
+        idempotency_key=idempotency_key,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role=admin.role,
+        action="committee.member.role_set",
+        entity_type="committee_membership",
+        entity_id=f"{committee_id}:{user_id}",
+        event_id=None,
+        bar_id=None,
+        payload={"committee_id": committee_id, "user_id": user_id, "role": payload.role, "reason": payload.reason},
+    )
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/members/{user_id}/revoke")
+def committees_revoke_member(
+    committee_id: int,
+    user_id: str,
+    payload: CommitteeRevokeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    committee = db.get(Committee, committee_id)
+    if committee is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    admin = _require_committee_admin(db, committee_id, user)
+
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "member_revoke",
+        CommitteeAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+
+    membership = db.query(CommitteeMembership).filter(
+        CommitteeMembership.committee_id == committee_id,
+        CommitteeMembership.user_id == user_id,
+    ).first()
+    if membership is None:
+        raise HTTPException(status_code=404, detail={"reason": "member_not_found"})
+    membership.is_active = False
+
+    response = {"committeeId": committee_id, "userId": user_id, "revoked": True}
+    db.add(CommitteeAdminIdempotency(
+        committee_id=committee_id,
+        action="member_revoke",
+        idempotency_key=idempotency_key,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role=admin.role,
+        action="committee.member.revoke",
+        entity_type="committee_membership",
+        entity_id=f"{committee_id}:{user_id}",
+        event_id=None,
+        bar_id=None,
+        payload={"committee_id": committee_id, "user_id": user_id, "reason": payload.reason},
+    )
+    db.commit()
+    return response
 
 @app.post("/events", response_model=CreateEventOut)
 def create_event(
