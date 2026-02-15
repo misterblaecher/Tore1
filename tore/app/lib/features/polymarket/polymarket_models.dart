@@ -10,8 +10,12 @@ class MarketLite {
   final String question;
   final String status;
   final String scope;
+  final String type;
   final double yesPrice;
   final double noPrice;
+  final double yesPct;
+  final double noPct;
+  final int poolTickets;
   final int volume;
   final int myPositionYes;
   final int myPositionNo;
@@ -23,8 +27,12 @@ class MarketLite {
     required this.question,
     required this.status,
     required this.scope,
+    required this.type,
     required this.yesPrice,
     required this.noPrice,
+    required this.yesPct,
+    required this.noPct,
+    required this.poolTickets,
     required this.volume,
     required this.myPositionYes,
     required this.myPositionNo,
@@ -35,14 +43,20 @@ class MarketLite {
   factory MarketLite.fromJson(Map<String, dynamic> json) {
     int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
     double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
+    final yp = _d(json['yesPct'] ?? json['yes_price']);
+    final np = _d(json['noPct'] ?? json['no_price']);
     return MarketLite(
       id: _i(json['id']),
       question: json['question']?.toString() ?? '',
       status: json['status']?.toString() ?? 'live',
       scope: json['scope']?.toString() ?? 'global',
-      yesPrice: _d(json['yes_price']),
-      noPrice: _d(json['no_price']),
-      volume: _i(json['volume']),
+      type: json['type']?.toString() ?? json['kind']?.toString().toLowerCase() ?? 'objective',
+      yesPrice: _d(json['yesPrice'] ?? json['yes_price']),
+      noPrice: _d(json['noPrice'] ?? json['no_price']),
+      yesPct: yp,
+      noPct: np > 0 ? np : (1 - yp),
+      poolTickets: _i(json['poolTickets'] ?? json['liquidity']),
+      volume: _i(json['volumeTickets'] ?? json['volume']),
       myPositionYes: _i(json['my_position_yes']),
       myPositionNo: _i(json['my_position_no']),
       myPositionTotal: _i(json['my_total']),
@@ -53,37 +67,54 @@ class MarketLite {
 
 class MarketDetail extends MarketLite {
   final String? outcome;
+  final String? description;
+  final String? rules;
 
   const MarketDetail({
     required super.id,
     required super.question,
     required super.status,
     required super.scope,
+    required super.type,
     required super.yesPrice,
     required super.noPrice,
+    required super.yesPct,
+    required super.noPct,
+    required super.poolTickets,
     required super.volume,
     required super.myPositionYes,
     required super.myPositionNo,
     required super.myPositionTotal,
     required super.eventId,
     required this.outcome,
+    required this.description,
+    required this.rules,
   });
 
   factory MarketDetail.fromJson(Map<String, dynamic> json) {
     final lite = MarketLite.fromJson(json);
+    final position = (json['position'] is Map)
+        ? Map<String, dynamic>.from(json['position'] as Map)
+        : <String, dynamic>{};
     return MarketDetail(
       id: lite.id,
       question: lite.question,
       status: lite.status,
       scope: lite.scope,
+      type: lite.type,
       yesPrice: lite.yesPrice,
       noPrice: lite.noPrice,
+      yesPct: lite.yesPct,
+      noPct: lite.noPct,
+      poolTickets: lite.poolTickets,
       volume: lite.volume,
-      myPositionYes: lite.myPositionYes,
-      myPositionNo: lite.myPositionNo,
-      myPositionTotal: lite.myPositionTotal,
+      myPositionYes: (position['yesShares'] as num?)?.toInt() ?? lite.myPositionYes,
+      myPositionNo: (position['noShares'] as num?)?.toInt() ?? lite.myPositionNo,
+      myPositionTotal: (position['totalShares'] as num?)?.toInt() ?? lite.myPositionTotal,
       eventId: lite.eventId,
-      outcome: json['resolved_outcome']?.toString(),
+      outcome: json['outcome']?.toString() ?? json['resolved_outcome']?.toString(),
+      description: json['description']?.toString(),
+      rules: json['rules']?.toString(),
     );
   }
 }

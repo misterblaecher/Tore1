@@ -88,7 +88,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   Future<void> _submit(String side) async {
     if (_submitting || _writeBlocked || _market == null) return;
     setState(() => _submitting = true);
-    final key = 'pm-${widget.marketId}-${side.toLowerCase()}-$_amount';
+    final key = 'pm-${widget.marketId}-${side.toLowerCase()}-$_amount-v1';
     try {
       await ref.read(apiProvider).postPolymarketPosition(
             marketId: widget.marketId,
@@ -137,10 +137,11 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   Widget build(BuildContext context) {
     final readOnly = isReadOnly(ref);
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: _writeBlocked);
     if (_loading) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: CircularProgressIndicator()));
     final m = _market;
     if (m == null) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: Text('Introuvable')));
+    final resolvedBlocked = m.status == 'resolved';
+    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: _writeBlocked) || resolvedBlocked;
     return Scaffold(
       appBar: AppBar(title: const Text('Market Detail')),
       body: RefreshIndicator(
@@ -150,16 +151,21 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
           children: [
             Text(m.question, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            Text('Status: ${m.status} | YES ${(m.yesPrice * 100).toStringAsFixed(0)}% / NO ${(m.noPrice * 100).toStringAsFixed(0)}%'),
-            Text('Volume: ${m.volume}'),
-            if (m.outcome != null) Text('Outcome: ${m.outcome}'),
+            Text('YES ${(m.yesPct * 100).toStringAsFixed(0)}% / NO ${(m.noPct * 100).toStringAsFixed(0)}%'),
+            const SizedBox(height: 6),
+            LinearProgressIndicator(value: m.yesPct, minHeight: 10),
+            const SizedBox(height: 6),
+            Text('Pool: ${m.poolTickets} • Volume: ${m.volume} tickets'),
+            if ((m.description ?? '').isNotEmpty) Text(m.description!),
+            if (m.outcome != null)
+              Text('Résultat: ${m.outcome} ${m.myPositionTotal == 0 ? '' : ((m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0) ? '• WIN' : '• LOSE')}'),
             const SizedBox(height: 12),
             Text('My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
             if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: ServiceLimitedBanner(
-                  message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: _bannerReason),
+                  message: resolvedBlocked ? 'Market résolu: achats désactivés.' : writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: _bannerReason),
                 ),
               ),
             const SizedBox(height: 12),
@@ -177,7 +183,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             TextField(
               controller: _customCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Custom amount (cents)'),
+              decoration: const InputDecoration(labelText: 'Montant tickets'),
               onSubmitted: (v) {
                 final parsed = int.tryParse(v);
                 if (parsed == null || parsed < 1) {
@@ -195,14 +201,14 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                 Expanded(
                   child: FilledButton(
                     onPressed: (_submitting || writeBlocked) ? null : () => _submit('yes'),
-                    child: const Text('YES'),
+                    child: const Text('Buy YES'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton(
                     onPressed: (_submitting || writeBlocked) ? null : () => _submit('no'),
-                    child: const Text('NO'),
+                    child: const Text('Buy NO'),
                   ),
                 ),
               ],

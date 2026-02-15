@@ -436,18 +436,28 @@ class Api {
     required String scope,
     int? eventId,
     required String status,
+    String type = 'all',
     String? cursor,
     int limit = 20,
   }) async {
+    final endpoint = scope == 'global' ? '/polymarket/global' : '/polymarket/markets';
+    final params = scope == 'global'
+        ? <String, dynamic>{
+            'status': status,
+            'type': type,
+            if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+            'limit': limit,
+          }
+        : <String, dynamic>{
+            'scope': scope,
+            if (eventId != null) 'event_id': eventId,
+            'status': status,
+            if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+            'limit': limit,
+          };
     final res = await _client.dio.get(
-      '/polymarket/markets',
-      queryParameters: {
-        'scope': scope,
-        if (eventId != null) 'event_id': eventId,
-        'status': status,
-        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
-        'limit': limit,
-      },
+      endpoint,
+      queryParameters: params,
     );
     final data = Map<String, dynamic>.from(res.data as Map);
     final items = ((data['items'] as List?) ?? const [])
@@ -475,12 +485,10 @@ class Api {
     required String idempotencyKey,
   }) async {
     final res = await _client.dio.post(
-      '/polymarket/position',
+      '/polymarket/markets/$marketId/buy',
       data: {
-        'market_id': marketId,
         'side': side,
-        'amount_cents': amountCents,
-        'client_key': idempotencyKey,
+        'amountTickets': amountCents,
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
