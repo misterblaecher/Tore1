@@ -15,7 +15,7 @@ import '../qr/presentation/qr_expired_screen.dart';
 import '../qr/presentation/qr_invalid_screen.dart';
 import '../qr/presentation/qr_revoked_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
-import '../staff/presentation/bar_staff_screen.dart';
+import '../staff/presentation/staff_providers.dart';
 
 class QrRouterService {
   QrRouterService(this._ref);
@@ -86,6 +86,13 @@ class QrRouterService {
           await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
           return;
         }
+        _ref.read(staffSessionProvider.notifier).establish(
+          eventId: payload.eventId!,
+          role: StaffSessionRole.entry,
+          tokenId: payload.tokenId,
+          expiresAt: payload.expiresAt,
+        );
+        _enterEvent(payload.eventId!);
         onOutcome?.call(const QrRouteOutcome.success('Staff entry'));
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => EntryStaffScreen(eventId: payload.eventId)),
@@ -97,9 +104,37 @@ class QrRouterService {
           await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
           return;
         }
-        onOutcome?.call(const QrRouteOutcome.success('Staff bar'));
+        final roleRaw = (payload.fields['role'] ?? '').toLowerCase();
+        final role = roleRaw == 'manager' ? StaffSessionRole.manager : StaffSessionRole.bar;
+        _ref.read(staffSessionProvider.notifier).establish(
+          eventId: payload.eventId!,
+          role: role,
+          tokenId: payload.tokenId,
+          expiresAt: payload.expiresAt,
+        );
+        _enterEvent(payload.eventId!);
+        if (role == StaffSessionRole.bar) {
+          onOutcome?.call(const QrRouteOutcome.success('Staff bar'));
+          await Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => const ModuleUnavailableScreen(
+                title: 'Module BAR indisponible',
+                message: 'Session BAR créée. Le module live arrive en P3.',
+                reasonCode: 'bar_pending_p3',
+              ),
+            ),
+          );
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.denied('Module manager indisponible'));
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => BarStaffScreen(eventId: payload.eventId!)),
+          MaterialPageRoute(
+            builder: (_) => const ModuleUnavailableScreen(
+              title: 'Module manager indisponible',
+              message: 'Session manager créée. L'écran dédié n'est pas encore disponible.',
+              reasonCode: 'manager_module_unavailable',
+            ),
+          ),
         );
         return;
       case QrType.polymarket:

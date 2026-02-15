@@ -100,6 +100,8 @@ class EventQrToken(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
     qr_type: Mapped[str] = mapped_column(String(32), index=True)
+    role: Mapped[Optional[str]] = mapped_column(String(24), nullable=True, index=True)
+    assignment_id: Mapped[Optional[int]] = mapped_column(ForeignKey("event_staff_assignments.id"), nullable=True, index=True)
     token_id: Mapped[str] = mapped_column(String(64), index=True)
     nonce: Mapped[str] = mapped_column(String(64))
     payload: Mapped[str] = mapped_column(Text)
@@ -108,6 +110,32 @@ class EventQrToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class EventStaffAssignment(Base):
+    __tablename__ = "event_staff_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    role: Mapped[str] = mapped_column(String(24), index=True)
+    label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class EventStaffAssignmentIdempotency(Base):
+    __tablename__ = "event_staff_assignment_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_event_staff_assignment_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("event_staff_assignments.id"), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class EventQrPackIdempotency(Base):

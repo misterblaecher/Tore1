@@ -73,6 +73,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_orders_zone_id(engine)
     ensure_event_join_tables(engine)
     ensure_event_wizard_tables(engine)
+    ensure_staff_management_tables(engine)
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
@@ -294,6 +295,49 @@ def ensure_p3_tables(engine: Engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_safety_buddy_sessions_user ON safety_buddy_sessions (user_id, status)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_safety_buddy_sessions_event ON safety_buddy_sessions (event_id, status)"))
+
+
+
+def ensure_staff_management_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_staff_assignments (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                role VARCHAR(24) NOT NULL,
+                label VARCHAR(120),
+                created_by_user_id INTEGER NOT NULL,
+                created_at DATETIME,
+                revoked_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_assignments_event_id ON event_staff_assignments (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_assignments_role ON event_staff_assignments (role)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_staff_assignment_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                assignment_id INTEGER NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_staff_assignment_idem UNIQUE (event_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_assignment_idem_event_id ON event_staff_assignment_idempotency (event_id)"))
+
+    qr_cols = _table_columns(engine, "event_qr_tokens")
+    with engine.begin() as conn:
+        if "role" not in qr_cols:
+            conn.execute(text("ALTER TABLE event_qr_tokens ADD COLUMN role VARCHAR(24)"))
+        if "assignment_id" not in qr_cols:
+            conn.execute(text("ALTER TABLE event_qr_tokens ADD COLUMN assignment_id INTEGER"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_qr_tokens_role ON event_qr_tokens (role)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_qr_tokens_assignment_id ON event_qr_tokens (assignment_id)"))
 
 
 def ensure_event_wizard_tables(engine: Engine) -> None:

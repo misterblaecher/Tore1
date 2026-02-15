@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Iterator
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
@@ -8,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.schemas.qr import QrResolveIn, QrResolveOut
 from app.services.p3_common import effective_module_state
 from app.services.qr_service import resolve_qr_payload
+from app.services.qr_pack_service import sign_payload
 from app.services.rate_limit_service import enforce_rate_limit
-from models import AppUser, Battle, Bet, Order
+from models import AppUser, Battle, Bet, EventQrToken, Order
 from main import _role_rank, get_current_user, resolve_event_role
 
 router = APIRouter()
@@ -31,6 +34,42 @@ QR_RUNTIME_POLICY = {
     "wallet_user": ("wallet_enabled", True),
 }
 
+
+def _parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _validate_signed_staff_qr(raw: str, qr_type: str, event_id: int | None, db: Session) -> tuple[bool, str | None, str | None, datetime | None]:
+    if qr_type not in {"entry_staff", "bar_staff", "staff_entry", "staff"}:
+        return True, None, None, None
+    parsed = urlparse(raw.strip())
+    params = parse_qs(parsed.query)
+    token_id = (params.get("token_id") or [None])[0]
+    issued_at = (params.get("issued_at") or [None])[0]
+    expires_at = (params.get("expires_at") or [None])[0]
+    nonce = (params.get("nonce") or [None])[0]
+    signature = (params.get("sig") or [None])[0]
+    if not token_id or not issued_at or not expires_at or not nonce or not signature or event_id is None:
+        return False, "invalid", None, None
+
+    normalized_qr_type = "entry_staff" if qr_type == "staff_entry" else qr_type
+    expected = sign_payload(normalized_qr_type, event_id, issued_at, expires_at, token_id, nonce)
+    if expected != signature:
+        return False, "invalid", token_id, None
+
+    token_row = db.query(EventQrToken).filter(EventQrToken.token_id == token_id).first()
+    if not token_row or token_row.event_id != event_id:
+        return False, "invalid", token_id, None
+    if token_row.revoked_at is not None:
+        return False, "revoked", token_id, token_row.expires_at
+    if token_row.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
+        return False, "expired", token_id, token_row.expires_at
+    return True, None, token_id, token_row.expires_at
 
 
 def _resolve_runtime_gate(db: Session, qr_type: str, event_id: int | None) -> tuple[bool, str | None]:
@@ -379,6 +418,28 @@ def qr_resolve(
             "data": base.get("data"),
         }
 
+    signed_valid, signed_reason, signed_token_id, signed_expires_at = _validate_signed_staff_qr(payload.raw, qr_type, event_id, db)
+    if not signed_valid:
+        return {
+            "valid": False,
+            "type": qr_type,
+            "event_id": event_id,
+            "bar_id": None,
+            "item_id": None,
+            "category_id": None,
+            "zone_id": None,
+            "bet_id": None,
+            "order_id": None,
+            "battle_id": None,
+            "scope": None,
+            "route_front": None,
+            "token": signed_token_id,
+            "reason": signed_reason,
+            "required_role": None,
+            "granted_role": "guest",
+            "data": {**(base.get("data") or {}), "expires_at": signed_expires_at.isoformat() if signed_expires_at else None},
+        }
+
     role_map = {
         "join": "guest",
         "join_event": "guest",
@@ -438,7 +499,7 @@ def qr_resolve(
             "battle_id": None,
             "scope": None,
             "route_front": None,
-            "token": token,
+            "token": signed_token_id or token,
             "reason": "forbidden",
             "required_role": required_role,
             "granted_role": granted_role,
@@ -458,7 +519,7 @@ def qr_resolve(
         "battle_id": None,
         "scope": None,
         "route_front": None,
-        "token": token,
+        "token": signed_token_id or token,
         "reason": None,
         "required_role": required_role,
         "granted_role": granted_role,
