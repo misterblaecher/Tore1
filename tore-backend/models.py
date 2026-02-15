@@ -759,6 +759,22 @@ class Order(Base):
     items: Mapped[List["OrderItem"]] = relationship(back_populates="order")
 
 
+class OrderStatusTransitionIdempotency(Base):
+    __tablename__ = "order_status_transition_idempotency"
+    __table_args__ = (
+        UniqueConstraint("order_id", "action", "idempotency_key", name="uq_order_status_transition_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    action: Mapped[str] = mapped_column(String(24), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    from_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(20))
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class OrderItem(Base):
     __tablename__ = "order_items"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

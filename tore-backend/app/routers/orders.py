@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Iterator, List, Optional
+from typing import Any, Iterator, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from db import now_utc
-from models import AppUserPrivacySetting, BarPrivacySetting, Event, Order, OrderClientQrScan, OrderItem, Zone
+from models import AppUserPrivacySetting, BarPrivacySetting, Event, Order, OrderClientQrScan, OrderItem, OrderStatusTransitionIdempotency, Zone
 from partner_auth import current_identity as current_partner_identity
 from app.schemas.orders import (
     CreateOrderIn,
@@ -17,6 +17,9 @@ from app.schemas.orders import (
     OrderClientQrScanOut,
     OrderOut,
     BarDashboardOut,
+    BarLiveOrdersOut,
+    BarOrderAcceptIn,
+    BarOrderCancelIn,
     OrdersLiveOut,
     OrderStatusPatchIn,
 )
@@ -36,6 +39,22 @@ LIVE_STATUS_MAP = {
     "ready": "READY",
     "completed": "SERVED",
     "cancelled": "CANCELLED",
+}
+
+BAR_LIVE_STATUS_MAP = {
+    "pending": "NEW",
+    "preparing": "IN_PROGRESS",
+    "ready": "READY",
+    "claimed": "SERVED",
+    "canceled": "CANCELLED",
+}
+
+ORDER_STATUS_TO_LIVE = {
+    "NEW": "pending",
+    "IN_PROGRESS": "preparing",
+    "READY": "ready",
+    "SERVED": "claimed",
+    "CANCELLED": "canceled",
 }
 
 
@@ -251,6 +270,257 @@ def get_orders_live(
         }.get(row["status"], row["status"].lower())
         row["runtime_status"] = runtime_status
     return {"items": payload, "next_cursor": next_cursor}
+
+
+def _compact_items_summary(order: Order) -> str:
+    chunks = [f"{it.qty}x {it.name_snapshot}" for it in order.items[:3]]
+    text = ", ".join(chunks)
+    if len(order.items) > 3:
+        text = f"{text}, +{len(order.items) - 3}"
+    return text[:220]
+
+
+def _masked_customer_label(user_id: Optional[str], order_id: int) -> str:
+    if user_id:
+        tail = user_id[-4:] if len(user_id) >= 4 else user_id
+        return f"U***{tail}"
+    return f"Guest-{order_id % 1000:03d}"
+
+
+def _order_live_payload(order: Order) -> dict[str, Any]:
+    return {
+        "id": order.id,
+        "createdAt": order.created_at,
+        "status": ORDER_STATUS_TO_LIVE.get(order.status, "pending"),
+        "totalTickets": int(order.total_tickets or 0),
+        "itemsSummary": _compact_items_summary(order),
+        "customerLabel": _masked_customer_label(order.user_id, order.id),
+        "expiresAt": None,
+    }
+
+
+def _assert_bar_event_access(db: Session, event_id: int, identity: dict) -> Event:
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    return event
+
+
+def _assert_order_bar_access(db: Session, order_id: int, identity: dict) -> Order:
+    order = db.query(Order).options(selectinload(Order.items)).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+    return order
+
+
+def _ensure_runtime_transition_allowed(runtime_state: str, action: str) -> None:
+    state = (runtime_state or "LIVE").upper()
+    if state in {"FROZEN", "CLOSED"}:
+        raise HTTPException(status_code=403, detail={"code": "EVENT_WRITE_BLOCKED", "current_state": state})
+    if state in {"PAUSE", "MENU_ONLY"} and action in {"accept", "ready", "cancel"}:
+        raise HTTPException(status_code=403, detail={"code": "EVENT_WRITE_BLOCKED", "current_state": state})
+    if state == "DEGRADED" and action in {"accept", "cancel"}:
+        raise HTTPException(status_code=403, detail={"code": "EVENT_DEGRADED_WRITE_BLOCKED", "current_state": state})
+
+
+def _transition_order_status(
+    db: Session,
+    *,
+    order: Order,
+    action: str,
+    expected_from: set[str],
+    next_status: str,
+    idempotency_key: str,
+    identity: dict,
+    reason: Optional[str] = None,
+) -> dict[str, Any]:
+    existing = (
+        db.query(OrderStatusTransitionIdempotency)
+        .filter(
+            OrderStatusTransitionIdempotency.order_id == order.id,
+            OrderStatusTransitionIdempotency.action == action,
+            OrderStatusTransitionIdempotency.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+    if existing:
+        payload = dict(existing.response_json or {})
+        payload["idempotent"] = True
+        return payload
+
+    if order.status not in expected_from:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_STATE_CONFLICT", "current_status": ORDER_STATUS_TO_LIVE.get(order.status, order.status.lower())},
+        )
+
+    previous = order.status
+    order.status = next_status
+    order.updated_at = now_utc()
+    db.add(order)
+
+    response = {
+        "id": order.id,
+        "status": ORDER_STATUS_TO_LIVE.get(order.status, order.status.lower()),
+        "previousStatus": ORDER_STATUS_TO_LIVE.get(previous, previous.lower()),
+        "idempotent": False,
+    }
+    stamp = OrderStatusTransitionIdempotency(
+        order_id=order.id,
+        action=action,
+        idempotency_key=idempotency_key,
+        from_status=previous,
+        to_status=next_status,
+        response_json=response,
+    )
+    db.add(stamp)
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity.get("user_id"),
+        actor_role=identity.get("role"),
+        action=f"orders.live.{action}",
+        entity_type="order",
+        entity_id=str(order.id),
+        event_id=order.event_id,
+        bar_id=order.bar_id,
+        payload={
+            "from": previous,
+            "to": next_status,
+            "idempotency_key": idempotency_key,
+            "reason": reason,
+        },
+    )
+    db.commit()
+    return response
+
+
+@router.get("/partner/portal/bar/events/{event_id}/orders/live", response_model=BarLiveOrdersOut)
+def partner_portal_bar_orders_live(
+    event_id: int,
+    status: str = Query(default="all"),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    _assert_bar_event_access(db, event_id, identity)
+    query = db.query(Order).options(selectinload(Order.items)).filter(Order.event_id == event_id, Order.bar_id == identity["bar_id"])
+    normalized = (status or "all").lower()
+    if normalized != "all":
+        mapped = BAR_LIVE_STATUS_MAP.get(normalized)
+        if not mapped:
+            raise HTTPException(400, "Invalid status filter")
+        query = query.filter(Order.status == mapped)
+    rows = query.order_by(Order.created_at.desc(), Order.id.desc()).limit(300).all()
+    return {"items": [_order_live_payload(row) for row in rows]}
+
+
+@router.post("/partner/portal/bar/orders/{order_id}/accept")
+def partner_portal_bar_order_accept(
+    order_id: int,
+    payload: Optional[BarOrderAcceptIn] = None,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Idempotency-Key required")
+    order = _assert_order_bar_access(db, order_id, identity)
+    runtime_state = get_event_runtime_state(db, order.event_id) if order.event_id else "LIVE"
+    _ensure_runtime_transition_allowed(runtime_state, "accept")
+    return _transition_order_status(
+        db,
+        order=order,
+        action="accept",
+        expected_from={"NEW"},
+        next_status="IN_PROGRESS",
+        idempotency_key=key,
+        identity=identity,
+        reason=payload.reason if payload else None,
+    )
+
+
+@router.post("/partner/portal/bar/orders/{order_id}/ready")
+def partner_portal_bar_order_ready(
+    order_id: int,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Idempotency-Key required")
+    order = _assert_order_bar_access(db, order_id, identity)
+    runtime_state = get_event_runtime_state(db, order.event_id) if order.event_id else "LIVE"
+    _ensure_runtime_transition_allowed(runtime_state, "ready")
+    return _transition_order_status(
+        db,
+        order=order,
+        action="ready",
+        expected_from={"IN_PROGRESS"},
+        next_status="READY",
+        idempotency_key=key,
+        identity=identity,
+    )
+
+
+@router.post("/partner/portal/bar/orders/{order_id}/claim")
+def partner_portal_bar_order_claim(
+    order_id: int,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Idempotency-Key required")
+    order = _assert_order_bar_access(db, order_id, identity)
+    runtime_state = get_event_runtime_state(db, order.event_id) if order.event_id else "LIVE"
+    _ensure_runtime_transition_allowed(runtime_state, "claim")
+    return _transition_order_status(
+        db,
+        order=order,
+        action="claim",
+        expected_from={"READY"},
+        next_status="SERVED",
+        idempotency_key=key,
+        identity=identity,
+    )
+
+
+@router.post("/partner/portal/bar/orders/{order_id}/cancel")
+def partner_portal_bar_order_cancel(
+    order_id: int,
+    payload: BarOrderCancelIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Idempotency-Key required")
+    order = _assert_order_bar_access(db, order_id, identity)
+    runtime_state = get_event_runtime_state(db, order.event_id) if order.event_id else "LIVE"
+    _ensure_runtime_transition_allowed(runtime_state, "cancel")
+    return _transition_order_status(
+        db,
+        order=order,
+        action="cancel",
+        expected_from={"NEW", "IN_PROGRESS"},
+        next_status="CANCELLED",
+        idempotency_key=key,
+        identity=identity,
+        reason=payload.reason,
+    )
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

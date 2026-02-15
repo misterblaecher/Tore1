@@ -62,6 +62,28 @@ class OrdersLiveOut(BaseModel):
     next_cursor: Optional[str] = None
 
 
+class BarLiveOrderOut(BaseModel):
+    id: int
+    createdAt: datetime
+    status: Literal["pending", "preparing", "ready", "claimed", "canceled"]
+    totalTickets: int
+    itemsSummary: str
+    customerLabel: Optional[str] = None
+    expiresAt: Optional[datetime] = None
+
+
+class BarLiveOrdersOut(BaseModel):
+    items: List[BarLiveOrderOut]
+
+
+class BarOrderCancelIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=240)
+
+
+class BarOrderAcceptIn(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=240)
+
+
 class OrderClientQrOut(BaseModel):
     order_id: int
     qr_raw: str
