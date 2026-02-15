@@ -32,6 +32,7 @@ import Kitchen from './pages/Kitchen'
 import BarDashboard from './pages/BarDashboard'
 import CreateEventWizard from './pages/CreateEventWizard'
 import EventQrPack from './pages/EventQrPack'
+import StaffManagement from './pages/StaffManagement'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -176,6 +177,16 @@ export default function App() {
           <RequireAuth>
             <RequireOrga>
               <CreateEventWizard />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/staff"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <StaffManagement />
             </RequireOrga>
           </RequireAuth>
         }

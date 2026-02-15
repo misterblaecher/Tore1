@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import io
+import json
 from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from sqlalchemy import func
 from db import now_utc
-from models import Bet, BetDispute, Event, EventCreateIdempotency, EventQrPackIdempotency, EventRuntimeState
+from models import Bet, BetDispute, Event, EventCreateIdempotency, EventQrPackIdempotency, EventQrToken, EventRuntimeState, EventStaffAssignment, EventStaffAssignmentIdempotency
 from partner_auth import current_identity, require_role
 from app.services.authz_service import ensure_partner_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
@@ -21,7 +22,7 @@ from app.services.audit_service import write_audit_log
 from app.services.entry_service import get_owned_event_or_403
 from app.services.event_modules_service import get_or_create_event_modules, update_event_modules
 from app.services.wallet_admin_service import admin_topup, list_wallet_admin_logs
-from app.services.qr_pack_service import generate_qr_pack
+from app.services.qr_pack_service import create_staff_qr_token, generate_qr_pack
 from app.services.rate_limit_service import enforce_rate_limit
 from app.services.wallet_service import get_or_create_wallet
 from app.services.p3_common import effective_module_state, ensure_event_action_allowed, get_event_runtime_state, is_event_live
@@ -70,6 +71,44 @@ DEFAULT_MODULES_ON = {
     "wifi": False,
     "safety": False,
 }
+
+
+STAFF_ROLES = {"ENTRY", "BAR", "MANAGER"}
+
+
+def _staff_status(*, revoked_at, expires_at: datetime | None) -> str:
+    if revoked_at is not None:
+        return "REVOKED"
+    if expires_at is not None and expires_at <= now_utc():
+        return "EXPIRED"
+    return "ACTIVE"
+
+
+def _serialize_staff_assignment(assignment: EventStaffAssignment, token: EventQrToken | None) -> dict:
+    token_payload = None
+    if token is not None:
+        token_payload = {
+            "tokenId": token.token_id,
+            "type": token.qr_type,
+            "payload": token.payload,
+            "expiresAt": token.expires_at,
+            "revokedAt": token.revoked_at,
+            "status": _staff_status(revoked_at=token.revoked_at, expires_at=token.expires_at),
+            "role": token.role,
+        }
+    status = token_payload["status"] if token_payload else _staff_status(revoked_at=assignment.revoked_at, expires_at=None)
+    return {
+        "id": assignment.id,
+        "eventId": assignment.event_id,
+        "role": assignment.role,
+        "label": assignment.label,
+        "createdBy": assignment.created_by_user_id,
+        "createdAt": assignment.created_at,
+        "revokedAt": assignment.revoked_at,
+        "status": status,
+        "token": token_payload,
+    }
+
 
 EVENT_TEMPLATES = [
     {
@@ -357,6 +396,196 @@ def create_orga_qr_pack(
     )
     db.commit()
     return {"eventId": event_id, "items": pack_items}
+
+
+
+
+@router.get("/orga/events/{event_id}/staff")
+def list_event_staff_assignments(
+    event_id: int = Path(..., ge=1),
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    assignments = (
+        db.query(EventStaffAssignment)
+        .filter(EventStaffAssignment.event_id == event_id)
+        .order_by(EventStaffAssignment.created_at.desc())
+        .all()
+    )
+    assignment_ids = [row.id for row in assignments]
+    token_by_assignment: dict[int, EventQrToken] = {}
+    if assignment_ids:
+        tokens = (
+            db.query(EventQrToken)
+            .filter(EventQrToken.assignment_id.in_(assignment_ids))
+            .order_by(EventQrToken.issued_at.desc())
+            .all()
+        )
+        for token in tokens:
+            if token.assignment_id is None or token.assignment_id in token_by_assignment:
+                continue
+            token_by_assignment[token.assignment_id] = token
+
+    items = [_serialize_staff_assignment(item, token_by_assignment.get(item.id)) for item in assignments]
+    return {"eventId": event_id, "items": items}
+
+
+@router.post("/orga/events/{event_id}/staff")
+def create_event_staff_assignment(
+    payload: dict,
+    event_id: int = Path(..., ge=1),
+    idempotency_header: str | None = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    key = (idempotency_header or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency key required"})
+
+    event = get_owned_event_or_403(db, event_id, identity["bar_id"])
+    existing = (
+        db.query(EventStaffAssignmentIdempotency)
+        .filter(EventStaffAssignmentIdempotency.event_id == event_id, EventStaffAssignmentIdempotency.idempotency_key == key)
+        .first()
+    )
+    if existing:
+        return existing.response_json
+
+    role = str(payload.get("role") or "").strip().upper()
+    if role not in STAFF_ROLES:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_role", "message": "Role must be ENTRY/BAR/MANAGER"})
+
+    label = (payload.get("label") or "").strip()
+    expires_at = payload.get("expiresAt")
+    if expires_at:
+        try:
+            expires_value = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_expiry", "message": "expiresAt invalid"}) from exc
+    else:
+        expires_value = (event.ends_at or now_utc()) + timedelta(hours=6)
+
+    assignment = EventStaffAssignment(
+        event_id=event_id,
+        role=role,
+        label=label or None,
+        created_by_user_id=identity["user_id"],
+        created_at=now_utc(),
+    )
+    db.add(assignment)
+    db.flush()
+
+    qr_item = create_staff_qr_token(
+        db,
+        event=event,
+        staff_role=role,
+        created_by_user_id=identity["user_id"],
+        assignment_id=assignment.id,
+        expires_at=expires_value,
+    )
+
+    response = {
+        "assignment": _serialize_staff_assignment(
+            assignment,
+            db.query(EventQrToken).filter(EventQrToken.assignment_id == assignment.id).order_by(EventQrToken.issued_at.desc()).first(),
+        ),
+        "qr": {"raw": qr_item["payload"], "deepLink": qr_item["payload"], "tokenId": qr_item["tokenId"], "type": qr_item["type"]},
+    }
+
+    serialized_response = json.loads(json.dumps(response, default=str))
+    db.add(EventStaffAssignmentIdempotency(event_id=event_id, idempotency_key=key, assignment_id=assignment.id, response_json=serialized_response))
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="orga.staff.create",
+        entity_type="event_staff_assignment",
+        entity_id=str(assignment.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"role": role, "label": assignment.label, "token_id": qr_item["tokenId"], "idempotency_key": key},
+    )
+    db.commit()
+    return response
+
+
+@router.post("/orga/staff/{assignment_id}/revoke")
+def revoke_event_staff_assignment(
+    payload: dict,
+    assignment_id: int = Path(..., ge=1),
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    reason = str(payload.get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail={"reason": "reason_required", "message": "Reason is required"})
+
+    assignment = db.get(EventStaffAssignment, assignment_id)
+    if not assignment:
+        raise HTTPException(status_code=404, detail={"reason": "staff_not_found"})
+    event = get_owned_event_or_403(db, assignment.event_id, identity["bar_id"])
+
+    now = now_utc()
+    if assignment.revoked_at is None:
+        assignment.revoked_at = now
+    tokens = db.query(EventQrToken).filter(EventQrToken.assignment_id == assignment.id, EventQrToken.revoked_at.is_(None)).all()
+    revoked_token_ids = []
+    for token in tokens:
+        token.revoked_at = now
+        revoked_token_ids.append(token.token_id)
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="orga.staff.revoke",
+        entity_type="event_staff_assignment",
+        entity_id=str(assignment.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"reason": reason, "tokens": revoked_token_ids},
+    )
+    db.commit()
+    return {"ok": True, "assignmentId": assignment.id, "revokedAt": assignment.revoked_at}
+
+
+@router.post("/orga/qr/{token_id}/revoke")
+def revoke_qr_token(
+    token_id: str,
+    payload: dict,
+    identity=Depends(_require_orga_identity),
+    db: Session = Depends(get_db),
+):
+    reason = str(payload.get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail={"reason": "reason_required", "message": "Reason is required"})
+
+    token = db.query(EventQrToken).filter(EventQrToken.token_id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail={"reason": "token_not_found"})
+    event = get_owned_event_or_403(db, token.event_id, identity["bar_id"])
+
+    if token.revoked_at is None:
+        token.revoked_at = now_utc()
+    if token.assignment_id:
+        assignment = db.get(EventStaffAssignment, token.assignment_id)
+        if assignment and assignment.revoked_at is None:
+            assignment.revoked_at = token.revoked_at
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="orga.qr.revoke",
+        entity_type="event_qr_token",
+        entity_id=token.token_id,
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"reason": reason, "assignment_id": token.assignment_id},
+    )
+    db.commit()
+    return {"ok": True, "tokenId": token.token_id, "revokedAt": token.revoked_at}
 
 
 @router.get("/orga/events/active")
