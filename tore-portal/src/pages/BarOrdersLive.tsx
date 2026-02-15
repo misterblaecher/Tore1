@@ -183,6 +183,7 @@ export default function BarOrdersLive() {
             <Badge label={`STATE ${eventState}`} tone={eventState === 'LIVE' ? 'success' : 'warning'} />
             <Badge label={`NET ${networkMode}`} tone={networkMode === 'ONLINE' ? 'success' : 'warning'} />
             {eventId ? <Link to={`/bar/events/${eventId}/dashboard`}>Dashboard</Link> : null}
+            {eventId ? <Link to={`/bar/events/${eventId}/menu`}>Menu Admin</Link> : null}
           </div>
           <Button onClick={() => void refresh()} disabled={!eventId || networkMode === 'OFFLINE'}>Refresh</Button>
         </div>
