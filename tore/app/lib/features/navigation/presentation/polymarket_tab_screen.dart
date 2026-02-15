@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
+import '../../../core/network/network_state_provider.dart';
+import '../../../shared/cache/cache_providers.dart';
 import '../../../state.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../polymarket/market_detail_screen.dart';
@@ -27,9 +29,10 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   bool _hasError = false;
   String? _error;
   String _scope = 'global';
-  String _status = 'live';
+  String _filter = 'all';
   final Set<int> _seenIds = <int>{};
   final Set<String> _seenCursors = <String>{};
+  bool _fromCache = false;
 
   @override
   void initState() {
@@ -45,6 +48,23 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
     super.dispose();
   }
 
+  String get _cacheKey => 'polymarket_global_$_filter';
+
+  ({String status, String type}) get _queryFilters {
+    switch (_filter) {
+      case 'live':
+        return (status: 'live', type: 'all');
+      case 'objective':
+        return (status: 'all', type: 'objective');
+      case 'subjective':
+        return (status: 'all', type: 'subjective');
+      case 'resolved':
+        return (status: 'resolved', type: 'all');
+      default:
+        return (status: 'all', type: 'all');
+    }
+  }
+
   Future<void> _refresh() async {
     setState(() {
       _initialLoading = true;
@@ -52,6 +72,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       _error = null;
       _nextCursor = null;
       _items = [];
+      _fromCache = false;
       _seenIds.clear();
       _seenCursors.clear();
     });
@@ -64,6 +85,24 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
     }
   }
 
+  Future<void> _hydrateCache() async {
+    final cached = await ref.read(cacheStoreProvider).getJson(_cacheKey);
+    if (cached == null) return;
+    final raw = (cached['items'] as List<dynamic>? ?? const []);
+    final items = raw.map((e) => MarketLite.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    if (!mounted || items.isEmpty) return;
+    setState(() {
+      _items = items;
+      _seenIds
+        ..clear()
+        ..addAll(items.map((e) => e.id));
+      _nextCursor = null;
+      _hasError = false;
+      _fromCache = true;
+      _initialLoading = false;
+    });
+  }
+
   Future<void> _loadMore() async {
     if (_loading) return;
     if (!_initialLoading && (_nextCursor == null)) return;
@@ -71,11 +110,13 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
     if (_nextCursor != null) _seenCursors.add(_nextCursor!);
     _loading = true;
     final ctx = ref.read(appContextProvider);
+    final q = _queryFilters;
     try {
       final page = await ref.read(apiProvider).fetchPolymarketMarkets(
             scope: _scope,
             eventId: _scope == 'event' ? ctx.activeEventId : null,
-            status: _status,
+            status: q.status,
+            type: q.type,
             cursor: _nextCursor,
           );
       if (!mounted) return;
@@ -84,9 +125,19 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
         _items = [..._items, ...fresh];
         _nextCursor = page.nextCursor;
         _initialLoading = false;
+        _fromCache = false;
       });
+      if (_scope == 'global' && _nextCursor == null) {
+        await ref.read(cacheStoreProvider).setJson(
+          _cacheKey,
+          {'items': _items.map((e) => {'id': e.id, 'question': e.question, 'status': e.status, 'scope': e.scope, 'type': e.type, 'yesPrice': e.yesPrice, 'noPrice': e.noPrice, 'yesPct': e.yesPct, 'noPct': e.noPct, 'poolTickets': e.poolTickets, 'volumeTickets': e.volume}).toList()},
+          ttl: const Duration(minutes: 30),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
+      await _hydrateCache();
+      if (_items.isNotEmpty) return;
       setState(() {
         _hasError = true;
         _error = ErrorMapper.message(e);
@@ -107,28 +158,8 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
           orElse: () => true,
         ) ?? true;
 
-    if (hasEvent && !polymarketEnabled) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Polymarket')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.block_outlined, size: 44),
-                const SizedBox(height: 8),
-                const Text('Module Polymarket indisponible pour cet event.'),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () => ref.read(appContextProvider.notifier).leaveEvent(),
-                  child: const Text('Retour'),
-                )
-              ],
-            ),
-          ),
-        ),
-      );
+    if (hasEvent && !polymarketEnabled && _scope == 'event') {
+      return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: Text('Module Polymarket indisponible pour cet event.')));
     }
 
     return Scaffold(
@@ -146,39 +177,33 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<String>(
-                    segments: [
-                      const ButtonSegment(value: 'global', label: Text('GLOBAL')),
-                      if (hasEvent) const ButtonSegment(value: 'event', label: Text('EVENT')),
-                    ],
-                    selected: {_scope},
-                    onSelectionChanged: (s) {
-                      setState(() => _scope = s.first);
-                      _refresh();
-                    },
-                  ),
-                ),
-              ],
+          if (hasEvent)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'global', label: Text('GLOBAL')),
+                  ButtonSegment(value: 'event', label: Text('EVENT')),
+                ],
+                selected: {_scope},
+                onSelectionChanged: (s) {
+                  setState(() => _scope = s.first);
+                  _refresh();
+                },
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'live', label: Text('Live')),
-                ButtonSegment(value: 'resolved', label: Text('Resolved')),
-                ButtonSegment(value: 'cancelled', label: Text('Cancelled')),
+          SizedBox(
+            height: 40,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              scrollDirection: Axis.horizontal,
+              children: [
+                _chip('all', 'Tous'),
+                _chip('live', 'Live'),
+                _chip('objective', 'Objectifs'),
+                _chip('subjective', 'Subjectifs'),
+                _chip('resolved', 'Résolus'),
               ],
-              selected: {_status},
-              onSelectionChanged: (s) {
-                setState(() => _status = s.first);
-                _refresh();
-              },
             ),
           ),
           const SizedBox(height: 6),
@@ -193,48 +218,48 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
     );
   }
 
+  Widget _chip(String value, String label) => Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          selected: _filter == value,
+          label: Text(label),
+          onSelected: (_) {
+            setState(() => _filter = value);
+            _refresh();
+          },
+        ),
+      );
+
   Widget _buildList() {
     if (_initialLoading) return const Center(child: CircularProgressIndicator());
     if (_hasError) {
-      const title = 'Impossible de charger les marchés.';
-      return ListView(
-        children: [
-          const SizedBox(height: 180),
-          Center(child: Text(title)),
-          const SizedBox(height: 8),
-          Center(child: Text(_error ?? 'Erreur')),
-          const SizedBox(height: 12),
-          Center(child: OutlinedButton(onPressed: _refresh, child: const Text('Réessayer'))),
-        ],
-      );
+      return ListView(children: [const SizedBox(height: 180), Center(child: Text(_error ?? 'Erreur')), const SizedBox(height: 12), Center(child: OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')))]);
     }
     if (_items.isEmpty) {
-      return ListView(
-        children: const [
-          SizedBox(height: 200),
-          Center(child: Text('Aucun market disponible pour ce filtre.')),
-        ],
-      );
+      return ListView(children: const [SizedBox(height: 200), Center(child: Text('Aucun market disponible pour ce filtre.'))]);
     }
 
+    final network = ref.watch(networkStatusProvider);
     return ListView.builder(
       controller: _scrollController,
-      itemCount: _items.length + 1,
+      itemCount: _items.length + 2,
       itemBuilder: (context, i) {
-        if (i == _items.length) {
+        if (i == 0 && (network == NetworkState.offline || _fromCache)) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text('Offline • affichage du cache local', style: TextStyle(color: Colors.orange)),
+          );
+        }
+        final index = i - 1;
+        if (index == _items.length) {
           if (_nextCursor == null) return const SizedBox(height: 32);
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: OutlinedButton.icon(
-                onPressed: _loadMore,
-                icon: const Icon(Icons.expand_more),
-                label: const Text('Charger plus'),
-              ),
-            ),
+            child: Center(child: OutlinedButton.icon(onPressed: _loadMore, icon: const Icon(Icons.expand_more), label: const Text('Charger plus'))),
           );
         }
-        final m = _items[i];
+        if (index < 0) return const SizedBox.shrink();
+        final m = _items[index];
         return _CompactCard(
           market: m,
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: m.id))),
@@ -252,14 +277,8 @@ class _CompactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String statusLabel() {
-      if (market.status == 'resolved') return 'RESOLU';
-      if (market.status == 'cancelled') return 'CANCEL';
-      return 'LIVE';
-    }
-
-    final yesPct = (market.yesPrice * 100).toStringAsFixed(0);
-    final noPct = (market.noPrice * 100).toStringAsFixed(0);
+    final yesPct = (market.yesPct * 100).toStringAsFixed(0);
+    final noPct = (market.noPct * 100).toStringAsFixed(0);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
@@ -270,29 +289,12 @@ class _CompactCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Expanded(
-                  child: Text(
-                    market.question,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Chip(label: Text(statusLabel())),
-              ]),
-              Row(
-                children: [
-                  Text('YES $yesPct%'),
-                  const Spacer(),
-                  Text('NO $noPct%'),
-                ],
-              ),
+              Row(children: [Expanded(child: Text(market.question, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))), Chip(label: Text(market.status.toUpperCase()))]),
+              LinearProgressIndicator(value: market.yesPct, minHeight: 8),
               const SizedBox(height: 4),
-              Text('Volume: ${market.volume}'),
-              if (market.myPositionTotal > 0)
-                Text('My position: YES ${market.myPositionYes} / NO ${market.myPositionNo} (Total ${market.myPositionTotal})'),
+              Row(children: [Text('YES $yesPct%'), const Spacer(), Text('NO $noPct%')]),
+              const SizedBox(height: 4),
+              Text('Pool: ${market.poolTickets} • Volume: ${market.volume}'),
             ],
           ),
         ),

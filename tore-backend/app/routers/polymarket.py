@@ -43,6 +43,94 @@ def _gate_bet_event_state(db: Session, bet_id: int, write: bool = True) -> None:
         ensure_event_action_allowed(db, bet.event_id, "polymarket_enabled", write=write)
 
 
+def _global_market_row(bet: Bet, snapshot: dict) -> dict:
+    total_pool = int(snapshot.get("liquidity") or 0)
+    return {
+        "id": bet.id,
+        "question": bet.question,
+        "status": "resolved" if bet.status in {"FINALIZED", "RESOLVED_PENDING"} else bet.status.lower(),
+        "type": (bet.kind or "OBJECTIVE").lower(),
+        "yesPrice": float(snapshot.get("yes_price") or 0.5),
+        "noPrice": float(snapshot.get("no_price") or 0.5),
+        "yesPct": float(snapshot.get("yes_price") or 0.5),
+        "poolTickets": total_pool,
+        "volumeTickets": int(snapshot.get("volume") or total_pool),
+        "createdAt": bet.created_at.isoformat() if bet.created_at else None,
+        "resolvesAt": bet.deadline_at.isoformat() if bet.deadline_at else None,
+    }
+
+
+def _global_market_detail(bet: Bet, snapshot: dict, detail: dict, me: dict | None) -> dict:
+    return {
+        "id": bet.id,
+        "question": bet.question,
+        "description": detail.get("rules_text"),
+        "status": "resolved" if bet.status in {"FINALIZED", "RESOLVED_PENDING"} else bet.status.lower(),
+        "type": (bet.kind or "OBJECTIVE").lower(),
+        "yesPct": float(snapshot.get("yes_price") or 0.5),
+        "noPct": float(snapshot.get("no_price") or 0.5),
+        "poolTickets": int(snapshot.get("liquidity") or 0),
+        "volumeTickets": int(snapshot.get("volume") or 0),
+        "outcome": (bet.resolved_outcome or "").upper() or None,
+        "rules": detail.get("rules_text"),
+        "orderbook": {
+            "yesPrice": float(snapshot.get("yes_price") or 0.5),
+            "noPrice": float(snapshot.get("no_price") or 0.5),
+        },
+        "position": {
+            "yesShares": int(me.get("stake_yes") or 0) if me else 0,
+            "noShares": int(me.get("stake_no") or 0) if me else 0,
+            "totalShares": int(me.get("stake_total") or 0) if me else 0,
+            "avgPrice": None,
+            "pnl": None,
+            "isWinner": None,
+        },
+    }
+
+
+@router.get("/polymarket/global")
+def list_polymarket_global(
+    status: str = Query(default="all"),
+    type: str = Query(default="all"),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = polymarket_service.optional_current_user(authorization, db)
+    status_norm = (status or "all").strip().lower()
+    if status_norm not in {"all", "live", "resolved"}:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Invalid status")
+    type_norm = (type or "all").strip().lower()
+    if type_norm not in {"all", "objective", "subjective"}:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Invalid type")
+
+    mapped_status = None if status_norm == "all" else status_norm
+    rows, next_cursor = polymarket_service.list_markets_cursor(
+        db,
+        scope="global",
+        event_id=None,
+        status=mapped_status,
+        cursor=cursor,
+        limit=limit,
+        user_id=user.id if user else None,
+    )
+
+    ids = [int(r["id"]) for r in rows]
+    bets = db.query(Bet).filter(Bet.id.in_(ids)).all() if ids else []
+    by_id = {b.id: b for b in bets}
+    items = []
+    for row in rows:
+        bet = by_id.get(int(row["id"]))
+        if not bet:
+            continue
+        if type_norm != "all" and (bet.kind or "").lower() != type_norm:
+            continue
+        items.append(_global_market_row(bet, row))
+
+    return {"items": items, "next_cursor": next_cursor}
+
+
 @router.get("/polymarket/bets", response_model=List[BetOut])
 def list_polymarket_bets(
     scope: Optional[str] = Query(default=None),
@@ -95,6 +183,10 @@ def polymarket_market_detail(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _gate_bet_event_state(db, market_id, write=False)
+    bet = db.get(Bet, market_id)
+    if not bet:
+        raise polymarket_service.polymarket_error(404, "invalid_market", "Bet not found")
     detail = polymarket_service.get_bet_detail(db, bet_id=market_id, authorization=None)
     history, next_cursor = polymarket_service.user_market_history(
         db,
@@ -103,7 +195,82 @@ def polymarket_market_detail(
         cursor=cursor,
         limit=limit,
     )
-    return {"market": polymarket_service.market_snapshot_for_user(db, db.get(Bet, market_id), user.id), "detail": detail, "my_history": history, "next_cursor": next_cursor}
+    market_snapshot = polymarket_service.market_snapshot_for_user(db, bet, user.id)
+    me = polymarket_service.get_bet_me(db, bet_id=market_id, user=user, include_wallet_balance=False)
+    return {
+        "market": _global_market_detail(bet, market_snapshot, detail, me),
+        "detail": detail,
+        "my_history": history,
+        "next_cursor": next_cursor,
+    }
+
+
+@router.post("/polymarket/markets/{market_id}/buy")
+def buy_polymarket_market(
+    market_id: int,
+    payload: dict,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise polymarket_service.polymarket_error(422, "idempotency_required", "Idempotency-Key required")
+
+    _gate_bet_event_state(db, market_id, write=True)
+    rate_limit_service.enforce_rate_limit("polymarket.position", user.id)
+    side = polymarket_service.ensure_bet_side(str(payload.get("side") or ""))
+    amount = int(payload.get("amountTickets") or 0)
+    if amount <= 0:
+        raise polymarket_service.polymarket_error(422, "invalid_amount", "amountTickets must be >= 1")
+
+    try:
+        res = polymarket_service.create_position(
+            db,
+            bet_id=market_id,
+            user_id=user.id,
+            side=side,
+            stake=amount,
+            idempotency_key=key,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 400 and isinstance(exc.detail, str) and "Insufficient wallet balance" in exc.detail:
+            raise polymarket_service.polymarket_error(400, "insufficient_balance", "Insufficient wallet balance") from exc
+        raise
+
+    bet = db.get(Bet, market_id)
+    me = polymarket_service.get_bet_me(db, bet_id=market_id, user=user, include_wallet_balance=False)
+    polymarket_service.audit_polymarket(db, action="polymarket.position", user=user, bet=bet, payload={"side": side, "amountTickets": amount, "idempotency_key": key})
+    db.commit()
+    return {
+        "market": _global_market_row(bet, polymarket_service.market_snapshot_for_user(db, bet, user.id)),
+        "userPosition": {
+            "yesShares": int(me.get("stake_yes") or 0),
+            "noShares": int(me.get("stake_no") or 0),
+            "totalShares": int(me.get("stake_total") or 0),
+        },
+        "position": res.get("position"),
+    }
+
+
+@router.get("/polymarket/markets/{market_id}/position")
+def get_polymarket_market_position(
+    market_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _gate_bet_event_state(db, market_id, write=False)
+    me = polymarket_service.get_bet_me(db, bet_id=market_id, user=user, include_wallet_balance=False)
+    return {
+        "marketId": market_id,
+        "shares": {
+            "yes": int(me.get("stake_yes") or 0),
+            "no": int(me.get("stake_no") or 0),
+            "total": int(me.get("stake_total") or 0),
+        },
+        "avgPrice": None,
+        "pnl": None,
+    }
 
 
 @router.get("/polymarket/event/{event_id}")
