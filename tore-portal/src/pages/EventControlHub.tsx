@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { api } from '../lib/api'
 import { Badge, Button, Card, InlineAlert, Skeleton } from '../lib/ui'
+import { hasBarModeAccess } from '../lib/authz'
 
 const fields = ['orders_enabled', 'market_enabled', 'battles_enabled', 'hunt_enabled', 'polymarket_enabled', 'entry_enabled', 'checkins_enabled', 'wifi_enabled', 'safety_enabled']
 const stateOptions = ['LIVE', 'PAUSE', 'MENU_ONLY', 'DEGRADED', 'FROZEN', 'CLOSED'] as const
@@ -27,6 +28,7 @@ function isCriticalModule(field: string) {
 }
 
 export default function EventControlHub() {
+  const canAccessBarMode = hasBarModeAccess()
   const { eventId } = useParams()
   const [state, setState] = useState<Record<string, boolean>>({})
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
@@ -160,6 +162,14 @@ export default function EventControlHub() {
           <Link to={`/orga/events/${eventId}/broadcast`} className="btn">Broadcast</Link>
           <Link to={`/orga/events/${eventId}/incidents`} className="btn">Incidents</Link>
           <Link to={`/orga/events/${eventId}/profitability`} className="btn">Rentabilité</Link>
+          {canAccessBarMode ? (
+            <>
+              <Link to={`/bar/events/${eventId}/dashboard`} className="btn">BAR MODE · Dashboard</Link>
+              <Link to="/orders-queue" className="btn">BAR MODE · Orders Live</Link>
+              <Link to="/menu-admin" className="btn">BAR MODE · Menu Admin</Link>
+              <Link to="/analytics" className="btn">BAR MODE · Analytics</Link>
+            </>
+          ) : null}
           <Link to={`/audit/${eventId}`} className="btn">Logs</Link>
           <Link to={`/safety-admin/${eventId}`} className="btn">Règles</Link>
         </div>

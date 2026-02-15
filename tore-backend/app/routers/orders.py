@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Iterator, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
-from models import AppUserPrivacySetting, BarPrivacySetting, Order, OrderClientQrScan, Zone
+from db import now_utc
+from models import AppUserPrivacySetting, BarPrivacySetting, Event, Order, OrderClientQrScan, OrderItem, Zone
 from partner_auth import current_identity as current_partner_identity
 from app.schemas.orders import (
     CreateOrderIn,
@@ -14,6 +16,7 @@ from app.schemas.orders import (
     OrderClientQrScanIn,
     OrderClientQrScanOut,
     OrderOut,
+    BarDashboardOut,
     OrdersLiveOut,
     OrderStatusPatchIn,
 )
@@ -275,6 +278,83 @@ def partner_portal_orders(
         query = query.filter(Order.event_id == event_id)
     rows = query.order_by(Order.created_at.desc()).limit(300).all()
     return [order_out(row) for row in rows]
+
+
+@router.get("/partner/portal/bar/events/{event_id}/dashboard", response_model=BarDashboardOut)
+def partner_portal_bar_dashboard(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender", "owner"})
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.bar_id != identity["bar_id"]:
+        raise HTTPException(403, "Forbidden")
+
+    now = now_utc()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+
+    rows = (
+        db.query(Order.status, func.count(Order.id))
+        .filter(Order.event_id == event_id, Order.created_at >= day_start, Order.created_at < day_end)
+        .group_by(Order.status)
+        .all()
+    )
+    counts = {status: int(total) for status, total in rows}
+
+    orders_pending = counts.get("NEW", 0)
+    orders_preparing = counts.get("IN_PROGRESS", 0)
+    orders_ready = counts.get("READY", 0)
+    orders_total_today = sum(counts.values())
+
+    revenue_tickets_today = (
+        db.query(func.coalesce(func.sum(Order.total_tickets), 0))
+        .filter(Order.event_id == event_id, Order.created_at >= day_start, Order.created_at < day_end)
+        .scalar()
+        or 0
+    )
+
+    items_sold_today = (
+        db.query(func.coalesce(func.sum(OrderItem.qty), 0))
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(Order.event_id == event_id, Order.created_at >= day_start, Order.created_at < day_end)
+        .scalar()
+        or 0
+    )
+
+    prep_rows = (
+        db.query(Order.created_at, Order.updated_at)
+        .filter(
+            Order.event_id == event_id,
+            Order.status.in_(["READY", "SERVED"]),
+            Order.created_at >= day_start,
+            Order.created_at < day_end,
+        )
+        .all()
+    )
+    avg_prep_seconds = None
+    if prep_rows:
+        total_seconds = sum(max(0.0, (updated - created).total_seconds()) for created, updated in prep_rows)
+        avg_prep_seconds = total_seconds / len(prep_rows)
+
+    return {
+        "event": {
+            "eventState": (event.event_state or "LIVE").upper(),
+            "lastUpdatedAt": event.last_updated_at or now,
+        },
+        "ordersPending": orders_pending,
+        "ordersPreparing": orders_preparing,
+        "ordersReady": orders_ready,
+        "ordersTotalToday": orders_total_today,
+        "itemsSoldToday": int(items_sold_today),
+        "revenueTicketsToday": int(revenue_tickets_today),
+        "avgPrepTime": float(avg_prep_seconds) if avg_prep_seconds is not None else None,
+        "inventoryAlerts": [],
+        "lastUpdatedAt": now,
+    }
 
 
 @router.patch("/partner/portal/orders/{order_id}/status", response_model=OrderOut)

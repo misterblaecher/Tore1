@@ -1,7 +1,7 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { getToken } from './lib/auth'
-import { hasOrgaHubAccess, hasOrgaManagerAccess } from './lib/authz'
+import { hasBarModeAccess, hasOrgaHubAccess, hasOrgaManagerAccess } from './lib/authz'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import EventDetail from './pages/EventDetail'
@@ -50,6 +50,11 @@ function RequireOrga({ children }: { children: React.ReactNode }) {
 
 function RequireOrgaManager({ children }: { children: React.ReactNode }) {
   if (!hasOrgaManagerAccess()) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
+function RequireBarMode({ children }: { children: React.ReactNode }) {
+  if (!hasBarModeAccess()) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -122,10 +127,12 @@ export default function App() {
         }
       />
       <Route
-        path="/bar-dashboard"
+        path="/bar/events/:eventId/dashboard"
         element={
           <RequireAuth>
-            <BarDashboard />
+            <RequireBarMode>
+              <BarDashboard />
+            </RequireBarMode>
           </RequireAuth>
         }
       />

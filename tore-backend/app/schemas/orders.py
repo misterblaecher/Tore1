@@ -79,3 +79,28 @@ class OrderClientQrScanOut(BaseModel):
     order: OrderOut
     user_visible_to_staff: bool
     identity_visible: bool
+
+
+class InventoryAlertOut(BaseModel):
+    drinkId: int
+    name: str
+    status: Literal["LOW", "OUT"]
+    remaining: Optional[int] = None
+
+
+class BarDashboardEventSnapshotOut(BaseModel):
+    eventState: str
+    lastUpdatedAt: datetime
+
+
+class BarDashboardOut(BaseModel):
+    event: BarDashboardEventSnapshotOut
+    ordersPending: int
+    ordersPreparing: int
+    ordersReady: int
+    ordersTotalToday: int
+    itemsSoldToday: Optional[int] = None
+    revenueTicketsToday: int
+    avgPrepTime: Optional[float] = None
+    inventoryAlerts: List[InventoryAlertOut]
+    lastUpdatedAt: datetime
