@@ -644,6 +644,19 @@ def entry_stats(db: Session, event_id: int) -> Dict[str, int]:
     return {"total": int(total), "last_hour": int(last_hour)}
 
 
+def entry_count(db: Session, event_id: int) -> int:
+    return int(db.scalar(select(func.coalesce(func.sum(EntryLog.delta), 0)).where(EntryLog.event_id == event_id)) or 0)
+
+
+def _entry_status_for_raw(db: Session, event_id: int, raw_qr: str) -> str:
+    seen = (
+        db.query(EntryLog.id)
+        .filter(EntryLog.event_id == event_id, EntryLog.raw_qr == raw_qr, EntryLog.delta > 0)
+        .first()
+    )
+    return "already_checked" if seen else "accepted"
+
+
 def log_event_action(
     db: Session,
     event_id: int,
@@ -819,6 +832,27 @@ class EntryLogOut(BaseModel):
     device_id: str
     idempotency_key: str
     raw_qr: Optional[str]
+
+
+class EntryCheckinIn(BaseModel):
+    ticket_qr_raw: Optional[str] = None
+    user_id: Optional[str] = None
+    ticket_id: Optional[str] = None
+    scanned_at: Optional[datetime] = None
+    device_id: str
+
+
+class EntryCheckinOut(BaseModel):
+    status: str
+    entryCount: int
+    userLabel: Optional[str] = None
+    timestamp: datetime
+    pendingSync: bool = False
+
+
+class EntryCountOut(BaseModel):
+    entryCount: int
+    timestamp: datetime
 
 
 class WalletTxOut(BaseModel):
@@ -4066,6 +4100,160 @@ def record_entry_scan(
         db.rollback()
         return entry_stats(db, event_id)
     return entry_stats(db, event_id)
+
+
+@app.post("/events/{event_id}/entry/checkin", response_model=EntryCheckinOut)
+def event_entry_checkin(
+    event_id: int,
+    payload: EntryCheckinIn,
+    authorization: Optional[str] = Header(default=None),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key or not idempotency_key.strip():
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    state = (event.event_state or "LIVE").upper()
+    if state in {"FROZEN", "CLOSED"}:
+        raise HTTPException(status_code=403, detail={"reason": f"event_{state.lower()}"})
+
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    staff_id = None
+    user = _resolve_app_user_from_token(raw, db)
+    if user:
+        require_feature(db, event_id, "entry_enabled")
+        require_role_for_event(db, user.id, event_id, "entry")
+        staff_id = user.id
+    else:
+        identity = _resolve_partner_identity_from_token(raw, db)
+        if not identity:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if event.bar_id != identity["bar_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        require_feature(db, event_id, "entry_enabled")
+        _require_partner_roles(identity, {"entry", "manager"})
+        staff_id = str(identity["user_id"])
+
+    raw_qr = (payload.ticket_qr_raw or payload.ticket_id or payload.user_id or "").strip()
+    if not raw_qr:
+        raise HTTPException(status_code=422, detail={"reason": "invalid", "message": "ticket_qr_raw|ticket_id|user_id required"})
+
+    existing_idem = (
+        db.query(EntryLog)
+        .filter(EntryLog.event_id == event_id, EntryLog.idempotency_key == idempotency_key.strip())
+        .first()
+    )
+    if existing_idem:
+        return EntryCheckinOut(
+            status=_entry_status_for_raw(db, event_id, raw_qr),
+            entryCount=entry_count(db, event_id),
+            userLabel=payload.user_id,
+            timestamp=existing_idem.created_at,
+        )
+
+    status = _entry_status_for_raw(db, event_id, raw_qr)
+    delta = 1 if status == "accepted" else 0
+    log = EntryLog(
+        event_id=event_id,
+        created_at=payload.scanned_at or now_utc(),
+        delta=delta,
+        source="scan",
+        staff_id=staff_id,
+        device_id=payload.device_id,
+        idempotency_key=idempotency_key.strip(),
+        raw_qr=raw_qr,
+    )
+    db.add(log)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="entry_staff",
+        action="entry.checkin",
+        entity_type="entry_log",
+        entity_id=None,
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"status": status, "device_id": payload.device_id, "idempotency_key": idempotency_key.strip(), "staff_id": staff_id},
+    )
+    db.commit()
+
+    return EntryCheckinOut(
+        status=status,
+        entryCount=entry_count(db, event_id),
+        userLabel=payload.user_id,
+        timestamp=log.created_at,
+    )
+
+
+@app.get("/events/{event_id}/entry/count", response_model=EntryCountOut)
+def get_event_entry_count(
+    event_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    user = _resolve_app_user_from_token(raw, db)
+    if user:
+        require_feature(db, event_id, "entry_enabled")
+        require_role_for_event(db, user.id, event_id, "entry")
+    else:
+        identity = _resolve_partner_identity_from_token(raw, db)
+        if not identity:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if event.bar_id != identity["bar_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        require_feature(db, event_id, "entry_enabled")
+
+    return EntryCountOut(entryCount=entry_count(db, event_id), timestamp=now_utc())
+
+
+@app.get("/events/{event_id}/entry/export.csv")
+def export_event_entry_csv(
+    event_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    user = _resolve_app_user_from_token(raw, db)
+    if user:
+        require_role_for_event(db, user.id, event_id, "entry")
+    else:
+        identity = _resolve_partner_identity_from_token(raw, db)
+        if not identity:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if event.bar_id != identity["bar_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        _require_partner_roles(identity, {"entry", "manager"})
+
+    rows = db.query(EntryLog).filter(EntryLog.event_id == event_id).order_by(EntryLog.created_at.desc(), EntryLog.id.desc()).all()
+    stream = io.StringIO()
+    writer = csv.writer(stream)
+    writer.writerow(["timestamp", "status", "ticket_or_user", "deviceId"])
+    for row in rows:
+        raw_qr = (row.raw_qr or "")
+        masked = f"***{raw_qr[-6:]}" if raw_qr else ""
+        writer.writerow([row.created_at.isoformat(), "accepted" if row.delta > 0 else "already_checked", masked, row.device_id or ""])
+
+    payload = io.BytesIO(stream.getvalue().encode("utf-8"))
+    headers = {"Content-Disposition": f'attachment; filename="entry_export_event_{event_id}.csv"'}
+    return StreamingResponse(payload, media_type="text/csv", headers=headers)
 
 
 @app.get("/events/{event_id}/entry/stats", response_model=EntryStatsOut)

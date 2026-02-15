@@ -6,7 +6,7 @@ import '../../core/network/network_state_provider.dart';
 import '../../core/qr/qr_parser.dart';
 import '../../core/qr/qr_validator.dart';
 import '../../state.dart';
-import '../entry/presentation/entry_mode_screen.dart';
+import '../entry/presentation/entry_staff_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
 import '../qr/presentation/join_event_screen.dart';
@@ -88,7 +88,7 @@ class QrRouterService {
         }
         onOutcome?.call(const QrRouteOutcome.success('Staff entry'));
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => EntryModeScreen(eventId: payload.eventId)),
+          MaterialPageRoute(builder: (_) => EntryStaffScreen(eventId: payload.eventId)),
         );
         return;
       case QrType.staffBar:
@@ -161,9 +161,10 @@ class QrRouterService {
   bool _isWriteBlockedForPayload(QrPayload payload) {
     final readOnly = _ref.read(isReadOnlyProvider) || _ref.read(networkStatusProvider) == NetworkState.offline;
     if (!readOnly) return false;
-    return payload.type == QrType.staffEntry ||
-        payload.type == QrType.staffBar ||
-        payload.type == QrType.order;
+    if (payload.type == QrType.staffEntry) {
+      return false; // controlled exception: entry staff can capture offline then sync.
+    }
+    return payload.type == QrType.staffBar || payload.type == QrType.order;
   }
 
   void _enterEvent(int eventId) {
