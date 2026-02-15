@@ -159,6 +159,7 @@ export default function BarMenuAdmin() {
             <Badge label={`NET ${networkMode}`} tone={networkMode === 'ONLINE' ? 'success' : 'warning'} />
             {eventId ? <Link to={`/bar/events/${eventId}/dashboard`}>Dashboard</Link> : null}
             {eventId ? <Link to={`/bar/events/${eventId}/orders`}>Orders Live</Link> : null}
+            {eventId ? <Link to={`/bar/events/${eventId}/analytics`}>Analytics</Link> : null}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button onClick={() => void load()} disabled={!eventId || networkMode === 'OFFLINE'}>Refresh</Button>

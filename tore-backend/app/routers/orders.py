@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import csv
+import io
 from typing import Any, Iterator, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -17,6 +21,7 @@ from app.schemas.orders import (
     OrderClientQrScanOut,
     OrderOut,
     BarDashboardOut,
+    BarAnalyticsOut,
     BarLiveOrdersOut,
     BarOrderAcceptIn,
     BarOrderCancelIn,
@@ -56,6 +61,16 @@ ORDER_STATUS_TO_LIVE = {
     "SERVED": "claimed",
     "CANCELLED": "canceled",
 }
+
+STATUS_TO_ANALYTICS_KEY = {
+    "NEW": "pending",
+    "IN_PROGRESS": "preparing",
+    "READY": "ready",
+    "SERVED": "claimed",
+    "CANCELLED": "canceled",
+}
+
+BUCKET_MINUTES = 15
 
 
 def get_db() -> Iterator[Session]:
@@ -325,6 +340,98 @@ def _ensure_runtime_transition_allowed(runtime_state: str, action: str) -> None:
         raise HTTPException(status_code=403, detail={"code": "EVENT_WRITE_BLOCKED", "current_state": state})
     if state == "DEGRADED" and action in {"accept", "cancel"}:
         raise HTTPException(status_code=403, detail={"code": "EVENT_DEGRADED_WRITE_BLOCKED", "current_state": state})
+
+
+def _bucket_floor(dt):
+    floored_minute = (dt.minute // BUCKET_MINUTES) * BUCKET_MINUTES
+    return dt.replace(minute=floored_minute, second=0, microsecond=0)
+
+
+def _build_bar_event_analytics(db: Session, event: Event) -> dict[str, Any]:
+    rows = (
+        db.query(Order)
+        .filter(Order.event_id == event.id, Order.bar_id == event.bar_id)
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+
+    by_status = {"pending": 0, "preparing": 0, "ready": 0, "claimed": 0, "canceled": 0}
+    timeline_map: dict[Any, dict[str, Any]] = {}
+
+    for row in rows:
+        status_key = STATUS_TO_ANALYTICS_KEY.get(row.status)
+        if status_key:
+            by_status[status_key] += 1
+
+        b_start = _bucket_floor(row.created_at)
+        current = timeline_map.get(b_start)
+        if not current:
+            current = {
+                "tStart": b_start,
+                "tEnd": b_start + timedelta(minutes=BUCKET_MINUTES),
+                "ordersCount": 0,
+                "revenueTickets": 0,
+            }
+            timeline_map[b_start] = current
+        current["ordersCount"] += 1
+        current["revenueTickets"] += int(row.total_tickets or 0)
+
+    timeline_buckets = [timeline_map[key] for key in sorted(timeline_map.keys())]
+
+    peak = None
+    if timeline_buckets:
+        top = max(timeline_buckets, key=lambda item: (item["ordersCount"], item["tStart"]))
+        peak = {"bucketStart": top["tStart"], "ordersCount": top["ordersCount"]}
+
+    item_rows = (
+        db.query(
+            OrderItem.drink_id,
+            func.max(OrderItem.name_snapshot).label("name"),
+            func.coalesce(func.sum(OrderItem.qty), 0).label("qty"),
+            func.coalesce(func.sum(OrderItem.line_total_cents), 0).label("revenue_cents"),
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(Order.event_id == event.id, Order.bar_id == event.bar_id, OrderItem.drink_id.is_not(None))
+        .group_by(OrderItem.drink_id)
+        .order_by(func.coalesce(func.sum(OrderItem.qty), 0).desc(), OrderItem.drink_id.asc())
+        .limit(20)
+        .all()
+    )
+    items_top = [
+        {
+            "drinkId": int(drink_id),
+            "name": str(name or f"Drink #{drink_id}"),
+            "qty": int(qty or 0),
+            "revenueTickets": int(round((int(revenue_cents or 0)) / 100)),
+        }
+        for drink_id, name, qty, revenue_cents in item_rows
+    ]
+
+    return {
+        "snapshot": {
+            "eventState": (event.event_state or "LIVE").upper(),
+            "lastUpdatedAt": event.last_updated_at or now_utc(),
+        },
+        "orders": {
+            "total": len(rows),
+            "byStatus": by_status,
+            "timelineBuckets": timeline_buckets,
+        },
+        "itemsTop": items_top,
+        "peak": peak,
+    }
+
+
+def _csv_response(filename: str, headers: list[str], rows: list[list[Any]]) -> Response:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _transition_order_status(
@@ -625,6 +732,68 @@ def partner_portal_bar_dashboard(
         "inventoryAlerts": [],
         "lastUpdatedAt": now,
     }
+
+
+@router.get("/partner/portal/bar/events/{event_id}/analytics", response_model=BarAnalyticsOut)
+def partner_portal_bar_analytics(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    event = _assert_bar_event_access(db, event_id, identity)
+    return _build_bar_event_analytics(db, event)
+
+
+@router.get("/partner/portal/bar/events/{event_id}/analytics/export/orders.csv")
+def partner_portal_bar_analytics_export_orders(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    _assert_bar_event_access(db, event_id, identity)
+    rows = (
+        db.query(Order)
+        .filter(Order.event_id == event_id, Order.bar_id == identity["bar_id"])
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+    data = [
+        [
+            order.id,
+            order.created_at.isoformat(),
+            ORDER_STATUS_TO_LIVE.get(order.status, order.status.lower()),
+            int(order.total_tickets or 0),
+        ]
+        for order in rows
+    ]
+    return _csv_response("orders-summary.csv", ["order_id", "created_at", "status", "total_tickets"], data)
+
+
+@router.get("/partner/portal/bar/events/{event_id}/analytics/export/items.csv")
+def partner_portal_bar_analytics_export_items(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    event = _assert_bar_event_access(db, event_id, identity)
+    analytics = _build_bar_event_analytics(db, event)
+    data = [[item["drinkId"], item["name"], item["qty"], item["revenueTickets"]] for item in analytics["itemsTop"]]
+    return _csv_response("items-summary.csv", ["drink_id", "name", "qty", "revenue_tickets"], data)
+
+
+@router.get("/partner/portal/bar/events/{event_id}/analytics/export/snapshot.json")
+def partner_portal_bar_analytics_export_snapshot(
+    event_id: int,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    ensure_partner_role(identity, {"manager", "bartender"})
+    event = _assert_bar_event_access(db, event_id, identity)
+    analytics = _build_bar_event_analytics(db, event)
+    return JSONResponse(content=jsonable_encoder(analytics), headers={"Content-Disposition": 'attachment; filename="analytics-snapshot.json"'})
 
 
 @router.patch("/partner/portal/orders/{order_id}/status", response_model=OrderOut)
