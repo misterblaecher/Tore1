@@ -63,7 +63,22 @@ class TickerController extends StateNotifier<TickerState> {
       final api = ref.read(apiProvider);
       final page = await api.tickerFeed(eventId, limit: 40);
       final raw = (page['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
-      final parsed = raw.map(TickerItem.fromJson).toList()..sort((a, b) => b.ts.compareTo(a.ts));
+      final parsed = raw.map(TickerItem.fromJson).toList();
+      final broadcasts = await api.broadcasts(eventId, limit: 20);
+      final bRaw = (broadcasts['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      for (final row in bRaw) {
+        parsed.add(TickerItem.fromJson({
+          'id': 'broadcast:${row['id']}',
+          'type': 'broadcast',
+          'ts': row['created_at'],
+          'title': 'Broadcast event',
+          'body': row['message'],
+          'severity': row['level'] == 'urgent' ? 'error' : (row['level'] == 'warn' ? 'warning' : 'info'),
+          'ref_kind': 'broadcast',
+          'ref_id': row['id']?.toString(),
+        }));
+      }
+      parsed.sort((a, b) => b.ts.compareTo(a.ts));
       state = state.copyWith(
         items: _dedup(parsed),
         nextCursor: page['next_cursor']?.toString(),

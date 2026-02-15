@@ -248,6 +248,14 @@ class Api {
 
   // -------- TICKER --------
 
+  Future<Map<String, dynamic>> broadcasts(int eventId, {int limit = 50}) async {
+    final res = await _client.dio.get(
+      '/events/$eventId/broadcasts',
+      queryParameters: {'limit': limit},
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> tickerFeed(int eventId, {String? cursor, int limit = 30}) async {
     final res = await _client.dio.get(
       '/events/$eventId/ticker',

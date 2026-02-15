@@ -74,6 +74,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_event_join_tables(engine)
     ensure_event_wizard_tables(engine)
     ensure_staff_management_tables(engine)
+    ensure_broadcast_tables(engine)
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
@@ -404,3 +405,23 @@ def ensure_event_wizard_tables(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_qr_pack_idempotency ON event_qr_pack_idempotency (event_id, idempotency_key)"))
+
+
+def ensure_broadcast_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_broadcasts (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                author_id INTEGER NOT NULL,
+                message VARCHAR(240) NOT NULL,
+                level VARCHAR(16) DEFAULT 'info' NOT NULL,
+                expires_at DATETIME,
+                idempotency_key VARCHAR(120) NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_event_broadcast_idem UNIQUE (event_id, author_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_broadcasts_event_created ON event_broadcasts (event_id, created_at)"))

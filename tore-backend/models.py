@@ -982,6 +982,23 @@ class AuditLog(Base):
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class EventBroadcast(Base):
+    __tablename__ = "event_broadcasts"
+    __table_args__ = (
+        UniqueConstraint("event_id", "author_id", "idempotency_key", name="uq_event_broadcast_idem"),
+        Index("ix_event_broadcasts_event_created", "event_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id"), index=True)
+    message: Mapped[str] = mapped_column(String(240), default="")
+    level: Mapped[str] = mapped_column(String(16), default="info")
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class BarPrivacySetting(Base):
     __tablename__ = "bar_privacy_settings"
     __table_args__ = (UniqueConstraint("bar_id", name="uq_bar_privacy_settings_bar"),)
