@@ -256,11 +256,13 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> tickerFeed(int eventId, {String? cursor, int limit = 30}) async {
+  Future<Map<String, dynamic>> tickerFeed(int eventId, {String? cursor, String? since, List<String>? types, int limit = 50}) async {
     final res = await _client.dio.get(
       '/events/$eventId/ticker',
       queryParameters: {
         if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        if (since != null && since.isNotEmpty) 'since': since,
+        if (types != null && types.isNotEmpty) 'types': types.join(','),
         'limit': limit,
       },
     );

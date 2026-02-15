@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-enum TickerFilter { all, prices, orders, events, alerts }
+enum TickerFilter { all, prices, orders, gifts, alerts }
 
 final tickerFilterProvider = StateProvider.family<TickerFilter, int>((ref, eventId) => TickerFilter.all);
 
@@ -13,8 +13,8 @@ extension TickerFilterLabel on TickerFilter {
         return 'Prices';
       case TickerFilter.orders:
         return 'Orders';
-      case TickerFilter.events:
-        return 'Events';
+      case TickerFilter.gifts:
+        return 'Gifts';
       case TickerFilter.alerts:
         return 'Alerts';
     }

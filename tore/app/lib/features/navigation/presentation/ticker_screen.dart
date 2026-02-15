@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
+import '../../../core/network/network_state_provider.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
+import '../../ticker/ticker_filter_provider.dart';
 import '../../ticker/ticker_models.dart';
 import '../../ticker/ticker_providers.dart';
-import '../../ticker/ticker_filter_provider.dart';
-import '../../polymarket/market_detail_screen.dart';
-import '../../wallet/presentation/wallet_screen.dart';
 
 class TickerScreen extends ConsumerWidget {
   const TickerScreen({super.key});
@@ -36,20 +35,24 @@ class TickerScreen extends ConsumerWidget {
 
     final state = ref.watch(tickerControllerProvider(eventId));
     final selectedFilter = ref.watch(tickerFilterProvider(eventId));
+    final network = ref.watch(networkStatusProvider);
+    final filters = _buildFilters(state.items);
+
     final filteredItems = state.items.where((item) {
       switch (selectedFilter) {
         case TickerFilter.all:
           return true;
         case TickerFilter.prices:
-          return item.type.toLowerCase().contains('price') || item.refKind == 'market';
+          return item.type == 'price';
         case TickerFilter.orders:
-          return item.type.toLowerCase().contains('order') || item.refKind == 'order';
-        case TickerFilter.events:
-          return item.type.toLowerCase().contains('event');
+          return item.type == 'order';
+        case TickerFilter.gifts:
+          return item.type == 'gift';
         case TickerFilter.alerts:
-          return item.severity == 'warning' || item.severity == 'error' || item.type.toLowerCase().contains('broadcast');
+          return item.severity == 'warning' || item.severity == 'error' || item.type == 'broadcast';
       }
     }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ticker'),
@@ -69,13 +72,12 @@ class TickerScreen extends ConsumerWidget {
               height: 40,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: TickerFilter.values.length,
+                itemCount: filters.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
-                  final filter = TickerFilter.values[index];
-                  final active = filter == selectedFilter;
+                  final filter = filters[index];
                   return ChoiceChip(
-                    selected: active,
+                    selected: filter == selectedFilter,
                     label: Text(filter.label),
                     onSelected: (_) => ref.read(tickerFilterProvider(eventId).notifier).state = filter,
                   );
@@ -83,11 +85,8 @@ class TickerScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 8),
-            if (state.unstableConnection)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Text('connexion instable', style: TextStyle(color: Colors.orange)),
-              ),
+            if (network == NetworkState.offline)
+              Text('Offline • cache local${state.lastSyncAt != null ? ' • sync ${state.lastSyncAt}' : ''}', style: const TextStyle(color: Colors.orange)),
             if (state.loading && state.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 100),
@@ -99,69 +98,46 @@ class TickerScreen extends ConsumerWidget {
                 child: Center(child: Text('Aucune activité.')),
               )
             else
-              ...filteredItems.map((item) => _TickerTile(item: item, eventId: eventId)),
+              ...filteredItems.map((item) => _TickerTile(item: item)),
           ],
         ),
       ),
     );
   }
+
+  List<TickerFilter> _buildFilters(List<TickerItem> items) {
+    final kinds = items.map((e) => e.type).toSet();
+    final out = <TickerFilter>[TickerFilter.all];
+    if (kinds.contains('price')) out.add(TickerFilter.prices);
+    if (kinds.contains('order')) out.add(TickerFilter.orders);
+    if (kinds.contains('gift')) out.add(TickerFilter.gifts);
+    if (kinds.contains('broadcast')) out.add(TickerFilter.alerts);
+    return out;
+  }
 }
 
 class _TickerTile extends StatelessWidget {
-  const _TickerTile({required this.item, required this.eventId});
+  const _TickerTile({required this.item});
 
   final TickerItem item;
-  final int eventId;
-
-  Color _severityColor(BuildContext context) {
-    switch (item.severity) {
-      case 'warning':
-        return Colors.orange;
-      case 'success':
-        return Colors.green;
-      default:
-        return Theme.of(context).colorScheme.primary;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
+    final (title, subtitle, icon) = switch (item.payload) {
+      BroadcastTickerPayload p => ('Broadcast', p.message, Icons.campaign_outlined),
+      GiftTickerPayload p => ('Gift', '${p.fromLabel} sent ${p.amount} tickets to ${p.toLabel}', Icons.card_giftcard),
+      PriceTickerPayload p => ('Price', '${p.drinkName} ${p.direction == 'up' ? '↑' : '↓'} ${p.fromPrice}→${p.toPrice}', Icons.show_chart),
+      OrderTickerPayload p => ('Order ${p.status}', '#${p.orderId} • ${p.totalTickets} tickets', Icons.receipt_long),
+      _ => ('Ticker', item.type, Icons.bolt),
+    };
+
     return Card(
       child: ListTile(
-        onTap: () {
-          if (item.refKind == 'wallet_tx' || item.refKind == 'wallet_gift') {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: eventId)));
-            return;
-          }
-          if (item.refKind == 'wallet') {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: eventId)));
-            return;
-          }
-          if (item.refKind == 'polymarket_market') {
-            final marketId = int.tryParse(item.refId ?? '');
-            if (marketId != null) {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: marketId)));
-            }
-            return;
-          }
-          if (item.refKind == 'order') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Commande mise à jour.')),
-            );
-          }
-        },
-        title: Text(item.title),
-        subtitle: Text(item.body),
-        trailing: Wrap(
-          spacing: 6,
-          children: [
-            Chip(label: Text(item.type, style: const TextStyle(fontSize: 11))),
-            Chip(
-              label: Text(item.severity, style: const TextStyle(fontSize: 11)),
-              backgroundColor: _severityColor(context).withOpacity(0.16),
-            ),
-          ],
-        ),
+        dense: true,
+        leading: Icon(icon, size: 18),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: Text(item.ts.toLocal().toString().substring(11, 19), style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
       ),
     );
   }
