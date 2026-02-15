@@ -12,11 +12,12 @@ from sqlalchemy.orm import Session
 
 from sqlalchemy import func
 from db import now_utc
-from models import Bet, BetDispute, Event, EventCreateIdempotency, EventQrPackIdempotency, EventQrToken, EventRuntimeState, EventStaffAssignment, EventStaffAssignmentIdempotency
+from models import Bet, BetDispute, Event, EventCostSimple, EventCostSimpleIdempotency, EventCreateIdempotency, EventQrPackIdempotency, EventQrToken, EventRuntimeState, EventStaffAssignment, EventStaffAssignmentIdempotency, Order, OrderItem, PartnerUser
 from partner_auth import current_identity, require_role
 from app.services.authz_service import ensure_partner_role
 from app.schemas.event_modules import EventModulesOut, EventModulesUpdateIn
 from app.schemas.orga_events import EventTemplateOut, OrgaEventCreateIn, OrgaEventOut, QrPackOut
+from app.schemas.profitability import ProfitabilityCostsIn, ProfitabilityCostsOut, ProfitabilityOut
 from app.schemas.wallet_admin import WalletAdminLogOut, WalletAdminLogPageOut, WalletAdminTopupIn, WalletAdminTopupOut
 from app.services.audit_service import write_audit_log
 from app.services.entry_service import get_owned_event_or_403
@@ -189,6 +190,51 @@ def _get_or_create_runtime_state(db: Session, event_id: int) -> EventRuntimeStat
 def _require_orga_identity(identity=Depends(current_identity)):
     ensure_partner_role(identity, {"manager", "bartender"})
     return identity
+
+
+def _require_orga_manager_identity(identity=Depends(current_identity)):
+    ensure_partner_role(identity, {"manager", "owner"})
+    return identity
+
+
+def _mask_partner_name(name: str | None) -> str | None:
+    if not name:
+        return None
+    cleaned = name.strip()
+    if len(cleaned) <= 2:
+        return cleaned[0] + "*"
+    return cleaned[:2] + "***"
+
+
+def _profitability_snapshot(db: Session, event_id: int) -> ProfitabilityOut:
+    orders_count = db.query(func.count(Order.id)).filter(Order.event_id == event_id).scalar() or 0
+    items_count = db.query(func.coalesce(func.sum(OrderItem.qty), 0)).join(Order, Order.id == OrderItem.order_id).filter(Order.event_id == event_id).scalar() or 0
+    gross_tickets = db.query(func.coalesce(func.sum(Order.total_tickets), 0)).filter(Order.event_id == event_id).scalar() or 0
+    last_updated = db.query(func.max(Order.updated_at)).filter(Order.event_id == event_id).scalar() or now_utc()
+
+    costs = db.query(EventCostSimple).filter(EventCostSimple.event_id == event_id).first()
+    costs_tickets = costs.costs_tickets if costs else 0
+    updated_by = None
+    if costs and costs.updated_by:
+        actor = db.get(PartnerUser, costs.updated_by)
+        updated_by = _mask_partner_name(actor.display_name if actor else None)
+
+    return ProfitabilityOut(
+        ordersCount=int(orders_count),
+        itemsCount=int(items_count),
+        grossRevenueTickets=int(gross_tickets),
+        grossRevenueEuro=None,
+        avgOrderValueTickets=(float(gross_tickets) / float(orders_count) if orders_count else 0.0),
+        lastUpdatedAt=last_updated,
+        costs=ProfitabilityCostsOut(
+            costsTickets=int(costs_tickets),
+            notes=costs.notes if costs else None,
+            breakdown=(costs.breakdown_json or {}) if costs else {},
+            updatedBy=updated_by,
+            updatedAt=costs.updated_at if costs else None,
+        ),
+        netEstimateTickets=int(gross_tickets - costs_tickets),
+    )
 
 
 
@@ -396,6 +442,112 @@ def create_orga_qr_pack(
     )
     db.commit()
     return {"eventId": event_id, "items": pack_items}
+
+
+@router.get("/orga/events/{event_id}/profitability", response_model=ProfitabilityOut)
+def get_profitability(
+    event_id: int = Path(..., ge=1),
+    identity=Depends(_require_orga_manager_identity),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    return _profitability_snapshot(db, event_id)
+
+
+@router.put("/orga/events/{event_id}/costs", response_model=ProfitabilityOut)
+def put_event_costs_simple(
+    payload: ProfitabilityCostsIn,
+    event_id: int = Path(..., ge=1),
+    idempotency_header: str | None = Header(default=None, alias="Idempotency-Key"),
+    identity=Depends(_require_orga_manager_identity),
+    db: Session = Depends(get_db),
+):
+    key = (idempotency_header or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    runtime = get_event_runtime_state(db, event_id)
+    if runtime == "DEGRADED":
+        raise HTTPException(status_code=423, detail={"reason": "event_degraded", "message": "Write blocked while event is degraded"})
+
+    existing = db.query(EventCostSimpleIdempotency).filter(
+        EventCostSimpleIdempotency.event_id == event_id,
+        EventCostSimpleIdempotency.idempotency_key == key,
+    ).first()
+    if existing:
+        return ProfitabilityOut(**(existing.response_json or _profitability_snapshot(db, event_id).model_dump(mode="json")))
+
+    row = db.query(EventCostSimple).filter(EventCostSimple.event_id == event_id).first()
+    if not row:
+        row = EventCostSimple(event_id=event_id)
+    before = {"costsTickets": row.costs_tickets if row.id else 0, "notes": row.notes if row.id else None, "breakdown": row.breakdown_json if row.id else {}}
+    row.costs_tickets = int(payload.costsTickets)
+    row.notes = (payload.notes or "").strip() or None
+    row.breakdown_json = payload.breakdown or {}
+    row.updated_by = identity["user_id"]
+    row.updated_at = now_utc()
+    db.add(row)
+    db.flush()
+
+    write_audit_log(
+        db,
+        actor_partner_id=identity["user_id"],
+        actor_role=identity["role"],
+        action="orga.profitability.costs.update",
+        entity_type="event_costs_simple",
+        entity_id=str(row.id),
+        event_id=event_id,
+        bar_id=identity["bar_id"],
+        payload={"before": before, "after": {"costsTickets": row.costs_tickets, "notes": row.notes, "breakdown": row.breakdown_json}, "idempotency_key": key},
+    )
+
+    snapshot = _profitability_snapshot(db, event_id)
+    db.add(EventCostSimpleIdempotency(event_id=event_id, idempotency_key=key, response_json=snapshot.model_dump(mode="json")))
+    db.commit()
+    return snapshot
+
+
+@router.get("/orga/events/{event_id}/profitability/export.csv")
+def export_profitability_csv(
+    event_id: int = Path(..., ge=1),
+    identity=Depends(_require_orga_manager_identity),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    snapshot = _profitability_snapshot(db, event_id)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["event_id", "timestamp", "ordersCount", "grossTickets", "costsTickets", "netTickets", "notes"])
+    writer.writerow([
+        event_id,
+        now_utc().isoformat(),
+        snapshot.ordersCount,
+        snapshot.grossRevenueTickets,
+        snapshot.costs.costsTickets,
+        snapshot.netEstimateTickets,
+        snapshot.costs.notes or "",
+    ])
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="profitability_event_{event_id}.csv"'},
+    )
+
+
+@router.get("/orga/events/{event_id}/profitability/export.json")
+def export_profitability_json(
+    event_id: int = Path(..., ge=1),
+    identity=Depends(_require_orga_manager_identity),
+    db: Session = Depends(get_db),
+):
+    get_owned_event_or_403(db, event_id, identity["bar_id"])
+    snapshot = _profitability_snapshot(db, event_id)
+    return {
+        "event_id": event_id,
+        "timestamp": now_utc(),
+        "snapshot": snapshot.model_dump(mode="json"),
+    }
 
 
 
