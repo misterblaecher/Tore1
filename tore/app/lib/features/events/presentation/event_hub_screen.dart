@@ -7,7 +7,7 @@ import '../../../shared/utils/write_gate.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
 import '../../broadcast/broadcast_screen.dart';
 import '../../menu_market/presentation/menu_screen.dart';
-import '../../navigation/presentation/polymarket_tab_screen.dart';
+import 'event_polymarket_screen.dart';
 import '../../navigation/presentation/ticker_screen.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
@@ -97,7 +97,7 @@ class EventHubScreen extends ConsumerWidget {
         title: 'Polymarket EVENT',
         subtitle: 'Markets de cet event',
         icon: Icons.casino_outlined,
-        builder: (_) => const PolymarketTabScreen(initialScope: 'event'),
+        builder: (_) => const EventPolymarketScreen(),
       ),
       _moduleUnavailable(key: 'classement', title: 'Classement', subtitle: 'Top participants', icon: Icons.leaderboard_outlined),
       _moduleUnavailable(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined),

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Iterator, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from models import AppUser, Bet
+from db import now_utc
+from models import AppUser, Bet, BetResolutionLog, EventConfig, EventRuntimeState, EventStaff, PolymarketEventIdempotency
 from main import get_current_user
 from app.schemas.polymarket import (
     BetCreateIn,
@@ -27,6 +29,62 @@ from app.services import polymarket_service, rate_limit_service
 from app.services.p3_common import ensure_event_action_allowed
 
 router = APIRouter()
+_EVENT_CREATE_RATE_LIMIT: dict[str, list] = {}
+
+
+def _runtime_write_guard_for_event(db: Session, event_id: int) -> None:
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event_id).first()
+    state = ((runtime.state if runtime else None) or "LIVE").upper()
+    blocked = {
+        "PAUSE": "EVENT_PAUSED",
+        "MENU_ONLY": "EVENT_MENU_ONLY",
+        "DEGRADED": "EVENT_DEGRADED",
+        "FROZEN": "EVENT_FROZEN",
+        "CLOSED": "EVENT_CLOSED",
+    }
+    if state in blocked:
+        raise HTTPException(status_code=423, detail={"reason": state.lower(), "code": blocked[state], "message": "Action blocked"})
+
+
+def _ensure_event_polymarket_enabled(db: Session, event_id: int) -> None:
+    cfg = db.query(EventConfig).filter(EventConfig.event_id == event_id).first()
+    if not cfg or not bool(cfg.allow_user_bets):
+        raise HTTPException(status_code=403, detail={"reason": "MODULE_OFF", "message": "Module polymarket_event disabled"})
+
+
+def _event_market_row(bet: Bet, snapshot: dict) -> dict:
+    row = _global_market_row(bet, snapshot)
+    row["scope"] = "event"
+    row["eventId"] = bet.event_id
+    return row
+
+
+def _assert_market_in_event(db: Session, event_id: int, market_id: int) -> Bet:
+    bet = db.get(Bet, market_id)
+    if not bet or bet.event_id != event_id:
+        raise polymarket_service.polymarket_error(404, "invalid_market", "Market not found for this event")
+    return bet
+
+
+def _assert_event_polymarket_write_allowed(db: Session, event_id: int) -> None:
+    _ensure_event_polymarket_enabled(db, event_id)
+    _runtime_write_guard_for_event(db, event_id)
+
+
+def _can_create_or_resolve(db: Session, event_id: int, user_id: str) -> bool:
+    staff = db.query(EventStaff).filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id, EventStaff.is_active.is_(True)).first()
+    role = (staff.role if staff else "").lower()
+    return role == "admin"
+
+
+def _rate_limit_event_create(user_id: str) -> None:
+    now = now_utc()
+    key = f"{user_id}:create"
+    q = _EVENT_CREATE_RATE_LIMIT.setdefault(key, [])
+    q[:] = [ts for ts in q if now - ts <= timedelta(minutes=2)]
+    if len(q) >= 1:
+        raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Create limited to 1/2min"})
+    q.append(now)
 
 
 def get_db() -> Iterator[Session]:
@@ -291,6 +349,172 @@ def list_polymarket_event_view(
         status = bet.get("status")
         bet["status_compat"] = "RESOLVED" if status == "FINALIZED" else status
     return {"event_id": event_id, "bets": bets}
+
+
+@router.get("/events/{event_id}/polymarket")
+def list_event_polymarket_markets(
+    event_id: int,
+    status: str = Query(default="all"),
+    type: str = Query(default="all"),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    _ensure_event_polymarket_enabled(db, event_id)
+    _runtime_write_guard_for_event(db, event_id)
+    user = polymarket_service.optional_current_user(authorization, db)
+
+    status_norm = (status or "all").strip().lower()
+    if status_norm not in {"all", "live", "resolved"}:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Invalid status")
+    type_norm = (type or "all").strip().lower()
+    if type_norm not in {"all", "objective", "subjective"}:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Invalid type")
+
+    rows, next_cursor = polymarket_service.list_markets_cursor(
+        db,
+        scope="event",
+        event_id=event_id,
+        status=None if status_norm == "all" else status_norm,
+        cursor=cursor,
+        limit=limit,
+        user_id=user.id if user else None,
+    )
+    items = []
+    ids = [int(r["id"]) for r in rows]
+    by_id = {b.id: b for b in db.query(Bet).filter(Bet.id.in_(ids)).all()} if ids else {}
+    for row in rows:
+        bet = by_id.get(int(row["id"]))
+        if not bet:
+            continue
+        if type_norm != "all" and (bet.kind or "").lower() != type_norm:
+            continue
+        items.append(_event_market_row(bet, row))
+
+    return {"items": items, "next_cursor": next_cursor}
+
+
+@router.post("/events/{event_id}/polymarket")
+def create_event_polymarket_market(
+    event_id: int,
+    payload: dict,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    idem = (idempotency_key or "").strip()
+    if not idem:
+        raise polymarket_service.polymarket_error(422, "idempotency_required", "Idempotency-Key required")
+    _assert_event_polymarket_write_allowed(db, event_id)
+    if not _can_create_or_resolve(db, event_id, user.id):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden", "message": "Missing permission"})
+
+    existing = db.query(PolymarketEventIdempotency).filter(
+        PolymarketEventIdempotency.event_id == event_id,
+        PolymarketEventIdempotency.action == "create",
+        PolymarketEventIdempotency.idempotency_key == idem,
+    ).first()
+    if existing:
+        return existing.response_json
+
+    _rate_limit_event_create(user.id)
+
+    question = str(payload.get("question") or "").strip()
+    if len(question) < 6:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Question too short")
+    market_type = str(payload.get("type") or "objective").strip().upper()
+    if market_type not in {"OBJECTIVE", "SUBJECTIVE"}:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Invalid type")
+    raw_resolves_at = payload.get("resolvesAt")
+    resolves_at = now_utc() + timedelta(hours=2)
+    if raw_resolves_at:
+        parsed = datetime.fromisoformat(str(raw_resolves_at))
+        resolves_at = parsed if parsed.tzinfo is None else parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    rules = str(payload.get("rules") or payload.get("description") or "").strip() or "Event polymarket market"
+
+    bet_payload = BetCreateIn(
+        scope="EVENT",
+        event_id=event_id,
+        question=question,
+        kind=market_type,
+        deadline_at=resolves_at,
+        rules_text=rules,
+        dispute_window_minutes=60,
+    )
+    created = polymarket_service.create_bet(db, payload=bet_payload, user=user)
+    bet = db.get(Bet, int(created["id"]))
+    response = _event_market_row(bet, polymarket_service.market_snapshot_for_user(db, bet, user.id))
+    db.add(PolymarketEventIdempotency(event_id=event_id, market_id=bet.id, action="create", actor_user_id=user.id, idempotency_key=idem, response_json=response))
+    polymarket_service.audit_polymarket(db, action="polymarket.event.create", user=user, bet=bet, payload={"idempotency_key": idem, "type": market_type})
+    db.commit()
+    return response
+
+
+@router.post("/events/{event_id}/polymarket/{market_id}/resolve")
+def resolve_event_polymarket_market(
+    event_id: int,
+    market_id: int,
+    payload: dict,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    idem = (idempotency_key or "").strip()
+    if not idem:
+        raise polymarket_service.polymarket_error(422, "idempotency_required", "Idempotency-Key required")
+    _assert_event_polymarket_write_allowed(db, event_id)
+    bet = _assert_market_in_event(db, event_id, market_id)
+    if not _can_create_or_resolve(db, event_id, user.id):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden", "message": "Missing permission"})
+
+    existing = db.query(PolymarketEventIdempotency).filter(
+        PolymarketEventIdempotency.event_id == event_id,
+        PolymarketEventIdempotency.action == "resolve",
+        PolymarketEventIdempotency.idempotency_key == idem,
+    ).first()
+    if existing:
+        return existing.response_json
+
+    outcome = str(payload.get("outcome") or "").strip().upper()
+    if outcome not in {"YES", "NO", "VOID"}:
+        raise polymarket_service.polymarket_error(422, "invalid_market", "Invalid outcome")
+    reason = str(payload.get("reason") or "").strip()
+    if len(reason) < 3:
+        raise polymarket_service.polymarket_error(422, "reason_required", "reason required")
+
+    if outcome == "VOID":
+        if bet.status == "FINALIZED":
+            raise polymarket_service.polymarket_error(409, "already_resolved", "Bet already resolved")
+        bet.status = "RESOLVED_PENDING"
+        bet.resolved_outcome = "VOID"
+        bet.resolved_at = now_utc()
+        db.add(bet)
+        db.add(BetResolutionLog(bet_id=bet.id, actor_user_id=user.id, action="resolve", outcome="VOID", notes=reason))
+        resolved = polymarket_service.bet_out(bet)
+    else:
+        resolved = polymarket_service.resolve_bet(db, bet_id=market_id, outcome=outcome, actor=user)
+        db.add(BetResolutionLog(bet_id=bet.id, actor_user_id=user.id, action="resolve_reason", outcome=outcome, notes=reason))
+
+    response = {"market": resolved, "payouts": None}
+    db.add(PolymarketEventIdempotency(event_id=event_id, market_id=market_id, action="resolve", actor_user_id=user.id, idempotency_key=idem, response_json=response))
+    polymarket_service.audit_polymarket(db, action="polymarket.event.resolve", user=user, bet=bet, payload={"outcome": outcome, "reason": reason, "idempotency_key": idem})
+    db.commit()
+    return response
+
+
+@router.post("/events/{event_id}/polymarket/{market_id}/buy")
+def buy_event_polymarket_market(
+    event_id: int,
+    market_id: int,
+    payload: dict,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _assert_event_polymarket_write_allowed(db, event_id)
+    _assert_market_in_event(db, event_id, market_id)
+    return buy_polymarket_market(market_id=market_id, payload=payload, idempotency_key=idempotency_key, user=user, db=db)
 
 
 @router.post("/polymarket/bets", response_model=BetOut)

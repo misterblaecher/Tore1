@@ -10,9 +10,11 @@ import '../../shared/widgets/service_limited_banner.dart';
 import 'polymarket_models.dart';
 
 class MarketDetailScreen extends ConsumerStatefulWidget {
-  const MarketDetailScreen({super.key, required this.marketId});
+  const MarketDetailScreen({super.key, required this.marketId, this.eventId, this.canResolve = false});
 
   final int marketId;
+  final int? eventId;
+  final bool canResolve;
 
   @override
   ConsumerState<MarketDetailScreen> createState() => _MarketDetailScreenState();
@@ -25,6 +27,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   bool _loading = true;
   bool _submitting = false;
   String? _bannerReason;
+  String? _resolutionFlash;
   final _customCtrl = TextEditingController();
   int _amount = 100;
   final Set<String> _historyIds = <String>{};
@@ -92,6 +95,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     try {
       await ref.read(apiProvider).postPolymarketPosition(
             marketId: widget.marketId,
+            eventId: widget.eventId,
             side: side,
             amountCents: _amount,
             idempotencyKey: key,
@@ -108,6 +112,31 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _resolveMarket() async {
+    if (!widget.canResolve || widget.eventId == null || _market == null) return;
+    String outcome = 'YES';
+    final reasonCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Resolve market'),
+        content: StatefulBuilder(
+          builder: (context, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButton<String>(value: outcome, items: const [DropdownMenuItem(value: 'YES', child: Text('YES')), DropdownMenuItem(value: 'NO', child: Text('NO')), DropdownMenuItem(value: 'VOID', child: Text('VOID'))], onChanged: (v) => setLocal(() => outcome = v ?? 'YES')),
+              TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason')),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))],
+      ),
+    );
+    if (ok != true || reasonCtrl.text.trim().length < 3) return;
+    await ref.read(apiProvider).resolveEventPolymarketMarket(eventId: widget.eventId!, marketId: widget.marketId, outcome: outcome, reason: reasonCtrl.text.trim());
+    await _load();
   }
 
   String? _extractErrorReason(Object e) {
@@ -142,6 +171,13 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     if (m == null) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: Text('Introuvable')));
     final resolvedBlocked = m.status == 'resolved';
     final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: _writeBlocked) || resolvedBlocked;
+    if (m.outcome != null && m.myPositionTotal > 0 && _resolutionFlash == null) {
+      final won = (m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0);
+      _resolutionFlash = won ? 'You won' : 'You lost';
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _resolutionFlash = null);
+      });
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Market Detail')),
       body: RefreshIndicator(
@@ -159,6 +195,14 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             if ((m.description ?? '').isNotEmpty) Text(m.description!),
             if (m.outcome != null)
               Text('Résultat: ${m.outcome} ${m.myPositionTotal == 0 ? '' : ((m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0) ? '• WIN' : '• LOSE')}'),
+            if (_resolutionFlash != null)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: _resolutionFlash == 'You won' ? Colors.green.shade100 : Colors.red.shade100, borderRadius: BorderRadius.circular(10)),
+                child: Text('$_resolutionFlash • outcome ${m.outcome}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
             const SizedBox(height: 12),
             Text('My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
             if (writeBlocked)
@@ -213,6 +257,11 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                 ),
               ],
             ),
+            if (widget.canResolve && widget.eventId != null && m.outcome == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: FilledButton.tonal(onPressed: _resolveMarket, child: const Text('Resolve')),
+              ),
             const SizedBox(height: 16),
             const Text('My History', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),

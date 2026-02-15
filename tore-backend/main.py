@@ -2991,9 +2991,9 @@ def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
             "music_vote": False,
             "broadcast": False,
         }
-    polymarket_enabled = bool(cfg.allow_user_bets)
-    menu_enabled = bool(cfg.menu_enabled)
-    wallet_enabled = bool(cfg.wallet_enabled)
+    polymarket_enabled = bool(getattr(cfg, "allow_user_bets", getattr(cfg, "polymarket_enabled", False)))
+    menu_enabled = bool(getattr(cfg, "menu_enabled", True))
+    wallet_enabled = bool(getattr(cfg, "wallet_enabled", True))
     return {
         "menu": menu_enabled,
         "wallet": wallet_enabled,
@@ -3045,12 +3045,28 @@ def _event_join_payload(db: Session, event: Event) -> dict[str, Any]:
 
 
 @app.get("/events/{event_id}/context")
-def get_event_context(event_id: int, db: Session = Depends(get_db)):
+def get_event_context(
+    event_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
     runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
     payload = _event_join_payload(db, event)
+    user_id: Optional[str] = None
+    if authorization:
+        token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else authorization.strip()
+        user_id = decode_user_token(token)
+    can_manage_bets = False
+    if user_id:
+        staff = db.query(EventStaff).filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id, EventStaff.is_active.is_(True)).first()
+        can_manage_bets = bool(staff and (staff.role or "").lower() == "admin")
+    payload["permissions"] = {
+        "canCreateBets": can_manage_bets,
+        "canResolveBets": can_manage_bets,
+    }
     payload["lastUpdatedAt"] = _event_state_last_updated(runtime)
     payload["lastStateUpdatedAt"] = _event_state_last_updated(runtime)
     return payload
