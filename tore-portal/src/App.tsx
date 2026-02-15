@@ -11,6 +11,7 @@ import PolymarketDetail from './pages/PolymarketDetail'
 import MenuAdmin from './pages/MenuAdmin'
 import MenuPublic from './pages/MenuPublic'
 import OrdersQueue from './pages/OrdersQueue'
+import BarOrdersLive from './pages/BarOrdersLive'
 import Analytics from './pages/Analytics'
 import HuntAdmin from './pages/HuntAdmin'
 import BattlesAdmin from './pages/BattlesAdmin'
@@ -132,6 +133,16 @@ export default function App() {
           <RequireAuth>
             <RequireBarMode>
               <BarDashboard />
+            </RequireBarMode>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/bar/events/:eventId/orders"
+        element={
+          <RequireAuth>
+            <RequireBarMode>
+              <BarOrdersLive />
             </RequireBarMode>
           </RequireAuth>
         }
