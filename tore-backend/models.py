@@ -151,6 +151,66 @@ class EventQrPackIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class EventIncident(Base):
+    __tablename__ = "event_incidents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    severity: Mapped[str] = mapped_column(String(16), default="info", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)
+    location: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("partner_users.id"), index=True)
+    assigned_to_staff_assignment_id: Mapped[Optional[int]] = mapped_column(ForeignKey("event_staff_assignments.id"), nullable=True, index=True)
+    assigned_to_role: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventIncidentLog(Base):
+    __tablename__ = "event_incident_logs"
+    __table_args__ = (
+        Index("ix_event_incident_logs_incident_created", "incident_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("event_incidents.id"), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(24), default="comment", index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventIncidentCreateIdempotency(Base):
+    __tablename__ = "event_incident_create_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_event_incident_create_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("event_incidents.id"), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventIncidentActionIdempotency(Base):
+    __tablename__ = "event_incident_action_idempotency"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "action_type", "idempotency_key", name="uq_event_incident_action_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("event_incidents.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(24), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventModuleConfig(Base):
     __tablename__ = "event_module_configs"
     __table_args__ = (UniqueConstraint("event_id", name="uq_event_module_config_event"),)

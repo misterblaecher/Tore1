@@ -75,6 +75,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_event_wizard_tables(engine)
     ensure_staff_management_tables(engine)
     ensure_broadcast_tables(engine)
+    ensure_incidents_tables(engine)
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
@@ -425,3 +426,70 @@ def ensure_broadcast_tables(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_broadcasts_event_created ON event_broadcasts (event_id, created_at)"))
+
+
+def ensure_incidents_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_incidents (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                title VARCHAR(180),
+                description TEXT NOT NULL DEFAULT '',
+                severity VARCHAR(16) NOT NULL DEFAULT 'info',
+                status VARCHAR(16) NOT NULL DEFAULT 'open',
+                location VARCHAR(180),
+                created_by INTEGER NOT NULL,
+                assigned_to_staff_assignment_id INTEGER,
+                assigned_to_role VARCHAR(24),
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incidents_event_id ON event_incidents (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incidents_severity ON event_incidents (severity)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incidents_status ON event_incidents (status)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_incident_logs (
+                id INTEGER NOT NULL PRIMARY KEY,
+                incident_id INTEGER NOT NULL,
+                event_id INTEGER NOT NULL,
+                action_type VARCHAR(24) NOT NULL,
+                payload JSON,
+                actor_id INTEGER NOT NULL,
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_logs_incident_id ON event_incident_logs (incident_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_logs_event_id ON event_incident_logs (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_logs_action_type ON event_incident_logs (action_type)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_logs_incident_created ON event_incident_logs (incident_id, created_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_incident_create_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                incident_id INTEGER NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_incident_create_idem UNIQUE (event_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_create_idem_event_id ON event_incident_create_idempotency (event_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_incident_action_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                incident_id INTEGER NOT NULL,
+                action_type VARCHAR(24) NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_incident_action_idem UNIQUE (incident_id, action_type, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_action_idem_incident_id ON event_incident_action_idempotency (incident_id)"))

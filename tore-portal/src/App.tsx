@@ -34,6 +34,7 @@ import CreateEventWizard from './pages/CreateEventWizard'
 import EventQrPack from './pages/EventQrPack'
 import StaffManagement from './pages/StaffManagement'
 import OrgaBroadcast from './pages/OrgaBroadcast'
+import OrgaIncidents from './pages/OrgaIncidents'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -198,6 +199,16 @@ export default function App() {
           <RequireAuth>
             <RequireOrga>
               <OrgaBroadcast />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/incidents"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <OrgaIncidents />
             </RequireOrga>
           </RequireAuth>
         }
