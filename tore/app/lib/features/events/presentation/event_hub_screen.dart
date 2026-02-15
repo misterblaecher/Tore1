@@ -5,6 +5,7 @@ import '../../../core/network/network_state_provider.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
+import '../../broadcast/broadcast_screen.dart';
 import '../../menu_market/presentation/menu_screen.dart';
 import '../../navigation/presentation/polymarket_tab_screen.dart';
 import '../../navigation/presentation/ticker_screen.dart';
@@ -102,7 +103,13 @@ class EventHubScreen extends ConsumerWidget {
       _moduleUnavailable(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined),
       _moduleUnavailable(key: 'battles', title: 'Battles', subtitle: 'Défis en direct', icon: Icons.sports_mma_outlined),
       _moduleUnavailable(key: 'music_vote', title: 'Music vote', subtitle: 'Vote la prochaine track', icon: Icons.music_note_outlined),
-      _moduleUnavailable(key: 'broadcast', title: 'Broadcast', subtitle: 'Annonces de l’event', icon: Icons.campaign_outlined),
+      _module(
+        key: 'broadcast',
+        title: 'Broadcast',
+        subtitle: 'Annonces de l’event',
+        icon: Icons.campaign_outlined,
+        builder: (_) => BroadcastScreen(eventId: eventId),
+      ),
     ];
 
     final enabled = modules.where((module) => module.isEnabled(modulesOn)).toList();

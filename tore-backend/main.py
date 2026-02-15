@@ -1227,6 +1227,7 @@ from app.routers.p3 import router as p3_router
 from app.routers.zones import router as zones_router
 from app.routers.ops import router as ops_router
 from app.routers.ticker import router as ticker_router
+from app.routers.broadcasts import router as broadcasts_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1241,6 +1242,7 @@ app.include_router(p3_router)
 app.include_router(zones_router)
 app.include_router(ops_router)
 app.include_router(ticker_router)
+app.include_router(broadcasts_router)
 
 app.add_middleware(
     CORSMiddleware,

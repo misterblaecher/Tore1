@@ -47,7 +47,7 @@ class TickerScreen extends ConsumerWidget {
         case TickerFilter.events:
           return item.type.toLowerCase().contains('event');
         case TickerFilter.alerts:
-          return item.severity == 'warning' || item.severity == 'error';
+          return item.severity == 'warning' || item.severity == 'error' || item.type.toLowerCase().contains('broadcast');
       }
     }).toList();
     return Scaffold(

@@ -157,6 +157,7 @@ export default function EventControlHub() {
           <Link to="/entry-staff" className="btn">Scanner entrées</Link>
           <Link to="/menu-admin" className="btn">Menu</Link>
           <Link to={`/orga/events/${eventId}/staff`} className="btn">Staff</Link>
+          <Link to={`/orga/events/${eventId}/broadcast`} className="btn">Broadcast</Link>
           <Link to={`/audit/${eventId}`} className="btn">Logs</Link>
           <Link to={`/safety-admin/${eventId}`} className="btn">Règles</Link>
         </div>

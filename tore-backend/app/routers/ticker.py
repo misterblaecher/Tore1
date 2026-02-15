@@ -12,7 +12,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from models import AppToken, AppUser, AuditLog, Event, Order, WalletGift, WalletTx
+from db import now_utc
+from models import AppToken, AppUser, AuditLog, Event, EventBroadcast, Order, WalletGift, WalletTx
 
 router = APIRouter(tags=["ticker"])
 security = HTTPBearer(auto_error=False)
@@ -182,6 +183,32 @@ def _ticker_rows(db: Session, event_id: int, user_id: str, scan_limit: int = 200
                 "ref_id": row.entity_id,
             }
         )
+
+    event = db.get(Event, event_id)
+    if event and bool((event.modules_on or {}).get("broadcast")):
+        broadcasts = (
+            db.query(EventBroadcast)
+            .filter(EventBroadcast.event_id == event_id)
+            .order_by(EventBroadcast.created_at.desc(), EventBroadcast.id.desc())
+            .limit(scan_limit)
+            .all()
+        )
+        now = now_utc()
+        for row in broadcasts:
+            if row.expires_at and row.expires_at <= now:
+                continue
+            rows.append(
+                {
+                    "id": f"broadcast:{row.id}",
+                    "ts": row.created_at,
+                    "type": "broadcast",
+                    "title": "Broadcast event",
+                    "body": row.message,
+                    "severity": "error" if row.level == "urgent" else ("warning" if row.level == "warn" else "info"),
+                    "ref_kind": "broadcast",
+                    "ref_id": str(row.id),
+                }
+            )
 
     rows.sort(key=lambda x: (x["ts"], x["id"]), reverse=True)
     return rows
