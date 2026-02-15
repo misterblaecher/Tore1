@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import '../../../api.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/utils/write_gate.dart';
+import 'music_admin_panel_screen.dart';
 
 class MusicVoteScreen extends ConsumerStatefulWidget {
   const MusicVoteScreen({super.key, required this.eventId});
@@ -22,24 +25,57 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
   final _urlCtrl = TextEditingController();
   String _provider = 'spotify';
   Map<String, dynamic>? _payload;
+  Map<String, dynamic>? _context;
   bool _loading = true;
   bool _posting = false;
+  Timer? _pollTimer;
+  Timer? _clock;
+  NetworkState? _pollingState;
+
+  DateTime _now = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _load();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _clock?.cancel();
+    _titleCtrl.dispose();
+    _artistCtrl.dispose();
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  void _schedulePolling(NetworkState state) {
+    _pollTimer?.cancel();
+    if (state == NetworkState.offline) return;
+    final seconds = state == NetworkState.degraded ? 5 : 2;
+    _pollTimer = Timer.periodic(Duration(seconds: seconds), (_) => _load(silent: true));
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent && mounted) setState(() => _loading = true);
     try {
-      final res = await ref.read(apiProvider).getMusic(widget.eventId);
-      if (mounted) setState(() => _payload = res);
+      final api = ref.read(apiProvider);
+      final music = await api.getMusic(widget.eventId);
+      final context = await api.eventContext(widget.eventId);
+      if (mounted) {
+        setState(() {
+          _payload = music;
+          _context = context;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _payload = null);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && !silent) setState(() => _loading = false);
     }
   }
 
@@ -82,19 +118,49 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     }
   }
 
+  String _countdown(Map<String, dynamic> round) {
+    final endsAtRaw = round['endsAt']?.toString();
+    if (endsAtRaw == null) return '--:--';
+    final endsAt = DateTime.tryParse(endsAtRaw)?.toLocal();
+    if (endsAt == null) return '--:--';
+    final remaining = endsAt.difference(_now);
+    if (remaining.isNegative) return '00:00';
+    final min = remaining.inMinutes.toString().padLeft(2, '0');
+    final sec = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+    return '$min:$sec';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = ((_payload?['runtimeState'] ?? 'LIVE').toString()).toUpperCase();
-    final readOnly = isReadOnly(ref);
     final network = ref.watch(networkStatusProvider);
+    if (_pollingState != network) {
+      _pollingState = network;
+      _schedulePolling(network);
+    }
+    final runtimeState = ((_payload?['runtimeState'] ?? 'LIVE').toString()).toUpperCase();
+    final readOnly = isReadOnly(ref);
+    final round = Map<String, dynamic>.from((_payload?['round'] as Map?) ?? const {});
+    final roundStatus = (round['status'] ?? 'IDLE').toString();
     final writeBlocked = isWriteBlocked(
       readOnly: readOnly,
-      runtimeBlocked: isWriteBlockedByEventState(state),
+      runtimeBlocked: isWriteBlockedByEventState(runtimeState),
       degradedBlocked: network == NetworkState.degraded,
     );
+    final canVote = !writeBlocked && !_posting && roundStatus == 'OPEN';
+    final permissions = Map<String, dynamic>.from((_context?['permissions'] as Map?) ?? const {});
+    final canAdminMusic = (permissions['canAdminMusic'] == true) || (permissions['canDjMusic'] == true);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Music vote')),
+      appBar: AppBar(
+        title: const Text('Music vote'),
+        actions: [
+          if (canAdminMusic)
+            IconButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MusicAdminPanelScreen(eventId: widget.eventId))),
+              icon: const Icon(Icons.tune),
+            ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -104,9 +170,31 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                 children: [
                   if (_payload == null) const Text('Module indisponible.'),
                   if (_payload != null) ...[
-                    Text('Winner: ${((_payload!['winner']?['candidate']?['title']) ?? '—').toString()}'),
-                    const SizedBox(height: 8),
-                    Text('Open: ${((_payload!['winner']?['candidate']?['externalUrl']) ?? '—').toString()}'),
+                    Card(
+                      child: ListTile(
+                        title: Text(
+                          roundStatus == 'OPEN'
+                              ? 'Round OPEN • ${_countdown(round)}'
+                              : roundStatus == 'LOCKED'
+                                  ? 'Winner locked'
+                                  : 'Waiting for next round',
+                        ),
+                      ),
+                    ),
+                    if (_payload!['nowPlaying'] is Map)
+                      Card(
+                        child: ListTile(
+                          title: Text('Now Playing: ${_payload!['nowPlaying']['title'] ?? ''}'),
+                          subtitle: Text('Open in ${_payload!['nowPlaying']['provider'] ?? ''}: ${_payload!['nowPlaying']['externalUrl'] ?? ''}'),
+                        ),
+                      ),
+                    if (_payload!['winner'] is Map)
+                      Card(
+                        child: ListTile(
+                          title: Text('Next winner: ${_payload!['winner']['candidate']['title'] ?? ''}'),
+                          subtitle: Text('Votes: ${_payload!['winner']['votesCount'] ?? 0} • Open in ${_payload!['winner']['candidate']['provider'] ?? ''}'),
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     DropdownButton<String>(
                       value: _provider,
@@ -123,20 +211,20 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                     TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Link (optional)')),
                     const SizedBox(height: 8),
                     ElevatedButton(
-                      onPressed: writeBlocked ? null : () => _vote(_composeCandidate()),
+                      onPressed: canVote ? () => _vote(_composeCandidate()) : null,
                       child: const Text('Vote'),
                     ),
                     const SizedBox(height: 16),
                     const Text('Top tracks', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    ...((( _payload!['topCandidates'] as List?) ?? const [])).map((row) {
+                    ...(((_payload!['topCandidates'] as List?) ?? const [])).map((row) {
                       final m = Map<String, dynamic>.from(row as Map);
                       final candidate = Map<String, dynamic>.from((m['candidate'] as Map?) ?? const {});
                       return Card(
                         child: ListTile(
                           title: Text('${candidate['title'] ?? ''} — ${candidate['artist'] ?? ''}'),
                           subtitle: Text('${candidate['provider'] ?? ''} • ${m['votes'] ?? 0} votes'),
-                          trailing: TextButton(onPressed: writeBlocked ? null : () => _vote(candidate), child: const Text('Vote')),
+                          trailing: TextButton(onPressed: canVote ? () => _vote(candidate) : null, child: const Text('Vote')),
                         ),
                       );
                     }),

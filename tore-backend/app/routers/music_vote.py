@@ -4,6 +4,7 @@ import hashlib
 import re
 from datetime import timedelta
 from typing import Optional
+from uuid import uuid4
 
 import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -11,6 +12,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.services.audit_service import write_audit_log
+from app.services.p3_common import get_event_runtime_state
 from db import get_db, now_utc
 from main import JWT_ALG, JWT_SECRET, get_current_user
 from models import (
@@ -25,12 +28,11 @@ from models import (
     EventStaff,
 )
 from partner_auth import current_identity
-from app.services.audit_service import write_audit_log
-from app.services.p3_common import get_event_runtime_state
 
 router = APIRouter(prefix="/events", tags=["music-vote"])
 
 _PROVIDER_SET = {"spotify", "apple", "ytmusic", "soundcloud"}
+_ALLOWED_ROUND_DURATIONS = {60, 120, 180, 300}
 
 
 class TrackCandidateIn(BaseModel):
@@ -63,6 +65,19 @@ class ForceIn(BaseModel):
 
 class ClearIn(BaseModel):
     reason: Optional[str] = None
+
+
+class RoundStartIn(BaseModel):
+    durationSec: int
+
+
+class NowPlayingIn(BaseModel):
+    candidate: TrackCandidateIn
+    reason: Optional[str] = None
+
+
+class SkipIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=180)
 
 
 def _hash_token(raw: str) -> str:
@@ -105,7 +120,19 @@ def _winner_payload(settings: EventMusicSetting) -> Optional[dict]:
     return {
         "candidateKey": settings.winner_candidate_key,
         "candidate": settings.winner_candidate_json,
-        "decidedAt": settings.winner_decided_at.isoformat() if settings.winner_decided_at else None,
+        "lockedAt": settings.winner_decided_at.isoformat() if settings.winner_decided_at else None,
+        "votesCount": int(settings.winner_votes_count or 0),
+    }
+
+
+def _round_payload(settings: EventMusicSetting) -> dict:
+    return {
+        "roundId": settings.round_id,
+        "status": (settings.round_status or "IDLE").upper(),
+        "startedAt": settings.round_started_at.isoformat() if settings.round_started_at else None,
+        "endsAt": settings.round_ends_at.isoformat() if settings.round_ends_at else None,
+        "durationSec": settings.round_duration_sec,
+        "lockedAt": settings.round_locked_at.isoformat() if settings.round_locked_at else None,
     }
 
 
@@ -133,9 +160,8 @@ def _top_candidates(db: Session, event_id: int, limit: int = 8) -> list[dict]:
         .limit(limit)
         .all()
     )
-    out = []
-    for row in rows:
-        out.append({
+    return [
+        {
             "candidateKey": row.candidate_key,
             "candidate": {
                 "provider": row.provider,
@@ -145,8 +171,68 @@ def _top_candidates(db: Session, event_id: int, limit: int = 8) -> list[dict]:
                 "artworkUrl": row.artwork_url,
             },
             "votes": int(row.votes or 0),
-        })
-    return out
+        }
+        for row in rows
+    ]
+
+
+def _winning_row(db: Session, event_id: int):
+    return (
+        db.query(
+            EventMusicVote.candidate_key,
+            EventMusicVote.provider,
+            EventMusicVote.external_url,
+            EventMusicVote.title,
+            EventMusicVote.artist,
+            EventMusicVote.artwork_url,
+            func.count(EventMusicVote.id).label("votes"),
+        )
+        .filter(EventMusicVote.event_id == event_id)
+        .group_by(
+            EventMusicVote.candidate_key,
+            EventMusicVote.provider,
+            EventMusicVote.external_url,
+            EventMusicVote.title,
+            EventMusicVote.artist,
+            EventMusicVote.artwork_url,
+        )
+        .order_by(func.count(EventMusicVote.id).desc(), EventMusicVote.candidate_key.asc())
+        .first()
+    )
+
+
+def _lock_round_with_winner(db: Session, event_id: int, settings: EventMusicSetting) -> None:
+    now = now_utc()
+    row = _winning_row(db, event_id)
+    settings.round_status = "LOCKED"
+    settings.round_locked_at = now
+    settings.winner_decided_at = now
+    if row is None:
+        settings.winner_candidate_key = None
+        settings.winner_candidate_json = None
+        settings.winner_votes_count = 0
+    else:
+        settings.winner_candidate_key = row.candidate_key
+        settings.winner_candidate_json = {
+            "provider": row.provider,
+            "externalUrl": row.external_url,
+            "title": row.title,
+            "artist": row.artist,
+            "artworkUrl": row.artwork_url,
+        }
+        settings.winner_votes_count = int(row.votes or 0)
+    settings.last_updated_at = now
+    settings.updated_at = now
+    db.add(settings)
+
+
+def _lazy_finalize_if_needed(db: Session, event_id: int, settings: EventMusicSetting) -> bool:
+    if (settings.round_status or "IDLE").upper() != "OPEN" or not settings.round_ends_at:
+        return False
+    if now_utc() < settings.round_ends_at:
+        return False
+    _lock_round_with_winner(db, event_id, settings)
+    return True
 
 
 def _optional_partner_identity(authorization: Optional[str], db: Session) -> Optional[dict]:
@@ -190,14 +276,18 @@ def _ensure_module_or_404(db: Session, event_id: int) -> Event:
 def music_get(event_id: int, db: Session = Depends(get_db)):
     _ensure_module_or_404(db, event_id)
     settings = _get_or_create_settings(db, event_id)
+    _lazy_finalize_if_needed(db, event_id, settings)
     payload = {
         "enabled": bool(settings.enabled),
         "djOverrideEnabled": bool(settings.dj_override_enabled),
         "allowMixedProviders": bool(settings.allow_mixed),
         "providerDefault": settings.provider_default,
+        "round": _round_payload(settings),
+        "nowPlaying": settings.now_playing_candidate_json,
         "winner": _winner_payload(settings),
         "topCandidates": _top_candidates(db, event_id),
-        "lastUpdatedAt": settings.updated_at,
+        "lastUpdatedAt": settings.last_updated_at.isoformat() if settings.last_updated_at else None,
+        "runtimeState": (get_event_runtime_state(db, event_id) or "LIVE").upper(),
     }
     db.commit()
     return payload
@@ -215,6 +305,9 @@ def music_vote(
         raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
     _ensure_module_or_404(db, event_id)
     settings = _get_or_create_settings(db, event_id)
+    _lazy_finalize_if_needed(db, event_id, settings)
+    if (settings.round_status or "IDLE").upper() != "OPEN":
+        raise HTTPException(status_code=409, detail={"reason": "VOTE_CLOSED"})
     if not settings.enabled:
         raise HTTPException(status_code=403, detail={"reason": "music_disabled"})
     _runtime_write_guard(db, event_id)
@@ -347,13 +440,24 @@ def music_settings(
     settings.last_updated_at = now_utc()
     settings.updated_by = str(identity["user_id"])
     db.add(settings)
-    response = {"ok": True, "settings": {
-        "enabled": settings.enabled,
-        "djOverrideEnabled": settings.dj_override_enabled,
-        "allowMixedProviders": settings.allow_mixed,
-        "providerDefault": settings.provider_default,
-    }}
-    db.add(EventMusicAdminIdempotency(event_id=event_id, action_type="settings", idempotency_key=idempotency_key, actor_partner_id=identity["user_id"], response_json=response))
+    response = {
+        "ok": True,
+        "settings": {
+            "enabled": settings.enabled,
+            "djOverrideEnabled": settings.dj_override_enabled,
+            "allowMixedProviders": settings.allow_mixed,
+            "providerDefault": settings.provider_default,
+        },
+    }
+    db.add(
+        EventMusicAdminIdempotency(
+            event_id=event_id,
+            action_type="settings",
+            idempotency_key=idempotency_key,
+            actor_partner_id=identity["user_id"],
+            response_json=response,
+        )
+    )
     write_audit_log(
         db,
         actor_partner_id=identity["user_id"],
@@ -383,6 +487,195 @@ def _admin_or_dj_guard(db: Session, event: Event, settings: EventMusicSetting, a
         if staff and (staff.role or "").lower() == "dj":
             return "dj", None, "dj"
     raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+
+
+@router.post("/{event_id}/music/admin/round/start")
+def music_round_start(
+    event_id: int,
+    body: RoundStartIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    if body.durationSec not in _ALLOWED_ROUND_DURATIONS:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_duration"})
+    event = _ensure_module_or_404(db, event_id)
+    settings = _get_or_create_settings(db, event_id)
+    _runtime_write_guard(db, event_id)
+    mode, actor_partner_id, actor_role = _admin_or_dj_guard(db, event, settings, authorization)
+    existing = db.query(EventMusicAdminIdempotency).filter(
+        EventMusicAdminIdempotency.event_id == event_id,
+        EventMusicAdminIdempotency.action_type == "round_start",
+        EventMusicAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if existing:
+        return existing.response_json
+
+    started_at = now_utc()
+    settings.round_id = str(uuid4())
+    settings.round_status = "OPEN"
+    settings.round_started_at = started_at
+    settings.round_duration_sec = body.durationSec
+    settings.round_ends_at = started_at + timedelta(seconds=body.durationSec)
+    settings.round_locked_at = None
+    settings.winner_candidate_key = None
+    settings.winner_candidate_json = None
+    settings.winner_decided_at = None
+    settings.winner_votes_count = 0
+    settings.last_updated_at = started_at
+    settings.updated_at = started_at
+    db.query(EventMusicVote).filter(EventMusicVote.event_id == event_id).delete(synchronize_session=False)
+    db.add(settings)
+    response = {"ok": True, "round": _round_payload(settings)}
+    db.add(EventMusicAdminIdempotency(event_id=event_id, action_type="round_start", idempotency_key=idempotency_key, actor_partner_id=actor_partner_id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner_id,
+        actor_role=actor_role,
+        action="music_vote.round_start",
+        entity_type="event_music",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"durationSec": body.durationSec, "actor_mode": mode},
+    )
+    db.commit()
+    return response
+
+
+@router.post("/{event_id}/music/admin/round/end")
+def music_round_end(
+    event_id: int,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    event = _ensure_module_or_404(db, event_id)
+    settings = _get_or_create_settings(db, event_id)
+    _runtime_write_guard(db, event_id)
+    mode, actor_partner_id, actor_role = _admin_or_dj_guard(db, event, settings, authorization)
+    existing = db.query(EventMusicAdminIdempotency).filter(
+        EventMusicAdminIdempotency.event_id == event_id,
+        EventMusicAdminIdempotency.action_type == "round_end",
+        EventMusicAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if existing:
+        return existing.response_json
+
+    _lock_round_with_winner(db, event_id, settings)
+    response = {"ok": True, "round": _round_payload(settings), "winner": _winner_payload(settings)}
+    db.add(EventMusicAdminIdempotency(event_id=event_id, action_type="round_end", idempotency_key=idempotency_key, actor_partner_id=actor_partner_id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner_id,
+        actor_role=actor_role,
+        action="music_vote.round_end",
+        entity_type="event_music",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"actor_mode": mode, "winner": settings.winner_candidate_key},
+    )
+    db.commit()
+    return response
+
+
+@router.post("/{event_id}/music/admin/now-playing")
+def music_now_playing(
+    event_id: int,
+    body: NowPlayingIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    event = _ensure_module_or_404(db, event_id)
+    settings = _get_or_create_settings(db, event_id)
+    _runtime_write_guard(db, event_id)
+    mode, actor_partner_id, actor_role = _admin_or_dj_guard(db, event, settings, authorization)
+    existing = db.query(EventMusicAdminIdempotency).filter(
+        EventMusicAdminIdempotency.event_id == event_id,
+        EventMusicAdminIdempotency.action_type == "now_playing",
+        EventMusicAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if existing:
+        return existing.response_json
+
+    provider = body.candidate.provider.strip().lower()
+    if provider not in _PROVIDER_SET:
+        raise HTTPException(status_code=400, detail={"reason": "provider_invalid"})
+    settings.now_playing_candidate_json = body.candidate.model_dump()
+    settings.last_updated_at = now_utc()
+    settings.updated_at = now_utc()
+    db.add(settings)
+    response = {"ok": True, "nowPlaying": settings.now_playing_candidate_json}
+    db.add(EventMusicAdminIdempotency(event_id=event_id, action_type="now_playing", idempotency_key=idempotency_key, actor_partner_id=actor_partner_id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner_id,
+        actor_role=actor_role,
+        action="music_vote.now_playing",
+        entity_type="event_music",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"candidate": settings.now_playing_candidate_json, "reason": body.reason, "actor_mode": mode},
+    )
+    db.commit()
+    return response
+
+
+@router.post("/{event_id}/music/admin/skip")
+def music_skip(
+    event_id: int,
+    body: SkipIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    event = _ensure_module_or_404(db, event_id)
+    settings = _get_or_create_settings(db, event_id)
+    _runtime_write_guard(db, event_id)
+    mode, actor_partner_id, actor_role = _admin_or_dj_guard(db, event, settings, authorization)
+    existing = db.query(EventMusicAdminIdempotency).filter(
+        EventMusicAdminIdempotency.event_id == event_id,
+        EventMusicAdminIdempotency.action_type == "skip",
+        EventMusicAdminIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if existing:
+        return existing.response_json
+
+    settings.winner_candidate_key = None
+    settings.winner_candidate_json = None
+    settings.winner_decided_at = None
+    settings.winner_votes_count = 0
+    settings.round_status = "IDLE"
+    settings.round_locked_at = None
+    settings.last_updated_at = now_utc()
+    settings.updated_at = now_utc()
+    db.add(settings)
+    response = {"ok": True, "round": _round_payload(settings), "winner": None}
+    db.add(EventMusicAdminIdempotency(event_id=event_id, action_type="skip", idempotency_key=idempotency_key, actor_partner_id=actor_partner_id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner_id,
+        actor_role=actor_role,
+        action="music_vote.skip",
+        entity_type="event_music",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"reason": body.reason, "actor_mode": mode},
+    )
+    db.commit()
+    return response
 
 
 @router.post("/{event_id}/music/admin/force")
@@ -416,6 +709,7 @@ def music_force(
     settings.winner_candidate_key = key
     settings.winner_candidate_json = candidate_json
     settings.winner_decided_at = now_utc()
+    settings.winner_votes_count = 0
     settings.last_updated_at = now_utc()
     settings.updated_at = now_utc()
     db.add(settings)
@@ -463,6 +757,7 @@ def music_clear(
     settings.winner_candidate_key = None
     settings.winner_candidate_json = None
     settings.winner_decided_at = None
+    settings.winner_votes_count = 0
     settings.last_updated_at = now_utc()
     settings.updated_at = now_utc()
     db.add(settings)

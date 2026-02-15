@@ -3268,12 +3268,19 @@ def get_event_context(
         token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else authorization.strip()
         user_id = decode_user_token(token)
     can_manage_bets = False
+    can_admin_music = False
+    can_dj_music = False
     if user_id:
         staff = db.query(EventStaff).filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id, EventStaff.is_active.is_(True)).first()
-        can_manage_bets = bool(staff and (staff.role or "").lower() == "admin")
+        role = (staff.role or "").lower() if staff else ""
+        can_manage_bets = bool(role == "admin")
+        can_admin_music = bool(role in {"admin", "manager", "owner"})
+        can_dj_music = bool(role == "dj")
     payload["permissions"] = {
         "canCreateBets": can_manage_bets,
         "canResolveBets": can_manage_bets,
+        "canAdminMusic": can_admin_music,
+        "canDjMusic": can_dj_music,
     }
     payload["lastUpdatedAt"] = _event_state_last_updated(runtime)
     payload["lastStateUpdatedAt"] = _event_state_last_updated(runtime)
