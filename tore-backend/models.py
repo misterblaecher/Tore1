@@ -705,6 +705,32 @@ class EventCost(Base):
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
+class EventCostSimple(Base):
+    __tablename__ = "event_costs_simple"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_costs_simple_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    costs_tickets: Mapped[int] = mapped_column(Integer, default=0)
+    breakdown_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventCostSimpleIdempotency(Base):
+    __tablename__ = "event_costs_simple_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_event_costs_simple_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (

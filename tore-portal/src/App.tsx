@@ -1,7 +1,7 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { getToken } from './lib/auth'
-import { hasOrgaHubAccess } from './lib/authz'
+import { hasOrgaHubAccess, hasOrgaManagerAccess } from './lib/authz'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import EventDetail from './pages/EventDetail'
@@ -35,6 +35,7 @@ import EventQrPack from './pages/EventQrPack'
 import StaffManagement from './pages/StaffManagement'
 import OrgaBroadcast from './pages/OrgaBroadcast'
 import OrgaIncidents from './pages/OrgaIncidents'
+import OrgaProfitability from './pages/OrgaProfitability'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -44,6 +45,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function RequireOrga({ children }: { children: React.ReactNode }) {
   if (!hasOrgaHubAccess()) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
+function RequireOrgaManager({ children }: { children: React.ReactNode }) {
+  if (!hasOrgaManagerAccess()) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -220,6 +226,16 @@ export default function App() {
             <RequireOrga>
               <EventQrPack />
             </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/profitability"
+        element={
+          <RequireAuth>
+            <RequireOrgaManager>
+              <OrgaProfitability />
+            </RequireOrgaManager>
           </RequireAuth>
         }
       />

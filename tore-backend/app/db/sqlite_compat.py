@@ -76,6 +76,39 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_staff_management_tables(engine)
     ensure_broadcast_tables(engine)
     ensure_incidents_tables(engine)
+    ensure_profitability_tables(engine)
+
+
+def ensure_profitability_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_costs_simple (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                costs_tickets INTEGER DEFAULT 0 NOT NULL,
+                breakdown_json JSON,
+                notes TEXT,
+                updated_by INTEGER,
+                updated_at DATETIME,
+                CONSTRAINT uq_event_costs_simple_event UNIQUE (event_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_costs_simple_event_id ON event_costs_simple (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_costs_simple_updated_at ON event_costs_simple (updated_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_costs_simple_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_costs_simple_idem UNIQUE (event_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_costs_simple_idempotency_event_id ON event_costs_simple_idempotency (event_id)"))
 
 
 def ensure_identity_consent_columns(engine: Engine) -> None:
