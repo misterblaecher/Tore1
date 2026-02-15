@@ -1137,6 +1137,90 @@ class UserGiftCode(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class Committee(Base):
+    __tablename__ = "committees"
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_committees_slug"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    slug: Mapped[str] = mapped_column(String(120), index=True)
+    description_public: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    logo_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeYear(Base):
+    __tablename__ = "committee_years"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "year_label", name="uq_committee_years_label"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_label: Mapped[str] = mapped_column(String(32), index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeMembership(Base):
+    __tablename__ = "committee_memberships"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "user_id", name="uq_committee_membership_user"),
+        Index("ix_committee_memberships_committee_active", "committee_id", "is_active"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(24), default="MEMBER", index=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+
+class CommitteeInviteCode(Base):
+    __tablename__ = "committee_invite_codes"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_committee_invite_codes_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    code: Mapped[str] = mapped_column(String(24), index=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    uses_left: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeRolePermission(Base):
+    __tablename__ = "committee_role_permissions"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "role", name="uq_committee_role_permissions"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    role: Mapped[str] = mapped_column(String(24), index=True)
+    permissions_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeAdminIdempotency(Base):
+    __tablename__ = "committee_admin_idempotency"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "action", "idempotency_key", name="uq_committee_admin_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    action: Mapped[str] = mapped_column(String(32), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (

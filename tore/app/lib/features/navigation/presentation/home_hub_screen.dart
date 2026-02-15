@@ -6,6 +6,7 @@ import 'package:tore/features/events/presentation/event_hub_screen.dart';
 import 'package:tore/features/menu_market/presentation/menu_screen.dart';
 import 'package:tore/features/navigation/presentation/polymarket_tab_screen.dart';
 import 'package:tore/features/navigation/presentation/profile_screen.dart';
+import 'package:tore/features/committees/presentation/committees_screens.dart';
 import 'package:tore/features/navigation/presentation/ticker_screen.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
@@ -27,6 +28,7 @@ class HomeHubScreen extends ConsumerWidget {
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
     final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
     final readOnly = isReadOnly(ref);
+    final committeesModule = ref.watch(_modulesProvider).maybeWhen(data: (m) => m['committee_os'] == true, orElse: () => false);
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -123,6 +125,13 @@ class HomeHubScreen extends ConsumerWidget {
               title: 'Polymarket',
               subtitle: 'Markets et positions',
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PolymarketTabScreen())),
+            ),
+          if (committeesModule)
+            _ModuleCard(
+              icon: Icons.groups_outlined,
+              title: 'Comité OS',
+              subtitle: 'Page publique + espace privé',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommitteesListScreen())),
             ),
           if (hasEvent && tickerOn)
             _ModuleCard(
@@ -235,3 +244,7 @@ class _ModuleCard extends StatelessWidget {
     );
   }
 }
+
+final _modulesProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  return ref.read(apiProvider).modulesState();
+});
