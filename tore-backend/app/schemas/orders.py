@@ -126,3 +126,48 @@ class BarDashboardOut(BaseModel):
     avgPrepTime: Optional[float] = None
     inventoryAlerts: List[InventoryAlertOut]
     lastUpdatedAt: datetime
+
+
+class BarAnalyticsSnapshotOut(BaseModel):
+    eventState: str
+    lastUpdatedAt: datetime
+
+
+class BarAnalyticsOrdersByStatusOut(BaseModel):
+    pending: int
+    preparing: int
+    ready: int
+    claimed: int
+    canceled: int
+
+
+class BarAnalyticsTimelineBucketOut(BaseModel):
+    tStart: datetime
+    tEnd: datetime
+    ordersCount: int
+    revenueTickets: int
+
+
+class BarAnalyticsOrdersOut(BaseModel):
+    total: int
+    byStatus: BarAnalyticsOrdersByStatusOut
+    timelineBuckets: List[BarAnalyticsTimelineBucketOut]
+
+
+class BarAnalyticsTopItemOut(BaseModel):
+    drinkId: int
+    name: str
+    qty: int
+    revenueTickets: int
+
+
+class BarAnalyticsPeakOut(BaseModel):
+    bucketStart: datetime
+    ordersCount: int
+
+
+class BarAnalyticsOut(BaseModel):
+    snapshot: BarAnalyticsSnapshotOut
+    orders: BarAnalyticsOrdersOut
+    itemsTop: List[BarAnalyticsTopItemOut]
+    peak: BarAnalyticsPeakOut | None = None

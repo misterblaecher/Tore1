@@ -13,6 +13,7 @@ import MenuPublic from './pages/MenuPublic'
 import OrdersQueue from './pages/OrdersQueue'
 import BarOrdersLive from './pages/BarOrdersLive'
 import BarMenuAdmin from './pages/BarMenuAdmin'
+import BarAnalytics from './pages/BarAnalytics'
 import Analytics from './pages/Analytics'
 import HuntAdmin from './pages/HuntAdmin'
 import BattlesAdmin from './pages/BattlesAdmin'
@@ -154,6 +155,16 @@ export default function App() {
           <RequireAuth>
             <RequireBarMode>
               <BarOrdersLive />
+            </RequireBarMode>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/bar/events/:eventId/analytics"
+        element={
+          <RequireAuth>
+            <RequireBarMode>
+              <BarAnalytics />
             </RequireBarMode>
           </RequireAuth>
         }

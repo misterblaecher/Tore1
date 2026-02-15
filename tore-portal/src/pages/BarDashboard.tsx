@@ -129,7 +129,7 @@ export default function BarDashboard() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link to={eventId ? `/bar/events/${eventId}/orders` : '/orders-queue'}>Orders Live</Link>
           <Link to={eventId ? `/bar/events/${eventId}/menu` : "/menu-admin"}>Menu Admin</Link>
-          <Link to="/analytics">Analytics</Link>
+          <Link to={eventId ? `/bar/events/${eventId}/analytics` : '/analytics'}>Analytics</Link>
         </div>
         <div style={{ marginTop: 10 }}>
           <Link to={eventId ? `/bar/events/${eventId}/orders` : '/orders-queue'}>Go to Orders Live</Link>
