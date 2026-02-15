@@ -8,6 +8,7 @@ import '../../../shared/widgets/service_limited_banner.dart';
 import '../../broadcast/broadcast_screen.dart';
 import '../../menu_market/presentation/menu_screen.dart';
 import 'event_polymarket_screen.dart';
+import 'event_ranking_screen.dart';
 import '../../navigation/presentation/ticker_screen.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
@@ -99,7 +100,13 @@ class EventHubScreen extends ConsumerWidget {
         icon: Icons.casino_outlined,
         builder: (_) => const EventPolymarketScreen(),
       ),
-      _moduleUnavailable(key: 'classement', title: 'Classement', subtitle: 'Top participants', icon: Icons.leaderboard_outlined),
+      _module(
+        key: 'classement',
+        title: 'Classement',
+        subtitle: 'Top participants',
+        icon: Icons.leaderboard_outlined,
+        builder: (_) => EventRankingScreen(eventId: eventId),
+      ),
       _moduleUnavailable(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined),
       _moduleUnavailable(key: 'battles', title: 'Battles', subtitle: 'Défis en direct', icon: Icons.sports_mma_outlined),
       _moduleUnavailable(key: 'music_vote', title: 'Music vote', subtitle: 'Vote la prochaine track', icon: Icons.music_note_outlined),

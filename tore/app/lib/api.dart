@@ -12,6 +12,13 @@ class MenuFetchResult {
   const MenuFetchResult({required this.items, required this.fromCache});
 }
 
+class EventRankingFetchResult {
+  final Map<String, dynamic> payload;
+  final bool fromCache;
+
+  const EventRankingFetchResult({required this.payload, required this.fromCache});
+}
+
 class Api {
   final ApiClient _client;
   final CacheStore _cache;
@@ -120,6 +127,29 @@ class Api {
       queryParameters: eventId == null ? null : {'event_id': eventId},
     );
     return res.data as List<dynamic>;
+  }
+
+  Future<EventRankingFetchResult> eventRankingWithCacheStatus(int eventId) async {
+    final cacheKey = 'event_ranking_$eventId';
+    try {
+      final res = await _client.dio.get(
+        '/events/$eventId/ranking',
+        options: Options(
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+          sendTimeout: const Duration(seconds: 5),
+        ),
+      );
+      final payload = Map<String, dynamic>.from(res.data as Map);
+      await _cache.setJson(cacheKey, payload, ttl: const Duration(days: 7));
+      return EventRankingFetchResult(payload: payload, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) {
+        return EventRankingFetchResult(payload: cached, fromCache: true);
+      }
+      throw const OfflineNoCacheException('event_ranking');
+    }
   }
 
   Future<Map<String, dynamic>> ticketBalance({
