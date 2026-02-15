@@ -357,14 +357,44 @@ class Api {
     int? eventId,
   }) async {
     final res = await _client.dio.post(
-      '/wallet/gift',
+      '/wallet/transfers',
       data: {
         if (eventId != null) 'event_id': eventId,
         'to_user_id': toUserId,
-        'amount_cents': amountCents,
-        'client_key': idempotencyKey,
+        'amount': amountCents,
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> walletGiftReceiveQr({int? eventId}) async {
+    final res = await _client.dio.get(
+      '/wallet/gifts/receive-qr',
+      queryParameters: {
+        if (eventId != null) 'event_id': eventId,
+      },
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> mePrivacy() async {
+    final res = await _client.dio.get('/me/privacy');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> putMePrivacy({
+    required String visibility,
+    required bool showIdentityInBar,
+  }) async {
+    final key = 'privacy-$visibility-${showIdentityInBar ? 1 : 0}';
+    final res = await _client.dio.put(
+      '/me/privacy',
+      data: {
+        'visibility': visibility,
+        'show_identity_in_bar': showIdentityInBar,
+      },
+      options: Options(headers: {'Idempotency-Key': key}),
     );
     return Map<String, dynamic>.from(res.data as Map);
   }

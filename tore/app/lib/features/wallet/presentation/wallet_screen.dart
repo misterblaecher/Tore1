@@ -67,6 +67,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       data: (value) => value,
       orElse: () => null,
     );
+    final event = eventAsync.maybeWhen(data: (value) => value, orElse: () => <String, dynamic>{});
+    final modulesOn = (event['modules_on'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final giftsEnabled = modulesOn['gifts_enabled'] != false;
+    final privacyEnabled = modulesOn['privacy_enabled'] != false;
 
     final walletQrDeepLink = 'tore://user?uid=$userId&event_id=${widget.eventId}';
 
@@ -209,6 +213,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     label: 'Ajouter 10 tickets',
                   ),
                 const SizedBox(height: 8),
+                if (giftsEnabled)
                 ToreCTA(
                   label: 'Send Gift',
                   onPressed: writeBlocked
@@ -223,7 +228,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                               content: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  TextField(controller: toCtrl, decoration: const InputDecoration(labelText: 'User ID')),
+                                  TextField(controller: toCtrl, decoration: const InputDecoration(labelText: 'User ID / code')),
                                   TextField(controller: amountCtrl, decoration: const InputDecoration(labelText: 'Amount')),
                                 ],
                               ),
@@ -241,7 +246,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                               eventId: widget.eventId,
                               toUserId: toUser,
                               amountCents: amount,
-                              idempotencyKey: 'gift-${widget.eventId}-$userId-$toUser-$amount',
+                              idempotencyKey: 'gift-${widget.eventId}-$userId-$toUser-$amount-${DateTime.now().millisecondsSinceEpoch}',
                             );
                             _refresh();
                             ref.invalidate(
@@ -265,6 +270,66 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           }
                         },
                 ),
+
+                if (giftsEnabled)
+                  ToreCTA(
+                    label: 'My gift QR',
+                    style: ToreCTAStyle.secondary,
+                    onPressed: () async {
+                      final qr = await api.walletGiftReceiveQr(eventId: widget.eventId);
+                      if (!context.mounted) return;
+                      await showDialog<void>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('My gift QR'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              QrImageView(data: (qr['deeplink'] ?? '').toString(), size: 170),
+                              const SizedBox(height: 8),
+                              SelectableText((qr['deeplink'] ?? '').toString()),
+                            ],
+                          ),
+                          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+                        ),
+                      );
+                    },
+                  ),
+                if (privacyEnabled)
+                  ToreCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Privacy', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Profil public'),
+                          value: ((meAsync.valueOrNull?.visibility ?? 'public') == 'public'),
+                          onChanged: (v) async {
+                            await api.putMePrivacy(
+                              visibility: v ? 'public' : 'private',
+                              showIdentityInBar: (meAsync.valueOrNull?.showIdentityInBar ?? false),
+                            );
+                            ref.invalidate(meProvider);
+                          },
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Mon identité est visible dans ce bar/event'),
+                          value: (meAsync.valueOrNull?.showIdentityInBar ?? false),
+                          onChanged: (v) async {
+                            await api.putMePrivacy(
+                              visibility: (meAsync.valueOrNull?.visibility ?? 'public'),
+                              showIdentityInBar: v,
+                            );
+                            ref.invalidate(meProvider);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
                 const SizedBox(height: 8),
                 ToreCTA(
                   label: 'Rafraîchir',

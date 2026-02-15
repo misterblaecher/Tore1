@@ -11,9 +11,11 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import AppToken, AppUser, WalletGift, WalletTx
+from models import AppToken, AppUser, AppUserPrivacySetting, TicketTransfer, TicketTransferIdempotency, UserGiftCode, WalletGift, WalletTx
 from partner_auth import current_identity as current_partner_identity
 from app.schemas.wallet import (
+    UserPrivacyIn,
+    UserPrivacyOut,
     WalletGiftIn,
     WalletGiftOut,
     WalletGiftPageOut,
@@ -22,14 +24,20 @@ from app.schemas.wallet import (
     WalletLedgerRowOut,
     WalletMeOut,
     WalletMyQrOut,
+    WalletReceiveGiftQrOut,
     WalletTopupFromQrIn,
     WalletTopupIn,
+    WalletTransferIn,
+    WalletTransferOut,
+    WalletTransferPageOut,
+    WalletTransferRowOut,
     WalletTxOut,
 )
 from app.services.audit_service import write_audit_log
 from app.services.p3_common import decode_cursor, encode_cursor, ensure_event_action_allowed
 from app.services.rate_limit_service import enforce_rate_limit
 from app.services.wallet_service import apply_wallet_tx, get_or_create_wallet, require_wallet_staff, wallet_tx_exists, wallet_tx_out
+from app.services.gift_qr_service import decode_receive_gift_token, issue_receive_gift_token
 
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
@@ -57,6 +65,62 @@ def _required_idempotency(header_key: Optional[str], fallback: Optional[str]) ->
     if len(value) < 1:
         raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency key required"})
     return value[:128]
+
+
+def _enforce_transfer_abuse_controls(user_id: str) -> None:
+    _enforce_gift_per_minute(user_id, max_per_minute=5)
+    now = time.monotonic()
+    with _gift_lock:
+        arr = _gift_store.setdefault(f"cooldown:{user_id}", [])
+        threshold = now - 8.0
+        arr[:] = [ts for ts in arr if ts >= threshold]
+        if arr and now - arr[-1] < 2.0:
+            raise HTTPException(status_code=429, detail={"reason": "cooldown", "message": "Please wait before sending another gift"})
+        arr.append(now)
+
+
+def _normalize_code(raw: str) -> str:
+    return "".join(ch for ch in (raw or "").upper() if ch.isalnum())[:16]
+
+
+def _ensure_user_gift_code(db: Session, user_id: str) -> UserGiftCode:
+    existing = db.query(UserGiftCode).filter(UserGiftCode.user_id == user_id).first()
+    if existing:
+        return existing
+    seed = _normalize_code(user_id[-8:] if user_id else "") or "USER"
+    base = f"U{seed}"[:10]
+    code = base
+    suffix = 0
+    while db.query(UserGiftCode).filter(UserGiftCode.code == code).first() is not None:
+        suffix += 1
+        code = f"{base[:8]}{suffix:02d}"
+    row = UserGiftCode(user_id=user_id, code=code)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _resolve_transfer_target(db: Session, payload: WalletTransferIn) -> tuple[str, int | None]:
+    if payload.to_user_id:
+        return payload.to_user_id.strip(), payload.event_id
+    if payload.to_code:
+        code = _normalize_code(payload.to_code)
+        found = db.query(UserGiftCode).filter(UserGiftCode.code == code).first()
+        if not found:
+            raise HTTPException(status_code=404, detail={"reason": "user_not_found", "message": "Unknown gift code"})
+        return found.user_id, payload.event_id
+    if payload.to_qr_token:
+        decoded = decode_receive_gift_token(payload.to_qr_token)
+        event_id = payload.event_id if payload.event_id is not None else decoded.get("eid")
+        return str(decoded.get("uid")), int(event_id) if event_id is not None else None
+    raise HTTPException(status_code=400, detail={"reason": "missing_target", "message": "Missing transfer target"})
+
+
+def _privacy_out(row: AppUserPrivacySetting | None) -> UserPrivacyOut:
+    return UserPrivacyOut(
+        visibility=(row.visibility if row and row.visibility in {"public", "private"} else "public"),
+        show_identity_in_bar=bool(row and (row.show_identity_in_bar or row.show_identity_to_staff)),
+    )
 
 
 def _wallet_ledger_type(tx: WalletTx) -> str:
@@ -291,6 +355,173 @@ def wallet_gifts(
             )
         )
     return WalletGiftPageOut(items=items, next_cursor=next_cursor)
+
+
+@router.get("/wallet/gifts/receive-qr", response_model=WalletReceiveGiftQrOut)
+def wallet_receive_gift_qr(
+    event_id: Optional[int] = Query(default=None),
+    user: AppUser = Depends(get_current_user),
+):
+    issued = issue_receive_gift_token(user_id=user.id, event_id=event_id)
+    return WalletReceiveGiftQrOut(token=issued["token"], deeplink=f"tore://gift-receive?gt={issued['token']}", expires_at=issued["expires_at"])
+
+
+@router.post("/wallet/transfers", response_model=WalletTransferOut)
+def wallet_transfer(
+    payload: WalletTransferIn,
+    idempotency_header: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    idem = _required_idempotency(idempotency_header, None)
+
+    existing = (
+        db.query(TicketTransferIdempotency)
+        .filter(TicketTransferIdempotency.from_user_id == user.id, TicketTransferIdempotency.idempotency_key == idem)
+        .first()
+    )
+    if existing:
+        sender = get_or_create_wallet(db, user.id)
+        payload_json = dict(existing.response_json or {})
+        if payload_json:
+            payload_json["idempotent"] = True
+            return WalletTransferOut(**payload_json)
+        transfer = db.get(TicketTransfer, existing.transfer_id)
+        return WalletTransferOut(
+            transfer_id=existing.transfer_id,
+            new_balance_sender=sender.balance_tickets,
+            recipient_user_id=transfer.to_user_id,
+            idempotent=True,
+        )
+
+    _enforce_transfer_abuse_controls(user.id)
+    to_user_id, resolved_event_id = _resolve_transfer_target(db, payload)
+
+    if to_user_id == user.id:
+        raise HTTPException(status_code=400, detail={"reason": "self_transfer_blocked", "message": "Cannot transfer to yourself"})
+    recipient = db.get(AppUser, to_user_id)
+    if not recipient:
+        raise HTTPException(status_code=404, detail={"reason": "user_not_found", "message": "Target user not found"})
+    if resolved_event_id is not None:
+        ensure_event_action_allowed(db, resolved_event_id, "wallet_enabled", write=True)
+
+    sender = get_or_create_wallet(db, user.id)
+    receiver = get_or_create_wallet(db, to_user_id)
+    if int(sender.balance_tickets or 0) < payload.amount:
+        raise HTTPException(status_code=400, detail={"reason": "insufficient_balance", "message": "Insufficient balance"})
+
+    sender.balance_tickets -= payload.amount
+    sender.updated_at = now_utc()
+    receiver.balance_tickets += payload.amount
+    receiver.updated_at = now_utc()
+
+    transfer = TicketTransfer(
+        from_user_id=user.id,
+        to_user_id=to_user_id,
+        amount=payload.amount,
+        event_id=resolved_event_id,
+        reason=payload.reason,
+    )
+    out_tx = WalletTx(user_id=user.id, kind="DEBIT", amount_tickets=-payload.amount, ref_type="GIFT_OUT", ref_id=None, idempotency_key=f"transfer:out:{idem}")
+    in_tx = WalletTx(user_id=to_user_id, kind="CREDIT", amount_tickets=payload.amount, ref_type="GIFT_IN", ref_id=None, idempotency_key=f"transfer:in:{idem}")
+    db.add_all([sender, receiver, transfer, out_tx, in_tx])
+    db.flush()
+    out_tx.ref_id = f"transfer:{transfer.id}"
+    in_tx.ref_id = f"transfer:{transfer.id}"
+
+    response_json = {
+        "transfer_id": transfer.id,
+        "new_balance_sender": int(sender.balance_tickets or 0),
+        "recipient_user_id": to_user_id,
+        "idempotent": False,
+    }
+    db.add(TicketTransferIdempotency(from_user_id=user.id, idempotency_key=idem, transfer_id=transfer.id, response_json=response_json))
+
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="guest",
+        action="wallet.transfer",
+        entity_type="ticket_transfer",
+        entity_id=str(transfer.id),
+        event_id=resolved_event_id,
+        bar_id=None,
+        payload={"from_user_id": user.id, "to_user_id": to_user_id, "amount": payload.amount, "reason": payload.reason},
+    )
+    db.commit()
+    return WalletTransferOut(**response_json)
+
+
+@router.get("/wallet/transfers", response_model=WalletTransferPageOut)
+def wallet_transfers(
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cursor_ts, cursor_id = decode_cursor(cursor)
+    q = db.query(TicketTransfer).filter(or_(TicketTransfer.from_user_id == user.id, TicketTransfer.to_user_id == user.id))
+    if cursor_ts and cursor_id:
+        q = q.filter(or_(TicketTransfer.created_at < cursor_ts, and_(TicketTransfer.created_at == cursor_ts, TicketTransfer.id < cursor_id)))
+    rows = q.order_by(TicketTransfer.created_at.desc(), TicketTransfer.id.desc()).limit(limit + 1).all()
+    next_cursor = None
+    if len(rows) > limit:
+        last = rows[limit - 1]
+        next_cursor = encode_cursor(last.created_at, last.id)
+        rows = rows[:limit]
+
+    items: list[WalletTransferRowOut] = []
+    for row in rows:
+        outgoing = row.from_user_id == user.id
+        items.append(
+            WalletTransferRowOut(
+                id=row.id,
+                ts=row.created_at,
+                direction="out" if outgoing else "in",
+                amount=-row.amount if outgoing else row.amount,
+                counterparty_user_id=row.to_user_id if outgoing else row.from_user_id,
+                reason=row.reason,
+                event_id=row.event_id,
+            )
+        )
+    return WalletTransferPageOut(items=items, next_cursor=next_cursor)
+
+
+@router.get("/me/privacy", response_model=UserPrivacyOut)
+def me_privacy(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user.id).first()
+    return _privacy_out(row)
+
+
+@router.put("/me/privacy", response_model=UserPrivacyOut)
+def put_me_privacy(
+    payload: UserPrivacyIn,
+    idempotency_header: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _required_idempotency(idempotency_header, f"privacy:{user.id}:{payload.visibility}:{int(payload.show_identity_in_bar)}")
+    row = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user.id).first()
+    if not row:
+        row = AppUserPrivacySetting(user_id=user.id)
+    row.visibility = payload.visibility
+    row.show_identity_in_bar = payload.show_identity_in_bar
+    row.show_identity_to_staff = payload.show_identity_in_bar
+    row.updated_at = now_utc()
+    db.add(row)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="user",
+        action="user.privacy.update",
+        entity_type="app_user",
+        entity_id=str(user.id),
+        event_id=None,
+        bar_id=None,
+        payload={"visibility": payload.visibility, "show_identity_in_bar": payload.show_identity_in_bar},
+    )
+    db.commit()
+    return _privacy_out(row)
 
 
 @router.post("/wallet/topup", response_model=WalletMeOut)

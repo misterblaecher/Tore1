@@ -1080,6 +1080,47 @@ class WalletGift(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class TicketTransfer(Base):
+    __tablename__ = "ticket_transfers"
+    __table_args__ = (
+        Index("ix_ticket_transfers_from_ts", "from_user_id", "created_at"),
+        Index("ix_ticket_transfers_to_ts", "to_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    to_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class TicketTransferIdempotency(Base):
+    __tablename__ = "ticket_transfer_idempotency"
+    __table_args__ = (
+        UniqueConstraint("from_user_id", "idempotency_key", name="uq_ticket_transfer_sender_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
+    transfer_id: Mapped[int] = mapped_column(ForeignKey("ticket_transfers.id"), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class UserGiftCode(Base):
+    __tablename__ = "user_gift_codes"
+    __table_args__ = (UniqueConstraint("code", name="uq_user_gift_codes_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), unique=True, index=True)
+    code: Mapped[str] = mapped_column(String(16), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
@@ -1132,6 +1173,8 @@ class AppUserPrivacySetting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
     show_identity_to_staff: Mapped[bool] = mapped_column(Boolean, default=False)
+    visibility: Mapped[str] = mapped_column(String(16), default="public")
+    show_identity_in_bar: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
