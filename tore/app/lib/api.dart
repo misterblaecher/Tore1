@@ -52,6 +52,62 @@ class Api {
         (await _client.dio.get('/events/$eventId/state')).data as Map,
       );
 
+  Future<Map<String, dynamic>> getMusic(int eventId) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/music')).data as Map);
+
+  Future<Map<String, dynamic>> voteMusic({
+    required int eventId,
+    required Map<String, dynamic> candidate,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/vote',
+      data: {'candidate': candidate},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> adminMusicSettings({
+    required int eventId,
+    required Map<String, dynamic> payload,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/admin/settings',
+      data: payload,
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> adminMusicForce({
+    required int eventId,
+    required Map<String, dynamic> candidate,
+    required String idempotencyKey,
+    String? reason,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/admin/force',
+      data: {'candidate': candidate, if (reason != null) 'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> adminMusicClear({
+    required int eventId,
+    required String idempotencyKey,
+    String? reason,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/admin/clear',
+      data: {if (reason != null) 'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> joinEvent({
     required int eventId,
     String? idempotencyKey,
