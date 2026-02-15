@@ -128,7 +128,7 @@ export default function BarDashboard() {
         <h3 style={{ marginTop: 0 }}>BAR MODE modules</h3>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link to={eventId ? `/bar/events/${eventId}/orders` : '/orders-queue'}>Orders Live</Link>
-          <Link to="/menu-admin">Menu Admin</Link>
+          <Link to={eventId ? `/bar/events/${eventId}/menu` : "/menu-admin"}>Menu Admin</Link>
           <Link to="/analytics">Analytics</Link>
         </div>
         <div style={{ marginTop: 10 }}>

@@ -77,6 +77,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_broadcast_tables(engine)
     ensure_incidents_tables(engine)
     ensure_profitability_tables(engine)
+    ensure_menu_admin_columns(engine)
 
 
 def ensure_profitability_tables(engine: Engine) -> None:
@@ -526,3 +527,29 @@ def ensure_incidents_tables(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_incident_action_idem_incident_id ON event_incident_action_idempotency (incident_id)"))
+
+
+def ensure_menu_admin_columns(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    cols = _table_columns(engine, "menu_items")
+    with engine.begin() as conn:
+        if "stock_status" not in cols:
+            conn.execute(text("ALTER TABLE menu_items ADD COLUMN stock_status VARCHAR(8) DEFAULT 'IN'"))
+        if "version" not in cols:
+            conn.execute(text("ALTER TABLE menu_items ADD COLUMN version INTEGER DEFAULT 1"))
+        if "last_price_change_at" not in cols:
+            conn.execute(text("ALTER TABLE menu_items ADD COLUMN last_price_change_at DATETIME"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS menu_admin_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_menu_admin_idempotency UNIQUE (event_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_menu_admin_idempotency_event_id ON menu_admin_idempotency (event_id)"))

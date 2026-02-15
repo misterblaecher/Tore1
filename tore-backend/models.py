@@ -655,6 +655,9 @@ class MenuItem(Base):
     tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    stock_status: Mapped[str] = mapped_column(String(8), default="IN")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    last_price_change_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     alcohol: Mapped[bool] = mapped_column(Boolean, default=False)
     vegan: Mapped[bool] = mapped_column(Boolean, default=False)
     allergens: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -691,6 +694,17 @@ class MenuTrackEvent(Base):
     device_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     changes_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class MenuAdminIdempotency(Base):
+    __tablename__ = "menu_admin_idempotency"
+    __table_args__ = (UniqueConstraint("event_id", "idempotency_key", name="uq_menu_admin_idempotency"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class EventCost(Base):
