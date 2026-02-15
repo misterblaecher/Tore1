@@ -1221,6 +1221,46 @@ class CommitteeAdminIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class CommitteeForumCategory(Base):
+    __tablename__ = "committee_forum_categories"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "year_id", "slug", name="uq_committee_forum_category_slug"),
+        Index("ix_committee_forum_categories_committee_year_order", "committee_id", "year_id", "order_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_id: Mapped[int] = mapped_column(ForeignKey("committee_years.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(120), index=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeForumPost(Base):
+    __tablename__ = "committee_forum_posts"
+    __table_args__ = (
+        Index("ix_committee_forum_posts_feed", "committee_id", "year_id", "category_id", "is_deleted", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_id: Mapped[int] = mapped_column(ForeignKey("committee_years.id"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("committee_forum_categories.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    body: Mapped[str] = mapped_column(Text)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    deleted_by: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
