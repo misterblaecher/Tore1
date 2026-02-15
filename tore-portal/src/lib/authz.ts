@@ -17,3 +17,11 @@ export function hasOrgaManagerAccess(): boolean {
   const role = (getSession()?.role || '').toLowerCase()
   return ORGA_MANAGER_ROLES.has(role)
 }
+
+
+export const BAR_MODE_ROLES = new Set(['bartender', 'manager', 'owner'])
+
+export function hasBarModeAccess(): boolean {
+  const role = (getSession()?.role || '').toLowerCase()
+  return BAR_MODE_ROLES.has(role)
+}

@@ -231,7 +231,7 @@ export default function Dashboard() {
           Orders Queue
         </Link>
         <Link
-          to="/bar-dashboard"
+          to={selectedEventId ? `/bar/events/${selectedEventId}/dashboard` : '/'}
           style={{
             display: 'inline-block',
             padding: '10px 14px',
@@ -243,7 +243,7 @@ export default function Dashboard() {
             textDecoration: 'none',
           }}
         >
-          Bar Dashboard
+          BAR MODE
         </Link>
         <Link
           to="/kitchen"
