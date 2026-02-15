@@ -12,9 +12,12 @@ import '../../polymarket/my_positions_screen.dart';
 import '../../polymarket/polymarket_models.dart';
 
 class PolymarketTabScreen extends ConsumerStatefulWidget {
-  const PolymarketTabScreen({super.key, this.initialScope = 'global'});
+  const PolymarketTabScreen({super.key, this.initialScope = 'global', this.eventOnly = false, this.canCreateBets = false, this.canResolveBets = false});
 
   final String initialScope;
+  final bool eventOnly;
+  final bool canCreateBets;
+  final bool canResolveBets;
 
   @override
   ConsumerState<PolymarketTabScreen> createState() => _PolymarketTabScreenState();
@@ -164,8 +167,14 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Polymarket'),
+        title: Text(widget.eventOnly ? 'Polymarket EVENT' : 'Polymarket'),
         actions: [
+          if (widget.eventOnly && widget.canCreateBets)
+            IconButton(
+              tooltip: 'Créer',
+              onPressed: () => _openCreateMarket(ctx.activeEventId),
+              icon: const Icon(Icons.add_circle_outline),
+            ),
           IconButton(
             tooltip: 'My Positions',
             onPressed: () {
@@ -177,7 +186,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       ),
       body: Column(
         children: [
-          if (hasEvent)
+          if (hasEvent && !widget.eventOnly)
             Padding(
               padding: const EdgeInsets.all(12),
               child: SegmentedButton<String>(
@@ -210,12 +219,44 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
-              child: _buildList(),
+          child: _buildList(),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _openCreateMarket(int? eventId) async {
+    if (eventId == null) return;
+    final questionCtrl = TextEditingController();
+    String type = 'objective';
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 16, left: 16, right: 16, top: 16),
+        child: StatefulBuilder(
+          builder: (context, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: questionCtrl, decoration: const InputDecoration(labelText: 'Question')),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [ButtonSegment(value: 'objective', label: Text('Objective')), ButtonSegment(value: 'subjective', label: Text('Subjective'))],
+                selected: {type},
+                onSelectionChanged: (s) => setLocal(() => type = s.first),
+              ),
+              const SizedBox(height: 10),
+              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Créer')),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(apiProvider).createEventPolymarketMarket(eventId: eventId, question: questionCtrl.text.trim(), type: type);
+    if (mounted) _refresh();
   }
 
   Widget _chip(String value, String label) => Padding(
@@ -262,7 +303,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
         final m = _items[index];
         return _CompactCard(
           market: m,
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: m.id))),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: m.id, eventId: _scope == 'event' ? ref.read(appContextProvider).activeEventId : null, canResolve: widget.canResolveBets))),
         );
       },
     );

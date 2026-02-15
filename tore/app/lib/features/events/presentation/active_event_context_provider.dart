@@ -12,6 +12,7 @@ class ActiveEventContext {
     required this.eventName,
     required this.eventState,
     required this.modulesOn,
+    required this.permissions,
     this.lastUpdatedAt,
   });
 
@@ -19,12 +20,14 @@ class ActiveEventContext {
   final String eventName;
   final String eventState;
   final Map<String, bool> modulesOn;
+  final EventPermissions permissions;
   final DateTime? lastUpdatedAt;
 
   ActiveEventContext copyWith({
     String? eventName,
     String? eventState,
     Map<String, bool>? modulesOn,
+    EventPermissions? permissions,
     DateTime? lastUpdatedAt,
   }) {
     return ActiveEventContext(
@@ -32,9 +35,16 @@ class ActiveEventContext {
       eventName: eventName ?? this.eventName,
       eventState: eventState ?? this.eventState,
       modulesOn: modulesOn ?? this.modulesOn,
+      permissions: permissions ?? this.permissions,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
     );
   }
+}
+
+class EventPermissions {
+  const EventPermissions({required this.canCreateBets, required this.canResolveBets});
+  final bool canCreateBets;
+  final bool canResolveBets;
 }
 
 class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventContext?>> {
@@ -66,6 +76,7 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
           eventName: ctx.activeEventName ?? 'Event #$nextEventId',
           eventState: 'LIVE',
           modulesOn: Map<String, bool>.from(ctx.activeEventModules ?? const {}),
+          permissions: const EventPermissions(canCreateBets: false, canResolveBets: false),
         ),
       );
       unawaited(refresh(force: true));
@@ -92,6 +103,7 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
       final modules = Map<String, bool>.from(
         ((payload['modulesOn'] as Map?) ?? const {}).map((key, value) => MapEntry(key.toString(), value == true)),
       );
+      final permissionsJson = Map<String, dynamic>.from((payload['permissions'] as Map?) ?? const {});
       ref.read(appContextProvider.notifier).setActiveEventModules(modules);
       final current = state.valueOrNull;
       state = AsyncData(
@@ -100,6 +112,10 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
           eventName: (event['name'] ?? current?.eventName ?? 'Event #$eventId').toString(),
           eventState: (payload['eventState'] ?? payload['event_state'] ?? current?.eventState ?? 'LIVE').toString().toUpperCase(),
           modulesOn: modules,
+          permissions: EventPermissions(
+            canCreateBets: permissionsJson['canCreateBets'] == true,
+            canResolveBets: permissionsJson['canResolveBets'] == true,
+          ),
           lastUpdatedAt: _readDateTime(payload['lastUpdatedAt'] ?? payload['lastStateUpdatedAt']),
         ),
       );

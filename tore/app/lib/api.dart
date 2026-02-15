@@ -440,8 +440,17 @@ class Api {
     String? cursor,
     int limit = 20,
   }) async {
-    final endpoint = scope == 'global' ? '/polymarket/global' : '/polymarket/markets';
+    final endpoint = scope == 'global'
+        ? '/polymarket/global'
+        : (scope == 'event' && eventId != null ? '/events/$eventId/polymarket' : '/polymarket/markets');
     final params = scope == 'global'
+        ? <String, dynamic>{
+            'status': status,
+            'type': type,
+            if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+            'limit': limit,
+          }
+        : endpoint.startsWith('/events/')
         ? <String, dynamic>{
             'status': status,
             'type': type,
@@ -480,17 +489,48 @@ class Api {
 
   Future<Map<String, dynamic>> postPolymarketPosition({
     required int marketId,
+    int? eventId,
     required String side,
     required int amountCents,
     required String idempotencyKey,
   }) async {
     final res = await _client.dio.post(
-      '/polymarket/markets/$marketId/buy',
+      eventId == null ? '/polymarket/markets/$marketId/buy' : '/events/$eventId/polymarket/$marketId/buy',
       data: {
         'side': side,
         'amountTickets': amountCents,
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createEventPolymarketMarket({
+    required int eventId,
+    required String question,
+    required String type,
+    String? rules,
+  }) async {
+    final idem = 'event-create-$eventId-${DateTime.now().millisecondsSinceEpoch}';
+    final res = await _client.dio.post(
+      '/events/$eventId/polymarket',
+      data: {'question': question, 'type': type, if (rules != null) 'rules': rules},
+      options: Options(headers: {'Idempotency-Key': idem}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> resolveEventPolymarketMarket({
+    required int eventId,
+    required int marketId,
+    required String outcome,
+    required String reason,
+  }) async {
+    final idem = 'event-resolve-$eventId-$marketId-${DateTime.now().millisecondsSinceEpoch}';
+    final res = await _client.dio.post(
+      '/events/$eventId/polymarket/$marketId/resolve',
+      data: {'outcome': outcome, 'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idem}),
     );
     return Map<String, dynamic>.from(res.data as Map);
   }

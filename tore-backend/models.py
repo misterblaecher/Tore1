@@ -605,6 +605,22 @@ class BetResolutionLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
 
 
+class PolymarketEventIdempotency(Base):
+    __tablename__ = "polymarket_event_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action", "idempotency_key", name="uq_polymarket_event_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, index=True)
+    market_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    action: Mapped[str] = mapped_column(String(24), index=True)
+    actor_user_id: Mapped[str] = mapped_column(String, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class BetDispute(Base):
     __tablename__ = "polymarket_disputes"
     __table_args__ = (
