@@ -1155,6 +1155,83 @@ class AuditLog(Base):
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class EventMusicSetting(Base):
+    __tablename__ = "event_music_settings"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_music_settings_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    dj_override_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    allow_mixed: Mapped[bool] = mapped_column(Boolean, default=True)
+    provider_default: Mapped[str] = mapped_column(String(24), default="spotify")
+    winner_candidate_key: Mapped[Optional[str]] = mapped_column(String(420), nullable=True)
+    winner_candidate_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    winner_decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+
+
+class EventMusicCandidate(Base):
+    __tablename__ = "event_music_candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    candidate_key: Mapped[str] = mapped_column(String(420), index=True)
+    provider: Mapped[str] = mapped_column(String(24), index=True)
+    external_url: Mapped[str] = mapped_column(String(512))
+    title: Mapped[str] = mapped_column(String(180), default="")
+    artist: Mapped[str] = mapped_column(String(180), default="")
+    artwork_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventMusicVote(Base):
+    __tablename__ = "event_music_votes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    candidate_key: Mapped[str] = mapped_column(String(420), index=True)
+    provider: Mapped[str] = mapped_column(String(24), index=True)
+    external_url: Mapped[str] = mapped_column(String(512))
+    title: Mapped[str] = mapped_column(String(180), default="")
+    artist: Mapped[str] = mapped_column(String(180), default="")
+    artwork_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventMusicActionIdempotency(Base):
+    __tablename__ = "event_music_vote_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action_type", "actor_user_id", "idempotency_key", name="uq_event_music_vote_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(32), default="vote")
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventMusicAdminIdempotency(Base):
+    __tablename__ = "event_music_admin_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action_type", "actor_partner_id", "idempotency_key", name="uq_event_music_admin_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(32), index=True)
+    actor_partner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventBroadcast(Base):
     __tablename__ = "event_broadcasts"
     __table_args__ = (

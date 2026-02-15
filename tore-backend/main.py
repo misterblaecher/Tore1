@@ -1233,6 +1233,7 @@ from app.routers.ticker import router as ticker_router
 from app.routers.broadcasts import router as broadcasts_router
 from app.routers.incidents import router as incidents_router
 from app.routers.bar_menu_admin import router as bar_menu_admin_router
+from app.routers.music_vote import router as music_vote_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1250,6 +1251,7 @@ app.include_router(ticker_router)
 app.include_router(broadcasts_router)
 app.include_router(incidents_router)
 app.include_router(bar_menu_admin_router)
+app.include_router(music_vote_router)
 
 app.add_middleware(
     CORSMiddleware,
