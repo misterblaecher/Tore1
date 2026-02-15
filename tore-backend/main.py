@@ -75,6 +75,8 @@ from models import (
     CommitteeInviteCode,
     CommitteeRolePermission,
     CommitteeAdminIdempotency,
+    CommitteeForumCategory,
+    CommitteeForumPost,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -1041,6 +1043,39 @@ class CommitteeSetRoleIn(BaseModel):
 
 class CommitteeRevokeIn(BaseModel):
     reason: str = Field(min_length=2, max_length=280)
+
+
+class CommitteeForumCreatePostIn(BaseModel):
+    yearId: int
+    categoryId: int
+    title: str = Field(min_length=3, max_length=180)
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class CommitteeForumPinIn(BaseModel):
+    pinned: bool
+    reason: str = Field(min_length=2, max_length=280)
+
+
+class CommitteeForumLockIn(BaseModel):
+    locked: bool
+    reason: str = Field(min_length=2, max_length=280)
+
+
+class CommitteeForumDeleteIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=280)
+
+
+class CommitteeForumCreateCategoryIn(BaseModel):
+    yearId: int
+    name: str = Field(min_length=2, max_length=120)
+    orderIndex: Optional[int] = Field(default=0, ge=0, le=1000)
+
+
+class CommitteeForumUpdateCategoryIn(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    orderIndex: Optional[int] = Field(default=None, ge=0, le=1000)
+    isArchived: Optional[bool] = None
 
 
 class EventCharterOut(BaseModel):
@@ -3607,6 +3642,67 @@ def _require_committee_admin(db: Session, committee_id: int, user: AppUser) -> C
     return membership
 
 
+def _require_committee_member(db: Session, committee_id: int, user: AppUser) -> CommitteeMembership:
+    membership = _committee_membership(db, committee_id, user.id)
+    if membership is None:
+        raise HTTPException(status_code=403, detail={"reason": "not_member"})
+    return membership
+
+
+def _require_idempotency(idempotency_key: Optional[str]) -> str:
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    return key
+
+
+def _forum_year_or_404(db: Session, committee_id: int, year_id: int) -> CommitteeYear:
+    year = db.get(CommitteeYear, year_id)
+    if year is None or year.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "year_not_found"})
+    return year
+
+
+def _forum_category_or_404(db: Session, committee_id: int, year_id: int, category_id: int) -> CommitteeForumCategory:
+    category = db.get(CommitteeForumCategory, category_id)
+    if category is None or category.committee_id != committee_id or category.year_id != year_id:
+        raise HTTPException(status_code=404, detail={"reason": "category_not_found"})
+    return category
+
+
+def _forum_require_mod_or_admin(db: Session, committee_id: int, membership: CommitteeMembership) -> None:
+    role = (membership.role or "MEMBER").upper()
+    if role not in {"MOD", "ADMIN", "OWNER"}:
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+
+
+def _forum_require_admin_or_owner(membership: CommitteeMembership) -> None:
+    if (membership.role or "MEMBER").upper() not in {"ADMIN", "OWNER"}:
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+
+
+def _forum_slug(value: str) -> str:
+    return "-".join("".join(ch.lower() if ch.isalnum() else " " for ch in value).split())[:120] or "category"
+
+
+def _forum_post_payload(db: Session, row: CommitteeForumPost) -> dict[str, Any]:
+    user = db.get(AppUser, row.created_by_user_id)
+    return {
+        "id": row.id,
+        "committeeId": row.committee_id,
+        "yearId": row.year_id,
+        "categoryId": row.category_id,
+        "title": row.title,
+        "body": row.body,
+        "createdByUserId": row.created_by_user_id,
+        "createdByDisplayName": user.display_name if user else row.created_by_user_id,
+        "createdAt": row.created_at.isoformat(),
+        "updatedAt": row.updated_at.isoformat(),
+        "isPinned": bool(row.is_pinned),
+        "isLocked": bool(row.is_locked),
+    }
+
+
 @app.get("/modules")
 def app_modules_state():
     return {"committee_os": _committee_module_enabled()}
@@ -3951,6 +4047,323 @@ def committees_revoke_member(
         bar_id=None,
         payload={"committee_id": committee_id, "user_id": user_id, "reason": payload.reason},
     )
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/forum/categories")
+def committee_forum_categories(
+    committee_id: int,
+    year_id: Optional[int] = Query(default=None),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    if db.get(Committee, committee_id) is None:
+        raise HTTPException(status_code=404, detail="Committee not found")
+    year = _forum_year_or_404(db, committee_id, year_id or (_committee_active_year(db, committee_id).id if _committee_active_year(db, committee_id) else -1))
+    rows = db.query(CommitteeForumCategory).filter(
+        CommitteeForumCategory.committee_id == committee_id,
+        CommitteeForumCategory.year_id == year.id,
+    ).order_by(CommitteeForumCategory.order_index.asc(), CommitteeForumCategory.id.asc()).all()
+    return [
+        {
+            "id": row.id,
+            "committeeId": row.committee_id,
+            "yearId": row.year_id,
+            "name": row.name,
+            "slug": row.slug,
+            "orderIndex": row.order_index,
+            "isArchived": bool(row.is_archived),
+        }
+        for row in rows
+    ]
+
+
+@app.get("/committees/{committee_id}/forum/posts")
+def committee_forum_posts(
+    committee_id: int,
+    year_id: int = Query(alias="year_id"),
+    category_id: int = Query(alias="category_id"),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _forum_year_or_404(db, committee_id, year_id)
+    _forum_category_or_404(db, committee_id, year_id, category_id)
+    include_deleted = (membership.role or "").upper() in {"MOD", "ADMIN", "OWNER"}
+    q = db.query(CommitteeForumPost).filter(
+        CommitteeForumPost.committee_id == committee_id,
+        CommitteeForumPost.year_id == year_id,
+        CommitteeForumPost.category_id == category_id,
+    )
+    if not include_deleted:
+        q = q.filter(CommitteeForumPost.is_deleted.is_(False))
+    if cursor:
+        try:
+            ts_raw, id_raw = cursor.split("|", 1)
+            ts = datetime.fromisoformat(ts_raw)
+            post_id = int(id_raw)
+        except Exception:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_cursor"})
+        q = q.filter(
+            (CommitteeForumPost.is_pinned.is_(True) & ((CommitteeForumPost.created_at < ts) | ((CommitteeForumPost.created_at == ts) & (CommitteeForumPost.id < post_id))))
+            | (CommitteeForumPost.is_pinned.is_(False) & ((CommitteeForumPost.created_at < ts) | ((CommitteeForumPost.created_at == ts) & (CommitteeForumPost.id < post_id))))
+        )
+    rows = q.order_by(CommitteeForumPost.is_pinned.desc(), CommitteeForumPost.created_at.desc(), CommitteeForumPost.id.desc()).limit(limit + 1).all()
+    items = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit and items:
+        tail = items[-1]
+        next_cursor = f"{tail.created_at.isoformat()}|{tail.id}"
+    return {"items": [_forum_post_payload(db, row) for row in items], "nextCursor": next_cursor}
+
+
+@app.get("/committees/{committee_id}/forum/posts/{post_id}")
+def committee_forum_post_detail(
+    committee_id: int,
+    post_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    row = db.get(CommitteeForumPost, post_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    if row.is_deleted and (membership.role or "").upper() not in {"MOD", "ADMIN", "OWNER"}:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    return _forum_post_payload(db, row)
+
+
+@app.post("/committees/{committee_id}/forum/posts")
+def committee_forum_create_post(
+    committee_id: int,
+    payload: CommitteeForumCreatePostIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    idem_key = _require_idempotency(idempotency_key)
+    membership = _require_committee_member(db, committee_id, user)
+    perms = _committee_permissions(db, committee_id, membership.role)
+    if not perms.get("can_post_forum", False):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    _forum_year_or_404(db, committee_id, payload.yearId)
+    category = _forum_category_or_404(db, committee_id, payload.yearId, payload.categoryId)
+    if category.is_archived:
+        raise HTTPException(status_code=400, detail={"reason": "category_archived"})
+    one_minute_ago = now_utc() - timedelta(minutes=1)
+    recent_posts = db.query(CommitteeForumPost).filter(
+        CommitteeForumPost.committee_id == committee_id,
+        CommitteeForumPost.created_by_user_id == user.id,
+        CommitteeForumPost.created_at >= one_minute_ago,
+    ).count()
+    if recent_posts >= 3:
+        raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Too many posts"})
+
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "forum_post_create",
+        CommitteeAdminIdempotency.idempotency_key == idem_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = CommitteeForumPost(
+        committee_id=committee_id,
+        year_id=payload.yearId,
+        category_id=payload.categoryId,
+        title=payload.title.strip(),
+        body=payload.body.strip(),
+        created_by_user_id=user.id,
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(row)
+    db.flush()
+    response = _forum_post_payload(db, row)
+    db.add(CommitteeAdminIdempotency(committee_id=committee_id, action="forum_post_create", idempotency_key=idem_key, response_json=response))
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/forum/posts/{post_id}/pin")
+def committee_forum_pin_post(
+    committee_id: int,
+    post_id: int,
+    payload: CommitteeForumPinIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    idem_key = _require_idempotency(idempotency_key)
+    membership = _require_committee_member(db, committee_id, user)
+    _forum_require_mod_or_admin(db, committee_id, membership)
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "forum_post_pin",
+        CommitteeAdminIdempotency.idempotency_key == idem_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = db.get(CommitteeForumPost, post_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    row.is_pinned = payload.pinned
+    row.updated_at = now_utc()
+    response = _forum_post_payload(db, row)
+    db.add(CommitteeAdminIdempotency(committee_id=committee_id, action="forum_post_pin", idempotency_key=idem_key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.forum.post.pin", entity_type="committee_forum_post", entity_id=str(post_id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "post_id": post_id, "pinned": payload.pinned, "reason": payload.reason})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/forum/posts/{post_id}/lock")
+def committee_forum_lock_post(
+    committee_id: int,
+    post_id: int,
+    payload: CommitteeForumLockIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    idem_key = _require_idempotency(idempotency_key)
+    membership = _require_committee_member(db, committee_id, user)
+    _forum_require_mod_or_admin(db, committee_id, membership)
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "forum_post_lock",
+        CommitteeAdminIdempotency.idempotency_key == idem_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = db.get(CommitteeForumPost, post_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    row.is_locked = payload.locked
+    row.updated_at = now_utc()
+    response = _forum_post_payload(db, row)
+    db.add(CommitteeAdminIdempotency(committee_id=committee_id, action="forum_post_lock", idempotency_key=idem_key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.forum.post.lock", entity_type="committee_forum_post", entity_id=str(post_id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "post_id": post_id, "locked": payload.locked, "reason": payload.reason})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/forum/posts/{post_id}/delete")
+def committee_forum_delete_post(
+    committee_id: int,
+    post_id: int,
+    payload: CommitteeForumDeleteIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    idem_key = _require_idempotency(idempotency_key)
+    membership = _require_committee_member(db, committee_id, user)
+    _forum_require_mod_or_admin(db, committee_id, membership)
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "forum_post_delete",
+        CommitteeAdminIdempotency.idempotency_key == idem_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = db.get(CommitteeForumPost, post_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    row.is_deleted = True
+    row.deleted_at = now_utc()
+    row.deleted_by = user.id
+    row.updated_at = now_utc()
+    response = {"postId": post_id, "deleted": True}
+    db.add(CommitteeAdminIdempotency(committee_id=committee_id, action="forum_post_delete", idempotency_key=idem_key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.forum.post.delete", entity_type="committee_forum_post", entity_id=str(post_id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "post_id": post_id, "reason": payload.reason})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/forum/categories")
+def committee_forum_create_category(
+    committee_id: int,
+    payload: CommitteeForumCreateCategoryIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    idem_key = _require_idempotency(idempotency_key)
+    membership = _require_committee_member(db, committee_id, user)
+    _forum_require_admin_or_owner(membership)
+    _forum_year_or_404(db, committee_id, payload.yearId)
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "forum_category_create",
+        CommitteeAdminIdempotency.idempotency_key == idem_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    slug = _forum_slug(payload.name)
+    category = CommitteeForumCategory(
+        committee_id=committee_id,
+        year_id=payload.yearId,
+        name=payload.name.strip(),
+        slug=slug,
+        order_index=payload.orderIndex or 0,
+        is_archived=False,
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(category)
+    db.flush()
+    response = {"id": category.id, "committeeId": committee_id, "yearId": payload.yearId, "name": category.name, "slug": category.slug, "orderIndex": category.order_index, "isArchived": False}
+    db.add(CommitteeAdminIdempotency(committee_id=committee_id, action="forum_category_create", idempotency_key=idem_key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.forum.category.create", entity_type="committee_forum_category", entity_id=str(category.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "year_id": payload.yearId, "name": payload.name})
+    db.commit()
+    return response
+
+
+@app.put("/committees/{committee_id}/forum/categories/{category_id}")
+def committee_forum_update_category(
+    committee_id: int,
+    category_id: int,
+    payload: CommitteeForumUpdateCategoryIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    idem_key = _require_idempotency(idempotency_key)
+    membership = _require_committee_member(db, committee_id, user)
+    _forum_require_admin_or_owner(membership)
+    idem = db.query(CommitteeAdminIdempotency).filter(
+        CommitteeAdminIdempotency.committee_id == committee_id,
+        CommitteeAdminIdempotency.action == "forum_category_update",
+        CommitteeAdminIdempotency.idempotency_key == idem_key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    category = db.get(CommitteeForumCategory, category_id)
+    if category is None or category.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "category_not_found"})
+    if payload.name is not None:
+        category.name = payload.name.strip()
+        category.slug = _forum_slug(payload.name)
+    if payload.orderIndex is not None:
+        category.order_index = payload.orderIndex
+    if payload.isArchived is not None:
+        category.is_archived = payload.isArchived
+    category.updated_at = now_utc()
+    response = {"id": category.id, "committeeId": committee_id, "yearId": category.year_id, "name": category.name, "slug": category.slug, "orderIndex": category.order_index, "isArchived": category.is_archived}
+    db.add(CommitteeAdminIdempotency(committee_id=committee_id, action="forum_category_update", idempotency_key=idem_key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.forum.category.update", entity_type="committee_forum_category", entity_id=str(category.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "category_id": category.id, "name": payload.name, "order_index": payload.orderIndex, "is_archived": payload.isArchived})
     db.commit()
     return response
 

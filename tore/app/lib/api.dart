@@ -298,6 +298,114 @@ class Api {
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
+
+  Future<CommitteeFetchResult> committeeForumCategoriesWithCacheStatus({
+    required int committeeId,
+    required int yearId,
+  }) async {
+    final cacheKey = 'committee_forum_categories_${committeeId}_$yearId';
+    try {
+      final data = (await _client.dio.get('/committees/$committeeId/forum/categories', queryParameters: {'year_id': yearId})).data as List<dynamic>;
+      await _cache.setJson(cacheKey, {'items': data}, ttl: const Duration(days: 7));
+      return CommitteeFetchResult(payload: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      final items = cached?['items'];
+      if (items is List<dynamic>) return CommitteeFetchResult(payload: items, fromCache: true);
+      throw const OfflineNoCacheException('committee_forum_categories');
+    }
+  }
+
+  Future<CommitteeFetchResult> committeeForumPostsWithCacheStatus({
+    required int committeeId,
+    required int yearId,
+    required int categoryId,
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final cacheKey = 'committee_forum_posts_${committeeId}_${yearId}_$categoryId';
+    try {
+      final data = Map<String, dynamic>.from(
+        (await _client.dio.get(
+          '/committees/$committeeId/forum/posts',
+          queryParameters: {'year_id': yearId, 'category_id': categoryId, if (cursor != null) 'cursor': cursor, 'limit': limit},
+        ))
+            .data as Map,
+      );
+      await _cache.setJson(cacheKey, data, ttl: const Duration(days: 7));
+      return CommitteeFetchResult(payload: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      throw const OfflineNoCacheException('committee_forum_posts');
+    }
+  }
+
+  Future<Map<String, dynamic>> committeeForumPostDetail({required int committeeId, required int postId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/forum/posts/$postId')).data as Map);
+
+  Future<Map<String, dynamic>> createCommitteeForumPost({
+    required int committeeId,
+    required int yearId,
+    required int categoryId,
+    required String title,
+    required String body,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/forum/posts',
+      data: {'yearId': yearId, 'categoryId': categoryId, 'title': title, 'body': body},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeForumModAction({
+    required int committeeId,
+    required int postId,
+    required String action,
+    required Map<String, dynamic> body,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/forum/posts/$postId/$action',
+      data: body,
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createCommitteeForumCategory({
+    required int committeeId,
+    required int yearId,
+    required String name,
+    int? orderIndex,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/forum/categories',
+      data: {'yearId': yearId, 'name': name, if (orderIndex != null) 'orderIndex': orderIndex},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateCommitteeForumCategory({
+    required int committeeId,
+    required int categoryId,
+    String? name,
+    int? orderIndex,
+    bool? isArchived,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.put(
+      '/committees/$committeeId/forum/categories/$categoryId',
+      data: {'name': name, 'orderIndex': orderIndex, 'isArchived': isArchived}..removeWhere((key, value) => value == null),
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<List<dynamic>> menu(int eventId) async {
     final result = await menuWithCacheStatus(eventId);
     return result.items;
