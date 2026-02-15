@@ -83,6 +83,13 @@ def test_vote_idempotent_and_cooldown_enforced():
     )
     assert set_res.status_code == 200
 
+    start_round = client.post(
+        f"/events/{seed['event_id']}/music/admin/round/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'round-1'},
+    )
+    assert start_round.status_code == 200
+
     body = {'candidate': _candidate('Song A')}
     r1 = client.post(
         f"/events/{seed['event_id']}/music/vote",
@@ -161,6 +168,13 @@ def test_runtime_blocked_states_return_403():
         json={"enabled": True},
         headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'set-run'},
     )
+
+    start_round = client.post(
+        f"/events/{seed['event_id']}/music/admin/round/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'round-run'},
+    )
+    assert start_round.status_code == 200
 
     s = get_session()
     try:
