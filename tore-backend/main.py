@@ -68,6 +68,7 @@ from models import (
     EventRuntimeState,
     EventJoin,
     EventCharterAcceptance,
+    TicketTransfer,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -3015,6 +3016,211 @@ def _event_state_last_updated(runtime: Optional[EventRuntimeState]) -> Optional[
     if runtime is None or runtime.updated_at is None:
         return None
     return runtime.updated_at.isoformat()
+
+
+RANKING_RULES_TEXT = (
+    "Score v1 = tickets dépensés + (commandes × 10) + (gifts envoyés × 2) + volume bets. "
+    "Objectif: valoriser l'activité sans mécanique toxique."
+)
+
+
+def _ranking_masked_name(user_id: str) -> str:
+    return f"Anonymous-{hashlib.sha1(user_id.encode('utf-8')).hexdigest()[:6]}"
+
+
+def _ranking_display_name(*, user_id: str, raw_name: Optional[str], visibility: str, requester_id: str) -> str:
+    if user_id == requester_id:
+        return (raw_name or "Player").strip() or "Player"
+    if visibility == "private":
+        return _ranking_masked_name(user_id)
+    return (raw_name or "Player").strip() or "Player"
+
+
+@app.get("/events/{event_id}/ranking")
+def event_ranking(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(404, "Event not found")
+
+    if not _event_modules_on(db, event_id).get("classement", False):
+        raise HTTPException(status_code=403, detail={"reason": "MODULE_OFF", "message": "Module classement disabled"})
+
+    joined_ids = {
+        row[0]
+        for row in db.query(EventJoin.user_id)
+        .filter(EventJoin.event_id == event_id)
+        .all()
+        if row[0]
+    }
+    if not joined_ids:
+        joined_ids.add(user.id)
+
+    order_rows = (
+        db.query(
+            Order.user_id,
+            func.count(Order.id).label("orders"),
+            func.coalesce(func.sum(Order.total_tickets), 0).label("spent_tickets"),
+        )
+        .filter(Order.event_id == event_id, Order.user_id.isnot(None))
+        .group_by(Order.user_id)
+        .all()
+    )
+    transfer_sent_rows = (
+        db.query(
+            TicketTransfer.from_user_id,
+            func.coalesce(func.sum(TicketTransfer.amount), 0).label("gifts_sent"),
+        )
+        .filter(TicketTransfer.event_id == event_id)
+        .group_by(TicketTransfer.from_user_id)
+        .all()
+    )
+    transfer_received_rows = (
+        db.query(
+            TicketTransfer.to_user_id,
+            func.coalesce(func.sum(TicketTransfer.amount), 0).label("gifts_received"),
+        )
+        .filter(TicketTransfer.event_id == event_id)
+        .group_by(TicketTransfer.to_user_id)
+        .all()
+    )
+    bet_rows = (
+        db.query(
+            BetPosition.user_id,
+            func.coalesce(func.sum(BetPosition.stake_tickets), 0).label("bets_volume"),
+        )
+        .join(Bet, Bet.id == BetPosition.bet_id)
+        .filter(Bet.scope == "EVENT", Bet.event_id == event_id)
+        .group_by(BetPosition.user_id)
+        .all()
+    )
+
+    users_index: dict[str, dict[str, int | str | float]] = {
+        user_id: {
+            "user_id": user_id,
+            "orders": 0,
+            "spent_tickets": 0,
+            "gifts_sent": 0,
+            "gifts_received": 0,
+            "bets_volume": 0,
+            "score": 0,
+        }
+        for user_id in joined_ids
+    }
+    users_index.setdefault(
+        user.id,
+        {
+            "user_id": user.id,
+            "orders": 0,
+            "spent_tickets": 0,
+            "gifts_sent": 0,
+            "gifts_received": 0,
+            "bets_volume": 0,
+            "score": 0,
+        },
+    )
+
+    for row in order_rows:
+        uid = row.user_id
+        if not uid:
+            continue
+        entry = users_index.setdefault(uid, {"user_id": uid, "orders": 0, "spent_tickets": 0, "gifts_sent": 0, "gifts_received": 0, "bets_volume": 0, "score": 0})
+        entry["orders"] = int(row.orders or 0)
+        entry["spent_tickets"] = int(row.spent_tickets or 0)
+    for row in transfer_sent_rows:
+        uid = row.from_user_id
+        if not uid:
+            continue
+        entry = users_index.setdefault(uid, {"user_id": uid, "orders": 0, "spent_tickets": 0, "gifts_sent": 0, "gifts_received": 0, "bets_volume": 0, "score": 0})
+        entry["gifts_sent"] = int(row.gifts_sent or 0)
+    for row in transfer_received_rows:
+        uid = row.to_user_id
+        if not uid:
+            continue
+        entry = users_index.setdefault(uid, {"user_id": uid, "orders": 0, "spent_tickets": 0, "gifts_sent": 0, "gifts_received": 0, "bets_volume": 0, "score": 0})
+        entry["gifts_received"] = int(row.gifts_received or 0)
+    for row in bet_rows:
+        uid = row.user_id
+        if not uid:
+            continue
+        entry = users_index.setdefault(uid, {"user_id": uid, "orders": 0, "spent_tickets": 0, "gifts_sent": 0, "gifts_received": 0, "bets_volume": 0, "score": 0})
+        entry["bets_volume"] = int(row.bets_volume or 0)
+
+    user_ids = list(users_index.keys())
+    users = {
+        u.id: u
+        for u in db.query(AppUser).filter(AppUser.id.in_(user_ids)).all()
+    }
+    privacy = {
+        p.user_id: (p.visibility or "public")
+        for p in db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id.in_(user_ids)).all()
+    }
+
+    ranked_rows: list[dict[str, Any]] = []
+    for raw in users_index.values():
+        spent_tickets = int(raw["spent_tickets"])
+        orders = int(raw["orders"])
+        gifts_sent = int(raw["gifts_sent"])
+        gifts_received = int(raw["gifts_received"])
+        bets_volume = int(raw["bets_volume"])
+        score = spent_tickets + (orders * 10) + (gifts_sent * 2) + bets_volume
+        raw["score"] = score
+        ranked_rows.append(raw)
+
+    ranked_rows.sort(
+        key=lambda row: (-int(row["score"]), -int(row["spent_tickets"]), -int(row["orders"]), str(row["user_id"])),
+    )
+
+    output_rows: list[dict[str, Any]] = []
+    me_row: Optional[dict[str, Any]] = None
+    for idx, row in enumerate(ranked_rows, start=1):
+        uid = str(row["user_id"])
+        profile = users.get(uid)
+        display_name = _ranking_display_name(
+            user_id=uid,
+            raw_name=profile.display_name if profile else None,
+            visibility=(privacy.get(uid) or "public").lower(),
+            requester_id=user.id,
+        )
+        payload = {
+            "rank": idx,
+            "displayName": display_name,
+            "score": int(row["score"]),
+            "stats": {
+                "orders": int(row["orders"]),
+                "spentTickets": int(row["spent_tickets"]),
+                "giftsSent": int(row["gifts_sent"]),
+                "giftsReceived": int(row["gifts_received"]),
+                "bets": int(row["bets_volume"]),
+            },
+        }
+        output_rows.append(payload)
+        if uid == user.id:
+            me_row = dict(payload)
+
+    if me_row is None:
+        me_row = {
+            "rank": len(output_rows) + 1,
+            "displayName": (user.display_name or "Player"),
+            "score": 0,
+            "stats": {"orders": 0, "spentTickets": 0, "giftsSent": 0, "giftsReceived": 0, "bets": 0},
+        }
+
+    top3 = output_rows[:3]
+    for entry in top3:
+        entry["badges"] = ["Top 3"]
+
+    return {
+        "eventId": event_id,
+        "updatedAt": now_utc().isoformat(),
+        "rulesText": RANKING_RULES_TEXT,
+        "top3": top3,
+        "list": output_rows[:200],
+        "me": me_row,
+    }
 
 
 def _event_join_payload(db: Session, event: Event) -> dict[str, Any]:
