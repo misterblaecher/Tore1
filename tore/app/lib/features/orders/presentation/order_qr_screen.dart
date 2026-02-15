@@ -13,9 +13,10 @@ import '../../../shared/widgets/service_limited_banner.dart';
 import 'order_status_live_screen.dart';
 
 class OrderQrScreen extends ConsumerStatefulWidget {
-  const OrderQrScreen({super.key, required this.orderId});
+  const OrderQrScreen({super.key, required this.orderId, this.estimatedTickets});
 
   final int orderId;
+  final int? estimatedTickets;
 
   @override
   ConsumerState<OrderQrScreen> createState() => _OrderQrScreenState();
@@ -194,6 +195,12 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white.withOpacity(0.8)),
             ),
+            const SizedBox(height: 12),
+            if (widget.estimatedTickets != null)
+              Text(
+                'Total estimé: 🎟️ ${widget.estimatedTickets}',
+                textAlign: TextAlign.center,
+              ),
             const SizedBox(height: 20),
             Expanded(
               child: Center(

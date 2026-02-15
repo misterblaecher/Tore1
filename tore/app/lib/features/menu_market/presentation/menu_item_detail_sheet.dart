@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/components/tore_card.dart';
 import '../../../ui/components/tore_cta.dart';
+import 'menu_item_availability.dart';
 
 class MenuItemDetailSheet extends StatefulWidget {
   const MenuItemDetailSheet({
@@ -29,6 +30,8 @@ class _MenuItemDetailSheetState extends State<MenuItemDetailSheet> {
     final imageUrl = widget.item['image_url']?.toString();
     final tickets = ((widget.item['ticket_cost'] as num?)?.toInt()) ?? 1;
     final lastPriceChange = widget.item['price_change_pct']?.toString();
+    final stockState = menuItemStockState(widget.item);
+    final isOut = stockState == MenuItemStockState.out;
 
     return SafeArea(
       child: Padding(
@@ -62,6 +65,16 @@ class _MenuItemDetailSheetState extends State<MenuItemDetailSheet> {
                   const SizedBox(height: 6),
                   Text('Prix: 🎟️ $tickets'),
                   if (lastPriceChange != null) Text('Dernière variation: $lastPriceChange'),
+                  if (stockState == MenuItemStockState.out)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Chip(label: Text('RUPTURE')),
+                    )
+                  else if (stockState == MenuItemStockState.low)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Chip(label: Text('LOW')),
+                    ),
                 ],
               ),
             ),
@@ -83,7 +96,7 @@ class _MenuItemDetailSheetState extends State<MenuItemDetailSheet> {
             const SizedBox(height: 8),
             ToreCTA(
               label: 'Add to cart',
-              onPressed: widget.enabled
+              onPressed: (widget.enabled && !isOut)
                   ? () {
                       widget.onAdd(qty);
                       Navigator.of(context).pop();

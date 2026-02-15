@@ -1,22 +1,24 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../state.dart';
-import '../../../shared/widgets/api_status_badge.dart';
 import '../../../core/network/error_mapper.dart';
+import '../../../screens/admin_prices.dart';
+import '../../../screens/organizer.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
-import '../../../shared/widgets/service_limited_banner.dart';
 import '../../../shared/utils/write_gate.dart';
-import '../../../screens/organizer.dart';
-import '../../wallet/presentation/wallet_screen.dart';
-import '../../../screens/admin_prices.dart';
-import '../../leaderboard/presentation/leaderboard_screen.dart';
+import '../../../shared/widgets/api_status_badge.dart';
+import '../../../shared/widgets/service_limited_banner.dart';
+import '../../../state.dart';
 import '../../events/presentation/event_config_providers.dart';
+import '../../leaderboard/presentation/leaderboard_screen.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
+import '../../wallet/presentation/wallet_screen.dart';
 import 'cart_screen.dart';
 import 'cart_state.dart';
+import 'menu_favorites_provider.dart';
+import 'menu_item_availability.dart';
 import 'menu_item_detail_sheet.dart';
 
 class MenuScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class MenuScreen extends ConsumerStatefulWidget {
 class _MenuScreenState extends ConsumerState<MenuScreen> {
   late Future<_MenuData> _future;
   bool _didLoadWithUser = false;
+  bool _showFavoritesOnly = false;
 
   @override
   void initState() {
@@ -45,7 +48,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final eventState = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'LIVE').toString();
 
     final menuResult = await api.menuWithCacheStatus(widget.eventId);
-    final items = (menuResult.items).cast<Map<String, dynamic>>();
+    final items = menuResult.items.cast<Map<String, dynamic>>();
     var isOffline = menuResult.fromCache;
 
     if (userId == null) {
@@ -71,7 +74,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   }
 
   int _requiredTickets(Map<String, dynamic> d) {
-    final v = d['ticket_cost'] ?? d['tickets_cost'] ?? d['price_tickets'] ?? d['ticket_price'];
+    final v = d['ticket_cost'] ?? d['tickets_cost'] ?? d['price_tickets'] ?? d['priceTickets'] ?? d['ticket_price'];
     if (v is num) return v.toInt();
     if (v != null) return int.tryParse(v.toString()) ?? 1;
     return 1;
@@ -82,15 +85,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     ref.watch(meProvider);
     final userId = ref.watch(userIdProvider);
     final cart = ref.watch(cartProvider(widget.eventId));
+    final favorites = ref.watch(menuFavoritesProvider(widget.eventId));
     final configAsync = ref.watch(eventConfigProvider(widget.eventId));
-    final config = configAsync.maybeWhen(
-      data: (value) => value,
-      orElse: () => null,
-    );
-    final configOfflineLimited = configAsync.maybeWhen(
-      error: (err, _) => err is OfflineNoCacheException,
-      orElse: () => false,
-    );
+    final config = configAsync.maybeWhen(data: (value) => value, orElse: () => null);
+    final configOfflineLimited = configAsync.maybeWhen(error: (err, _) => err is OfflineNoCacheException, orElse: () => false);
     final readOnly = isReadOnly(ref);
 
     if (config != null && !config.menuEnabled) {
@@ -115,22 +113,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               tooltip: 'Organisateur',
               icon: const Icon(Icons.event_note_outlined),
               onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => OrganizerScreen(eventId: widget.eventId),
-                  ),
-                );
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrganizerScreen(eventId: widget.eventId)));
               },
             ),
           IconButton(
             tooltip: 'Portefeuille',
             icon: const Icon(Icons.account_balance_wallet_outlined),
             onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => WalletScreen(eventId: widget.eventId),
-                ),
-              );
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: widget.eventId)));
               _refresh();
             },
           ),
@@ -139,22 +129,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               tooltip: 'Prix (Admin)',
               icon: const Icon(Icons.edit_outlined),
               onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => AdminPricesScreen(eventId: widget.eventId),
-                  ),
-                );
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminPricesScreen(eventId: widget.eventId)));
               },
             ),
           IconButton(
             tooltip: 'Classement',
             icon: const Icon(Icons.emoji_events_outlined),
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => LeaderboardScreen(eventId: widget.eventId),
-                ),
-              );
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => LeaderboardScreen(eventId: widget.eventId)));
             },
           ),
         ],
@@ -175,46 +157,53 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           final items = data.items;
           final tickets = data.tickets;
           final isOffline = data.isOffline;
-          final writeBlocked = isWriteBlockedByEventState(data.eventState);
+          final runtimeWriteBlocked = isWriteBlockedByEventState(data.eventState);
           final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-          final allWritesBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: writeBlocked);
+          final allWritesBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeWriteBlocked);
+          final visibleItems = _showFavoritesOnly
+              ? items.where((item) {
+                  final id = ((item['id'] as int?) ?? (item['item_id'] as int?) ?? (item['drink_id'] as int?) ?? 0);
+                  return favorites.contains(id);
+                }).toList()
+              : items;
 
           final top = Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Row(
               children: [
-                const ApiStatusBadge(),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Panier',
-                  icon: Badge(
-                    isLabelVisible: cart.totalItems > 0,
-                    label: Text(cart.totalItems.toString()),
-                    child: const Icon(Icons.shopping_cart_outlined),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => CartScreen(
-                          eventId: widget.eventId,
-                          tickets: tickets,
-                          eventState: data.eventState,
+                ApiStatusBadge(isOffline: isOffline),
+                const SizedBox(width: 8),
+                Badge(
+                  label: Text(cart.totalItems.toString()),
+                  child: IconButton(
+                    tooltip: 'Panier',
+                    icon: const Icon(Icons.shopping_cart_outlined),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CartScreen(
+                            eventId: widget.eventId,
+                            tickets: tickets,
+                            eventState: data.eventState,
+                            menuItems: items,
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-                if (tickets != null)
-                  Chip(
-                    label: Text('🎟️ $tickets'),
-                  )
-                else
-                  const SizedBox.shrink(),
+                if (tickets != null) Chip(label: Text('🎟️ $tickets')) else const SizedBox.shrink(),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Favoris'),
+                  selected: _showFavoritesOnly,
+                  onSelected: (_) => setState(() => _showFavoritesOnly = !_showFavoritesOnly),
+                ),
               ],
             ),
           );
 
-          if (items.isEmpty) {
+          if (visibleItems.isEmpty) {
             return Column(
               children: [
                 if (configOfflineLimited)
@@ -228,7 +217,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: data.eventState)),
                   ),
                 top,
-                const Expanded(child: Center(child: Text('Menu vide'))),
+                Expanded(child: Center(child: Text(_showFavoritesOnly ? 'Aucun favori.' : 'Menu vide'))),
               ],
             );
           }
@@ -248,23 +237,25 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               top,
               Expanded(
                 child: ListView.separated(
-                  itemCount: items.length,
+                  itemCount: visibleItems.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
-                    final d = items[i];
+                    final d = visibleItems[i];
 
                     final itemId = ((d['id'] as int?) ?? (d['item_id'] as int?) ?? (d['drink_id'] as int?) ?? 0);
                     final name = (d['name'] ?? '').toString();
                     final type = (d['type'] ?? '').toString();
                     final base = (d['base_price_cents'] as int?) ?? 0;
                     final eff = (d['effective_price_cents'] as int?) ?? base;
-
                     final effPrice = (eff / 100.0).toStringAsFixed(2);
                     final subtitle = type.isEmpty ? 'Prix: $effPrice €' : '$type • $effPrice €';
 
                     final requiredTickets = _requiredTickets(d);
                     final hasEnoughTickets = tickets == null ? true : tickets >= requiredTickets;
-
+                    final stockState = menuItemStockState(d);
+                    final isOut = stockState == MenuItemStockState.out;
+                    final isLow = stockState == MenuItemStockState.low;
+                    final isFavorite = favorites.contains(itemId);
                     final disabledBecauseAuth = userId == null;
                     final disabledBecauseOffline = isOffline || degradedBlocked;
                     final disabledBecauseEventState = allWritesBlocked;
@@ -277,7 +268,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                           isScrollControlled: true,
                           builder: (_) => MenuItemDetailSheet(
                             item: d,
-                            enabled: !(disabledBecauseAuth || disabledBecauseOffline || disabledBecauseEventState),
+                            enabled: !(disabledBecauseAuth || disabledBecauseOffline || disabledBecauseEventState || isOut),
                             onAdd: (qty) {
                               cartController.addOrIncrement(
                                 itemId: itemId,
@@ -285,37 +276,46 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                 name: name,
                                 subtitle: subtitle,
                                 ticketCost: requiredTickets,
+                                available: d['available'] as bool?,
+                                stockStatus: (d['stockStatus'] ?? d['stock_status'])?.toString(),
+                                feeTickets: (d['feeTickets'] as num?)?.toInt() ?? 0,
                                 qty: qty,
                               );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('$name ajouté au panier (x$qty)')),
-                              );
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name ajouté au panier (x$qty)')));
                             },
                           ),
                         );
                       },
-                      title: Text(name.isEmpty ? '(Sans nom)' : name),
+                      title: Row(
+                        children: [
+                          Expanded(child: Text(name.isEmpty ? '(Sans nom)' : name)),
+                          IconButton(
+                            onPressed: itemId == 0 ? null : () => ref.read(menuFavoritesProvider(widget.eventId).notifier).toggle(itemId),
+                            icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                          ),
+                        ],
+                      ),
                       subtitle: Text(subtitle),
+                      leading: isOut
+                          ? const Chip(label: Text('RUPTURE'))
+                          : (isLow ? const Chip(label: Text('LOW')) : null),
                       trailing: SizedBox(
                         width: 130,
                         child: ElevatedButton(
-                          onPressed: (itemId == 0 ||
-                                  disabledBecauseAuth ||
-                                  disabledBecauseOffline ||
-                                  disabledBecauseEventState ||
-                                  !hasEnoughTickets)
+                          onPressed: (itemId == 0 || disabledBecauseAuth || disabledBecauseOffline || disabledBecauseEventState || isOut || !hasEnoughTickets)
                               ? null
-                              : () async {
+                              : () {
                                   cartController.addOrIncrement(
                                     itemId: itemId,
                                     barId: int.tryParse((d['bar_id'] ?? d['barId'] ?? '').toString()) ?? 0,
                                     name: name,
                                     subtitle: subtitle,
                                     ticketCost: requiredTickets,
+                                    available: d['available'] as bool?,
+                                    stockStatus: (d['stockStatus'] ?? d['stock_status'])?.toString(),
+                                    feeTickets: (d['feeTickets'] as num?)?.toInt() ?? 0,
                                   );
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('$name ajouté au panier')),
-                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name ajouté au panier')));
                                 },
                           child: Text(
                             disabledBecauseAuth
@@ -324,7 +324,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                     ? 'Hors-ligne'
                                     : (disabledBecauseEventState
                                         ? 'Bloqué'
-                                        : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Ajouter'))),
+                                        : (isOut ? 'RUPTURE' : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Ajouter')))),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

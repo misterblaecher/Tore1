@@ -152,3 +152,18 @@ def test_export_csv_columns_present():
     body = res.text.splitlines()
     assert body
     assert body[0] == "id,name,category,priceTickets,available,stockStatus,lastPriceChangeAt,version"
+
+
+def test_user_event_menu_exposes_stock_fields():
+    seed = _seed_partner(role="manager")
+    client = TestClient(app)
+
+    res = client.get(f"/events/{seed['event_id']}/menu")
+    assert res.status_code == 200
+    payload = res.json()
+    assert len(payload) >= 1
+
+    row = payload[0]
+    assert 'priceTickets' in row
+    assert 'available' in row
+    assert 'stockStatus' in row

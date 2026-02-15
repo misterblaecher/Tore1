@@ -13,6 +13,7 @@ import '../../../ui/components/tore_divider.dart';
 import '../../../ui/components/tore_list_row.dart';
 import '../../orders/presentation/order_qr_screen.dart';
 import 'cart_state.dart';
+import 'menu_item_availability.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({
@@ -20,11 +21,13 @@ class CartScreen extends ConsumerStatefulWidget {
     required this.eventId,
     required this.tickets,
     required this.eventState,
+    this.menuItems = const [],
   });
 
   final int eventId;
   final int? tickets;
   final String eventState;
+  final List<Map<String, dynamic>> menuItems;
 
   @override
   ConsumerState<CartScreen> createState() => _CartScreenState();
@@ -32,6 +35,13 @@ class CartScreen extends ConsumerStatefulWidget {
 
 class _CartScreenState extends ConsumerState<CartScreen> {
   bool _submitting = false;
+
+  Map<int, Map<String, dynamic>> get _menuById {
+    return {
+      for (final item in widget.menuItems)
+        ((item['id'] as int?) ?? (item['item_id'] as int?) ?? (item['drink_id'] as int?) ?? -1): item,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,12 +52,17 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final readOnly = isReadOnly(ref);
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
     final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeWriteBlocked);
-    final insufficientBalance = widget.tickets != null && cart.totalTickets > widget.tickets!;
-    final canConfirm = !cart.isEmpty &&
-        !writeBlocked &&
-        !insufficientBalance &&
-        userId != null &&
-        !_submitting;
+    final insufficientBalance = widget.tickets != null && cart.totalEstimatedTickets > widget.tickets!;
+    final outLines = cart.lines.where((line) {
+      final menuItem = _menuById[line.itemId];
+      if (menuItem != null) {
+        return isMenuItemOut(menuItem);
+      }
+      final status = line.stockStatus?.toUpperCase();
+      return line.available == false || status == 'OUT';
+    }).toList();
+    final hasUnavailable = outLines.isNotEmpty;
+    final canConfirm = !cart.isEmpty && !writeBlocked && !insufficientBalance && !hasUnavailable && userId != null && !_submitting;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Panier')),
@@ -65,18 +80,23 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 padding: EdgeInsets.only(bottom: 8),
                 child: ServiceLimitedBanner(message: 'Tickets insuffisants pour confirmer ce panier.'),
               ),
+            if (hasUnavailable)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: ServiceLimitedBanner(message: 'Un ou plusieurs articles sont indisponibles. Retire-les pour confirmer.'),
+              ),
             ToreCard(
               child: Column(
                 children: [
-                  ToreListRow(
-                    title: 'Articles',
-                    trailing: Text(cart.totalItems.toString()),
-                  ),
+                  ToreListRow(title: 'Articles', trailing: Text(cart.totalItems.toString())),
                   const ToreDivider(),
-                  ToreListRow(
-                    title: 'Total',
-                    trailing: Text('🎟️ ${cart.totalTickets}'),
-                  ),
+                  ToreListRow(title: 'Total tickets', trailing: Text('🎟️ ${cart.totalTickets}')),
+                  if (cart.totalFeesTickets > 0) ...[
+                    const ToreDivider(),
+                    ToreListRow(title: 'Frais estimés', trailing: Text('🎟️ ${cart.totalFeesTickets}')),
+                  ],
+                  const ToreDivider(),
+                  ToreListRow(title: 'Total estimé', trailing: Text('🎟️ ${cart.totalEstimatedTickets}')),
                 ],
               ),
             ),
@@ -89,26 +109,30 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       separatorBuilder: (_, __) => const ToreDivider(),
                       itemBuilder: (context, index) {
                         final line = cart.lines[index];
+                        final unavailable = outLines.any((entry) => entry.itemId == line.itemId);
                         return ToreListRow(
                           title: '${line.name} ×${line.qty}',
-                          subtitle: '${line.ticketCost} tickets/unité',
+                          subtitle: unavailable ? 'Indispo' : '${line.ticketCost} tickets/unité',
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                onPressed: () => controller.decrement(line.itemId),
-                                icon: const Icon(Icons.remove_circle_outline),
-                              ),
-                              IconButton(
-                                onPressed: () => controller.increment(line.itemId),
-                                icon: const Icon(Icons.add_circle_outline),
-                              ),
+                              IconButton(onPressed: () => controller.decrement(line.itemId), icon: const Icon(Icons.remove_circle_outline)),
+                              IconButton(onPressed: () => controller.increment(line.itemId), icon: const Icon(Icons.add_circle_outline)),
                             ],
                           ),
                         );
                       },
                     ),
             ),
+            if (hasUnavailable)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ToreCTA(
+                  label: 'Retirer indisponibles',
+                  style: ToreCTAStyle.secondary,
+                  onPressed: controller.removeUnavailable,
+                ),
+              ),
             const SizedBox(height: 8),
             ToreCTA(
               label: _submitting ? 'Confirmation...' : 'Confirmer',
@@ -153,13 +177,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
       ref.read(cartProvider(widget.eventId).notifier).clear();
       await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => OrderQrScreen(orderId: orderId)),
+        MaterialPageRoute(builder: (_) => OrderQrScreen(orderId: orderId, estimatedTickets: cart.totalEstimatedTickets)),
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyError(e))),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
