@@ -54,6 +54,7 @@ from models import (
     PartnerMembership,
     Wallet,
     WalletTx,
+    WalletGift,
     Bet,
     BetPosition,
     BetResolutionLog,
@@ -93,6 +94,9 @@ from models import (
     CommitteeGlossaryTerm,
     CommitteeGlossaryIdempotency,
     AuditLog,
+    UserPrivacyDeleteRequest,
+    UserSanction,
+    GlobalFeatureFlag,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -234,12 +238,41 @@ def _ensure_wallet_indexes() -> None:
         s.close()
 
 
+def _ensure_app_user_privacy_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    s = get_session()
+    try:
+        columns = {row[1] for row in s.execute(text("PRAGMA table_info(app_users)")).fetchall()}
+        if "email" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN email VARCHAR(255)"))
+            s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_email ON app_users (email)"))
+        if "phone" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN phone VARCHAR(64)"))
+            s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_phone ON app_users (phone)"))
+        if "is_deleted" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN is_deleted BOOLEAN DEFAULT 0"))
+            s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_is_deleted ON app_users (is_deleted)"))
+        if "deleted_at" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN deleted_at DATETIME"))
+        if "anonymized_at" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN anonymized_at DATETIME"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_deleted_at ON app_users (deleted_at)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_anonymized_at ON app_users (anonymized_at)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_actor_user_ts ON audit_logs (actor_user_id, ts)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_committee_ts ON audit_logs (committee_id, ts)"))
+        s.commit()
+    finally:
+        s.close()
+
+
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
     _ensure_market_tick_columns()
     _ensure_polymarket_v1_columns()
     _ensure_wallet_indexes()
+    _ensure_app_user_privacy_columns()
     ensure_sqlite_compat(engine)
     s = get_session()
     try:
@@ -370,6 +403,65 @@ def _hash_token(raw: str) -> str:
 security = HTTPBearer(auto_error=False)
 
 
+def _retention_days() -> int:
+    try:
+        return max(1, int(os.getenv("TORE_PRIVACY_RETENTION_DAYS", "30")))
+    except ValueError:
+        return 30
+
+
+def _serialize_dt(value: Optional[datetime]) -> Optional[str]:
+    return value.isoformat() if value else None
+
+
+def _active_sanction_for_user(db: Session, user_id: str) -> Optional[UserSanction]:
+    now = now_utc()
+    rows = db.query(UserSanction).filter(UserSanction.user_id == user_id, UserSanction.status == "ACTIVE").order_by(UserSanction.created_at.desc()).all()
+    for row in rows:
+        if row.starts_at and row.starts_at > now:
+            continue
+        if row.ends_at and row.ends_at <= now:
+            row.status = "EXPIRED"
+            db.add(row)
+            continue
+        return row
+    return None
+
+
+def _enforce_user_sanctions(db: Session, user: AppUser) -> None:
+    if bool(getattr(user, "is_deleted", False)):
+        raise HTTPException(status_code=403, detail={"reason": "ACCOUNT_DELETED"})
+    sanction = _active_sanction_for_user(db, user.id)
+    if sanction and sanction.type in {"SUSPEND", "BAN"}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "reason": "SANCTIONED",
+                "type": sanction.type,
+                "endsAt": _serialize_dt(sanction.ends_at),
+            },
+        )
+
+
+def _apply_user_anonymization(user: AppUser) -> None:
+    user.display_name = "Deleted User"
+    user.avatar_url = None
+    user.address_text = None
+    user.show_address = False
+    user.email = None
+    user.phone = None
+    user.is_deleted = True
+    now = now_utc()
+    if user.deleted_at is None:
+        user.deleted_at = now
+    user.anonymized_at = now
+
+
+def _require_global_admin(identity: Dict[str, Any]) -> None:
+    if (identity.get("role") or "").upper() != "ADMIN_GLOBAL":
+        raise HTTPException(status_code=403, detail={"reason": "FORBIDDEN_ADMIN_GLOBAL"})
+
+
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
     if not authorization:
         return None
@@ -448,6 +540,7 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
+    _enforce_user_sanctions(db, user)
     return user
 
 
@@ -2943,6 +3036,7 @@ def me(
             if bar_id is not None
             else None
         )
+        active_sanction = _active_sanction_for_user(s, user.id)
         return {
             "id": user.id,
             "display_name": user.display_name,
@@ -2956,6 +3050,12 @@ def me(
             "bar_show_identity_to_staff": (
                 bool(bar_settings and bar_settings.staff_identity_consent_required)
                 if bar_id is not None
+                else None
+            ),
+            "warned": bool(active_sanction and active_sanction.type == "WARN"),
+            "warning": (
+                {"type": active_sanction.type, "endsAt": _serialize_dt(active_sanction.ends_at), "reason": active_sanction.reason}
+                if active_sanction and active_sanction.type == "WARN"
                 else None
             ),
         }
@@ -3033,6 +3133,164 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
         }
     finally:
         s.close()
+
+
+class AdminSanctionIn(BaseModel):
+    type: Literal["WARN", "SUSPEND", "BAN"]
+    durationHours: Optional[int] = Field(default=None, ge=1)
+    reason: str = Field(min_length=3, max_length=255)
+
+
+class AdminSanctionRevokeIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=255)
+
+
+class AdminFlagUpdateIn(BaseModel):
+    key: str = Field(min_length=2, max_length=64)
+    enabled: bool
+    reason: str = Field(min_length=3, max_length=255)
+
+
+class AdminFreezeEventIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=180)
+
+
+def _export_payload_for_user(db: Session, user: AppUser) -> dict[str, Any]:
+    profile = {
+        "id": user.id,
+        "display_name": user.display_name,
+        "email": user.email,
+        "phone": user.phone,
+        "show_address": user.show_address,
+        "show_avatar": user.show_avatar,
+        "is_deleted": bool(user.is_deleted),
+        "created_at": _serialize_dt(user.created_at),
+    }
+    wallet_transfers = [
+        {
+            "id": row.id,
+            "event_id": row.event_id,
+            "from_user_id": row.from_user_id,
+            "to_user_id": row.to_user_id,
+            "amount": row.amount_tickets,
+            "reason": row.reason,
+            "created_at": _serialize_dt(row.created_at),
+        }
+        for row in db.query(WalletGift).filter((WalletGift.from_user_id == user.id) | (WalletGift.to_user_id == user.id)).order_by(WalletGift.id.desc()).limit(500).all()
+    ]
+    positions = [
+        {
+            "id": row.id,
+            "bet_id": row.bet_id,
+            "side": row.side,
+            "shares": row.shares,
+            "stake_tickets": row.stake_tickets,
+            "created_at": _serialize_dt(row.created_at),
+        }
+        for row in db.query(BetPosition).filter(BetPosition.user_id == user.id).order_by(BetPosition.id.desc()).limit(500).all()
+    ]
+    committee_memberships = [
+        {
+            "committee_id": row.committee_id,
+            "year_id": row.year_id,
+            "role": row.role,
+            "status": row.status,
+            "created_at": _serialize_dt(row.created_at),
+        }
+        for row in db.query(CommitteeMembership).filter(CommitteeMembership.user_id == user.id).order_by(CommitteeMembership.id.desc()).all()
+    ]
+    safety_checkins = [
+        {
+            "event_id": row.event_id,
+            "zone": row.zone,
+            "state": row.state,
+            "created_at": _serialize_dt(row.created_at),
+        }
+        for row in db.query(Checkin).filter(Checkin.user_id == user.id).order_by(Checkin.id.desc()).limit(500).all()
+    ]
+    order_summaries = [
+        {
+            "id": row.id,
+            "event_id": row.event_id,
+            "status": row.status,
+            "total_tickets": row.total_tickets,
+            "created_at": _serialize_dt(row.created_at),
+        }
+        for row in db.query(Order).filter(Order.user_id == user.id).order_by(Order.id.desc()).limit(500).all()
+    ]
+    return {
+        "profile": profile,
+        "walletTransfers": wallet_transfers,
+        "polymarketPositions": positions,
+        "committeeMemberships": committee_memberships,
+        "safetyCheckins": safety_checkins,
+        "orderSummaries": order_summaries,
+    }
+
+
+@app.get("/me/export.json")
+def me_export_json(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _export_payload_for_user(db, user)
+
+
+@app.get("/me/export.csv")
+def me_export_csv(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    payload = _export_payload_for_user(db, user)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["section", "field", "value"])
+    for key, value in payload["profile"].items():
+        writer.writerow(["profile", key, value])
+    for section in ["walletTransfers", "polymarketPositions", "committeeMemberships", "safetyCheckins", "orderSummaries"]:
+        for row in payload[section]:
+            for key, value in row.items():
+                writer.writerow([section, key, value])
+    return StreamingResponse(iter([output.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=me-export.csv"})
+
+
+@app.post("/me/delete")
+def me_delete(
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    existing = db.query(UserPrivacyDeleteRequest).filter(UserPrivacyDeleteRequest.user_id == user.id, UserPrivacyDeleteRequest.idempotency_key == key).first()
+    if existing:
+        return {"status": existing.status, "effectiveAt": existing.effective_at.isoformat(), "idempotent": True}
+    now = now_utc()
+    effective_at = now + timedelta(days=_retention_days())
+    req = UserPrivacyDeleteRequest(user_id=user.id, requested_at=now, effective_at=effective_at, status="PENDING", idempotency_key=key)
+    db.add(req)
+    target = db.get(AppUser, user.id)
+    if target:
+        _apply_user_anonymization(target)
+        db.add(target)
+    db.query(AppToken).filter(AppToken.user_id == user.id, AppToken.revoked_at.is_(None)).update({"revoked_at": now}, synchronize_session=False)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="user.delete.requested",
+        entity_type="app_user",
+        entity_id=user.id,
+        event_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"scope": "user", "reason": "RGPD_DELETE_REQUEST", "effective_at": effective_at.isoformat()},
+    )
+    db.commit()
+    return {"status": req.status, "effectiveAt": req.effective_at.isoformat(), "idempotent": False}
+
+
+@app.get("/me/delete/status")
+def me_delete_status(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(UserPrivacyDeleteRequest).filter(UserPrivacyDeleteRequest.user_id == user.id).order_by(UserPrivacyDeleteRequest.id.desc()).first()
+    if not row:
+        return {"status": "NONE", "effectiveAt": None}
+    return {"status": row.status, "effectiveAt": _serialize_dt(row.effective_at), "requestedAt": _serialize_dt(row.requested_at)}
+
 
 
 def _bar_status_from_events(now: datetime, events: list[Event]) -> str | None:
@@ -4015,8 +4273,202 @@ def _list_glossary_terms(
 
 
 @app.get("/modules")
-def app_modules_state():
-    return {"committee_os": _committee_module_enabled(), "folklore_glossary": _folklore_glossary_module_enabled()}
+def app_modules_state(db: Session = Depends(get_db)):
+    state = {"committee_os": _committee_module_enabled(), "folklore_glossary": _folklore_glossary_module_enabled()}
+    flags = db.query(GlobalFeatureFlag).all()
+    for flag in flags:
+        if flag.key in state:
+            state[flag.key] = bool(flag.enabled)
+    return state
+
+
+@app.get("/admin/audit")
+def admin_audit(
+    actor: Optional[str] = Query(default=None),
+    user: Optional[str] = Query(default=None),
+    event: Optional[int] = Query(default=None),
+    committee: Optional[int] = Query(default=None),
+    since: Optional[str] = Query(default=None),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_global_admin(identity)
+    q = db.query(AuditLog)
+    if actor:
+        if actor.isdigit():
+            q = q.filter((AuditLog.actor_user_id == actor) | (AuditLog.actor_partner_id == int(actor)))
+        else:
+            q = q.filter(AuditLog.actor_user_id == actor)
+    if user:
+        q = q.filter((AuditLog.actor_user_id == user) | (AuditLog.entity_id == user))
+    if event is not None:
+        q = q.filter(AuditLog.event_id == event)
+    if committee is not None:
+        q = q.filter(AuditLog.committee_id == committee)
+    if since:
+        try:
+            q = q.filter(AuditLog.ts >= datetime.fromisoformat(since.replace("Z", "+00:00")))
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_since"})
+    if cursor:
+        try:
+            q = q.filter(AuditLog.id < int(cursor))
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_cursor"})
+    rows = q.order_by(AuditLog.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    clipped = rows[:limit]
+    next_cursor = str(clipped[-1].id) if has_more and clipped else None
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "ts": row.ts.isoformat(),
+                "actorUserId": row.actor_user_id,
+                "actorPartnerId": row.actor_partner_id,
+                "actorRole": row.actor_role,
+                "action": row.action,
+                "entityType": row.entity_type,
+                "entityId": row.entity_id,
+                "eventId": row.event_id,
+                "committeeId": row.committee_id,
+                "idempotencyKey": row.idempotency_key,
+                "payload": row.payload_json,
+            }
+            for row in clipped
+        ],
+        "nextCursor": next_cursor,
+    }
+
+
+@app.get("/admin/users")
+def admin_users(query: Optional[str] = Query(default=None), cursor: Optional[str] = Query(default=None), limit: int = Query(default=30, ge=1, le=100), identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    q = db.query(AppUser)
+    if query:
+        like = f"%{query.strip().lower()}%"
+        q = q.filter((func.lower(AppUser.id).like(like)) | (func.lower(AppUser.display_name).like(like)))
+    if cursor:
+        q = q.filter(AppUser.id > cursor)
+    rows = q.order_by(AppUser.id.asc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    clipped = rows[:limit]
+    return {
+        "items": [{"id": row.id, "displayName": row.display_name, "isDeleted": bool(row.is_deleted), "createdAt": _serialize_dt(row.created_at)} for row in clipped],
+        "nextCursor": (clipped[-1].id if has_more and clipped else None),
+    }
+
+
+@app.get("/admin/users/{user_id}/sanctions")
+def admin_user_sanctions(user_id: str, identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    rows = db.query(UserSanction).filter(UserSanction.user_id == user_id).order_by(UserSanction.id.desc()).all()
+    return {"items": [{"id": row.id, "type": row.type, "status": row.status, "reason": row.reason, "startsAt": _serialize_dt(row.starts_at), "endsAt": _serialize_dt(row.ends_at), "createdAt": _serialize_dt(row.created_at), "revokedAt": _serialize_dt(row.revoked_at)} for row in rows]}
+
+
+@app.post("/admin/users/{user_id}/sanctions")
+def admin_create_sanction(user_id: str, payload: AdminSanctionIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    key = ensure_idempotency_key(idempotency_key)
+    existing = db.query(UserSanction).filter(UserSanction.user_id == user_id, UserSanction.reason == payload.reason, UserSanction.created_by == identity["user_id"], UserSanction.status == "ACTIVE").order_by(UserSanction.id.desc()).first()
+    if existing and existing.type == payload.type:
+        return {"id": existing.id, "type": existing.type, "status": existing.status, "idempotent": True}
+    now = now_utc()
+    ends_at = None
+    if payload.type == "SUSPEND":
+        hours = payload.durationHours or 24
+        ends_at = now + timedelta(hours=hours)
+    sanction = UserSanction(user_id=user_id, status="ACTIVE", type=payload.type, starts_at=now, ends_at=ends_at, reason=payload.reason, created_by=identity["user_id"])
+    db.add(sanction)
+    write_audit_log(db, actor_partner_id=identity["user_id"], actor_role=identity.get("role"), actor_user_id=user_id, action="admin.sanction.create", entity_type="user_sanction", entity_id=None, event_id=None, committee_id=None, bar_id=identity.get("bar_id"), idempotency_key=key, payload={"scope": "global_admin", "reason": payload.reason, "type": payload.type, "durationHours": payload.durationHours})
+    db.commit()
+    db.refresh(sanction)
+    return {"id": sanction.id, "type": sanction.type, "status": sanction.status, "endsAt": _serialize_dt(sanction.ends_at), "idempotent": False}
+
+
+@app.post("/admin/users/{user_id}/sanctions/{sanction_id}/revoke")
+def admin_revoke_sanction(user_id: str, sanction_id: int, payload: AdminSanctionRevokeIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    key = ensure_idempotency_key(idempotency_key)
+    sanction = db.query(UserSanction).filter(UserSanction.id == sanction_id, UserSanction.user_id == user_id).first()
+    if not sanction:
+        raise HTTPException(status_code=404, detail="Sanction not found")
+    if sanction.status == "REVOKED":
+        return {"status": sanction.status, "idempotent": True}
+    sanction.status = "REVOKED"
+    sanction.revoked_by = identity["user_id"]
+    sanction.revoked_at = now_utc()
+    db.add(sanction)
+    write_audit_log(db, actor_partner_id=identity["user_id"], actor_role=identity.get("role"), actor_user_id=user_id, action="admin.sanction.revoke", entity_type="user_sanction", entity_id=str(sanction.id), event_id=None, committee_id=None, bar_id=identity.get("bar_id"), idempotency_key=key, payload={"scope": "global_admin", "reason": payload.reason})
+    db.commit()
+    return {"status": sanction.status, "idempotent": False}
+
+
+@app.post("/admin/events/{event_id}/freeze")
+def admin_freeze_event(event_id: int, payload: AdminFreezeEventIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    key = ensure_idempotency_key(idempotency_key)
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event_id).first()
+    if not runtime:
+        runtime = EventRuntimeState(event_id=event_id)
+    runtime.state = "FROZEN"
+    runtime.reason = payload.reason
+    runtime.updated_at = now_utc()
+    runtime.updated_by_user_id = identity["user_id"]
+    db.add(runtime)
+    write_audit_log(db, actor_partner_id=identity["user_id"], actor_role=identity.get("role"), actor_user_id=None, action="admin.event.freeze", entity_type="event", entity_id=str(event_id), event_id=event_id, committee_id=None, bar_id=event.bar_id, idempotency_key=key, payload={"scope": "global_admin", "reason": payload.reason})
+    db.commit()
+    return {"status": runtime.state, "reason": runtime.reason}
+
+
+@app.get("/admin/flags")
+def admin_flags(identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    rows = db.query(GlobalFeatureFlag).order_by(GlobalFeatureFlag.key.asc()).all()
+    return {"items": [{"key": row.key, "enabled": row.enabled, "reason": row.reason, "updatedAt": _serialize_dt(row.updated_at)} for row in rows]}
+
+
+@app.put("/admin/flags")
+def admin_flags_update(payload: AdminFlagUpdateIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    key = ensure_idempotency_key(idempotency_key)
+    row = db.get(GlobalFeatureFlag, payload.key)
+    if not row:
+        row = GlobalFeatureFlag(key=payload.key)
+    row.enabled = payload.enabled
+    row.reason = payload.reason
+    row.updated_at = now_utc()
+    row.updated_by = identity["user_id"]
+    db.add(row)
+    write_audit_log(db, actor_partner_id=identity["user_id"], actor_role=identity.get("role"), actor_user_id=None, action="admin.flag.update", entity_type="global_feature_flag", entity_id=payload.key, event_id=None, committee_id=None, bar_id=identity.get("bar_id"), idempotency_key=key, payload={"scope": "global_admin", "reason": payload.reason, "enabled": payload.enabled})
+    db.commit()
+    return {"key": row.key, "enabled": row.enabled, "reason": row.reason}
+
+
+@app.post("/admin/purge/run")
+def admin_purge_run(idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), identity=Depends(current_partner_identity), db: Session = Depends(get_db)):
+    _require_global_admin(identity)
+    key = ensure_idempotency_key(idempotency_key)
+    now = now_utc()
+    rows = db.query(UserPrivacyDeleteRequest).filter(UserPrivacyDeleteRequest.status == "PENDING", UserPrivacyDeleteRequest.effective_at < now).all()
+    purged = 0
+    for req in rows:
+        user = db.get(AppUser, req.user_id)
+        if user:
+            _apply_user_anonymization(user)
+            db.add(user)
+            db.query(AppToken).filter(AppToken.user_id == user.id, AppToken.revoked_at.is_(None)).update({"revoked_at": now}, synchronize_session=False)
+        req.status = "DONE"
+        db.add(req)
+        purged += 1
+    write_audit_log(db, actor_partner_id=identity["user_id"], actor_role=identity.get("role"), actor_user_id=None, action="admin.purge.run", entity_type="privacy_delete", entity_id=None, event_id=None, committee_id=None, bar_id=identity.get("bar_id"), idempotency_key=key, payload={"scope": "global_admin", "reason": "RETENTION_PURGE", "purgedCount": purged})
+    db.commit()
+    return {"purgedCount": purged}
 
 
 @app.get("/committees")

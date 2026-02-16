@@ -25,3 +25,9 @@ export function hasBarModeAccess(): boolean {
   const role = (getSession()?.role || '').toLowerCase()
   return BAR_MODE_ROLES.has(role)
 }
+
+
+export function hasGlobalAdmin(): boolean {
+  const role = (getSession()?.role || "").toUpperCase()
+  return role === "ADMIN_GLOBAL"
+}

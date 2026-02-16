@@ -1,7 +1,7 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { getToken } from './lib/auth'
-import { hasBarModeAccess, hasOrgaHubAccess, hasOrgaManagerAccess } from './lib/authz'
+import { hasBarModeAccess, hasGlobalAdmin, hasOrgaHubAccess, hasOrgaManagerAccess } from './lib/authz'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import EventDetail from './pages/EventDetail'
@@ -43,6 +43,9 @@ import OrgaIncidents from './pages/OrgaIncidents'
 import OrgaProfitability from './pages/OrgaProfitability'
 import OrgaEventSafety from './pages/OrgaEventSafety'
 import OrgaEventMap from './pages/OrgaEventMap'
+import AdminAuditGlobal from './pages/AdminAuditGlobal'
+import AdminUsersGlobal from './pages/AdminUsersGlobal'
+import AdminFlagsGlobal from './pages/AdminFlagsGlobal'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -65,10 +68,46 @@ function RequireBarMode({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RequireGlobalAdmin({ children }: { children: React.ReactNode }) {
+  if (!hasGlobalAdmin()) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      <Route
+        path="/admin/audit"
+        element={
+          <RequireAuth>
+            <RequireGlobalAdmin>
+              <AdminAuditGlobal />
+            </RequireGlobalAdmin>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <RequireAuth>
+            <RequireGlobalAdmin>
+              <AdminUsersGlobal />
+            </RequireGlobalAdmin>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/flags"
+        element={
+          <RequireAuth>
+            <RequireGlobalAdmin>
+              <AdminFlagsGlobal />
+            </RequireGlobalAdmin>
+          </RequireAuth>
+        }
+      />
       <Route
         path="/"
         element={
