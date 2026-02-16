@@ -16,6 +16,7 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
+from zoneinfo import ZoneInfo
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header
@@ -23,7 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc, case, text
+from sqlalchemy import select, func, desc, case, text, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1240,6 +1241,32 @@ class CreateEventOut(BaseModel):
 class EventPublishOut(BaseModel):
     event_id: int
     publicationStatus: str
+
+
+class MyEventSummaryOut(BaseModel):
+    id: int
+    name: str
+    startAt: str
+    endAt: str
+    venue: Optional[str] = None
+    visibility: str
+    status: str
+    modulesOn: dict = Field(default_factory=dict)
+    host_type: str
+    host_id: Optional[str] = None
+    roleForMe: Literal["OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"]
+    canManage: bool
+    joined: bool
+
+
+class EventManageSnapshotOut(BaseModel):
+    eventId: int
+    publicationStatus: str
+    visibility: str
+    runtime: EventRuntimeOut
+    share: EventShareOut
+    qrPackAvailable: bool
+    staffInviteCodeCurrent: Optional[str] = None
 
 
 class EventSummaryOut(BaseModel):
@@ -7975,6 +8002,215 @@ def get_orga(org_id: int, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(404, "Organization not found")
     return _orga_to_out(row)
+
+
+def _event_role_for_user(db: Session, *, event: Event, user_id: str) -> tuple[str, bool]:
+    host_type = (event.host_type or "user").lower()
+    host_id = (event.host_id or "").strip()
+    if host_type == "user" and host_id and host_id == user_id:
+        return "OWNER", True
+
+    orga_role = None
+    if host_type == "orga" and host_id:
+        try:
+            org_id = int(host_id)
+        except ValueError:
+            org_id = 0
+        membership = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == org_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.status == "ACTIVE",
+        ).first()
+        if membership is not None:
+            role = (membership.role or "MEMBER").upper()
+            if role in {"OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"}:
+                orga_role = role
+            else:
+                orga_role = "MEMBER"
+
+    staff = db.query(EventStaff).filter(
+        EventStaff.event_id == event.id,
+        EventStaff.user_id == user_id,
+        EventStaff.is_active == True,  # noqa: E712
+    ).first()
+    staff_role = None
+    if staff is not None:
+        raw = (staff.role or "").lower()
+        staff_role = "MANAGER" if raw == "admin" else "STAFF"
+
+    if orga_role == "OWNER":
+        return "OWNER", True
+    if orga_role == "MANAGER":
+        return "MANAGER", True
+    if staff_role == "MANAGER":
+        return "MANAGER", True
+    if orga_role == "STAFF" or staff_role == "STAFF":
+        return "STAFF", False
+    if orga_role == "FOLLOWER":
+        return "FOLLOWER", False
+    if orga_role == "MEMBER":
+        return "MEMBER", False
+    return "MEMBER", False
+
+
+def _event_bucket(row: Event, now: datetime) -> str:
+    now = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+    starts_at = row.starts_at if row.starts_at.tzinfo is not None else row.starts_at.replace(tzinfo=timezone.utc)
+    ends_at = row.ends_at if row.ends_at.tzinfo is not None else row.ends_at.replace(tzinfo=timezone.utc)
+    if starts_at <= now <= ends_at:
+        return "LIVE"
+    tz_name = (row.timezone or "Europe/Brussels").strip() or "Europe/Brussels"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = timezone.utc
+    local_now = now.astimezone(tz)
+    local_start = starts_at.astimezone(tz)
+    if local_start.date() == local_now.date() and starts_at > now:
+        return "TODAY"
+    if starts_at > now:
+        return "UPCOMING"
+    return "PAST"
+
+
+def _event_summary_payload(db: Session, *, row: Event, user_id: str, joined_ids: set[int], runtime_map: dict[int, EventRuntimeState]) -> dict[str, Any]:
+    role_for_me, can_manage = _event_role_for_user(db, event=row, user_id=user_id)
+    runtime = runtime_map.get(row.id)
+    status = ((runtime.state if runtime else None) or row.event_state or "LIVE").upper()
+    return {
+        "id": row.id,
+        "name": row.name,
+        "startAt": row.starts_at.isoformat(),
+        "endAt": row.ends_at.isoformat(),
+        "venue": row.venue,
+        "visibility": (row.visibility or "PRIVATE").upper(),
+        "status": status,
+        "modulesOn": row.modules_on or {},
+        "host_type": (row.host_type or "user").lower(),
+        "host_id": row.host_id,
+        "roleForMe": role_for_me,
+        "canManage": can_manage,
+        "joined": row.id in joined_ids,
+    }
+
+
+@app.get("/me/events")
+def my_events(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    now = now_utc()
+    memberships = db.query(OrganizationMembership).filter(
+        OrganizationMembership.user_id == user.id,
+        OrganizationMembership.status == "ACTIVE",
+    ).all()
+    org_ids = [str(m.organization_id) for m in memberships]
+
+    staff_event_ids = [row[0] for row in db.query(EventStaff.event_id).filter(EventStaff.user_id == user.id, EventStaff.is_active == True).all()]  # noqa: E712
+
+    filters = [
+        ((Event.host_type == "user") & (Event.host_id == user.id)),
+    ]
+    if org_ids:
+        filters.append((Event.host_type == "orga") & (Event.host_id.in_(org_ids)))
+    if staff_event_ids:
+        filters.append(Event.id.in_(staff_event_ids))
+
+    rows = db.query(Event).filter(or_(*filters)).order_by(Event.starts_at.asc(), Event.id.asc()).all()
+    event_ids = [row.id for row in rows]
+    runtime_rows = db.query(EventRuntimeState).filter(EventRuntimeState.event_id.in_(event_ids)).all() if event_ids else []
+    runtime_map = {row.event_id: row for row in runtime_rows}
+    joined_ids = {
+        row.event_id
+        for row in db.query(EventJoin.event_id).filter(EventJoin.user_id == user.id, EventJoin.event_id.in_(event_ids)).all()
+    } if event_ids else set()
+
+    payload = {"LIVE": [], "TODAY": [], "UPCOMING": [], "PAST": []}
+    for row in rows:
+        bucket = _event_bucket(row, now)
+        payload[bucket].append(_event_summary_payload(db, row=row, user_id=user.id, joined_ids=joined_ids, runtime_map=runtime_map))
+
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.list.me",
+        entity_type="app_user",
+        entity_id=user.id,
+        event_id=None,
+        bar_id=None,
+        payload={"total": len(rows)},
+    )
+    db.commit()
+    return payload
+
+
+@app.get("/orgas/{org_id}/events/private")
+def list_orga_private_events(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    now = now_utc()
+    rows = db.query(Event).filter(
+        Event.host_type == "orga",
+        Event.host_id == str(org_id),
+    ).order_by(Event.starts_at.asc(), Event.id.asc()).all()
+    event_ids = [row.id for row in rows]
+    runtime_rows = db.query(EventRuntimeState).filter(EventRuntimeState.event_id.in_(event_ids)).all() if event_ids else []
+    runtime_map = {row.event_id: row for row in runtime_rows}
+    joined_ids = {
+        row.event_id
+        for row in db.query(EventJoin.event_id).filter(EventJoin.user_id == user.id, EventJoin.event_id.in_(event_ids)).all()
+    } if event_ids else set()
+    payload = {"LIVE": [], "TODAY": [], "UPCOMING": [], "PAST": []}
+    for row in rows:
+        bucket = _event_bucket(row, now)
+        payload[bucket].append(_event_summary_payload(db, row=row, user_id=user.id, joined_ids=joined_ids, runtime_map=runtime_map))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.list.orga.private",
+        entity_type="organization",
+        entity_id=str(org_id),
+        event_id=None,
+        bar_id=None,
+        payload={"total": len(rows)},
+    )
+    db.commit()
+    return payload
+
+
+@app.get("/events/{event_id}/manage_snapshot", response_model=EventManageSnapshotOut)
+def event_manage_snapshot(event_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+    current = db.query(StaffInviteToken).filter(
+        StaffInviteToken.event_id == event_id,
+        StaffInviteToken.is_revoked == False,  # noqa: E712
+    ).order_by(StaffInviteToken.created_at.desc()).first()
+    payload = {
+        "eventId": event.id,
+        "publicationStatus": (event.publication_status or "DRAFT").upper(),
+        "visibility": (event.visibility or "PRIVATE").upper(),
+        "runtime": _app_event_runtime_payload(db, event),
+        "share": _app_event_share_payload(event, include_staff=True),
+        "qrPackAvailable": True,
+        "staffInviteCodeCurrent": current.token if current is not None else None,
+    }
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.manage_snapshot.get",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"scope": f"{event.host_type}:{event.host_id}"},
+    )
+    db.commit()
+    return payload
 
 
 @app.get("/orgas/{org_id}/events")
