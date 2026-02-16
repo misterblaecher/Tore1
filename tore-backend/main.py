@@ -10,6 +10,7 @@ import secrets
 import string
 import hashlib
 import json
+import subprocess
 import threading
 import time
 from collections import defaultdict, deque
@@ -141,6 +142,35 @@ def _env_bool(key: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _strict_dev_env_enabled() -> bool:
+    return (os.getenv("ENV") or "").strip().upper() == "DEV"
+
+
+def _debug_git_sha() -> Optional[str]:
+    env_sha = (os.getenv("GIT_SHA") or os.getenv("TORE_GIT_SHA") or "").strip()
+    if env_sha:
+        return env_sha
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip() or None
+    except Exception:
+        return None
+
+
+def _debug_signing_key_ids() -> list[str]:
+    ring = (os.getenv("TORE_QR_SIGNING_KEYS") or "").strip()
+    if ring:
+        values = [item.strip() for item in ring.split(",") if item.strip()]
+    else:
+        fallback = (os.getenv("TORE_QR_SIGNING_SECRET") or os.getenv("TORE_JWT_SECRET") or "").strip()
+        values = [fallback] if fallback else []
+
+    key_ids: list[str] = []
+    for value in values:
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+        key_ids.append(digest[:12])
+    return key_ids
 
 
 def _cors_origins() -> list[str]:
@@ -3026,6 +3056,20 @@ def debug_auth_check(
         "user_found": bool(user),
         "user_id": (user.id if user else None),
         "db_url": DATABASE_URL,
+    }
+
+
+@app.get("/debug/info")
+def debug_info(db: Session = Depends(get_db)):
+    if not _strict_dev_env_enabled():
+        raise HTTPException(404, "Not found")
+
+    modules_flags_count = db.query(GlobalFeatureFlag).count()
+    return {
+        "serverTime": now_utc().isoformat(),
+        "gitSha": _debug_git_sha(),
+        "signingKeyIds": _debug_signing_key_ids(),
+        "modulesFlagsCount": modules_flags_count,
     }
 
 
