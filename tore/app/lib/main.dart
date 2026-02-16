@@ -10,10 +10,11 @@ import 'state.dart';
 import 'core/network/providers.dart';
 import 'config/app_config.dart';
 
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final appConfig = AppConfig.fromDartDefines();
+  debugPrint('[Boot] TORE environment=${appConfig.environmentName} API base URL=${appConfig.apiBaseUrl}');
+
   runApp(
     ProviderScope(
       overrides: [appConfigProvider.overrideWithValue(appConfig)],
