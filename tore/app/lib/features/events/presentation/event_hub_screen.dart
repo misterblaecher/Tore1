@@ -12,6 +12,7 @@ import 'event_ranking_screen.dart';
 import '../../navigation/presentation/ticker_screen.dart';
 import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
+import '../../hunt/presentation/hunt_screen.dart';
 import 'music_vote_screen.dart';
 import 'active_event_context_provider.dart';
 
@@ -108,7 +109,7 @@ class EventHubScreen extends ConsumerWidget {
         icon: Icons.leaderboard_outlined,
         builder: (_) => EventRankingScreen(eventId: eventId),
       ),
-      _moduleUnavailable(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined),
+      _module(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined, builder: (_) => HuntScreen(eventId: eventId)),
       _moduleUnavailable(key: 'battles', title: 'Battles', subtitle: 'Défis en direct', icon: Icons.sports_mma_outlined),
       _module(key: 'music_vote', aliases: const ['music', 'vote'], title: 'Music vote', subtitle: 'Vote la prochaine track', icon: Icons.music_note_outlined, builder: (_) => MusicVoteScreen(eventId: eventId)),
       _module(
