@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import 'core/network/api_client.dart';
+import 'features/hunt/hunt_models.dart';
 import 'features/polymarket/polymarket_models.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
@@ -58,6 +59,45 @@ class Api {
       Map<String, dynamic>.from(
         (await _client.dio.get('/events/$eventId/state')).data as Map,
       );
+
+  Future<ActiveHunt> getActiveHunt(int eventId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/hunts/active')).data as Map);
+    return ActiveHunt.fromJson(data);
+  }
+
+  Future<HuntClaimResponse> claimHunt({
+    required int eventId,
+    required int huntId,
+    required int checkpointId,
+    required String token,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/hunts/$huntId/claim',
+      data: {'checkpointId': checkpointId, 'token': token},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return HuntClaimResponse.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<HuntLeaderboard> getHuntLeaderboard(int eventId, int huntId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/hunts/$huntId/leaderboard')).data as Map);
+    return HuntLeaderboard.fromJson(data);
+  }
+
+  Future<HuntStealResponse> stealHunt({
+    required int eventId,
+    required int huntId,
+    required String victimUserId,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/hunts/$huntId/steal',
+      data: {'victimUserId': victimUserId},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return HuntStealResponse.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
 
   Future<Map<String, dynamic>> getMusic(int eventId) async =>
       Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/music')).data as Map);

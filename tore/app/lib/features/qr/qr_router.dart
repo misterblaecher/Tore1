@@ -7,6 +7,7 @@ import '../../core/qr/qr_parser.dart';
 import '../../core/qr/qr_validator.dart';
 import '../../state.dart';
 import '../entry/presentation/entry_staff_screen.dart';
+import '../hunt/presentation/hunt_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
 import '../qr/presentation/join_event_screen.dart';
@@ -164,6 +165,22 @@ class QrRouterService {
         );
         return;
       case QrType.hunt:
+        final activeEventId = _ref.read(appContextProvider).activeEventId;
+        final qrEventId = payload.eventId ?? int.tryParse((payload.fields['event_id'] ?? '').toString());
+        if (activeEventId == null || qrEventId == null || activeEventId != qrEventId) {
+          onOutcome?.call(const QrRouteOutcome.denied('Checkpoint hors contexte event'));
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const QrInvalidScreen(details: 'Checkpoint Hunt invalide: event actif absent ou différent.'),
+            ),
+          );
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('Hunt checkpoint'));
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => HuntScreen(eventId: activeEventId, initialClaimPayload: payload)),
+        );
+        return;
       case QrType.battle:
       case QrType.order:
         onOutcome?.call(const QrRouteOutcome.denied('Module indisponible'));
