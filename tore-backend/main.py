@@ -10,6 +10,9 @@ import secrets
 import string
 import hashlib
 import json
+import threading
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
 
@@ -86,6 +89,10 @@ from models import (
     CommitteeBaptemeAssignment,
     CommitteeBaptemeIncident,
     CommitteeBaptemeIdempotency,
+    CommitteeGlossarySettings,
+    CommitteeGlossaryTerm,
+    CommitteeGlossaryIdempotency,
+    AuditLog,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -1138,6 +1145,35 @@ class CommitteeBaptemeIncidentIn(BaseModel):
     inviteId: Optional[int] = None
     type: str = Field(min_length=2, max_length=48)
     note: str = Field(min_length=2, max_length=2000)
+
+
+class CommitteeGlossaryTermCreateIn(BaseModel):
+    term: str = Field(min_length=1, max_length=140)
+    definition: str = Field(min_length=1, max_length=10000)
+    examples: Optional[str] = Field(default=None, max_length=10000)
+    tags: Optional[List[str]] = None
+    yearId: Optional[int] = None
+    isOfficial: Optional[bool] = False
+
+
+class CommitteeGlossaryTermUpdateIn(BaseModel):
+    definition: Optional[str] = Field(default=None, min_length=1, max_length=10000)
+    examples: Optional[str] = Field(default=None, max_length=10000)
+    tags: Optional[List[str]] = None
+    isOfficial: Optional[bool] = None
+    status: Optional[Literal["ACTIVE", "ARCHIVED", "DELETED"]] = None
+
+
+class CommitteeGlossaryArchiveIn(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=280)
+
+
+class CommitteeGlossaryDeleteIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=280)
+
+
+class CommitteeGlossarySettingsIn(BaseModel):
+    public_enabled: bool
 
 
 class EventCharterOut(BaseModel):
@@ -3841,9 +3877,146 @@ def _forum_post_payload(db: Session, row: CommitteeForumPost) -> dict[str, Any]:
     }
 
 
+def _folklore_glossary_module_enabled() -> bool:
+    return _env_bool("TORE_MODULE_FOLKLORE_GLOSSARY", default=True)
+
+
+def _require_folklore_glossary_module() -> None:
+    if not _folklore_glossary_module_enabled():
+        raise HTTPException(status_code=404, detail={"reason": "MODULE_OFF"})
+
+
+def _committee_can_moderate_glossary(db: Session, committee_id: int, membership: CommitteeMembership) -> bool:
+    role = (membership.role or "MEMBER").upper()
+    if role in {"ADMIN", "MOD", "OWNER"}:
+        return True
+    perms = _committee_permissions(db, committee_id, membership.role)
+    return bool(perms.get("canModerateForum"))
+
+
+def _require_glossary_write_access(db: Session, committee_id: int, user: AppUser) -> CommitteeMembership:
+    membership = _require_committee_member(db, committee_id, user)
+    if not _committee_can_moderate_glossary(db, committee_id, membership):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    return membership
+
+
+def _sanitize_glossary_tags(tags: Optional[List[str]]) -> List[str]:
+    if not tags:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in tags:
+        val = (raw or "").strip()
+        if not val:
+            continue
+        lowered = val.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        out.append(val[:40])
+    return out[:25]
+
+
+def _committee_glossary_settings(db: Session, committee_id: int) -> CommitteeGlossarySettings:
+    row = db.query(CommitteeGlossarySettings).filter(CommitteeGlossarySettings.committee_id == committee_id).first()
+    if row is None:
+        row = CommitteeGlossarySettings(committee_id=committee_id, public_enabled=False, updated_at=now_utc(), updated_by="system")
+        db.add(row)
+        db.flush()
+    return row
+
+
+def _glossary_term_payload(row: CommitteeGlossaryTerm) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "committeeId": row.committee_id,
+        "yearId": row.year_id,
+        "term": row.term,
+        "definition": row.definition,
+        "examples": row.examples,
+        "tags": list(row.tags_json or []),
+        "isOfficial": bool(row.is_official),
+        "status": row.status,
+        "source": {"type": "committee", "yearId": row.year_id},
+        "createdAt": row.created_at.isoformat(),
+        "createdBy": row.created_by,
+        "updatedAt": row.updated_at.isoformat(),
+        "updatedBy": row.updated_by,
+    }
+
+
+_glossary_rl_lock = threading.Lock()
+_glossary_rl_store: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _enforce_glossary_write_rate_limit(committee_id: int, actor_user_id: str) -> None:
+    now = time.monotonic()
+    key = f"{committee_id}:{actor_user_id}"
+    window_s = 600
+    with _glossary_rl_lock:
+        q = _glossary_rl_store[key]
+        threshold = now - window_s
+        while q and q[0] < threshold:
+            q.popleft()
+        if len(q) >= 10:
+            raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Too many writes"})
+        q.append(now)
+
+
+def _glossary_filters(tags: Optional[str]) -> list[str]:
+    if not tags:
+        return []
+    return [item.strip().lower() for item in tags.split(",") if item.strip()]
+
+
+def _list_glossary_terms(
+    db: Session,
+    committee_id: int,
+    query: Optional[str],
+    tags: Optional[str],
+    year: Optional[int],
+    cursor: Optional[str],
+    limit: int,
+    include_archived: bool,
+    include_deleted: bool,
+) -> dict[str, Any]:
+    q = db.query(CommitteeGlossaryTerm).filter(CommitteeGlossaryTerm.committee_id == committee_id)
+    statuses = ["ACTIVE"]
+    if include_archived:
+        statuses.append("ARCHIVED")
+    if include_deleted:
+        statuses.append("DELETED")
+    q = q.filter(CommitteeGlossaryTerm.status.in_(statuses))
+    if year is not None:
+        q = q.filter(CommitteeGlossaryTerm.year_id == year)
+    if query:
+        search = f"%{query.strip().lower()}%"
+        q = q.filter(func.lower(CommitteeGlossaryTerm.term).like(search) | func.lower(CommitteeGlossaryTerm.definition).like(search))
+
+    after_id = None
+    if cursor:
+        try:
+            after_id = int(cursor)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_cursor"})
+    if after_id is not None:
+        q = q.filter(CommitteeGlossaryTerm.id > after_id)
+
+    rows = q.order_by(CommitteeGlossaryTerm.id.asc()).limit(limit + 1).all()
+    filtered_tags = _glossary_filters(tags)
+    items = [_glossary_term_payload(row) for row in rows]
+    if filtered_tags:
+        items = [it for it in items if filtered_tags and set(filtered_tags).issubset({str(tag).lower() for tag in it.get("tags", [])})]
+    has_more = len(items) > limit
+    clipped = items[:limit]
+    next_cursor = str(clipped[-1]["id"]) if has_more and clipped else None
+    return {"items": clipped, "nextCursor": next_cursor, "serverTime": now_utc().isoformat()}
+
+
 @app.get("/modules")
 def app_modules_state():
-    return {"committee_os": _committee_module_enabled()}
+    return {"committee_os": _committee_module_enabled(), "folklore_glossary": _folklore_glossary_module_enabled()}
 
 
 @app.get("/committees")
@@ -4900,6 +5073,270 @@ def committee_forum_update_category(
     write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.forum.category.update", entity_type="committee_forum_category", entity_id=str(category.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "category_id": category.id, "name": payload.name, "order_index": payload.orderIndex, "is_archived": payload.isArchived})
     db.commit()
     return response
+
+
+@app.get("/glossary/committees")
+def glossary_public_committees(db: Session = Depends(get_db)):
+    _require_folklore_glossary_module()
+    rows = (
+        db.query(Committee)
+        .join(CommitteeGlossarySettings, CommitteeGlossarySettings.committee_id == Committee.id)
+        .filter(CommitteeGlossarySettings.public_enabled.is_(True))
+        .order_by(Committee.name.asc())
+        .all()
+    )
+    return [{"id": row.id, "name": row.name, "slug": row.slug} for row in rows]
+
+
+@app.get("/glossary/committees/{committee_id}/settings")
+def glossary_public_settings(committee_id: int, db: Session = Depends(get_db)):
+    _require_folklore_glossary_module()
+    settings = db.query(CommitteeGlossarySettings).filter(CommitteeGlossarySettings.committee_id == committee_id).first()
+    if settings is None or not settings.public_enabled:
+        raise HTTPException(status_code=404, detail={"reason": "not_public"})
+    tags = (
+        db.query(CommitteeGlossaryTerm.tags_json)
+        .filter(CommitteeGlossaryTerm.committee_id == committee_id, CommitteeGlossaryTerm.status != "DELETED")
+        .all()
+    )
+    available = sorted({tag for row in tags for tag in (row[0] or [])})
+    return {"public_enabled": True, "availableTags": available}
+
+
+@app.get("/glossary/committees/{committee_id}/terms")
+def glossary_public_terms(
+    committee_id: int,
+    query: Optional[str] = Query(default=None),
+    tags: Optional[str] = Query(default=None),
+    year: Optional[int] = Query(default=None),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    _require_folklore_glossary_module()
+    settings = db.query(CommitteeGlossarySettings).filter(CommitteeGlossarySettings.committee_id == committee_id).first()
+    if settings is None or not settings.public_enabled:
+        raise HTTPException(status_code=404, detail={"reason": "not_public"})
+    return _list_glossary_terms(db, committee_id, query, tags, year, cursor, limit, include_archived=False, include_deleted=False)
+
+
+@app.get("/committees/{committee_id}/glossary/terms")
+def glossary_private_terms(
+    committee_id: int,
+    query: Optional[str] = Query(default=None),
+    tags: Optional[str] = Query(default=None),
+    year: Optional[int] = Query(default=None),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_folklore_glossary_module()
+    membership = _require_committee_member(db, committee_id, user)
+    include_archived = _committee_can_moderate_glossary(db, committee_id, membership)
+    return _list_glossary_terms(db, committee_id, query, tags, year, cursor, limit, include_archived=include_archived, include_deleted=include_archived)
+
+
+@app.post("/committees/{committee_id}/glossary/terms")
+def glossary_create_term(
+    committee_id: int,
+    payload: CommitteeGlossaryTermCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_folklore_glossary_module()
+    key = _require_idempotency(idempotency_key)
+    membership = _require_glossary_write_access(db, committee_id, user)
+    _enforce_glossary_write_rate_limit(committee_id, user.id)
+    if payload.yearId is not None:
+        _committee_year_or_404(db, committee_id, payload.yearId)
+    idem = db.query(CommitteeGlossaryIdempotency).filter(
+        CommitteeGlossaryIdempotency.committee_id == committee_id,
+        CommitteeGlossaryIdempotency.action == "term_create",
+        CommitteeGlossaryIdempotency.idempotency_key == key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = CommitteeGlossaryTerm(
+        committee_id=committee_id,
+        year_id=payload.yearId,
+        term=payload.term.strip(),
+        definition=payload.definition.strip(),
+        examples=payload.examples.strip() if payload.examples else None,
+        tags_json=_sanitize_glossary_tags(payload.tags),
+        is_official=bool(payload.isOfficial),
+        status="ACTIVE",
+        created_by=user.id,
+        updated_by=user.id,
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(row)
+    db.flush()
+    response = _glossary_term_payload(row)
+    db.add(CommitteeGlossaryIdempotency(committee_id=committee_id, action="term_create", idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.glossary.term.create", entity_type="committee_glossary_term", entity_id=str(row.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "term": row.term, "idempotency_key": key})
+    db.commit()
+    return response
+
+
+@app.put("/committees/{committee_id}/glossary/terms/{term_id}")
+def glossary_update_term(
+    committee_id: int,
+    term_id: int,
+    payload: CommitteeGlossaryTermUpdateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_folklore_glossary_module()
+    key = _require_idempotency(idempotency_key)
+    membership = _require_glossary_write_access(db, committee_id, user)
+    _enforce_glossary_write_rate_limit(committee_id, user.id)
+    idem = db.query(CommitteeGlossaryIdempotency).filter(
+        CommitteeGlossaryIdempotency.committee_id == committee_id,
+        CommitteeGlossaryIdempotency.action == f"term_update:{term_id}",
+        CommitteeGlossaryIdempotency.idempotency_key == key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = db.get(CommitteeGlossaryTerm, term_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "term_not_found"})
+    if payload.definition is not None:
+        row.definition = payload.definition.strip()
+    if payload.examples is not None:
+        row.examples = payload.examples.strip() if payload.examples else None
+    if payload.tags is not None:
+        row.tags_json = _sanitize_glossary_tags(payload.tags)
+    if payload.isOfficial is not None:
+        row.is_official = payload.isOfficial
+    if payload.status is not None:
+        row.status = payload.status
+    row.updated_at = now_utc()
+    row.updated_by = user.id
+    response = _glossary_term_payload(row)
+    db.add(CommitteeGlossaryIdempotency(committee_id=committee_id, action=f"term_update:{term_id}", idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.glossary.term.update", entity_type="committee_glossary_term", entity_id=str(row.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "term_id": term_id, "idempotency_key": key})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/glossary/terms/{term_id}/archive")
+def glossary_archive_term(
+    committee_id: int,
+    term_id: int,
+    payload: CommitteeGlossaryArchiveIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_folklore_glossary_module()
+    key = _require_idempotency(idempotency_key)
+    membership = _require_glossary_write_access(db, committee_id, user)
+    _enforce_glossary_write_rate_limit(committee_id, user.id)
+    idem = db.query(CommitteeGlossaryIdempotency).filter(
+        CommitteeGlossaryIdempotency.committee_id == committee_id,
+        CommitteeGlossaryIdempotency.action == f"term_archive:{term_id}",
+        CommitteeGlossaryIdempotency.idempotency_key == key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = db.get(CommitteeGlossaryTerm, term_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "term_not_found"})
+    row.status = "ARCHIVED"
+    row.updated_at = now_utc()
+    row.updated_by = user.id
+    response = {"id": row.id, "status": row.status}
+    db.add(CommitteeGlossaryIdempotency(committee_id=committee_id, action=f"term_archive:{term_id}", idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.glossary.term.archive", entity_type="committee_glossary_term", entity_id=str(row.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "term_id": term_id, "reason": payload.reason})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/glossary/terms/{term_id}/delete")
+def glossary_delete_term(
+    committee_id: int,
+    term_id: int,
+    payload: CommitteeGlossaryDeleteIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_folklore_glossary_module()
+    key = _require_idempotency(idempotency_key)
+    membership = _require_glossary_write_access(db, committee_id, user)
+    _enforce_glossary_write_rate_limit(committee_id, user.id)
+    idem = db.query(CommitteeGlossaryIdempotency).filter(
+        CommitteeGlossaryIdempotency.committee_id == committee_id,
+        CommitteeGlossaryIdempotency.action == f"term_delete:{term_id}",
+        CommitteeGlossaryIdempotency.idempotency_key == key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    row = db.get(CommitteeGlossaryTerm, term_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "term_not_found"})
+    row.status = "DELETED"
+    row.updated_at = now_utc()
+    row.updated_by = user.id
+    response = {"id": row.id, "status": row.status}
+    db.add(CommitteeGlossaryIdempotency(committee_id=committee_id, action=f"term_delete:{term_id}", idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.glossary.term.delete", entity_type="committee_glossary_term", entity_id=str(row.id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "term_id": term_id, "reason": payload.reason})
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/glossary/settings")
+def glossary_get_settings(
+    committee_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_folklore_glossary_module()
+    _require_committee_member(db, committee_id, user)
+    settings = _committee_glossary_settings(db, committee_id)
+    membership = _committee_membership(db, committee_id, user.id)
+    include_deleted = membership is not None and _committee_can_moderate_glossary(db, committee_id, membership)
+    q = db.query(CommitteeGlossaryTerm.tags_json).filter(CommitteeGlossaryTerm.committee_id == committee_id)
+    if not include_deleted:
+        q = q.filter(CommitteeGlossaryTerm.status != "DELETED")
+    tags = q.all()
+    available = sorted({tag for row in tags for tag in (row[0] or [])})
+    return {"public_enabled": bool(settings.public_enabled), "availableTags": available}
+
+
+@app.put("/committees/{committee_id}/glossary/settings")
+def glossary_put_settings(
+    committee_id: int,
+    payload: CommitteeGlossarySettingsIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_folklore_glossary_module()
+    key = _require_idempotency(idempotency_key)
+    membership = _require_glossary_write_access(db, committee_id, user)
+    _enforce_glossary_write_rate_limit(committee_id, user.id)
+    idem = db.query(CommitteeGlossaryIdempotency).filter(
+        CommitteeGlossaryIdempotency.committee_id == committee_id,
+        CommitteeGlossaryIdempotency.action == "settings_update",
+        CommitteeGlossaryIdempotency.idempotency_key == key,
+    ).first()
+    if idem is not None:
+        return idem.response_json
+    settings = _committee_glossary_settings(db, committee_id)
+    settings.public_enabled = payload.public_enabled
+    settings.updated_at = now_utc()
+    settings.updated_by = user.id
+    response = {"committeeId": committee_id, "public_enabled": bool(settings.public_enabled), "updatedAt": settings.updated_at.isoformat()}
+    db.add(CommitteeGlossaryIdempotency(committee_id=committee_id, action="settings_update", idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role=membership.role, action="committee.glossary.settings.update", entity_type="committee_glossary_settings", entity_id=str(committee_id), event_id=None, bar_id=None, payload={"committee_id": committee_id, "public_enabled": payload.public_enabled})
+    db.commit()
+    return response
+
 
 @app.post("/events", response_model=CreateEventOut)
 def create_event(
