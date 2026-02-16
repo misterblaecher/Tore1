@@ -7,6 +7,7 @@ import 'package:tore/features/menu_market/presentation/menu_screen.dart';
 import 'package:tore/features/navigation/presentation/polymarket_tab_screen.dart';
 import 'package:tore/features/navigation/presentation/profile_screen.dart';
 import 'package:tore/features/committees/presentation/committees_screens.dart';
+import 'package:tore/features/glossary/glossary_screens.dart';
 import 'package:tore/features/navigation/presentation/ticker_screen.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
@@ -29,7 +30,9 @@ class HomeHubScreen extends ConsumerWidget {
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
     final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
     final readOnly = isReadOnly(ref);
-    final committeesModule = ref.watch(_modulesProvider).maybeWhen(data: (m) => m['committee_os'] == true, orElse: () => false);
+    final modules = ref.watch(_modulesProvider).maybeWhen(data: (m) => m, orElse: () => const <String, dynamic>{});
+    final committeesModule = modules['committee_os'] == true;
+    final glossaryModule = modules['folklore_glossary'] == true;
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -140,6 +143,13 @@ class HomeHubScreen extends ConsumerWidget {
               title: 'Comité OS',
               subtitle: 'Page publique + espace privé',
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommitteesListScreen())),
+            ),
+          if (glossaryModule)
+            _ModuleCard(
+              icon: Icons.menu_book_outlined,
+              title: 'Glossaire Folklore',
+              subtitle: 'Comités publics et termes folklore',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GlossaryHomeScreen())),
             ),
           if (committeesModule)
             _ModuleCard(

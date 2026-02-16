@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'core/network/api_client.dart';
 import 'features/hunt/hunt_models.dart';
+import 'features/glossary/glossary_models.dart';
 import 'features/battles/battle_models.dart';
 import 'features/polymarket/polymarket_models.dart';
 import 'features/safety/safety_models.dart';
@@ -316,6 +317,104 @@ class Api {
 
   Future<Map<String, dynamic>> modulesState() async =>
       Map<String, dynamic>.from((await _client.dio.get('/modules')).data as Map);
+
+  Future<List<GlossaryCommittee>> glossaryPublicCommittees() async {
+    final data = (await _client.dio.get('/glossary/committees')).data as List<dynamic>;
+    return data.whereType<Map>().map((row) => GlossaryCommittee.fromJson(Map<String, dynamic>.from(row))).toList(growable: false);
+  }
+
+  Future<GlossarySettings> glossaryPublicSettings(int committeeId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/glossary/committees/$committeeId/settings')).data as Map);
+    return GlossarySettings.fromJson(data);
+  }
+
+  Future<GlossaryTermsPage> glossaryPublicTerms(
+    int committeeId, {
+    String? query,
+    List<String>? tags,
+    int? year,
+    String? cursor,
+    int? limit,
+  }) async {
+    final params = {
+      if (query != null && query.isNotEmpty) 'query': query,
+      if (tags != null && tags.isNotEmpty) 'tags': tags.join(','),
+      if (year != null) 'year': year,
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (limit != null) 'limit': limit,
+    };
+    final data = Map<String, dynamic>.from((await _client.dio.get('/glossary/committees/$committeeId/terms', queryParameters: params)).data as Map);
+    return GlossaryTermsPage.fromJson(data);
+  }
+
+  Future<GlossarySettings> committeeGlossarySettings(int committeeId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/glossary/settings')).data as Map);
+    return GlossarySettings.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> committeeSetGlossarySettings(int committeeId, bool publicEnabled, {required String idempotencyKey}) async {
+    final res = await _client.dio.put(
+      '/committees/$committeeId/glossary/settings',
+      data: {'public_enabled': publicEnabled},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<GlossaryTermsPage> committeeGlossaryTerms(
+    int committeeId, {
+    String? query,
+    List<String>? tags,
+    int? year,
+    String? cursor,
+    int? limit,
+  }) async {
+    final params = {
+      if (query != null && query.isNotEmpty) 'query': query,
+      if (tags != null && tags.isNotEmpty) 'tags': tags.join(','),
+      if (year != null) 'year': year,
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (limit != null) 'limit': limit,
+    };
+    final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/glossary/terms', queryParameters: params)).data as Map);
+    return GlossaryTermsPage.fromJson(data);
+  }
+
+  Future<GlossaryTerm> committeeCreateGlossaryTerm(int committeeId, Map<String, dynamic> payload, {required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/glossary/terms',
+      data: payload,
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return GlossaryTerm.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<GlossaryTerm> committeeUpdateGlossaryTerm(int committeeId, int termId, Map<String, dynamic> payloadPatch, {required String idempotencyKey}) async {
+    final res = await _client.dio.put(
+      '/committees/$committeeId/glossary/terms/$termId',
+      data: payloadPatch,
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return GlossaryTerm.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<Map<String, dynamic>> committeeArchiveGlossaryTerm(int committeeId, int termId, {required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/glossary/terms/$termId/archive',
+      data: {'reason': 'archived_from_flutter'},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeDeleteGlossaryTerm(int committeeId, int termId, String reason, {required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/committees/$committeeId/glossary/terms/$termId/delete',
+      data: {'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
 
   Future<CommitteeFetchResult> committeesWithCacheStatus() async {
     const cacheKey = 'committees_list';
