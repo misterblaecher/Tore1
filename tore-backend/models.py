@@ -330,6 +330,91 @@ class HuntScan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class EventHunt(Base):
+    __tablename__ = "event_hunts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180), default="")
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    rules_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("partner_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventHuntCheckpoint(Base):
+    __tablename__ = "event_hunt_checkpoints"
+    __table_args__ = (
+        UniqueConstraint("hunt_id", "order_index", name="uq_event_hunt_checkpoint_order"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hunt_id: Mapped[int] = mapped_column(ForeignKey("event_hunts.id"), index=True)
+    label: Mapped[str] = mapped_column(String(180), default="")
+    points: Mapped[int] = mapped_column(Integer, default=1)
+    reward_tickets: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    qr_token_id: Mapped[str] = mapped_column(String(64), index=True)
+    qr_token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class EventHuntClaim(Base):
+    __tablename__ = "event_hunt_claims"
+    __table_args__ = (
+        UniqueConstraint("checkpoint_id", "user_id", name="uq_event_hunt_claim_checkpoint_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hunt_id: Mapped[int] = mapped_column(ForeignKey("event_hunts.id"), index=True)
+    checkpoint_id: Mapped[int] = mapped_column(ForeignKey("event_hunt_checkpoints.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    claimed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    points_awarded: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class EventHuntScore(Base):
+    __tablename__ = "event_hunt_scores"
+    __table_args__ = (
+        UniqueConstraint("hunt_id", "user_id", name="uq_event_hunt_score_hunt_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hunt_id: Mapped[int] = mapped_column(ForeignKey("event_hunts.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventHuntIdempotency(Base):
+    __tablename__ = "event_hunt_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action", "idempotency_key", name="uq_event_hunt_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventHuntSteal(Base):
+    __tablename__ = "event_hunt_steals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hunt_id: Mapped[int] = mapped_column(ForeignKey("event_hunts.id"), index=True)
+    attacker_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    victim_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer, default=0)
+    result: Mapped[str] = mapped_column(String(32), default="OK", index=True)
+    audit: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class Drink(Base):
     __tablename__ = "drinks"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

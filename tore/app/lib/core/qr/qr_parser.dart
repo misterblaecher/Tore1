@@ -154,6 +154,7 @@ class QrParser {
       case 'wifi_token':
         return QrType.wifi;
       case 'hunt':
+      case 'hunt_checkpoint':
         return QrType.hunt;
       case 'battle':
       case 'affond':

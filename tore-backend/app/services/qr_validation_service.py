@@ -19,6 +19,7 @@ SENSITIVE_QR_TYPES = {
     "menu",
     "gift_receive",
     "wifi_token",
+    "hunt_checkpoint",
 }
 
 
