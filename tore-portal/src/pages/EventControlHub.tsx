@@ -162,6 +162,7 @@ export default function EventControlHub() {
           <Link to={`/orga/events/${eventId}/broadcast`} className="btn">Broadcast</Link>
           <Link to={`/orga/events/${eventId}/incidents`} className="btn">Incidents</Link>
           <Link to={`/orga/events/${eventId}/profitability`} className="btn">Rentabilité</Link>
+          <Link to={`/orga/events/${eventId}/wifi`} className="btn">WiFi</Link>
           {canAccessBarMode ? (
             <>
               <Link to={`/bar/events/${eventId}/dashboard`} className="btn">BAR MODE · Dashboard</Link>

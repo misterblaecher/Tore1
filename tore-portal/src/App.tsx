@@ -320,7 +320,7 @@ export default function App() {
         }
       />
       <Route
-        path="/wifi-admin/:eventId"
+        path="/orga/events/:eventId/wifi"
         element={
           <RequireAuth>
             <WifiAdmin />

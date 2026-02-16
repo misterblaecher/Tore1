@@ -245,6 +245,50 @@ class EventRuntimeState(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     updated_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
 
+
+class EventWifiSettings(Base):
+    __tablename__ = "event_wifi_settings"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_wifi_settings_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    ssid: Mapped[str] = mapped_column(String(180), default="")
+    password: Mapped[str] = mapped_column(String(240), default="")
+    instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class EventWifiToken(Base):
+    __tablename__ = "event_wifi_tokens"
+    __table_args__ = (UniqueConstraint("token_id", name="uq_event_wifi_tokens_token_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    token_id: Mapped[str] = mapped_column(String(64), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    revoked_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+    revoke_reason: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    issued_to_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+
+
+class EventWifiIdempotency(Base):
+    __tablename__ = "event_wifi_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action", "idempotency_key", name="uq_event_wifi_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
 class Hunt(Base):
     __tablename__ = "hunts"
 

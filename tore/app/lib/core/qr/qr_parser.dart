@@ -151,6 +151,7 @@ class QrParser {
       case 'staff':
         return QrType.staffBar;
       case 'wifi':
+      case 'wifi_token':
         return QrType.wifi;
       case 'hunt':
         return QrType.hunt;

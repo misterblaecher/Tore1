@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy.orm import Session
 
 from app.services.qr_signing_service import verify_payload_signature
-from models import EventQrToken
+from models import EventQrToken, EventWifiToken
 
 SENSITIVE_QR_TYPES = {
     "join",
@@ -17,6 +18,7 @@ SENSITIVE_QR_TYPES = {
     "bar_staff",
     "menu",
     "gift_receive",
+    "wifi_token",
 }
 
 
@@ -43,6 +45,7 @@ def validate_signed_qr(raw: str, *, qr_type: str, event_id: int | None, db: Sess
     expires_at = (params.get("expires_at") or [None])[0]
     nonce = (params.get("nonce") or [None])[0]
     signature = (params.get("sig") or [None])[0]
+    raw_token = (params.get("token") or [None])[0]
 
     # Explicit legacy escape hatch for historical static QR payloads.
     legacy_allowed = ((params.get("legacy") or [""])[0] == "1")
@@ -68,6 +71,18 @@ def validate_signed_qr(raw: str, *, qr_type: str, event_id: int | None, db: Sess
         return False, "invalid", token_id, None
     if expires_at_dt <= datetime.now(timezone.utc):
         return False, "expired", token_id, expires_at_dt
+
+    if normalized_qr_type == "wifi_token":
+        wifi_token = db.query(EventWifiToken).filter(EventWifiToken.token_id == token_id).first()
+        if not wifi_token or wifi_token.event_id != event_id or not raw_token:
+            return False, "invalid", token_id, expires_at_dt
+        if wifi_token.token_hash != hashlib.sha256(raw_token.encode("utf-8")).hexdigest():
+            return False, "invalid", token_id, wifi_token.expires_at
+        if wifi_token.revoked_at is not None:
+            return False, "revoked", token_id, wifi_token.expires_at
+        if wifi_token.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
+            return False, "expired", token_id, wifi_token.expires_at
+        return True, None, token_id, wifi_token.expires_at
 
     token_row = db.query(EventQrToken).filter(EventQrToken.token_id == token_id).first()
     if not token_row or token_row.event_id != event_id:
