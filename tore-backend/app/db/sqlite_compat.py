@@ -147,6 +147,73 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_menu_admin_columns(engine)
     ensure_event_battles_v1_tables(engine)
     ensure_event_safety_v1_tables(engine)
+    ensure_organization_tables(engine)
+
+
+def ensure_organization_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS organizations (
+                id INTEGER NOT NULL PRIMARY KEY,
+                name VARCHAR(140) NOT NULL,
+                slug VARCHAR(160) NOT NULL,
+                description TEXT,
+                city VARCHAR(120),
+                org_type VARCHAR(64),
+                website_url VARCHAR(255),
+                created_by_user_id VARCHAR NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_organizations_slug UNIQUE (slug)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organizations_name ON organizations (name)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organizations_city_type ON organizations (city, org_type)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS organization_memberships (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                role VARCHAR(16) DEFAULT 'MEMBER' NOT NULL,
+                created_at DATETIME,
+                created_by_user_id VARCHAR NOT NULL,
+                CONSTRAINT uq_organization_memberships_org_user UNIQUE (organization_id, user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_memberships_user_role ON organization_memberships (user_id, role)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_memberships_org ON organization_memberships (organization_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS organization_invite_codes (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                code VARCHAR(16) NOT NULL,
+                role VARCHAR(16) DEFAULT 'MEMBER' NOT NULL,
+                max_uses INTEGER DEFAULT 100 NOT NULL,
+                used_count INTEGER DEFAULT 0 NOT NULL,
+                expires_at DATETIME,
+                created_by_user_id VARCHAR NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_organization_invite_codes_code UNIQUE (code)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_invite_codes_org_expires ON organization_invite_codes (organization_id, expires_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS organization_write_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                actor_user_id VARCHAR NOT NULL,
+                action VARCHAR(48) NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_organization_write_idem UNIQUE (actor_user_id, action, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_write_idem_actor ON organization_write_idempotency (actor_user_id)"))
 
 
 def ensure_profitability_tables(engine: Engine) -> None:

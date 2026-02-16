@@ -94,6 +94,10 @@ from models import (
     CommitteeGlossarySettings,
     CommitteeGlossaryTerm,
     CommitteeGlossaryIdempotency,
+    Organization,
+    OrganizationMembership,
+    OrganizationInviteCode,
+    OrganizationWriteIdempotency,
     AuditLog,
     UserPrivacyDeleteRequest,
     UserSanction,
@@ -7492,4 +7496,270 @@ def battle_me(
         "team_id": join.team_id if join else None,
         "joined_at": join.joined_at.isoformat() if join else None,
         "score_snapshot": stats,
+    }
+
+
+class OrgaCreateIn(BaseModel):
+    name: str = Field(min_length=2, max_length=140)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    city: Optional[str] = Field(default=None, max_length=120)
+    org_type: Optional[str] = Field(default=None, max_length=64)
+    website_url: Optional[str] = Field(default=None, max_length=255)
+
+
+class OrgaOut(BaseModel):
+    id: int
+    name: str
+    slug: str
+    description: Optional[str] = None
+    city: Optional[str] = None
+    org_type: Optional[str] = None
+    website_url: Optional[str] = None
+
+
+class OrgaMembershipOut(BaseModel):
+    orga: OrgaOut
+    role: Literal["OWNER", "MANAGER", "STAFF", "MEMBER"]
+
+
+class JoinByCodeIn(BaseModel):
+    code: str = Field(min_length=4, max_length=16)
+
+
+class OrgaInviteOut(BaseModel):
+    org_id: int
+    code: str
+    deeplink: str
+    qr_payload: str
+    expires_at: Optional[str] = None
+
+
+def _orga_to_out(row: Organization) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "slug": row.slug,
+        "description": row.description,
+        "city": row.city,
+        "org_type": row.org_type,
+        "website_url": row.website_url,
+    }
+
+
+def _slugify_orga_name(db: Session, base_name: str) -> str:
+    cleaned = "".join(ch.lower() if ch.isalnum() else "-" for ch in base_name).strip("-")
+    cleaned = "-".join([p for p in cleaned.split("-") if p])
+    root = cleaned[:120] or f"orga-{secrets.token_hex(2)}"
+    slug = root
+    idx = 1
+    while db.scalar(select(Organization.id).where(Organization.slug == slug)) is not None:
+        idx += 1
+        slug = f"{root}-{idx}"
+    return slug
+
+
+@app.post("/orgas", response_model=OrgaMembershipOut)
+def create_organization(
+    payload: OrgaCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    idem = db.query(OrganizationWriteIdempotency).filter(
+        OrganizationWriteIdempotency.actor_user_id == user.id,
+        OrganizationWriteIdempotency.action == "orga_create",
+        OrganizationWriteIdempotency.idempotency_key == key,
+    ).first()
+    if idem:
+        return idem.response_json
+
+    org = Organization(
+        name=payload.name.strip(),
+        slug=_slugify_orga_name(db, payload.name.strip()),
+        description=(payload.description or "").strip() or None,
+        city=(payload.city or "").strip() or None,
+        org_type=(payload.org_type or "").strip() or None,
+        website_url=(payload.website_url or "").strip() or None,
+        created_by_user_id=user.id,
+        created_at=now_utc(),
+    )
+    db.add(org)
+    db.flush()
+
+    membership = OrganizationMembership(
+        organization_id=org.id,
+        user_id=user.id,
+        role="OWNER",
+        created_by_user_id=user.id,
+        created_at=now_utc(),
+    )
+    db.add(membership)
+
+    response = {"orga": _orga_to_out(org), "role": "OWNER"}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_create", idempotency_key=key, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="OWNER",
+        action="organization.create",
+        entity_type="organization",
+        entity_id=str(org.id),
+        event_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"name": org.name, "org_type": org.org_type, "city": org.city},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/orgas")
+def list_orgas(
+    query: Optional[str] = None,
+    city: Optional[str] = None,
+    type: Optional[str] = Query(default=None, alias="type"),
+    cursor: Optional[int] = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    stmt = select(Organization)
+    if query:
+        q = f"%{query.strip().lower()}%"
+        stmt = stmt.where(func.lower(Organization.name).like(q))
+    if city:
+        stmt = stmt.where(func.lower(Organization.city) == city.strip().lower())
+    if type:
+        stmt = stmt.where(func.lower(Organization.org_type) == type.strip().lower())
+    if cursor:
+        stmt = stmt.where(Organization.id < cursor)
+    rows = db.scalars(stmt.order_by(Organization.id.desc()).limit(limit + 1)).all()
+    next_cursor = rows[-1].id if len(rows) > limit else None
+    items = rows[:limit]
+    return {"items": [_orga_to_out(row) for row in items], "next_cursor": next_cursor}
+
+
+@app.get("/me/orgas", response_model=list[OrgaMembershipOut])
+def my_orgas(
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(
+        select(OrganizationMembership, Organization)
+        .join(Organization, Organization.id == OrganizationMembership.organization_id)
+        .where(OrganizationMembership.user_id == user.id)
+        .order_by(Organization.name.asc())
+    ).all()
+    return [{"orga": _orga_to_out(org), "role": membership.role} for membership, org in rows]
+
+
+@app.get("/orgas/{org_id}", response_model=OrgaOut)
+def get_orga(org_id: int, db: Session = Depends(get_db)):
+    row = db.get(Organization, org_id)
+    if not row:
+        raise HTTPException(404, "Organization not found")
+    return _orga_to_out(row)
+
+
+@app.post("/orgas/join_by_code")
+def join_orga_by_code(
+    payload: JoinByCodeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    enforce_rate_limit("orga_join", user.id)
+    key = ensure_idempotency_key(idempotency_key)
+
+    idem = db.query(OrganizationWriteIdempotency).filter(
+        OrganizationWriteIdempotency.actor_user_id == user.id,
+        OrganizationWriteIdempotency.action == "orga_join_by_code",
+        OrganizationWriteIdempotency.idempotency_key == key,
+    ).first()
+    if idem:
+        return idem.response_json
+
+    code = payload.code.strip().upper()
+    invite = db.query(OrganizationInviteCode).filter(OrganizationInviteCode.code == code).first()
+    now = now_utc()
+    if not invite:
+        raise HTTPException(status_code=404, detail={"reason": "INVALID_CODE", "message": "Invalid invite code"})
+    if invite.expires_at and invite.expires_at < now:
+        raise HTTPException(status_code=400, detail={"reason": "EXPIRED_CODE", "message": "Invite code expired"})
+    if invite.used_count >= invite.max_uses:
+        raise HTTPException(status_code=400, detail={"reason": "EXHAUSTED_CODE", "message": "Invite code exhausted"})
+
+    membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == invite.organization_id,
+        OrganizationMembership.user_id == user.id,
+    ).first()
+    if membership:
+        response = {"ok": True, "organization_id": invite.organization_id, "role": membership.role, "idempotent": True}
+        db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_join_by_code", idempotency_key=key, response_json=response))
+        db.commit()
+        return response
+
+    membership = OrganizationMembership(
+        organization_id=invite.organization_id,
+        user_id=user.id,
+        role=invite.role,
+        created_by_user_id=invite.created_by_user_id,
+        created_at=now,
+    )
+    invite.used_count += 1
+    db.add(membership)
+    response = {"ok": True, "organization_id": invite.organization_id, "role": invite.role, "idempotent": False}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_join_by_code", idempotency_key=key, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=invite.role,
+        action="organization.join_by_code",
+        entity_type="organization_membership",
+        entity_id=f"{invite.organization_id}:{user.id}",
+        event_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"organization_id": invite.organization_id, "code": code},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/orgas/{org_id}/invite", response_model=OrgaInviteOut)
+def get_orga_invite(
+    org_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == user.id,
+    ).first()
+    if not membership or membership.role not in {"OWNER", "MANAGER"}:
+        raise HTTPException(403, "Forbidden")
+
+    code = random_code(8)
+    invite = OrganizationInviteCode(
+        organization_id=org_id,
+        code=code,
+        role="MEMBER",
+        max_uses=100,
+        used_count=0,
+        expires_at=now_utc() + timedelta(days=7),
+        created_by_user_id=user.id,
+        created_at=now_utc(),
+    )
+    db.add(invite)
+    db.commit()
+
+    deeplink = f"tore://orgas/join?code={code}&orgId={org_id}"
+    return {
+        "org_id": org_id,
+        "code": code,
+        "deeplink": deeplink,
+        "qr_payload": deeplink,
+        "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
     }

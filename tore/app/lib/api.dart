@@ -1307,4 +1307,25 @@ class Api {
     final res = await _client.dio.get('/events/$eventId');
     return Map<String, dynamic>.from(res.data as Map);
   }
+
+  Future<Map<String, dynamic>> listOrgas({String? query}) async {
+    final res = await _client.dio.get('/orgas', queryParameters: {if (query != null && query.trim().isNotEmpty) 'query': query.trim()});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> myOrgas() async {
+    final res = await _client.dio.get('/me/orgas');
+    final raw = (res.data as List?) ?? const [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> joinOrgaByCode({required String code, required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/orgas/join_by_code',
+      data: {'code': code},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
 }

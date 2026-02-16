@@ -1609,6 +1609,70 @@ class CommitteeGlossaryIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class Organization(Base):
+    __tablename__ = "organizations"
+    __table_args__ = (
+        Index("ix_organizations_city_type", "city", "org_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(140), index=True)
+    slug: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
+    org_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    website_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class OrganizationMembership(Base):
+    __tablename__ = "organization_memberships"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_organization_memberships_org_user"),
+        Index("ix_organization_memberships_user_role", "user_id", "role"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="MEMBER", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+
+
+class OrganizationInviteCode(Base):
+    __tablename__ = "organization_invite_codes"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_organization_invite_codes_code"),
+        Index("ix_organization_invite_codes_org_expires", "organization_id", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    code: Mapped[str] = mapped_column(String(16), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="MEMBER", index=True)
+    max_uses: Mapped[int] = mapped_column(Integer, default=100)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class OrganizationWriteIdempotency(Base):
+    __tablename__ = "organization_write_idempotency"
+    __table_args__ = (
+        UniqueConstraint("actor_user_id", "action", "idempotency_key", name="uq_organization_write_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    action: Mapped[str] = mapped_column(String(48), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
