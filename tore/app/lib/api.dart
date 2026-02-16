@@ -4,6 +4,7 @@ import 'core/network/api_client.dart';
 import 'features/hunt/hunt_models.dart';
 import 'features/battles/battle_models.dart';
 import 'features/polymarket/polymarket_models.dart';
+import 'features/safety/safety_models.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
 
@@ -60,6 +61,44 @@ class Api {
       Map<String, dynamic>.from(
         (await _client.dio.get('/events/$eventId/state')).data as Map,
       );
+
+  Future<SafetyState> getSafetyState(int eventId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/safety/state')).data as Map);
+    return SafetyState.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> setSafetyBuddy({
+    required int eventId,
+    required String buddyUserId,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/safety/buddy',
+      data: {'buddyUserId': buddyUserId},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> safetyCheckin({
+    required int eventId,
+    required String type,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/safety/checkin',
+      data: {'type': type},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<SafetyHistoryResponse> getSafetyHistory(int eventId, {int limit = 50}) async {
+    final data = Map<String, dynamic>.from(
+      (await _client.dio.get('/events/$eventId/safety/history', queryParameters: {'limit': limit})).data as Map,
+    );
+    return SafetyHistoryResponse.fromJson(data);
+  }
 
   Future<ActiveHunt> getActiveHunt(int eventId) async {
     final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/hunts/active')).data as Map);
