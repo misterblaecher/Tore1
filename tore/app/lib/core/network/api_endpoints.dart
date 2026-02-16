@@ -4,6 +4,7 @@ class ApiEndpoints {
   /// Base URL for the backend.
   ///
   /// It is configurable via --dart-define=TORE_API_BASE_URL=...
+  /// and backward-compatible with --dart-define=API_BASE_URL=...
   static String get baseUrl => AppConfig.apiBaseUrlResolved;
 
   static const authGuest = '/auth/guest';
