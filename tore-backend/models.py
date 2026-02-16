@@ -1805,6 +1805,60 @@ class SafetyBuddySession(Base):
     ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class EventSafetySettings(Base):
+    __tablename__ = "event_safety_settings"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_safety_settings_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    orga_phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    message_hint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class EventSafetyBuddy(Base):
+    __tablename__ = "event_safety_buddies"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", name="uq_event_safety_buddy_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    buddy_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventSafetyCheckin(Base):
+    __tablename__ = "event_safety_checkins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    type: Mapped[str] = mapped_column(String(16), default="OK", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    resolved_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+    resolve_reason: Mapped[Optional[str]] = mapped_column(String(240), nullable=True)
+    assigned_to_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+
+
+class EventSafetyIdempotency(Base):
+    __tablename__ = "event_safety_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action", "actor_scope", "actor_id", "idempotency_key", name="uq_event_safety_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action: Mapped[str] = mapped_column(String(32), index=True)
+    actor_scope: Mapped[str] = mapped_column(String(16), default="user")
+    actor_id: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class AppToken(Base):
     __tablename__ = "app_tokens"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

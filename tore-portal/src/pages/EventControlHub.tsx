@@ -174,7 +174,7 @@ export default function EventControlHub() {
             </>
           ) : null}
           <Link to={`/audit/${eventId}`} className="btn">Logs</Link>
-          <Link to={`/safety-admin/${eventId}`} className="btn">Règles</Link>
+          {state.safety_enabled ? <Link to={`/orga/events/${eventId}/safety`} className="btn">Safe Kit</Link> : null}
         </div>
       </Card>
 

@@ -1356,6 +1356,7 @@ from app.routers.incidents import router as incidents_router
 from app.routers.bar_menu_admin import router as bar_menu_admin_router
 from app.routers.music_vote import router as music_vote_router
 from app.routers.event_wifi import router as event_wifi_router
+from app.routers.safety_v1 import router as safety_v1_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1375,6 +1376,7 @@ app.include_router(incidents_router)
 app.include_router(bar_menu_admin_router)
 app.include_router(music_vote_router)
 app.include_router(event_wifi_router)
+app.include_router(safety_v1_router)
 
 app.add_middleware(
     CORSMiddleware,
