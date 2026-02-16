@@ -24,6 +24,7 @@ QR_RUNTIME_POLICY = {
     "checkins": ("checkins_enabled", True),
     "hunt": ("hunt_enabled", True),
     "wifi": ("wifi_enabled", False),
+    "wifi_token": ("wifi_enabled", False),
     "safety": ("safety_enabled", True),
     "menu": ("orders_enabled", False),
     "market": ("market_enabled", False),
@@ -380,6 +381,29 @@ def qr_resolve(
             "data": base.get("data"),
         }
 
+    if qr_type == "wifi_token":
+        allowed, blocked_reason = _resolve_runtime_gate(db, qr_type, event_id)
+        if not allowed:
+            return {
+                "valid": False,
+                "type": qr_type,
+                "event_id": event_id,
+                "bar_id": None,
+                "item_id": None,
+                "category_id": None,
+                "zone_id": None,
+                "bet_id": None,
+                "order_id": None,
+                "battle_id": None,
+                "scope": None,
+                "route_front": None,
+                "token": None,
+                "reason": blocked_reason,
+                "required_role": None,
+                "granted_role": "guest",
+                "data": base.get("data"),
+            }
+
     signed_valid, signed_reason, signed_token_id, signed_expires_at = validate_signed_qr(payload.raw, qr_type=qr_type, event_id=event_id, db=db)
     if not signed_valid:
         return {
@@ -414,6 +438,7 @@ def qr_resolve(
         "hunt": "guest",
         "gift": "guest",
         "wifi": "guest",
+        "wifi_token": "guest",
         "safety": "guest",
         "checkins": "guest",
         "admin_config": "admin",

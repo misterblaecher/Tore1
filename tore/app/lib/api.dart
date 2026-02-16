@@ -1038,6 +1038,14 @@ class Api {
         .toList();
     return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
   }
+  Future<Map<String, dynamic>> eventWifiClaim({
+    required int eventId,
+    required String token,
+  }) async {
+    final res = await _client.dio.get('/events/$eventId/wifi/claim', queryParameters: {'token': token});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> getEvent(int eventId) async {
     final res = await _client.dio.get('/events/$eventId');
     return Map<String, dynamic>.from(res.data as Map);

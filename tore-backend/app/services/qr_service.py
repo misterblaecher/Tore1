@@ -28,6 +28,8 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
 
     qr_type = (parsed.netloc or parsed.path.lstrip("/")).lower()
     params = parse_qs(parsed.query)
+    if qr_type == "qr":
+        qr_type = ((params.get("type") or [""])[0] or "").lower()
 
     if qr_type == "wallet":
         action = parsed.path.lstrip("/").lower()
@@ -213,6 +215,30 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
                 "deep_link": trimmed,
             },
         }
+
+    if qr_type == "wifi_token":
+        raw_event_id = (params.get("event_id") or [None])[0]
+        try:
+            event_id = int(raw_event_id) if raw_event_id is not None else None
+        except (TypeError, ValueError):
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        token = (params.get("token") or [None])[0]
+        token_id = (params.get("token_id") or [None])[0]
+        if event_id is None or not token or not token_id:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        return {
+            "valid": True,
+            "type": "wifi_token",
+            "event_id": event_id,
+            "token": token,
+            "route_front": "/wifi",
+            "reason": None,
+            "data": {
+                "deep_link": trimmed,
+                "token_id": token_id,
+            },
+        }
+
 
     # Roadmap extensions: expose contract + routing, backend handlers can remain modular.
     route_map = {

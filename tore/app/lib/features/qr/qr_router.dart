@@ -15,6 +15,7 @@ import '../qr/presentation/qr_expired_screen.dart';
 import '../qr/presentation/qr_invalid_screen.dart';
 import '../qr/presentation/qr_revoked_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
+import '../qr/presentation/wifi_screen.dart';
 import '../staff/presentation/staff_providers.dart';
 
 class QrRouterService {
@@ -144,6 +145,24 @@ class QrRouterService {
         );
         return;
       case QrType.wifi:
+        if (payload.eventId == null || payload.tokenId == null || payload.tokenId!.isEmpty) {
+          onOutcome?.call(const QrRouteOutcome.denied('WiFi QR invalide'));
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const ModuleUnavailableScreen(
+                title: 'WiFi indisponible',
+                message: 'QR WiFi invalide.',
+                reasonCode: 'invalid_qr',
+              ),
+            ),
+          );
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('WiFi'));
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => WifiScreen(eventId: payload.eventId!, token: payload.tokenId!)),
+        );
+        return;
       case QrType.hunt:
       case QrType.battle:
       case QrType.order:
