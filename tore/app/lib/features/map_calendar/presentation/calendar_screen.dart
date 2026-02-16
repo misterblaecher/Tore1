@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import '../../events/presentation/event_hub_screen.dart';
+import '../../qr/presentation/join_event_screen.dart';
 import 'map_calendar_providers.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -75,8 +76,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                 FilledButton(
                                   onPressed: eventId == null
                                       ? null
-                                      : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: (item['name'] ?? '').toString()))),
-                                  child: const Text('Rejoindre'),
+                                      : () {
+                                          final isPublic = (item['visibility'] ?? 'PUBLIC').toString().toUpperCase() == 'PUBLIC';
+                                          if (isPublic) {
+                                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => JoinEventScreen(prefillEventId: eventId)));
+                                            return;
+                                          }
+                                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: (item['name'] ?? '').toString())));
+                                        },
+                                  child: const Text('Ouvrir'),
                                 ),
                               ],
                             ),
