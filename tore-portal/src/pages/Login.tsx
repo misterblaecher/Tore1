@@ -1,140 +1,93 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getSession, setSession, setToken } from '../lib/auth'
-import { API_BASE } from '../lib/api'
-import { isApiUnavailable } from '../lib/errors'
-import ApiUnavailable from '../ui/ApiUnavailable'
+import { FormEvent, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { API_BASE, ApiError } from '../lib/api'
+import { setToken } from '../lib/auth'
 
-type AuthOut = {
-  token: string
-  bar_id: number
-  role: string
-  display_name: string
-}
+type RequestOut = { token?: string; dev_token?: string }
+type VerifyOut = { access_token?: string; accessToken?: string }
 
 export default function Login() {
-  const nav = useNavigate()
-  const session = getSession()
-  const [barId, setBarId] = useState<string>(session?.bar_id ? String(session.bar_id) : '')
-  const [name, setName] = useState<string>(session?.display_name ?? '')
-  const [pin, setPin] = useState<string>(session?.pin ?? '')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [apiDown, setApiDown] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: string } | undefined)?.from || '/create-orga'
+  const isDev = useMemo(() => import.meta.env.DEV, [])
 
-  async function onSubmit(e: React.FormEvent) {
+  const [email, setEmail] = useState('')
+  const [token, setMagicToken] = useState('')
+  const [devToken, setDevToken] = useState<string | null>(null)
+  const [step, setStep] = useState<'request' | 'verify'>('request')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function requestLink(e: FormEvent) {
     e.preventDefault()
-    setError(null)
-    setApiDown(false)
     setLoading(true)
+    setError(null)
     try {
-      const res = await fetch(`${API_BASE}/partner/auth/login`, {
+      const res = await fetch(`${API_BASE}/auth/email/request_link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bar_id: Number(barId),
-          display_name: name,
-          pin,
-        }),
+        body: JSON.stringify({ email }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.detail ?? `HTTP ${res.status}`)
-      }
-      const data = (await res.json()) as AuthOut
-      setToken(data.token)
-      setSession({ bar_id: data.bar_id, display_name: data.display_name, pin, role: data.role })
-      nav('/')
-    } catch (err: any) {
-      if (isApiUnavailable(err)) {
-        setApiDown(true)
-      } else {
-        setError('Impossible de se connecter. Vérifie le bar ID, le nom et le PIN.')
-      }
+      if (!res.ok) throw new ApiError(`HTTP ${res.status}`)
+      const data = (await res.json()) as RequestOut
+      setDevToken(isDev ? data.token ?? data.dev_token ?? null : null)
+      setStep('verify')
+    } catch {
+      setError('Impossible d’envoyer le lien pour le moment.')
     } finally {
       setLoading(false)
     }
   }
 
-  if (apiDown) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0b0b0f', color: '#fff' }}>
-        <div style={{ width: 'min(560px, 92vw)' }}>
-          <ApiUnavailable />
-        </div>
-      </div>
-    )
+  async function verifyToken(e: FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`${API_BASE}/auth/email/verify_link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token }),
+      })
+      if (!res.ok) throw new ApiError(`HTTP ${res.status}`)
+      const data = (await res.json()) as VerifyOut
+      const accessToken = data.access_token ?? data.accessToken
+      if (!accessToken) throw new Error('missing token')
+      setToken(accessToken)
+      navigate(from, { replace: true })
+    } catch {
+      setError('Code invalide ou expiré.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0b0b0f', color: '#fff' }}>
-      <form
-        onSubmit={onSubmit}
-        style={{
-          width: 'min(520px, 92vw)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 16,
-          padding: 20,
-          background: 'rgba(255,255,255,0.04)',
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 26 }}>TORÈ — Portail</h1>
-        <p style={{ marginTop: 8, opacity: 0.85 }}>Connexion partenaire (PIN)</p>
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0a0b10', color: '#fff' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: 20, borderRadius: 16, background: 'rgba(255,255,255,0.04)' }}>
+        <h1>Connexion</h1>
+        <button type="button" style={{ width: '100%', padding: 10, borderRadius: 10, marginBottom: 12 }}>
+          Continuer avec Google (bientôt)
+        </button>
 
-        <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>Bar ID</span>
-            <input
-              value={barId}
-              onChange={(e) => setBarId(e.target.value.replace(/\D/g, ''))}
-              inputMode="numeric"
-              required
-              style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
-            />
-          </label>
+        {step === 'request' ? (
+          <form onSubmit={requestLink} style={{ display: 'grid', gap: 10 }}>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="email@exemple.com" />
+            <button type="submit" disabled={loading}>{loading ? 'Envoi…' : 'Recevoir un lien magique'}</button>
+          </form>
+        ) : (
+          <form onSubmit={verifyToken} style={{ display: 'grid', gap: 10 }}>
+            <p>Check your email.</p>
+            {isDev && devToken ? <code>DEV token: {devToken}</code> : null}
+            <input value={token} onChange={(e) => setMagicToken(e.target.value)} required placeholder="Token" />
+            <button type="submit" disabled={loading}>{loading ? 'Vérification…' : 'Verify'}</button>
+            <button type="button" onClick={() => setStep('request')}>Renvoyer un lien</button>
+          </form>
+        )}
 
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>Nom (display_name)</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
-            />
-          </label>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>PIN (4 chiffres)</span>
-            <input
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              inputMode="numeric"
-              required
-              maxLength={4}
-              pattern="\d{4}"
-              style={{ padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: '#fff' }}
-            />
-          </label>
-
-          {error ? <div style={{ color: '#ffb4b4', fontWeight: 600 }}>{error}</div> : null}
-
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: '#ffffff',
-              color: '#000',
-              fontWeight: 800,
-              cursor: 'pointer',
-            }}
-          >
-            {loading ? 'Connexion…' : 'Se connecter'}
-          </button>
-        </div>
-      </form>
+        {error ? <p style={{ color: '#ffb4b4' }}>{error}</p> : null}
+      </div>
     </div>
   )
 }

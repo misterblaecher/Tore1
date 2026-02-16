@@ -1,6 +1,7 @@
 /// Compatibility layer.
 ///
-/// The app now centralizes auth + session providers in `lib/state.dart`.
-/// We keep this file to avoid breaking imports in older screens.
+/// The app now centralizes auth + session providers in `lib/state.dart` +
+/// auth-session provider.
 
 export '../../state.dart' show authRepositoryProvider, meProvider, userIdProvider;
+export 'auth_session_provider.dart' show authSessionProvider, AuthSessionState, AuthStatus;

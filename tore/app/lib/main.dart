@@ -8,6 +8,7 @@ import 'features/auth/presentation/welcome_screen.dart';
 import 'package:tore/theme/theme.dart';
 import 'state.dart';
 import 'core/network/providers.dart';
+import 'core/auth/providers.dart';
 import 'core/perf/perf_overlay.dart';
 import 'core/perf/perf_tracer.dart';
 import 'config/app_config.dart';
@@ -111,7 +112,11 @@ class _BootEntryState extends ConsumerState<_BootEntry> {
       );
     }
 
-    return boot.status == AppBootStatus.needsWelcome ? const WelcomeScreen() : const AppShell();
+    final authSession = ref.watch(authSessionProvider);
+    if (authSession.status == AuthStatus.loading) {
+      return const _BootSplash(title: 'TORÈ', status: 'Session…');
+    }
+    return authSession.isAuthed || authSession.isGuest ? const AppShell() : const WelcomeScreen();
   }
 }
 

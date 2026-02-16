@@ -8,6 +8,7 @@ import '../../../state.dart';
 import '../../events/presentation/event_manage_landing_screen.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../community/community_models.dart';
+import '../../auth/presentation/email_auth_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -46,13 +47,92 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _upgradeGuestAccount() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Sauvegarder mon compte', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  try {
+                    await ref.read(authSessionProvider.notifier).loginWithGoogle();
+                    await _runGuestUpgradeBestEffort();
+                  } catch (_) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(content: Text('Google indisponible, essaie Email.')));
+                  }
+                },
+                child: const Text('Continuer avec Google'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await Navigator.of(this.context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
+                  await _runGuestUpgradeBestEffort();
+                },
+                child: const Text('Continuer par Email'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runGuestUpgradeBestEffort() async {
+    final repo = ref.read(authRepositoryProvider);
+    final guestId = await repo.api.tokenStorage.readGuestDeviceId();
+    if (guestId != null && guestId.isNotEmpty) {
+      try {
+        await repo.upgradeGuest(guestDeviceId: guestId);
+      } catch (_) {}
+    }
+    ref.invalidate(meProvider);
+    ref.invalidate(authSessionProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final meAsync = ref.watch(meProvider);
+    final session = ref.watch(authSessionProvider);
     final ctx = ref.watch(appContextProvider);
     final runtimeStateAsync = ctx.hasActiveEvent
         ? ref.watch(_profileEventProvider(ctx.activeEventId!))
         : const AsyncValue<String>.data('N/A');
+
+    if (session.isGuest) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Profil')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              color: Colors.orange.withOpacity(0.15),
+              child: ListTile(
+                title: const Text('Tu es en invité — sauvegarde ton compte'),
+                subtitle: const Text('Pour conserver ton profil et tes actions.'),
+                trailing: FilledButton(onPressed: _upgradeGuestAccount, child: const Text('Sauvegarder')),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async => ref.read(authSessionProvider.notifier).logout(),
+              icon: const Icon(Icons.logout),
+              label: const Text('Se déconnecter'),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profil')),
@@ -404,6 +484,59 @@ class _EditFieldState extends State<_EditField> {
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _upgradeGuestAccount() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Sauvegarder mon compte', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  try {
+                    await ref.read(authSessionProvider.notifier).loginWithGoogle();
+                    await _runGuestUpgradeBestEffort();
+                  } catch (_) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(content: Text('Google indisponible, essaie Email.')));
+                  }
+                },
+                child: const Text('Continuer avec Google'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await Navigator.of(this.context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
+                  await _runGuestUpgradeBestEffort();
+                },
+                child: const Text('Continuer par Email'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runGuestUpgradeBestEffort() async {
+    final repo = ref.read(authRepositoryProvider);
+    final guestId = await repo.api.tokenStorage.readGuestDeviceId();
+    if (guestId != null && guestId.isNotEmpty) {
+      try {
+        await repo.upgradeGuest(guestDeviceId: guestId);
+      } catch (_) {}
+    }
+    ref.invalidate(meProvider);
+    ref.invalidate(authSessionProvider);
   }
 
   @override
