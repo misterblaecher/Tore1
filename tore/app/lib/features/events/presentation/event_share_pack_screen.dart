@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../state.dart';
 import '../../../shared/utils/write_gate.dart';
@@ -18,6 +20,7 @@ class EventSharePackScreen extends ConsumerStatefulWidget {
 }
 
 class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
+  static const String _publicWebBaseUrl = 'https://app.tore.be';
   Map<String, dynamic>? _pack;
 
   String _idem(String action) => '$action-${widget.eventId}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
@@ -33,10 +36,26 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
     if (mounted) setState(() => _pack = pack);
   }
 
-  Future<void> _copy(String value) async {
+  Future<void> _copy(String value, {String message = 'Copié'}) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _openPrintableVersion({required bool canManage}) async {
+    final path = canManage
+        ? '/orga/events/${widget.eventId}/share-pack/print'
+        : '/share/event/${widget.eventId}/print';
+    final uri = Uri.parse('$_publicWebBaseUrl$path');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _sharePrintableLink({required bool canManage}) async {
+    final path = canManage
+        ? '/orga/events/${widget.eventId}/share-pack/print'
+        : '/share/event/${widget.eventId}/print';
+    final url = '$_publicWebBaseUrl$path';
+    await Share.share(url, subject: 'Print pack TORÈ #${widget.eventId}');
   }
 
   Future<void> _createStaffInvite(String role) async {
@@ -56,7 +75,11 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
     final pack = _pack;
     final links = Map<String, dynamic>.from((pack?['links'] as Map?) ?? const <String, dynamic>{});
     final staffInvites = ((links['staffInvites'] as List?) ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    final canManage = links.containsKey('staffInvites');
     final qr = Map<String, dynamic>.from((pack?['qr'] as Map?) ?? const <String, dynamic>{});
+    final printUrl = canManage
+        ? '$_publicWebBaseUrl/orga/events/${widget.eventId}/share-pack/print'
+        : '$_publicWebBaseUrl/share/event/${widget.eventId}/print';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Share pack')),
@@ -65,6 +88,33 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () => _openPrintableVersion(canManage: canManage),
+                          icon: const Icon(Icons.print),
+                          label: const Text('Version imprimable'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _copy(printUrl, message: 'Lien print copié'),
+                          icon: const Icon(Icons.link),
+                          label: const Text('Copier lien print'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _sharePrintableLink(canManage: canManage),
+                          icon: const Icon(Icons.share),
+                          label: const Text('Partager'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 _LinkCard(title: 'Public link', link: links['publicShare'], onCopy: _copy),
                 const SizedBox(height: 8),
                 _LinkCard(title: 'Join link', link: links['joinPublic'], onCopy: _copy),
@@ -75,7 +125,7 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Staff invites', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      Wrap(spacing: 8, children: [for (final role in const ['ENTRY', 'BAR', 'MANAGER', 'HELPER']) OutlinedButton(onPressed: () => _createStaffInvite(role), child: Text('Créer $role'))]),
+                      Wrap(spacing: 8, children: [for (final role in const ['ENTRY', 'BAR', 'MANAGER', 'HELPER']) OutlinedButton(onPressed: canManage ? () => _createStaffInvite(role) : null, child: Text('Créer $role'))]),
                       const SizedBox(height: 8),
                       for (final invite in staffInvites)
                         ListTile(
@@ -84,7 +134,7 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                           subtitle: Text('Expire: ${invite['expiresAt'] ?? '-'} · ${invite['status'] ?? '-'}'),
                           trailing: Wrap(spacing: 4, children: [
                             IconButton(onPressed: () => _copy((invite['webUrl'] ?? '').toString()), icon: const Icon(Icons.copy)),
-                            IconButton(onPressed: () => _revokeStaffInvite((invite['code'] ?? '').toString()), icon: const Icon(Icons.block)),
+                            IconButton(onPressed: canManage ? () => _revokeStaffInvite((invite['code'] ?? '').toString()) : null, icon: const Icon(Icons.block)),
                           ]),
                         ),
                     ]),
@@ -114,7 +164,7 @@ class _LinkCard extends StatelessWidget {
 
   final String title;
   final dynamic link;
-  final Future<void> Function(String) onCopy;
+  final Future<void> Function(String, {String message}) onCopy;
 
   @override
   Widget build(BuildContext context) {

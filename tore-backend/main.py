@@ -6318,12 +6318,42 @@ def _event_share_pack_payload(db: Session, event: Event, *, include_staff: bool)
             "id": event.id,
             "name": event.name,
             "visibility": (event.visibility or "PRIVATE").upper(),
+            "publicationStatus": (event.publication_status or "DRAFT").upper(),
             "host": {"type": event.host_type, "id": event.host_id, "name": event.host_display_name},
             "startsAt": event.starts_at.isoformat() if event.starts_at else None,
             "venue": event.venue,
         },
         "links": {k: v for k, v in links.items() if v is not None},
         "qr": {k: v for k, v in qr.items() if v is not None},
+    }
+
+
+def _public_event_share_pack_payload(db: Session, event: Event) -> dict[str, Any]:
+    base_pack = _event_share_pack_payload(db, event, include_staff=False)
+    public_base = _public_app_base_url()
+    open_url = f"{public_base}/open?type=event&id={event.id}"
+    links = base_pack.get("links", {})
+    public_links = {
+        "publicShare": links.get("publicShare"),
+        "joinPublic": links.get("joinPublic"),
+        "open": {"webUrl": open_url, "deeplink": f"tore://open?type=event&id={event.id}"},
+    }
+    return {
+        "event": {
+            "id": event.id,
+            "name": event.name,
+            "visibility": (event.visibility or "PRIVATE").upper(),
+            "publicationStatus": (event.publication_status or "DRAFT").upper(),
+            "startsAt": event.starts_at.isoformat() if event.starts_at else None,
+            "venue": event.venue,
+        },
+        "metadata": {
+            "title": event.name,
+            "description": f"Ouvrir {event.name} dans TORÈ",
+        },
+        "links": {k: v for k, v in public_links.items() if v is not None},
+        "openUrl": open_url,
+        "printPackUrl": f"{public_base}/share/event/{event.id}/print",
     }
 
 
@@ -6837,6 +6867,35 @@ def get_event_share_pack(
         event_id=event.id,
         bar_id=event.bar_id,
         payload={"includeStaff": include_staff},
+    )
+    db.commit()
+    return payload
+
+
+@app.get("/share/event/{event_id}")
+def get_public_event_share_pack(
+    event_id: int,
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+        raise HTTPException(status_code=404, detail={"reason": "public_share_pack_not_available"})
+
+    payload = _public_event_share_pack_payload(db, event)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=None,
+        actor_role="anonymous",
+        action="event.public_share_pack.read",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"scope": "public_share_pack"},
     )
     db.commit()
     return payload

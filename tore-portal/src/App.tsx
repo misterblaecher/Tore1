@@ -48,6 +48,7 @@ import AdminUsersGlobal from './pages/AdminUsersGlobal'
 import AdminFlagsGlobal from './pages/AdminFlagsGlobal'
 import CreateOrga from './pages/CreateOrga'
 import OpenInApp from './pages/OpenInApp'
+import PrintSharePack from './pages/PrintSharePack'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -81,6 +82,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/open" element={<OpenInApp />} />
+      <Route path="/share/event/:eventId/print" element={<PrintSharePack managed={false} />} />
 
       <Route
         path="/admin/audit"
@@ -310,6 +312,16 @@ export default function App() {
           <RequireAuth>
             <RequireOrga>
               <OrgaIncidents />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/share-pack/print"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <PrintSharePack managed={true} />
             </RequireOrga>
           </RequireAuth>
         }
