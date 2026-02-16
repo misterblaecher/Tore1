@@ -144,9 +144,59 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 
 def _cors_origins() -> list[str]:
-    raw = os.getenv("TORE_CORS_ORIGINS", "*")
-    values = [v.strip() for v in raw.split(",") if v.strip()]
-    return values or ["*"]
+    raw = (os.getenv("TORE_CORS_ORIGINS") or "").strip()
+    if raw:
+        values = [v.strip() for v in raw.split(",") if v.strip()]
+        return values or ["*"]
+
+    env_name = (os.getenv("TORE_ENV") or os.getenv("ENV") or "dev").strip().lower()
+    if env_name in {"prod", "production"}:
+        logging.warning("TORE_CORS_ORIGINS is empty in production profile; CORS allowlist is empty.")
+        return []
+
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
+
+
+def _validate_qr_signing_keys_format() -> tuple[bool, str]:
+    ring = (os.getenv("TORE_QR_SIGNING_KEYS") or "").strip()
+    if not ring:
+        return True, "TORE_QR_SIGNING_KEYS not set (fallback secret strategy enabled)"
+
+    values = [item.strip() for item in ring.split(",") if item.strip()]
+    if not values:
+        return False, "TORE_QR_SIGNING_KEYS is present but empty after parsing"
+
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:.")
+    invalid: list[str] = []
+    for idx, value in enumerate(values, start=1):
+        if len(value) < 16:
+            invalid.append(f"#{idx}:too_short")
+            continue
+        if any(ch not in allowed for ch in value):
+            invalid.append(f"#{idx}:invalid_chars")
+
+    if invalid:
+        return False, f"invalid keys ({', '.join(invalid)})"
+    return True, f"{len(values)} key(s)"
+
+
+def _startup_sanity_checks() -> None:
+    ok, msg = _validate_qr_signing_keys_format()
+    if ok:
+        logging.info(f"startup.sanity.qr_signing_keys={msg}")
+    else:
+        logging.warning(f"startup.sanity.qr_signing_keys={msg}")
+
+    cors = _cors_origins()
+    if cors:
+        logging.info(f"startup.sanity.cors={cors}")
+    else:
+        logging.warning("startup.sanity.cors=EMPTY_ALLOWLIST")
 
 
 def _should_bootstrap_on_startup() -> bool:
@@ -1520,6 +1570,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
+    _startup_sanity_checks()
     if _should_bootstrap_on_startup():
         ensure_seed()
     else:
