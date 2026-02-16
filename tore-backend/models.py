@@ -1197,6 +1197,11 @@ class AppUser(Base):
 
     show_address: Mapped[bool] = mapped_column(Boolean, default=False)
     show_avatar: Mapped[bool] = mapped_column(Boolean, default=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    anonymized_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
 
     tokens: Mapped[List["AppToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
@@ -1608,6 +1613,8 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
         Index("ix_audit_logs_event_ts", "event_id", "ts"),
+        Index("ix_audit_logs_actor_user_ts", "actor_user_id", "ts"),
+        Index("ix_audit_logs_committee_ts", "committee_id", "ts"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -1623,6 +1630,50 @@ class AuditLog(Base):
     bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), nullable=True, index=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class UserPrivacyDeleteRequest(Base):
+    __tablename__ = "user_privacy_delete_requests"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_user_privacy_delete_req_idem"),
+        Index("ix_user_privacy_delete_req_effective", "status", "effective_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    effective_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="PENDING", index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
+
+
+class UserSanction(Base):
+    __tablename__ = "user_sanctions"
+    __table_args__ = (
+        Index("ix_user_sanctions_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    type: Mapped[str] = mapped_column(String(16), index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    revoked_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class GlobalFeatureFlag(Base):
+    __tablename__ = "global_feature_flags"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
 
 
 class EventMusicSetting(Base):
