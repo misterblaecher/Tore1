@@ -133,7 +133,7 @@ class QrRouterService {
           MaterialPageRoute(
             builder: (_) => const ModuleUnavailableScreen(
               title: 'Module manager indisponible',
-              message: 'Session manager créée. L'écran dédié n'est pas encore disponible.',
+              message: "Session manager créée. L'écran dédié n'est pas encore disponible.",
               reasonCode: 'manager_module_unavailable',
             ),
           ),

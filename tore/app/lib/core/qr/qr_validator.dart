@@ -15,7 +15,9 @@ class QrValidationResult {
 }
 
 class QrValidator {
-  QrValidator([this._resolver, {Future<QrResolveResult> Function(String raw)? resolveRaw}]) : _resolveRaw = resolveRaw;
+  QrValidator({QrResolveService? resolver, Future<QrResolveResult> Function(String raw)? resolveRaw})
+      : _resolver = resolver,
+        _resolveRaw = resolveRaw;
 
   final QrResolveService? _resolver;
   final Future<QrResolveResult> Function(String raw)? _resolveRaw;
@@ -63,5 +65,5 @@ class QrValidator {
 }
 
 final qrValidatorProvider = Provider<QrValidator>((ref) {
-  return QrValidator(ref.watch(qrResolveServiceProvider));
+  return QrValidator(resolver: ref.watch(qrResolveServiceProvider));
 });

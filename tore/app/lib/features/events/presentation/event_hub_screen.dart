@@ -10,6 +10,7 @@ import '../../menu_market/presentation/menu_screen.dart';
 import 'event_polymarket_screen.dart';
 import 'event_ranking_screen.dart';
 import '../../navigation/presentation/ticker_screen.dart';
+import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../hunt/presentation/hunt_screen.dart';
 import '../../battles/presentation/battles_screen.dart';
