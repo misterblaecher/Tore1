@@ -12,6 +12,7 @@ import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
 import 'package:tore/features/ticker/ticker_providers.dart';
 import 'package:tore/features/wallet/presentation/wallet_screen.dart';
+import 'package:tore/features/map_calendar/presentation/calendar_screen.dart';
 import 'package:tore/state.dart';
 import 'package:tore/ui/components/components.dart';
 import 'package:tore/shared/utils/write_gate.dart';
@@ -98,6 +99,13 @@ class HomeHubScreen extends ConsumerWidget {
                 ],
               ),
             ),
+          if (!hasEvent)
+            _ModuleCard(
+              icon: Icons.calendar_month_outlined,
+              title: 'Calendrier',
+              subtitle: 'Events publics: Live / Today / Upcoming',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen())),
+            ),
           if (hasEvent)
             _ModuleCard(
               icon: Icons.event_note_outlined,
@@ -132,6 +140,13 @@ class HomeHubScreen extends ConsumerWidget {
               title: 'Comité OS',
               subtitle: 'Page publique + espace privé',
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommitteesListScreen())),
+            ),
+          if (committeesModule)
+            _ModuleCard(
+              icon: Icons.calendar_month_outlined,
+              title: 'Calendrier',
+              subtitle: 'Vue publique cross-bars',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen())),
             ),
           if (hasEvent && tickerOn)
             _ModuleCard(

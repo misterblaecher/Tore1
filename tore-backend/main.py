@@ -1357,6 +1357,7 @@ from app.routers.bar_menu_admin import router as bar_menu_admin_router
 from app.routers.music_vote import router as music_vote_router
 from app.routers.event_wifi import router as event_wifi_router
 from app.routers.safety_v1 import router as safety_v1_router
+from app.routers.map_calendar import router as map_calendar_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1377,6 +1378,7 @@ app.include_router(bar_menu_admin_router)
 app.include_router(music_vote_router)
 app.include_router(event_wifi_router)
 app.include_router(safety_v1_router)
+app.include_router(map_calendar_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -3102,6 +3104,8 @@ def list_bar_events(bar_id: int, db: Session = Depends(get_db)):
 
 
 def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
+    event = db.get(Event, event_id)
+    event_modules = (event.modules_on or {}) if event else {}
     cfg = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == event_id).first()
     if cfg is None:
         return {
@@ -3118,6 +3122,7 @@ def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
             "classement": True,
             "music_vote": False,
             "broadcast": False,
+            "map": bool(event_modules.get("map", False)),
         }
     polymarket_enabled = bool(getattr(cfg, "allow_user_bets", getattr(cfg, "polymarket_enabled", False)))
     menu_enabled = bool(getattr(cfg, "menu_enabled", True))
@@ -3136,6 +3141,7 @@ def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
         "classement": bool(cfg.report_enabled),
         "music_vote": False,
         "broadcast": False,
+        "map": bool(event_modules.get("map", False)),
     }
 
 

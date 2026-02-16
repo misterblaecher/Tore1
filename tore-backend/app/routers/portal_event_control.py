@@ -71,6 +71,7 @@ DEFAULT_MODULES_ON = {
     "battles": False,
     "wifi": False,
     "safety": False,
+    "map": False,
 }
 
 

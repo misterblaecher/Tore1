@@ -29,6 +29,20 @@ class CommitteeFetchResult {
   const CommitteeFetchResult({required this.payload, required this.fromCache});
 }
 
+class EventMapFetchResult {
+  final Map<String, dynamic> payload;
+  final bool fromCache;
+
+  const EventMapFetchResult({required this.payload, required this.fromCache});
+}
+
+class CalendarEventsFetchResult {
+  final List<Map<String, dynamic>> items;
+  final bool fromCache;
+
+  const CalendarEventsFetchResult({required this.items, required this.fromCache});
+}
+
 class Api {
   final ApiClient _client;
   final CacheStore _cache;
@@ -619,6 +633,54 @@ class Api {
     final result = await menuWithCacheStatus(eventId);
     return result.items;
   }
+
+  Future<EventMapFetchResult> getEventMapWithCacheStatus(int eventId) async {
+    final cacheKey = 'event_map_$eventId';
+    try {
+      final res = await _client.dio.get('/events/$eventId/map');
+      final payload = Map<String, dynamic>.from(res.data as Map);
+      await _cache.setJson(cacheKey, payload, ttl: const Duration(days: 1));
+      return EventMapFetchResult(payload: payload, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) {
+        return EventMapFetchResult(payload: cached, fromCache: true);
+      }
+      throw const OfflineNoCacheException('event_map');
+    }
+  }
+
+  Future<CalendarEventsFetchResult> getCalendarEventsWithCacheStatus({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final keyFrom = from.toIso8601String();
+    final keyTo = to.toIso8601String();
+    final cacheKey = 'calendar_events_${keyFrom}_$keyTo';
+    try {
+      final res = await _client.dio.get('/calendar/events', queryParameters: {
+        'from': keyFrom,
+        'to': keyTo,
+        'scope': 'public',
+      });
+      final raw = (Map<String, dynamic>.from(res.data as Map)['items'] as List<dynamic>? ?? const []);
+      final items = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      await _cache.setJson(cacheKey, {'items': items}, ttl: const Duration(days: 1));
+      return CalendarEventsFetchResult(items: items, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      final items = cached?['items'];
+      if (items is List) {
+        return CalendarEventsFetchResult(
+          items: items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(),
+          fromCache: true,
+        );
+      }
+      throw const OfflineNoCacheException('calendar_events');
+    }
+  }
+
+  String getEventIcsUrl(int eventId) => '${_client.dio.options.baseUrl}/calendar/events/$eventId.ics';
 
   Future<MenuFetchResult> menuWithCacheStatus(int eventId) async {
     final cacheKey = 'event_menu_$eventId';

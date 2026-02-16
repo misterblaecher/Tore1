@@ -42,6 +42,7 @@ import OrgaBroadcast from './pages/OrgaBroadcast'
 import OrgaIncidents from './pages/OrgaIncidents'
 import OrgaProfitability from './pages/OrgaProfitability'
 import OrgaEventSafety from './pages/OrgaEventSafety'
+import OrgaEventMap from './pages/OrgaEventMap'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -336,6 +337,16 @@ export default function App() {
           <RequireAuth>
             <RequireOrga>
               <OrgaEventHunts />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/map"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <OrgaEventMap />
             </RequireOrga>
           </RequireAuth>
         }

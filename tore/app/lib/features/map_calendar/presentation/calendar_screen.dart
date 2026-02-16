@@ -1,0 +1,96 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../state.dart';
+import '../../../ui/components/components.dart';
+import '../../events/presentation/event_hub_screen.dart';
+import 'map_calendar_providers.dart';
+
+class CalendarScreen extends ConsumerStatefulWidget {
+  const CalendarScreen({super.key});
+
+  @override
+  ConsumerState<CalendarScreen> createState() => _CalendarScreenState();
+}
+
+class _CalendarScreenState extends ConsumerState<CalendarScreen> {
+  CalendarRange _range = CalendarRange.today;
+
+  @override
+  Widget build(BuildContext context) {
+    final asyncEvents = ref.watch(calendarEventsProvider(_range));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Calendrier guindaille')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(label: const Text('Aujourd’hui'), selected: _range == CalendarRange.today, onSelected: (_) => setState(() => _range = CalendarRange.today)),
+                ChoiceChip(label: const Text('Semaine'), selected: _range == CalendarRange.week, onSelected: (_) => setState(() => _range = CalendarRange.week)),
+                ChoiceChip(label: const Text('Mois'), selected: _range == CalendarRange.month, onSelected: (_) => setState(() => _range = CalendarRange.month)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: asyncEvents.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Erreur calendrier: $e')),
+              data: (result) {
+                return ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: result.items.length,
+                  itemBuilder: (_, index) {
+                    final item = result.items[index];
+                    final eventId = int.tryParse('${item['id']}');
+                    final start = DateTime.tryParse((item['startAt'] ?? '').toString());
+                    final end = DateTime.tryParse((item['endAt'] ?? '').toString());
+                    final dateLabel = '${start != null ? TimeOfDay.fromDateTime(start).format(context) : '--'} - ${end != null ? TimeOfDay.fromDateTime(end).format(context) : '--'}';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: ToreCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text((item['name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 4),
+                            Text('$dateLabel · ${(item['barName'] ?? 'Bar').toString()}'),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: eventId == null
+                                      ? null
+                                      : () async {
+                                          final url = ref.read(apiProvider).getEventIcsUrl(eventId);
+                                          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                                        },
+                                  child: const Text('Ajouter au calendrier'),
+                                ),
+                                FilledButton(
+                                  onPressed: eventId == null
+                                      ? null
+                                      : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: (item['name'] ?? '').toString()))),
+                                  child: const Text('Rejoindre'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
