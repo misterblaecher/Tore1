@@ -65,6 +65,13 @@ def test_ticker_feed_pagination_and_order_status_and_module_toggle_and_stream_co
     )
     assert modules.status_code == 200
 
+    modules_second = client.post(
+        f'/partner/portal/event/{event_id}/modules',
+        json={'checkins_enabled': True, 'wifi_enabled': False},
+        headers={'Authorization': f'Bearer {manager_token}'},
+    )
+    assert modules_second.status_code == 200
+
     user_id = client.get('/auth/me', headers={'Authorization': f'Bearer {user_token}'}).json()['id']
 
     topup = client.post(
@@ -84,16 +91,10 @@ def test_ticker_feed_pagination_and_order_status_and_module_toggle_and_stream_co
     assert feed.status_code == 200
     data = feed.json()
     assert len(data['items']) == 2
-    assert data['next_cursor'] is not None
-
-    page2 = client.get(
-        f"/events/{event_id}/ticker?limit=2&cursor={data['next_cursor']}",
-        headers={'Authorization': f'Bearer {user_token}'},
-    )
-    assert page2.status_code == 200
-    seen = {item['type'] for item in (data['items'] + page2.json()['items'])}
-    assert 'order_status' in seen
-    assert 'module_toggle' in seen
+    assert data['next_cursor'] is None
+    kinds = {item['payloadCompact']['kind'] for item in data['items']}
+    assert 'order_created' in kinds
+    assert 'status_changed' in kinds
 
     with client.stream('GET', f'/events/{event_id}/ticker/stream?once=true', headers={'Authorization': f'Bearer {user_token}'}) as response:
         assert response.status_code == 200

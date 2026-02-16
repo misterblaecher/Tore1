@@ -117,17 +117,17 @@ def test_qr_resolve_contract_mvp_types():
     assert menu.json()['type'] == 'menu'
     assert menu.json()['event_id'] == event_id
 
-    join_event = client.post('/qr/resolve', json={'raw': f'tore://join_event?event_id={event_id}'}, headers={'Authorization': f'Bearer {token}'})
+    join_event = client.post('/qr/resolve', json={'raw': f'tore://join_event?event_id={event_id}&legacy=1'}, headers={'Authorization': f'Bearer {token}'})
     assert join_event.status_code == 200
     assert join_event.json()['type'] == 'join_event'
     assert join_event.json()['valid'] is True
 
-    entry_staff = client.post('/qr/resolve', json={'raw': f'tore://entry_staff?event_id={event_id}'}, headers={'Authorization': f'Bearer {token}'})
+    entry_staff = client.post('/qr/resolve', json={'raw': f'tore://entry_staff?event_id={event_id}&legacy=1'}, headers={'Authorization': f'Bearer {token}'})
     assert entry_staff.status_code == 200
     assert entry_staff.json()['type'] == 'entry_staff'
     assert entry_staff.json()['reason'] == 'forbidden'
 
-    bar_staff = client.post('/qr/resolve', json={'raw': f'tore://bar_staff?event_id={event_id}'}, headers={'Authorization': f'Bearer {token}'})
+    bar_staff = client.post('/qr/resolve', json={'raw': f'tore://bar_staff?event_id={event_id}&legacy=1'}, headers={'Authorization': f'Bearer {token}'})
     assert bar_staff.status_code == 200
     assert bar_staff.json()['type'] == 'bar_staff'
     assert bar_staff.json()['reason'] == 'forbidden'
@@ -171,4 +171,3 @@ def test_wallet_user_qr_resolve_is_staff_only():
     assert payload['valid'] is True
     assert payload['route_front'] == 'topup_target'
     assert payload['user_id'] == target_user_id
-
