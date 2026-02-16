@@ -289,6 +289,50 @@ class EventWifiIdempotency(Base):
     response_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
+
+class EventMapSettings(Base):
+    __tablename__ = "event_map_settings"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_map_settings_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    venue_name: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tec_link: Mapped[Optional[str]] = mapped_column(String(600), nullable=True)
+    waze_link: Mapped[Optional[str]] = mapped_column(String(600), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class EventNavettesSettings(Base):
+    __tablename__ = "event_navettes_settings"
+    __table_args__ = (UniqueConstraint("event_id", name="uq_event_navettes_settings_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    last_return_time: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True)
+
+
+class EventMapIdempotency(Base):
+    __tablename__ = "event_map_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "idempotency_key", name="uq_event_map_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
 class Hunt(Base):
     __tablename__ = "hunts"
 

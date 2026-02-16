@@ -39,6 +39,7 @@ export default function EventControlHub() {
   const [savingModules, setSavingModules] = useState(false)
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [error, setError] = useState<string | null>(null)
+  const [mapModuleOn, setMapModuleOn] = useState(false)
 
   useEffect(() => {
     const onOnline = () => setIsOnline(true)
@@ -75,6 +76,12 @@ export default function EventControlHub() {
     setRuntimeState(snap.event_state)
     setRuntimeReason(snap.runtime_reason || '')
     setAuditItems(audit.items || [])
+    try {
+      await api(`/events/${eventId}/map`)
+      setMapModuleOn(true)
+    } catch {
+      setMapModuleOn(false)
+    }
   }
 
   useEffect(() => {
@@ -163,6 +170,7 @@ export default function EventControlHub() {
           <Link to={`/orga/events/${eventId}/incidents`} className="btn">Incidents</Link>
           <Link to={`/orga/events/${eventId}/profitability`} className="btn">Rentabilité</Link>
           <Link to={`/orga/events/${eventId}/wifi`} className="btn">WiFi</Link>
+          {mapModuleOn ? <Link to={`/orga/events/${eventId}/map`} className="btn">Carte & Navettes</Link> : null}
           {state.hunt_enabled ? <Link to={`/orga/events/${eventId}/hunts`} className="btn">Hunt</Link> : null}
           {state.battles_enabled ? <Link to={`/orga/events/${eventId}/battles`} className="btn">Battles / Affonds</Link> : null}
           {canAccessBarMode ? (
