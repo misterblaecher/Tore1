@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/providers.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../state.dart';
+import '../../events/presentation/event_manage_landing_screen.dart';
+import '../../events/presentation/event_hub_screen.dart';
+import '../../community/community_models.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -212,6 +215,69 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
 
+
+              const SizedBox(height: 12),
+              FutureBuilder<MyEventsFetchResult>(
+                future: ref.read(apiProvider).myEvents(),
+                builder: (context, snap) {
+                  final result = snap.data;
+                  final buckets = result?.buckets ?? const <String, List<MyEventSummary>>{};
+                  final allItems = [
+                    ...?buckets['LIVE'],
+                    ...?buckets['TODAY'],
+                    ...?buckets['UPCOMING'],
+                    ...?buckets['PAST'],
+                  ];
+                  if (snap.connectionState == ConnectionState.waiting && result == null) {
+                    return const Card(child: Padding(padding: EdgeInsets.all(14), child: Center(child: CircularProgressIndicator())));
+                  }
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Mes Events', style: TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 6),
+                          Text('LIVE ${buckets['LIVE']?.length ?? 0} • TODAY ${buckets['TODAY']?.length ?? 0} • UPCOMING ${buckets['UPCOMING']?.length ?? 0} • PAST ${buckets['PAST']?.length ?? 0}'),
+                          if (result != null)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: result.fromCache ? Colors.amber.withOpacity(0.2) : Colors.green.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                result.fromCache
+                                    ? 'Cache (TTL 24h) • dernière synchro: ${_fmt(result.lastSyncAt)}'
+                                    : 'Sync live • ${_fmt(result.lastSyncAt)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          if (allItems.isEmpty) const Text('Aucun event pertinent.'),
+                          for (final e in allItems.take(12))
+                            ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(e.name),
+                              subtitle: Text('${e.roleForMe} • ${e.visibility} • ${e.status}'),
+                              trailing: e.canManage ? const Icon(Icons.chevron_right) : null,
+                              onTap: () {
+                                final route = e.joined
+                                    ? MaterialPageRoute(builder: (_) => EventHubScreen(eventId: e.id, eventName: e.name))
+                                    : MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: e));
+                                Navigator.of(context).push(route);
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+
               const SizedBox(height: 12),
               FutureBuilder<Map<String, dynamic>>(
                 future: ref.read(apiProvider).myProfileV2(),
@@ -284,6 +350,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         },
       ),
     );
+  }
+
+  static String _fmt(DateTime? dt) {
+    if (dt == null) return '-';
+    final local = dt.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
   static String _initials(String displayName, String id) {

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/utils/write_gate.dart';
+import '../community_models.dart';
+import '../../events/presentation/event_manage_landing_screen.dart';
 import '../../../state.dart';
 import '../../../ui/components/tore_card.dart';
 import '../../../ui/components/tore_chip.dart';
@@ -34,13 +36,14 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Organisation')),
       body: FutureBuilder<List<dynamic>>(
-        future: Future.wait([api.getOrga(widget.orgId), api.listOrgaPublicEvents(widget.orgId), api.listOrgaPosts(widget.orgId)]),
+        future: Future.wait([api.getOrga(widget.orgId), api.listOrgaPublicEvents(widget.orgId), api.listOrgaPosts(widget.orgId), if (_isAdmin) api.orgaPrivateEvents(widget.orgId)]),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snap.hasError || !snap.hasData) return const Center(child: Text('Erreur chargement orga'));
           final orga = Map<String, dynamic>.from(snap.data![0] as Map);
           final events = ((Map<String, dynamic>.from(snap.data![1] as Map)['items'] as List?) ?? const []).cast<dynamic>();
           final posts = ((Map<String, dynamic>.from(snap.data![2] as Map)['items'] as List?) ?? const []).cast<dynamic>();
+          final privateBuckets = _isAdmin && snap.data!.length > 3 ? (snap.data![3] as Map<String, List<MyEventSummary>>) : <String, List<MyEventSummary>>{};
 
           return ListView(
             padding: const EdgeInsets.all(12),
@@ -85,6 +88,35 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                 child: Column(children: [for (final e in events) ToreListRow(title: (e['name'] ?? 'Event').toString(), subtitle: '${e['bucket'] ?? ''} • ${e['eventState'] ?? ''}')]),
               ),
               const SizedBox(height: 12),
+              if (_isAdmin)
+                ToreCard(
+                  header: const Text('Events (privés)'),
+                  child: Column(
+                    children: [
+                      for (final bucket in const ['LIVE', 'TODAY', 'UPCOMING', 'PAST'])
+                        ...[
+                          if ((privateBuckets[bucket] ?? const <MyEventSummary>[]).isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, bottom: 4),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(bucket, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          for (final event in (privateBuckets[bucket] ?? const <MyEventSummary>[]))
+                            ToreListRow(
+                              title: event.name,
+                              subtitle: '${event.visibility} • ${event.status} • ${event.roleForMe}',
+                              trailing: TextButton(
+                                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event))),
+                                child: const Text('Reprendre'),
+                              ),
+                            ),
+                        ],
+                    ],
+                  ),
+                ),
+              if (_isAdmin) const SizedBox(height: 12),
               ToreCard(
                 header: const Text('Posts'),
                 child: Column(children: [for (final p in posts.take(3)) ToreListRow(title: (p as Map)['text']?.toString() ?? '-', subtitle: (p['author_user_id'] ?? '').toString())]),

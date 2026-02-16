@@ -6,6 +6,7 @@ import 'features/glossary/glossary_models.dart';
 import 'features/battles/battle_models.dart';
 import 'features/polymarket/polymarket_models.dart';
 import 'features/safety/safety_models.dart';
+import 'features/community/community_models.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
 
@@ -1359,6 +1360,54 @@ class Api {
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+
+  Future<MyEventsFetchResult> myEvents() async {
+    const cacheKey = 'my_events_v1';
+    try {
+      final res = await _client.dio.get('/me/events');
+      final payload = Map<String, dynamic>.from(res.data as Map);
+      final nowIso = DateTime.now().toIso8601String();
+      await _cache.setJson(cacheKey, {'payload': payload, 'lastSyncAt': nowIso}, ttl: const Duration(hours: 24));
+      return MyEventsFetchResult(
+        buckets: _decodeMyEventBuckets(payload),
+        fromCache: false,
+        lastSyncAt: DateTime.tryParse(nowIso),
+      );
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) {
+        final payload = Map<String, dynamic>.from((cached['payload'] as Map?) ?? const <String, dynamic>{});
+        final lastSyncAt = DateTime.tryParse((cached['lastSyncAt'] ?? '').toString());
+        return MyEventsFetchResult(
+          buckets: _decodeMyEventBuckets(payload),
+          fromCache: true,
+          lastSyncAt: lastSyncAt,
+        );
+      }
+      throw const OfflineNoCacheException('my_events');
+    }
+  }
+
+  Future<Map<String, List<MyEventSummary>>> orgaPrivateEvents(int orgId) async {
+    final res = await _client.dio.get('/orgas/$orgId/events/private');
+    return _decodeMyEventBuckets(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<ManageSnapshot> eventManageSnapshot(int eventId) async {
+    final res = await _client.dio.get('/events/$eventId/manage_snapshot');
+    return ManageSnapshot.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Map<String, List<MyEventSummary>> _decodeMyEventBuckets(Map<String, dynamic> payload) {
+    const keys = <String>['LIVE', 'TODAY', 'UPCOMING', 'PAST'];
+    final out = <String, List<MyEventSummary>>{};
+    for (final key in keys) {
+      final raw = (payload[key] as List?) ?? const [];
+      out[key] = raw.whereType<Map>().map((e) => MyEventSummary.fromJson(Map<String, dynamic>.from(e))).toList();
+    }
+    return out;
   }
 
   Future<Map<String, dynamic>> listOrgaPublicEvents(int orgId) async {
