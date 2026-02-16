@@ -1366,4 +1366,71 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> getOrga(int orgId) async {
+    final res = await _client.dio.get('/orgas/$orgId');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getOrgaInvite(int orgId) async {
+    final res = await _client.dio.get('/orgas/$orgId/invite');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> listOrgaPosts(int orgId) async {
+    final res = await _client.dio.get('/orgas/$orgId/posts');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> followOrga({required int orgId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/follow', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> unfollowOrga({required int orgId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/unfollow', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createOrgaPost({required int orgId, required String text, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/posts', data: {'text': text}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> pinOrgaPost({required int orgId, required int postId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/posts/$postId/pin', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> deleteOrgaPost({required int orgId, required int postId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/posts/$postId/delete', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> myProfileV2() async {
+    final res = await _client.dio.get('/me/profile');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateMyProfileV2({
+    required String displayName,
+    String? photoUrl,
+    String? bio,
+    String? instagramHandle,
+    String visibility = 'PUBLIC',
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.put(
+      '/me/profile',
+      data: {
+        'display_name': displayName,
+        'photo_url': photoUrl,
+        'bio': bio,
+        'instagram_handle': instagramHandle,
+        'visibility': visibility,
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
 }

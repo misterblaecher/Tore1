@@ -15,6 +15,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? _sessionToken;
+  String _idem() => "profile-v2-${DateTime.now().millisecondsSinceEpoch}";
 
   @override
   void initState() {
@@ -209,6 +210,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                   ),
                 ),
+              ),
+
+              const SizedBox(height: 12),
+              FutureBuilder<Map<String, dynamic>>(
+                future: ref.read(apiProvider).myProfileV2(),
+                builder: (context, snap) {
+                  final profile = snap.data ?? const <String, dynamic>{};
+                  final orgas = ((profile['orgas'] as List?) ?? const []).cast<dynamic>();
+                  final events = ((profile['events'] as List?) ?? const []).cast<dynamic>();
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Profil V2', style: TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          _EditField(
+                            label: 'Pseudo (obligatoire)',
+                            initialValue: (profile['display_name'] ?? me.displayName).toString(),
+                            onSave: (v) async {
+                              await ref.read(apiProvider).updateMyProfileV2(displayName: v, bio: profile['bio']?.toString(), instagramHandle: profile['instagram_handle']?.toString(), photoUrl: profile['photo_url']?.toString(), visibility: (profile['visibility'] ?? 'PUBLIC').toString(), idempotencyKey: _idem());
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _EditField(
+                            label: 'Bio',
+                            initialValue: (profile['bio'] ?? '').toString(),
+                            onSave: (v) async {
+                              await ref.read(apiProvider).updateMyProfileV2(displayName: (profile['display_name'] ?? me.displayName).toString(), bio: v, instagramHandle: profile['instagram_handle']?.toString(), photoUrl: profile['photo_url']?.toString(), visibility: (profile['visibility'] ?? 'PUBLIC').toString(), idempotencyKey: _idem());
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          Text('Mes orgas (${orgas.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          for (final o in orgas.take(3)) Text('• ${(o as Map)['name']} (${o['role']})'),
+                          const SizedBox(height: 8),
+                          Text('Mes events (${events.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          for (final e in events.take(3)) Text('• ${(e as Map)['name']}'),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               Card(

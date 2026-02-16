@@ -1214,6 +1214,9 @@ class AppUser(Base):
     display_name: Mapped[str] = mapped_column(String, default="")
     avatar_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     address_text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    instagram_handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    profile_visibility: Mapped[str] = mapped_column(String(16), default="PUBLIC", index=True)
 
     show_address: Mapped[bool] = mapped_column(Boolean, default=False)
     show_avatar: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -1642,6 +1645,8 @@ class Organization(Base):
     city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
     org_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     website_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    instagram_handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(16), default="PUBLIC", index=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
@@ -1657,6 +1662,9 @@ class OrganizationMembership(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
     role: Mapped[str] = mapped_column(String(16), default="MEMBER", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
 
@@ -1690,6 +1698,22 @@ class OrganizationWriteIdempotency(Base):
     action: Mapped[str] = mapped_column(String(48), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
     response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class OrgaPost(Base):
+    __tablename__ = "organization_posts"
+    __table_args__ = (
+        Index("ix_organization_posts_feed", "organization_id", "deleted_at", "pinned", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    image_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
