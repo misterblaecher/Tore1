@@ -63,9 +63,12 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
@@ -73,7 +76,7 @@ android {
             }
         }
     }
-}
+} // ✅ ferme android
 
 flutter {
     source = "../.."
