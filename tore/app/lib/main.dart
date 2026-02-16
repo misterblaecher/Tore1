@@ -5,9 +5,9 @@ import 'package:tore/features/bars/presentation/bars_screen.dart';
 
 import 'app_shell.dart';
 import 'features/auth/presentation/welcome_screen.dart';
-import 'features/qr/presentation/module_unavailable_screen.dart';
 import 'features/community/presentation/orga_detail_screen.dart';
 import 'features/qr/presentation/join_event_screen.dart';
+import 'features/events/presentation/staff_invite_join_screen.dart';
 import 'package:tore/theme/theme.dart';
 import 'state.dart';
 import 'core/network/providers.dart';
@@ -83,11 +83,7 @@ class ToreApp extends ConsumerWidget {
             if (type == 'staff_invite') {
               return MaterialPageRoute(
                 settings: settings,
-                builder: (_) => const ModuleUnavailableScreen(
-                  title: 'Rejoindre le staff',
-                  message: 'Le parcours staff invite n’est pas encore disponible sur cette version.',
-                  reasonCode: 'staff_invite_unavailable',
-                ),
+                builder: (_) => StaffInviteJoinScreen(code: code),
               );
             }
           }

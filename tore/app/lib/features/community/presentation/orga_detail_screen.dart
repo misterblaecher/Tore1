@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../community_models.dart';
 import '../../events/presentation/event_manage_landing_screen.dart';
+import '../../events/presentation/event_share_pack_screen.dart';
 import '../../../state.dart';
 import '../../../ui/components/tore_card.dart';
 import '../../../ui/components/tore_chip.dart';
@@ -120,9 +121,19 @@ ${share['deeplink'] ?? ''}';
                             ToreListRow(
                               title: event.name,
                               subtitle: '${event.visibility} • ${event.status} • ${event.roleForMe}',
-                              trailing: TextButton(
-                                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event))),
-                                child: const Text('Reprendre'),
+                              trailing: Wrap(
+                                spacing: 4,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event))),
+                                    child: const Text('Reprendre'),
+                                  ),
+                                  if (event.canManage)
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventSharePackScreen(eventId: event.id))),
+                                      child: const Text('Share pack'),
+                                    ),
+                                ],
                               ),
                             ),
                         ],

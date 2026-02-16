@@ -77,6 +77,8 @@ from models import (
     EventJoin,
     EventCharterAcceptance,
     EventAppWriteIdempotency,
+    EventStaffInviteCode,
+    EventStaffInviteIdempotency,
     TicketTransfer,
     Committee,
     CommitteeYear,
@@ -1215,6 +1217,20 @@ class StaffInviteOut(BaseModel):
     expires_at: Optional[str] = None
 
 
+class StaffInviteCodeIn(BaseModel):
+    role: str
+    expiresInHours: int = Field(default=12, ge=1, le=168)
+    label: Optional[str] = Field(default=None, max_length=120)
+
+
+class StaffInviteRevokeIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=280)
+
+
+class StaffJoinByInviteIn(BaseModel):
+    code: str
+
+
 class StaffAcceptIn(BaseModel):
     token: str
 
@@ -1326,6 +1342,8 @@ class OpenLinkOut(BaseModel):
     deeplink: str
     webFallback: str
     expiresAt: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
 
 
 class CreateEventOut(BaseModel):
@@ -6209,6 +6227,106 @@ def _app_event_share_payload(event: Event, public_base_url: str | None = None, i
     return payload
 
 
+
+
+def _staff_invite_status(invite: EventStaffInviteCode) -> str:
+    now = now_utc()
+    if invite.status == "REVOKED" or invite.revoked_at is not None:
+        return "REVOKED"
+    if invite.expires_at and now > invite.expires_at:
+        return "EXPIRED"
+    return "ACTIVE"
+
+
+def _event_runtime_state(db: Session, event_id: int) -> str:
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event_id).first()
+    return ((runtime.state if runtime else None) or "LIVE").upper()
+
+
+def _guard_event_write_runtime(db: Session, event_id: int, *, critical_write: bool = False) -> str:
+    state = _event_runtime_state(db, event_id)
+    if state in {"CLOSED", "FROZEN"}:
+        raise HTTPException(status_code=423, detail={"reason": f"event_{state.lower()}", "eventState": state})
+    if critical_write and state == "DEGRADED":
+        raise HTTPException(status_code=423, detail={"reason": "event_degraded_write_blocked", "eventState": state})
+    return state
+
+
+def _staff_invite_public_payload(invite: EventStaffInviteCode, *, public_base_url: str | None = None) -> dict[str, Any]:
+    public_base_url = (public_base_url or _public_app_base_url()).rstrip("/")
+    code = (invite.code or "").upper()
+    return {
+        "role": (invite.role or "").upper(),
+        "code": code,
+        "expiresAt": invite.expires_at.isoformat() if invite.expires_at else None,
+        "status": _staff_invite_status(invite),
+        "webUrl": f"{public_base_url}/open?type=staff_invite&code={code}",
+        "deeplink": f"tore://open?type=staff_invite&code={code}",
+        "qrPayload": f"tore://open?type=staff_invite&code={code}",
+    }
+
+
+def _event_share_pack_payload(db: Session, event: Event, *, include_staff: bool) -> dict[str, Any]:
+    public_base = _public_app_base_url()
+    share = _app_event_share_payload(event, public_base_url=public_base, include_staff=include_staff)
+    module_cfg = db.query(EventModuleConfig).filter(EventModuleConfig.event_id == event.id).first()
+
+    links: dict[str, Any] = {
+        "publicShare": {"webUrl": share["webUrl"], "deeplink": share["deeplink"]},
+        "joinPublic": {
+            "webUrl": f"{public_base}/open?type=join&code={(event.event_code or '').upper()}",
+            "deeplink": f"tore://open?type=join&code={(event.event_code or '').upper()}",
+        } if event.event_code else None,
+    }
+    if include_staff:
+        invites = (
+            db.query(EventStaffInviteCode)
+            .filter(EventStaffInviteCode.event_id == event.id)
+            .order_by(EventStaffInviteCode.created_at.desc())
+            .all()
+        )
+        links["staffInvites"] = [_staff_invite_public_payload(item, public_base_url=public_base) for item in invites]
+    if module_cfg and module_cfg.hunt_enabled:
+        links["hunts"] = {"webUrl": f"{public_base}/events/{event.id}/hunt", "deeplink": f"tore://open?type=event&id={event.id}&module=hunts"}
+    if module_cfg and module_cfg.battles_enabled:
+        links["battles"] = {"webUrl": f"{public_base}/events/{event.id}/battles", "deeplink": f"tore://open?type=event&id={event.id}&module=battles"}
+
+    if module_cfg and module_cfg.entry_enabled:
+        entry_invite = (
+            db.query(EventStaffInviteCode)
+            .filter(EventStaffInviteCode.event_id == event.id, EventStaffInviteCode.role == "ENTRY")
+            .order_by(EventStaffInviteCode.created_at.desc())
+            .first()
+        )
+    else:
+        entry_invite = None
+    bar_invite = (
+        db.query(EventStaffInviteCode)
+        .filter(EventStaffInviteCode.event_id == event.id, EventStaffInviteCode.role == "BAR")
+        .order_by(EventStaffInviteCode.created_at.desc())
+        .first()
+    ) if module_cfg and module_cfg.orders_enabled else None
+
+    qr = {
+        "join": f"tore://join_event?event_id={event.id}",
+        "entryStaff": f"tore://open?type=staff_invite&code={(entry_invite.code if entry_invite else '')}" if entry_invite else None,
+        "barStaff": f"tore://open?type=staff_invite&code={(bar_invite.code if bar_invite else '')}" if bar_invite else None,
+    }
+
+    return {
+        "event": {
+            "id": event.id,
+            "name": event.name,
+            "visibility": (event.visibility or "PRIVATE").upper(),
+            "host": {"type": event.host_type, "id": event.host_id, "name": event.host_display_name},
+            "startsAt": event.starts_at.isoformat() if event.starts_at else None,
+            "venue": event.venue,
+        },
+        "links": {k: v for k, v in links.items() if v is not None},
+        "qr": {k: v for k, v in qr.items() if v is not None},
+    }
+
+
 def _require_event_host_write_perms(db: Session, event: Event, user: AppUser) -> None:
     host_type = (event.host_type or "user").lower()
     host_id = (event.host_id or "").strip()
@@ -6462,61 +6580,266 @@ def resolve_open_link(
         if not code:
             raise HTTPException(status_code=400, detail={"reason": "missing_code"})
         normalized = code.strip().upper()
+        invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == normalized).order_by(EventStaffInviteCode.created_at.desc()).first()
+        if invite is None:
+            raise HTTPException(status_code=404, detail={"reason": "invite_not_found"})
         deeplink = f"tore://open?type=staff_invite&code={normalized}"
         web_fallback = f"{_public_app_base_url()}/open?type=staff_invite&code={normalized}"
-        target = {"code": normalized}
+        target = {"code": normalized, "event_id": invite.event_id, "role": (invite.role or "").upper()}
     else:
         raise HTTPException(status_code=400, detail={"reason": "unsupported_type"})
 
-    return {
+    payload = {
         "ok": True,
         "type": type_normalized,
         "target": target,
         "deeplink": deeplink,
         "webFallback": web_fallback,
     }
+    if type_normalized == "staff_invite":
+        payload["title"] = "Invitation staff"
+        payload["description"] = "Rejoins le staff dans TORÈ"
+    return payload
 
 @app.post("/events/{event_id}/staff_invite_code")
 def create_event_staff_invite_code(
     event_id: int,
+    payload: StaffInviteCodeIn,
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     key = ensure_idempotency_key(idempotency_key)
-    existing = db.query(EventAppWriteIdempotency).filter(
-        EventAppWriteIdempotency.actor_user_id == user.id,
-        EventAppWriteIdempotency.action == f"event_staff_invite_code:{event_id}",
-        EventAppWriteIdempotency.idempotency_key == key,
-    ).first()
-    if existing is not None:
-        return existing.response_json
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     _require_event_host_write_perms(db, event, user)
-    code = random_code(8)
-    response = {
-        "code": code,
-        "deeplink": f"tore://event/staff_invite?event_id={event.id}&code={code}",
-        "qr_payload": f"tore://staff_invite?event_id={event.id}&code={code}",
-    }
-    db.add(EventAppWriteIdempotency(actor_user_id=user.id, action=f"event_staff_invite_code:{event_id}", idempotency_key=key, event_id=event.id, response_json=response))
+
+    existing = db.query(EventStaffInviteIdempotency).filter(
+        EventStaffInviteIdempotency.event_id == event_id,
+        EventStaffInviteIdempotency.action == "create",
+        EventStaffInviteIdempotency.actor_user_id == user.id,
+        EventStaffInviteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    role = (payload.role or "").upper().strip()
+    if role not in {"ENTRY", "BAR", "MANAGER", "HELPER"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_role"})
+
+    expires_at = now_utc() + timedelta(hours=payload.expiresInHours or 12)
+    code = random_code(8).upper()
+    invite = EventStaffInviteCode(
+        event_id=event.id,
+        role=role,
+        code=code,
+        label=(payload.label or None),
+        expires_at=expires_at,
+        created_by=user.id,
+        status="ACTIVE",
+    )
+    db.add(invite)
+    db.flush()
+
+    response = _staff_invite_public_payload(invite)
+    db.add(EventStaffInviteIdempotency(
+        event_id=event.id,
+        action="create",
+        actor_user_id=user.id,
+        idempotency_key=key,
+        invite_id=invite.id,
+        response_json=response,
+    ))
     write_audit_log(
         db,
         actor_partner_id=None,
         actor_user_id=user.id,
         actor_role="app_user",
-        action="event.staff_invite_code.create",
+        action="event.staff_invite.create",
+        entity_type="event_staff_invite_code",
+        entity_id=str(invite.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"role": role, "expiresAt": response.get("expiresAt"), "label": payload.label},
+    )
+    db.commit()
+    return response
+
+
+@app.post("/events/{event_id}/staff_invites/{code}/revoke")
+def revoke_event_staff_invite_code(
+    event_id: int,
+    code: str,
+    payload: StaffInviteRevokeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+
+    existing = db.query(EventStaffInviteIdempotency).filter(
+        EventStaffInviteIdempotency.event_id == event_id,
+        EventStaffInviteIdempotency.action == f"revoke:{code.upper()}",
+        EventStaffInviteIdempotency.actor_user_id == user.id,
+        EventStaffInviteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    normalized = (code or "").strip().upper()
+    invite = db.query(EventStaffInviteCode).filter(
+        EventStaffInviteCode.event_id == event_id,
+        EventStaffInviteCode.code == normalized,
+    ).first()
+    if invite is None:
+        raise HTTPException(status_code=404, detail={"reason": "invite_not_found"})
+
+    invite.status = "REVOKED"
+    invite.revoked_at = now_utc()
+    invite.revoked_reason = payload.reason.strip()
+    response = {"ok": True, "status": "REVOKED", "code": normalized}
+    db.add(EventStaffInviteIdempotency(
+        event_id=event.id,
+        action=f"revoke:{normalized}",
+        actor_user_id=user.id,
+        idempotency_key=key,
+        invite_id=invite.id,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.staff_invite.revoke",
+        entity_type="event_staff_invite_code",
+        entity_id=str(invite.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"code": normalized, "reason": invite.revoked_reason},
+    )
+    db.commit()
+    return response
+
+
+@app.post("/events/{event_id}/staff/join_by_invite")
+def join_staff_by_invite(
+    event_id: int,
+    payload: StaffJoinByInviteIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    existing = db.query(EventStaffInviteIdempotency).filter(
+        EventStaffInviteIdempotency.event_id == event_id,
+        EventStaffInviteIdempotency.action == "join",
+        EventStaffInviteIdempotency.actor_user_id == user.id,
+        EventStaffInviteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    _guard_event_write_runtime(db, event_id, critical_write=True)
+
+    normalized = (payload.code or "").strip().upper()
+    invite = db.query(EventStaffInviteCode).filter(
+        EventStaffInviteCode.event_id == event_id,
+        EventStaffInviteCode.code == normalized,
+    ).order_by(EventStaffInviteCode.created_at.desc()).first()
+    if invite is None:
+        raise HTTPException(status_code=404, detail={"reason": "invite_not_found"})
+    if _staff_invite_status(invite) != "ACTIVE":
+        raise HTTPException(status_code=409, detail={"reason": "invite_not_active", "status": _staff_invite_status(invite)})
+
+    role = (invite.role or "HELPER").lower()
+    staff = db.query(EventStaff).filter(EventStaff.event_id == event_id, EventStaff.user_id == user.id).first()
+    if staff is None:
+        staff = EventStaff(event_id=event_id, user_id=user.id, role=role, is_active=True, created_at=now_utc(), created_by_user_id=invite.created_by)
+        db.add(staff)
+    else:
+        staff.role = role
+        staff.is_active = True
+        staff.revoked_at = None
+        staff.revoked_by_user_id = None
+
+    response = {"ok": True, "eventId": event_id, "role": (invite.role or role).upper(), "expiresAt": invite.expires_at.isoformat() if invite.expires_at else None}
+    db.add(EventStaffInviteIdempotency(
+        event_id=event_id,
+        action="join",
+        actor_user_id=user.id,
+        idempotency_key=key,
+        invite_id=invite.id,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.staff_invite.join",
+        entity_type="event_staff",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"code": normalized, "role": response["role"]},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/events/{event_id}/share_pack")
+def get_event_share_pack(
+    event_id: int,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    user = None
+    raw = _extract_bearer_token(authorization)
+    if raw:
+        user = _resolve_app_user_from_token(raw, db)
+
+    include_staff = False
+    if user is not None:
+        try:
+            _require_event_host_write_perms(db, event, user)
+            include_staff = True
+        except HTTPException:
+            include_staff = False
+    elif (event.visibility or "PRIVATE").upper() != "PUBLIC":
+        raise HTTPException(status_code=401, detail={"reason": "auth_required"})
+
+    payload = _event_share_pack_payload(db, event, include_staff=include_staff)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=(user.id if user else None),
+        actor_role="app_user" if user else "anonymous",
+        action="event.share_pack.read",
         entity_type="event",
         entity_id=str(event.id),
         event_id=event.id,
         bar_id=event.bar_id,
-        idempotency_key=key,
-        payload={"scope": f"{event.host_type}:{event.host_id}"},
+        payload={"includeStaff": include_staff},
     )
     db.commit()
-    return response
+    return payload
 
 
 @app.get("/events/{event_id}/qr-pack", response_model=QrPackOut)

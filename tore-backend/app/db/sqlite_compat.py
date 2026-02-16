@@ -615,6 +615,51 @@ def ensure_staff_management_tables(engine: Engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_assignment_idem_event_id ON event_staff_assignment_idempotency (event_id)"))
 
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_staff_invite_codes (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                role VARCHAR(24) NOT NULL,
+                code VARCHAR(24) NOT NULL,
+                label VARCHAR(120),
+                expires_at DATETIME NOT NULL,
+                created_by VARCHAR NOT NULL,
+                status VARCHAR(16) DEFAULT 'ACTIVE',
+                created_at DATETIME,
+                revoked_at DATETIME,
+                revoked_reason VARCHAR(280)
+            )
+        """))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_staff_invite_event_code ON event_staff_invite_codes (event_id, code)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_invite_event_id ON event_staff_invite_codes (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_invite_status ON event_staff_invite_codes (status)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_staff_invite_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                action VARCHAR(64) NOT NULL,
+                actor_user_id VARCHAR NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                invite_id INTEGER,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_staff_invite_idem UNIQUE (event_id, action, actor_user_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_invite_idem_event_id ON event_staff_invite_idempotency (event_id)"))
+
+    invite_cols = _table_columns(engine, "event_staff_invite_codes")
+    with engine.begin() as conn:
+        if "label" not in invite_cols:
+            conn.execute(text("ALTER TABLE event_staff_invite_codes ADD COLUMN label VARCHAR(120)"))
+        if "status" not in invite_cols:
+            conn.execute(text("ALTER TABLE event_staff_invite_codes ADD COLUMN status VARCHAR(16) DEFAULT 'ACTIVE'"))
+        if "revoked_at" not in invite_cols:
+            conn.execute(text("ALTER TABLE event_staff_invite_codes ADD COLUMN revoked_at DATETIME"))
+        if "revoked_reason" not in invite_cols:
+            conn.execute(text("ALTER TABLE event_staff_invite_codes ADD COLUMN revoked_reason VARCHAR(280)"))
+
     qr_cols = _table_columns(engine, "event_qr_tokens")
     with engine.begin() as conn:
         if "role" not in qr_cols:
