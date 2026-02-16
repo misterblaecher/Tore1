@@ -239,6 +239,35 @@ def resolve_qr_payload(raw: str) -> Dict[str, Any]:
             },
         }
 
+    if qr_type == "hunt_checkpoint":
+        raw_event_id = (params.get("event_id") or [None])[0]
+        raw_hunt_id = (params.get("hunt_id") or [None])[0]
+        raw_checkpoint_id = (params.get("checkpoint_id") or [None])[0]
+        token = (params.get("token") or [None])[0]
+        token_id = (params.get("token_id") or [None])[0]
+        try:
+            event_id = int(raw_event_id) if raw_event_id is not None else None
+            hunt_id = int(raw_hunt_id) if raw_hunt_id is not None else None
+            checkpoint_id = int(raw_checkpoint_id) if raw_checkpoint_id is not None else None
+        except (TypeError, ValueError):
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        if event_id is None or hunt_id is None or checkpoint_id is None or not token or not token_id:
+            return {"valid": False, "type": "unknown", "event_id": None, "reason": "invalid"}
+        return {
+            "valid": True,
+            "type": "hunt_checkpoint",
+            "event_id": event_id,
+            "token": token,
+            "route_front": "/hunt",
+            "reason": None,
+            "data": {
+                "deep_link": trimmed,
+                "hunt_id": hunt_id,
+                "checkpoint_id": checkpoint_id,
+                "token_id": token_id,
+            },
+        }
+
 
     # Roadmap extensions: expose contract + routing, backend handlers can remain modular.
     route_map = {

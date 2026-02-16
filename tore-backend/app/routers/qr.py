@@ -23,6 +23,7 @@ QR_RUNTIME_POLICY = {
     "bar_staff": ("orders_enabled", False),
     "checkins": ("checkins_enabled", True),
     "hunt": ("hunt_enabled", True),
+    "hunt_checkpoint": ("hunt_enabled", True),
     "wifi": ("wifi_enabled", False),
     "wifi_token": ("wifi_enabled", False),
     "safety": ("safety_enabled", True),
