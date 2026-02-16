@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/features/events/presentation/active_event_context_provider.dart';
-import 'package:tore/shared/components/service_limited_banner.dart';
+import 'package:tore/shared/widgets/service_limited_banner.dart';
 import 'package:tore/shared/utils/runtime_write_guard.dart';
 import 'package:tore/shared/utils/write_gate.dart';
 import 'package:tore/state.dart';
