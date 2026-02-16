@@ -7,11 +7,19 @@ import 'app_shell.dart';
 import 'features/auth/presentation/welcome_screen.dart';
 import 'package:tore/theme/theme.dart';
 import 'state.dart';
+import 'core/network/providers.dart';
+import 'config/app_config.dart';
 
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: ToreApp()));
+  final appConfig = AppConfig.fromDartDefines();
+  runApp(
+    ProviderScope(
+      overrides: [appConfigProvider.overrideWithValue(appConfig)],
+      child: const ToreApp(),
+    ),
+  );
 }
 
 class ToreApp extends ConsumerWidget {
