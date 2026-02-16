@@ -286,10 +286,20 @@ def ensure_entry_token_columns(engine: Engine) -> None:
 def ensure_audit_log_indexes(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":
         return
+    cols = _table_columns(engine, "audit_logs")
     with engine.begin() as conn:
+        if "actor_user_id" not in cols:
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN actor_user_id VARCHAR"))
+        if "committee_id" not in cols:
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN committee_id INTEGER"))
+        if "idempotency_key" not in cols:
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN idempotency_key VARCHAR(128)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_event_id ON audit_logs (event_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_bar_id ON audit_logs (bar_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_action ON audit_logs (action)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_actor_user_id ON audit_logs (actor_user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_committee_id ON audit_logs (committee_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_idempotency_key ON audit_logs (idempotency_key)"))
 
 
 def ensure_event_module_columns(engine: Engine) -> None:

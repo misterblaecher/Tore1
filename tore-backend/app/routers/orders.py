@@ -32,6 +32,7 @@ from app.services.audit_service import write_audit_log
 from app.services.order_client_qr_service import decode_order_client_token, issue_order_client_token
 from app.services.orders_service import create_order, order_out, patch_order_status
 from app.services.authz_service import ensure_partner_role
+from app.services.idempotency_service import ensure_idempotency_key
 from app.services.rate_limit_service import enforce_rate_limit
 from app.services.p3_common import decode_cursor, encode_cursor, get_event_runtime_state
 from app.services.p3_common import ensure_event_action_allowed
@@ -124,9 +125,7 @@ def create_order_route(
     if token_user_id and payload.user_id and payload.user_id != token_user_id:
         raise HTTPException(403, "Forbidden")
 
-    idem_key = (idempotency_header or payload.idempotency_key or "").strip()
-    if len(idem_key) < 4:
-        raise HTTPException(400, "Missing idempotency key")
+    idem_key = ensure_idempotency_key(idempotency_header)
 
     order = create_order(
         db,
@@ -139,6 +138,7 @@ def create_order_route(
         payment_mode=payload.payment_mode,
         idempotency_key=idem_key,
         zone_id=payload.zone_id,
+        actor_user_id=resolved_user_id,
     )
     return order_out(order)
 

@@ -1392,12 +1392,15 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     actor_partner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("partner_users.id"), nullable=True, index=True)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
     actor_role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     action: Mapped[str] = mapped_column(String(64), index=True)
     entity_type: Mapped[str] = mapped_column(String(64), default="")
     entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    committee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("committees.id"), nullable=True, index=True)
     bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), nullable=True, index=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
 

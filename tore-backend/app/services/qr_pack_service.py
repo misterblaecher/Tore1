@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
-import os
 import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 from db import now_utc
 from models import Event, EventQrToken
-
-QR_SIGNING_SECRET = os.getenv("TORE_QR_SIGNING_SECRET", os.getenv("TORE_JWT_SECRET", "dev-secret-change-me"))
+from app.services.qr_signing_service import sign_payload
 
 QR_TYPES = {
     "JOIN_EVENT": "join_event",
@@ -36,11 +32,6 @@ def _build_payload(qr_type: str, event_id: int, issued_at_iso: str, expires_at_i
     if role:
         params["role"] = role.lower()
     return f"tore://{qr_type}?{urlencode(params)}"
-
-
-def sign_payload(qr_type: str, event_id: int, issued_at_iso: str, expires_at_iso: str, token_id: str, nonce: str) -> str:
-    payload = f"{qr_type}|{event_id}|{issued_at_iso}|{expires_at_iso}|{token_id}|{nonce}"
-    return hmac.new(QR_SIGNING_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def create_staff_qr_token(

@@ -80,6 +80,7 @@ def create_order(
     payment_mode: str,
     idempotency_key: str,
     zone_id: Optional[int] = None,
+    actor_user_id: Optional[str] = None,
 ) -> Order:
     bar = db.get(Bar, bar_id)
     if not bar:
@@ -220,13 +221,15 @@ def create_order(
     write_audit_log(
         db,
         actor_partner_id=None,
+        actor_user_id=actor_user_id or user_id,
         actor_role="user",
         action="orders.create",
         entity_type="order",
         entity_id=str(order.id),
         event_id=event_id,
         bar_id=bar_id,
-        payload={"status": "NEW", "idempotency_key": idempotency_key, "items_count": len(items), "zone_id": zone.id if zone else None},
+        idempotency_key=idempotency_key,
+        payload={"status": "NEW", "items_count": len(items), "zone_id": zone.id if zone else None},
     )
 
     order.updated_at = now_utc()
