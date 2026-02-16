@@ -12,9 +12,11 @@ import '../../events/presentation/event_hub_screen.dart';
 import 'qr_scanner_screen.dart';
 
 class JoinEventScreen extends ConsumerStatefulWidget {
-  const JoinEventScreen({super.key, this.prefillEventId});
+  const JoinEventScreen({super.key, this.prefillEventId, this.prefillCode, this.autoJoinCode = false});
 
   final int? prefillEventId;
+  final String? prefillCode;
+  final bool autoJoinCode;
 
   @override
   ConsumerState<JoinEventScreen> createState() => _JoinEventScreenState();
@@ -35,6 +37,17 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
     _tabs = TabController(length: 2, vsync: this);
     if (widget.prefillEventId != null) {
       _resolveEventById(widget.prefillEventId!);
+    }
+    if ((widget.prefillCode ?? '').trim().isNotEmpty) {
+      _tabs.index = 1;
+      _codeCtrl.text = widget.prefillCode!.trim().toUpperCase();
+      if (widget.autoJoinCode) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _resolveByCode();
+          }
+        });
+      }
     }
   }
 

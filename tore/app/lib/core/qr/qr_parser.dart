@@ -12,6 +12,8 @@ enum QrType {
   battle,
   order,
   polymarket,
+  orga,
+  staffInvite,
   unknown,
 }
 
@@ -95,11 +97,11 @@ class QrParser {
       type: type,
       raw: raw,
       parsedAt: now,
-      eventId: _toInt(query['event_id']),
+      eventId: _toInt(query['event_id'] ?? query['id']),
       barId: _toInt(query['bar_id']),
-      committeeId: _toInt(query['committee_id']),
+      committeeId: _toInt(query['committee_id'] ?? query['org_id']),
       orderId: _toInt(query['order_id']),
-      tokenId: query['token'] ?? query['ot'] ?? query['token_id'],
+      tokenId: query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
       battleId: _toInt(query['battle_id']),
       betId: _toInt(query['bet_id']),
       expiresAt: _parseDate(query['exp'] ?? query['expires_at']),
@@ -117,11 +119,11 @@ class QrParser {
       type: type,
       raw: raw,
       parsedAt: now,
-      eventId: _toInt(mapped['event_id']),
+      eventId: _toInt(mapped['event_id'] ?? mapped['id']),
       barId: _toInt(mapped['bar_id']),
-      committeeId: _toInt(mapped['committee_id']),
+      committeeId: _toInt(mapped['committee_id'] ?? mapped['org_id']),
       orderId: _toInt(mapped['order_id']),
-      tokenId: mapped['token'] ?? mapped['ot'] ?? mapped['token_id'],
+      tokenId: mapped['token'] ?? mapped['ot'] ?? mapped['token_id'] ?? mapped['code'],
       battleId: _toInt(mapped['battle_id']),
       betId: _toInt(mapped['bet_id']),
       expiresAt: _parseDate(mapped['exp'] ?? mapped['expires_at']),
@@ -133,7 +135,9 @@ class QrParser {
   }
 
   QrType _mapType(String? primary, String? fallback) {
-    final normalized = (primary ?? fallback ?? '').toLowerCase().trim();
+    final first = (primary ?? '').toLowerCase().trim();
+    final second = (fallback ?? '').toLowerCase().trim();
+    final normalized = (first.isEmpty || first == 'open' || first == 'qr') ? second : first;
     switch (normalized) {
       case 'join':
       case 'join_event':
@@ -167,6 +171,13 @@ class QrParser {
       case 'pm':
       case 'resolver':
         return QrType.polymarket;
+      case 'orga':
+      case 'orga_detail':
+      case 'organization':
+        return QrType.orga;
+      case 'staff_invite':
+      case 'event_staff_invite':
+        return QrType.staffInvite;
       default:
         return QrType.unknown;
     }

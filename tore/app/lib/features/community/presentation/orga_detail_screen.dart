@@ -59,6 +59,19 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                   ]),
                 ]),
               ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final share = await api.getOrgaShare(widget.orgId);
+                  final text = '${share['webUrl'] ?? ''}
+${share['deeplink'] ?? ''}';
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lien orga copié')));
+                },
+                icon: const Icon(Icons.ios_share_outlined),
+                label: const Text('Partager le lien'),
+              ),
               const SizedBox(height: 12),
               if (!_isAdmin)
                 Row(children: [

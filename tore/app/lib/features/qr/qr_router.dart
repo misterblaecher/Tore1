@@ -9,7 +9,9 @@ import '../../state.dart';
 import '../entry/presentation/entry_staff_screen.dart';
 import '../hunt/presentation/hunt_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
+import '../events/presentation/event_hub_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
+import '../community/presentation/orga_detail_screen.dart';
 import '../qr/presentation/join_event_screen.dart';
 import '../qr/presentation/module_unavailable_screen.dart';
 import '../qr/presentation/qr_expired_screen.dart';
@@ -59,14 +61,30 @@ class QrRouterService {
 
     switch (payload.type) {
       case QrType.joinEvent:
-        if (payload.eventId == null) {
+        if (payload.eventId == null && (payload.tokenId ?? '').isEmpty) {
           onOutcome?.call(const QrRouteOutcome.unknown('JOIN invalide'));
-          await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
+          await _openUnknown(context: context, payload: payload, reason: 'event_id/code manquant');
+          return;
+        }
+        final activeEventId = _ref.read(appContextProvider).activeEventId;
+        if (payload.eventId != null && activeEventId == payload.eventId) {
+          onOutcome?.call(const QrRouteOutcome.success('Event hub'));
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => EventHubScreen(eventId: payload.eventId!, eventName: 'Event #${payload.eventId}'),
+            ),
+          );
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Join event'));
         await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => JoinEventScreen(prefillEventId: payload.eventId)),
+          MaterialPageRoute(
+            builder: (_) => JoinEventScreen(
+              prefillEventId: payload.eventId,
+              prefillCode: payload.tokenId,
+              autoJoinCode: (payload.tokenId ?? '').isNotEmpty,
+            ),
+          ),
         );
         return;
       case QrType.menu:
@@ -143,6 +161,30 @@ class QrRouterService {
         onOutcome?.call(const QrRouteOutcome.success('Polymarket'));
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PolymarketTabScreen()),
+        );
+        return;
+      case QrType.orga:
+        final orgId = payload.committeeId ?? payload.eventId;
+        if (orgId == null) {
+          onOutcome?.call(const QrRouteOutcome.unknown('Orga invalide'));
+          await _openUnknown(context: context, payload: payload, reason: 'org_id manquant');
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('Organisation'));
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => OrgaDetailScreen(orgId: orgId)),
+        );
+        return;
+      case QrType.staffInvite:
+        onOutcome?.call(const QrRouteOutcome.denied('Staff invite'));
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const ModuleUnavailableScreen(
+              title: 'Rejoindre le staff',
+              message: 'Le parcours staff invite est en cours de finalisation. Utilise la gestion staff de l’event.',
+              reasonCode: 'staff_invite_unavailable',
+            ),
+          ),
         );
         return;
       case QrType.wifi:

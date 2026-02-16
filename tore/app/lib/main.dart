@@ -5,6 +5,9 @@ import 'package:tore/features/bars/presentation/bars_screen.dart';
 
 import 'app_shell.dart';
 import 'features/auth/presentation/welcome_screen.dart';
+import 'features/qr/presentation/module_unavailable_screen.dart';
+import 'features/community/presentation/orga_detail_screen.dart';
+import 'features/qr/presentation/join_event_screen.dart';
 import 'package:tore/theme/theme.dart';
 import 'state.dart';
 import 'core/network/providers.dart';
@@ -52,6 +55,43 @@ class ToreApp extends ConsumerWidget {
         final name = settings.name;
         if (name == null) return null;
         final uri = Uri.tryParse(name);
+        if (uri != null) {
+          final isOpen = (uri.scheme == 'tore' && uri.host == 'open') ||
+              (uri.scheme == 'https' && uri.host == 'app.tore.be' && uri.path == '/open');
+          if (isOpen) {
+            final type = (uri.queryParameters['type'] ?? '').toLowerCase();
+            final id = int.tryParse(uri.queryParameters['id'] ?? uri.queryParameters['event_id'] ?? uri.queryParameters['org_id'] ?? '');
+            final code = (uri.queryParameters['code'] ?? '').trim();
+            if (type == 'event') {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => JoinEventScreen(prefillEventId: id),
+              );
+            }
+            if (type == 'join') {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => JoinEventScreen(prefillCode: code, autoJoinCode: code.isNotEmpty),
+              );
+            }
+            if (type == 'orga' && id != null) {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => OrgaDetailScreen(orgId: id),
+              );
+            }
+            if (type == 'staff_invite') {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => const ModuleUnavailableScreen(
+                  title: 'Rejoindre le staff',
+                  message: 'Le parcours staff invite n’est pas encore disponible sur cette version.',
+                  reasonCode: 'staff_invite_unavailable',
+                ),
+              );
+            }
+          }
+        }
         final segments = uri?.pathSegments ?? const <String>[];
         if (segments.length == 3 &&
             segments[0] == 'bars' &&

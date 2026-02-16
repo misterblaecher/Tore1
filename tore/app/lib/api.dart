@@ -1420,6 +1420,11 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> getOrgaShare(int orgId) async {
+    final res = await _client.dio.get('/orgas/$orgId/share');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> getOrgaInvite(int orgId) async {
     final res = await _client.dio.get('/orgas/$orgId/invite');
     return Map<String, dynamic>.from(res.data as Map);

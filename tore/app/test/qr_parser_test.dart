@@ -57,6 +57,30 @@ void main() {
       expect(payload.betId, 44);
     });
 
+
+    test('parse open event deeplink', () {
+      final payload = parser.parse('tore://open?type=event&id=21');
+      expect(payload.type, QrType.joinEvent);
+      expect(payload.eventId, 21);
+    });
+
+    test('parse open orga deeplink', () {
+      final payload = parser.parse('tore://open?type=orga&id=7');
+      expect(payload.type, QrType.orga);
+      expect(payload.committeeId, 7);
+    });
+
+    test('parse open join code deeplink', () {
+      final payload = parser.parse('tore://open?type=join&code=JOIN66');
+      expect(payload.type, QrType.joinEvent);
+      expect(payload.tokenId, 'JOIN66');
+    });
+
+    test('parse open staff invite deeplink', () {
+      final payload = parser.parse('tore://open?type=staff_invite&code=ABC123');
+      expect(payload.type, QrType.staffInvite);
+      expect(payload.tokenId, 'ABC123');
+    });
     test('parse json payload', () {
       final payload = parser.parse('{"type":"join_event","event_id":88,"exp":9999999999}');
       expect(payload.type, QrType.joinEvent);
