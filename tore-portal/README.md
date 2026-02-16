@@ -29,7 +29,7 @@ npm run dev
 ```
 
 Par défaut, l'app appelle `http://localhost:8000`.
-Tu peux surcharger via `VITE_API_BASE`.
+Tu peux surcharger via `VITE_API_BASE_URL` (fallback legacy: `VITE_API_BASE`).
 
 ## Auth
 

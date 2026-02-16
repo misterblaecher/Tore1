@@ -140,7 +140,7 @@ export default function BarMenuAdmin() {
 
   const exportCsv = () => {
     if (!eventId) return
-    window.open(`${import.meta.env.VITE_API_BASE || 'http://localhost:8000'}/partner/portal/bar/events/${eventId}/menu/export.csv`, '_blank')
+    window.open(`${import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'}/partner/portal/bar/events/${eventId}/menu/export.csv`, '_blank')
   }
 
   return (
