@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/app_context/app_context.dart';
+import 'package:tore/core/perf/prefetch.dart';
 import 'package:tore/features/events/presentation/event_config_providers.dart';
 import 'package:tore/features/events/presentation/event_hub_screen.dart';
 import 'package:tore/features/menu_market/presentation/menu_screen.dart';
@@ -38,6 +39,16 @@ class HomeHubScreen extends ConsumerWidget {
     final walletOn = config?.walletEnabled ?? false;
     final polymarketOn = config?.polymarketEnabled ?? false;
     final tickerOn = menuOn || walletOn || polymarketOn;
+
+    if (hasEvent && ctx.activeEventId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        prefetchEventEssentials(
+          ref,
+          ctx.activeEventId!,
+          modulesOn: {'menu': menuOn, 'wallet': walletOn, 'polymarket': polymarketOn},
+        );
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home Hub'),

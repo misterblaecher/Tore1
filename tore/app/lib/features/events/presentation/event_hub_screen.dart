@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/network_state_provider.dart';
+import '../../../core/perf/prefetch.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
@@ -32,6 +33,10 @@ class EventHubScreen extends ConsumerWidget {
     final state = (eventCtx?.eventState ?? 'LIVE').toUpperCase();
     final title = eventCtx?.eventName ?? eventName;
     final modules = eventCtx?.modulesOn ?? const <String, bool>{};
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      prefetchEventEssentials(ref, eventId, modulesOn: modules);
+    });
 
     final readOnly = isReadOnly(ref);
     final network = ref.watch(networkStatusProvider);

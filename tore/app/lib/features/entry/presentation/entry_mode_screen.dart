@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/network_state_provider.dart';
+import '../../../core/perf/perf_tracer.dart';
+import '../../../core/perf/scan_suppression.dart';
 import '../../../core/qr/qr_parser.dart';
 import '../../../core/qr/qr_validator.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
@@ -26,12 +29,12 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   String _banner = 'Prêt à scanner';
   Color _bannerColor = const Color(0xFF1F2937);
   bool _pendingEstimate = false;
-  DateTime _lastScanAt = DateTime.fromMillisecondsSinceEpoch(0);
-  String _lastRaw = '';
+  final ScanSuppression _suppression = ScanSuppression(cooldown: const Duration(milliseconds: 800));
   Timer? _syncTimer;
 
   List<EntryQueueItem> _queue = [];
-  final List<_ScanResult> _recent = [];
+  Timer? _queuePersistTimer;
+  int _queueSinceLastFlush = 0;
 
   @override
   void initState() {
@@ -43,6 +46,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   @override
   void dispose() {
     _syncTimer?.cancel();
+    _queuePersistTimer?.cancel();
     super.dispose();
   }
 
@@ -81,27 +85,25 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
   Future<void> _refreshLogs() async {
     if (widget.eventId == null) return;
-    final logs = await ref.read(entryServiceProvider).getEntryLogs(eventId: widget.eventId!, limit: 5);
-    if (!mounted) return;
-    setState(() {
-      _recent
-        ..clear()
-        ..addAll(logs.map((r) => _ScanResult(
-              status: (r['decision'] == 'ACCEPT') ? 'accepted' : ((r['reason'] == 'already_used') ? 'already_checked' : 'invalid'),
-              reason: (r['reason'] ?? '').toString(),
-              at: DateTime.tryParse((r['created_at'] ?? '').toString()) ?? DateTime.now(),
-            )));
-    });
+    final logs = await ref.read(entryServiceProvider).getEntryLogs(eventId: widget.eventId!, limit: 8);
+    ref.read(entryUiStateProvider.notifier).seed(
+          logs
+              .map(
+                (r) => _ScanResult(
+                  status: (r['decision'] == 'ACCEPT') ? 'accepted' : ((r['reason'] == 'already_used') ? 'already_checked' : 'invalid'),
+                  reason: (r['reason'] ?? '').toString(),
+                  at: DateTime.tryParse((r['created_at'] ?? '').toString()) ?? DateTime.now(),
+                ),
+              )
+              .toList(),
+        );
   }
 
   Future<void> _openScanner() async {
     final raw = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const QrScannerScreen(mode: QrScannerMode.pickRaw)));
     if (raw == null || raw.trim().isEmpty || widget.eventId == null) return;
 
-    final now = DateTime.now();
-    if (_lastRaw == raw && now.difference(_lastScanAt).inMilliseconds < 800) return;
-    _lastRaw = raw;
-    _lastScanAt = now;
+    if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now())) return;
 
     final payload = ref.read(qrParserProvider).parse(raw);
     final validation = await ref.read(qrValidatorProvider).validate(payload);
@@ -109,7 +111,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       _applyFeedback(status: 'invalid', reason: validation.reason ?? 'INVALID');
       return;
     }
-    await _handleScan(raw, scannedAt: now);
+    await _handleScan(raw, scannedAt: DateTime.now());
   }
 
   Future<void> _handleScan(String raw, {required DateTime scannedAt}) async {
@@ -126,7 +128,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     );
 
     if (queueMode) {
-      await _enqueue(item, reason: 'PENDING SYNC');
+      _enqueue(item, reason: 'PENDING SYNC');
       _applyFeedback(status: 'pending', reason: 'PENDING SYNC');
       return;
     }
@@ -140,18 +142,31 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
             scannedAt: scannedAt,
           );
       _applyFeedback(status: (res['status'] ?? 'invalid').toString(), reason: (res['status'] ?? '').toString().toUpperCase());
-      await _refreshStats();
-      await _refreshLogs();
+      unawaited(_refreshStats());
+      unawaited(_refreshLogs());
     } catch (e) {
-      await _enqueue(item, reason: e.toString());
+      _enqueue(item, reason: e.toString());
       _applyFeedback(status: 'pending', reason: 'PENDING SYNC');
     }
   }
 
-  Future<void> _enqueue(EntryQueueItem item, {required String reason}) async {
+  void _enqueue(EntryQueueItem item, {required String reason}) {
     _queue.insert(0, item..lastError = reason);
-    await ref.read(entryOfflineQueueStoreProvider).save(_queue);
-    setState(() => _pendingEstimate = true);
+    _pendingEstimate = true;
+    _queueSinceLastFlush += 1;
+    if (mounted) setState(() {});
+
+    if (_queueSinceLastFlush >= 10) {
+      _queueSinceLastFlush = 0;
+      unawaited(ref.read(entryOfflineQueueStoreProvider).save(_queue));
+      return;
+    }
+
+    _queuePersistTimer?.cancel();
+    _queuePersistTimer = Timer(const Duration(milliseconds: 500), () {
+      _queueSinceLastFlush = 0;
+      unawaited(ref.read(entryOfflineQueueStoreProvider).save(_queue));
+    });
   }
 
   Future<void> _syncPending() async {
@@ -205,11 +220,10 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
         HapticFeedback.mediumImpact();
     }
 
+    ref.read(entryUiStateProvider.notifier).push(_ScanResult(status: status, reason: reason, at: DateTime.now()));
     setState(() {
       _bannerColor = color;
       _banner = reason;
-      _recent.insert(0, _ScanResult(status: status, reason: reason, at: DateTime.now()));
-      if (_recent.length > 5) _recent.removeRange(5, _recent.length);
     });
   }
 
@@ -221,7 +235,8 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CSV copié dans le presse-papiers')));
     } catch (_) {
-      final rows = _recent.map((r) => '${r.at.toIso8601String()},${r.status},${r.reason.replaceAll(',', ' ')}').join('\n');
+      final recent = ref.read(entryUiStateProvider).recent;
+      final rows = recent.map((r) => '${r.at.toIso8601String()},${r.status},${r.reason.replaceAll(',', ' ')}').join('\n');
       final fallback = 'timestamp,status,reason\n$rows';
       await Clipboard.setData(ClipboardData(text: fallback));
       if (!mounted) return;
@@ -238,6 +253,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     final net = ref.watch(networkStatusProvider);
     final pendingCount = _queue.where((q) => q.status == 'pending' && q.eventId == widget.eventId).length;
     final totalDisplay = _total + pendingCount;
+    final entryUi = ref.watch(entryUiStateProvider);
 
     return Scaffold(
       body: _loading
@@ -288,7 +304,17 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('Derniers scans', style: TextStyle(fontWeight: FontWeight.w700)),
-                          for (final item in _recent.take(5)) Text('[${_fmt(item.at)}] ${item.status} • ${item.reason}'),
+                          SizedBox(
+                            height: 152,
+                            child: ListView.builder(
+                              key: const ValueKey('entry-recent-list'),
+                              itemCount: entryUi.recent.length,
+                              itemBuilder: (context, index) {
+                                final item = entryUi.recent[index];
+                                return Text('[${_fmt(item.at)}] ${item.status} • ${item.reason}');
+                              },
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -301,6 +327,31 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
   String _fmt(DateTime ts) => '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
 }
+
+class EntryUiState {
+  const EntryUiState({this.recent = const []});
+
+  final List<_ScanResult> recent;
+
+  EntryUiState copyWith({List<_ScanResult>? recent}) => EntryUiState(recent: recent ?? this.recent);
+}
+
+class EntryUiStateNotifier extends StateNotifier<EntryUiState> {
+  EntryUiStateNotifier() : super(const EntryUiState());
+
+  static const int maxRecent = 8;
+
+  void seed(List<_ScanResult> items) {
+    state = state.copyWith(recent: items.take(maxRecent).toList(growable: false));
+  }
+
+  void push(_ScanResult result) {
+    final next = <_ScanResult>[result, ...state.recent];
+    state = state.copyWith(recent: next.take(maxRecent).toList(growable: false));
+  }
+}
+
+final entryUiStateProvider = StateNotifierProvider<EntryUiStateNotifier, EntryUiState>((ref) => EntryUiStateNotifier());
 
 class _ScanResult {
   _ScanResult({required this.status, required this.reason, required this.at});
