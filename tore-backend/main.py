@@ -91,6 +91,7 @@ from models import (
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
 from app.db.sqlite_compat import ensure_sqlite_compat
 from app.services.audit_service import write_audit_log
+from app.services.idempotency_service import ensure_idempotency_key
 
 
 # ---------------------------------------------------------------------
@@ -3439,6 +3440,7 @@ def _apply_event_join(
     _ensure_event_join_allowed(db, event)
 
     accepted_version = accepted_charter_version
+    wrote = False
     if event.charter_enabled:
         if not event.charter_version:
             raise HTTPException(status_code=409, detail={"reason": "charter_version_missing"})
@@ -3465,6 +3467,7 @@ def _apply_event_join(
                     accepted_at=now_utc(),
                 )
             )
+            wrote = True
         accepted_version = event.charter_version
 
     existing = db.query(EventJoin).filter(EventJoin.event_id == event.id, EventJoin.user_id == user.id).first()
@@ -3478,15 +3481,34 @@ def _apply_event_join(
             accepted_charter_version=accepted_version,
         )
         db.add(join)
+        wrote = True
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
+            wrote = False
     else:
         if existing.accepted_charter_version is None and accepted_version is not None:
             existing.accepted_charter_version = accepted_version
             db.add(existing)
             db.commit()
+            wrote = True
+
+    if wrote:
+        write_audit_log(
+            db,
+            actor_partner_id=None,
+            actor_user_id=user.id,
+            actor_role="app_user",
+            action="event.join",
+            entity_type="event_join",
+            entity_id=f"{event.id}:{user.id}",
+            event_id=event.id,
+            bar_id=event.bar_id,
+            idempotency_key=idempotency_key,
+            payload={"accepted_charter_version": accepted_version},
+        )
+        db.commit()
 
     return _event_join_payload(db, event)
 
@@ -3565,7 +3587,7 @@ def join_event(
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
-    key = idempotency_key or f"join-{user.id}-{event_id}"
+    key = ensure_idempotency_key(idempotency_key)
     return _apply_event_join(
         db,
         event=event,
@@ -3586,7 +3608,7 @@ def join_event_by_code(
     event = db.query(Event).filter(Event.event_code == code).first()
     if event is None:
         raise HTTPException(404, detail={"reason": "invalid_code"})
-    key = idempotency_key or f"join-code-{user.id}-{event.id}"
+    key = ensure_idempotency_key(idempotency_key)
     return _apply_event_join(
         db,
         event=event,
@@ -3715,10 +3737,7 @@ def _require_committee_member(db: Session, committee_id: int, user: AppUser) -> 
 
 
 def _require_idempotency(idempotency_key: Optional[str]) -> str:
-    key = (idempotency_key or "").strip()
-    if not key:
-        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
-    return key
+    return ensure_idempotency_key(idempotency_key)
 
 
 def _require_committee_finance_manager(db: Session, committee_id: int, user: AppUser) -> CommitteeMembership:

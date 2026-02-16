@@ -20,7 +20,7 @@ class CreateOrderIn(BaseModel):
     note: Optional[str] = None
     zone_id: Optional[int] = None
     payment_mode: Literal["pay_later", "tickets"] = "pay_later"
-    idempotency_key: str = Field(min_length=4, max_length=120)
+    idempotency_key: Optional[str] = Field(default=None, min_length=4, max_length=120)
 
 
 class OrderItemOut(BaseModel):
@@ -93,7 +93,7 @@ class OrderClientQrOut(BaseModel):
 class OrderClientQrScanIn(BaseModel):
     raw: Optional[str] = Field(default=None, min_length=8)
     ot: Optional[str] = Field(default=None, min_length=8)
-    idempotency_key: str = Field(min_length=4, max_length=120)
+    idempotency_key: Optional[str] = Field(default=None, min_length=4, max_length=120)
 
 
 class OrderClientQrScanOut(BaseModel):
