@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../api.dart';
+import '../../../state.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/utils/write_gate.dart';

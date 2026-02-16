@@ -5,10 +5,16 @@ import '../../core/network/health_provider.dart';
 import '../../theme/tore_colors.dart';
 
 class ApiStatusBadge extends ConsumerWidget {
-  const ApiStatusBadge({super.key});
+  const ApiStatusBadge({super.key, this.isOffline = false});
+
+  final bool isOffline;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (isOffline) {
+      return _chip('API', 'OFF', ToreColors.rubine);
+    }
+
     final health = ref.watch(apiHealthProvider);
 
     return health.when(
