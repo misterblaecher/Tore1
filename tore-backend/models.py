@@ -1618,6 +1618,63 @@ class EventMusicAdminIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class EventBattleRound(Base):
+    __tablename__ = "event_battle_rounds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180), default="")
+    kind: Mapped[str] = mapped_column(String(24), default="PARTICIPATION", index=True)
+    optionA_label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    optionB_label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="IDLE", index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    locked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    winner: Mapped[str] = mapped_column(String(12), default="NONE")
+    winner_count_a: Mapped[int] = mapped_column(Integer, default=0)
+    winner_count_b: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class EventBattleVote(Base):
+    __tablename__ = "event_battle_votes"
+    __table_args__ = (UniqueConstraint("round_id", "user_id", name="uq_event_battle_vote_round_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("event_battle_rounds.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    choice: Mapped[str] = mapped_column(String(16), default="PARTICIPATE", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventBattleScore(Base):
+    __tablename__ = "event_battle_scores"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", name="uq_event_battle_score_event_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventBattleIdempotency(Base):
+    __tablename__ = "event_battle_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action_type", "actor_id", "idempotency_key", name="uq_event_battle_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(32), index=True)
+    actor_id: Mapped[str] = mapped_column(String(120), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventBroadcast(Base):
     __tablename__ = "event_broadcasts"
     __table_args__ = (

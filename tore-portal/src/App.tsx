@@ -30,6 +30,7 @@ import CheckinsAdmin from './pages/CheckinsAdmin'
 import AuditLogs from './pages/AuditLogs'
 import WifiAdmin from './pages/WifiAdmin'
 import OrgaEventHunts from './pages/OrgaEventHunts'
+import OrgaEventBattles from './pages/OrgaEventBattles'
 import SafetyAdmin from './pages/SafetyAdmin'
 import ZonesAdmin from './pages/ZonesAdmin'
 import Kitchen from './pages/Kitchen'
@@ -334,6 +335,16 @@ export default function App() {
           <RequireAuth>
             <RequireOrga>
               <OrgaEventHunts />
+            </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/battles"
+        element={
+          <RequireAuth>
+            <RequireOrga>
+              <OrgaEventBattles />
             </RequireOrga>
           </RequireAuth>
         }

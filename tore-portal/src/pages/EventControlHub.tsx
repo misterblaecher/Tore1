@@ -164,6 +164,7 @@ export default function EventControlHub() {
           <Link to={`/orga/events/${eventId}/profitability`} className="btn">Rentabilité</Link>
           <Link to={`/orga/events/${eventId}/wifi`} className="btn">WiFi</Link>
           {state.hunt_enabled ? <Link to={`/orga/events/${eventId}/hunts`} className="btn">Hunt</Link> : null}
+          {state.battles_enabled ? <Link to={`/orga/events/${eventId}/battles`} className="btn">Battles / Affonds</Link> : null}
           {canAccessBarMode ? (
             <>
               <Link to={`/bar/events/${eventId}/dashboard`} className="btn">BAR MODE · Dashboard</Link>

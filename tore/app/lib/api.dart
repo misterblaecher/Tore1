@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'core/network/api_client.dart';
 import 'features/hunt/hunt_models.dart';
+import 'features/battles/battle_models.dart';
 import 'features/polymarket/polymarket_models.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
@@ -97,6 +98,22 @@ class Api {
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return HuntStealResponse.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+
+  Future<BattleStatePayload> getBattleState(int eventId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/battles/state')).data as Map);
+    return BattleStatePayload.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> battleVote({required int eventId, required int roundId, required String choice, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/events/$eventId/battles/vote', data: {'roundId': roundId, 'choice': choice}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<BattleLeaderboard> getBattleLeaderboard(int eventId) async {
+    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/battles/leaderboard')).data as Map);
+    return BattleLeaderboard.fromJson(data);
   }
 
   Future<Map<String, dynamic>> getMusic(int eventId) async =>
