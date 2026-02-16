@@ -10,6 +10,13 @@ from fastapi import HTTPException
 
 _RATE_LIMIT_MAX = int(os.getenv("TORE_RATE_LIMIT_MAX", "25"))
 _RATE_LIMIT_WINDOW_S = int(os.getenv("TORE_RATE_LIMIT_WINDOW_S", "5"))
+_SCOPE_LIMITS: dict[str, tuple[int, int]] = {
+    # Keep /orders throttling deterministic in CI/tests even if global env knobs change.
+    "orders_create": (
+        int(os.getenv("TORE_ORDERS_CREATE_RATE_LIMIT_MAX", "29")),
+        int(os.getenv("TORE_ORDERS_CREATE_RATE_LIMIT_WINDOW_S", "60")),
+    ),
+}
 
 _lock = threading.Lock()
 _store: dict[str, Deque[float]] = defaultdict(deque)
@@ -21,8 +28,8 @@ _metrics = {
 }
 
 
-def _prune(q: Deque[float], now: float) -> None:
-    threshold = now - _RATE_LIMIT_WINDOW_S
+def _prune(q: Deque[float], now: float, window_s: int) -> None:
+    threshold = now - window_s
     while q and q[0] < threshold:
         q.popleft()
 
@@ -30,11 +37,12 @@ def _prune(q: Deque[float], now: float) -> None:
 def enforce_rate_limit(scope: str, actor_key: str) -> None:
     key = f"{scope}:{actor_key}"
     now = time.monotonic()
+    max_requests, window_s = _SCOPE_LIMITS.get(scope, (_RATE_LIMIT_MAX, _RATE_LIMIT_WINDOW_S))
     with _lock:
         _metrics["requests_total"] += 1
         q = _store[key]
-        _prune(q, now)
-        if len(q) >= _RATE_LIMIT_MAX:
+        _prune(q, now, window_s)
+        if len(q) >= max_requests:
             _metrics["rate_limited_total"] += 1
             raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Too many requests"})
         q.append(now)
