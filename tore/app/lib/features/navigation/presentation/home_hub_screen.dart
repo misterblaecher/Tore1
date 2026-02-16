@@ -4,6 +4,7 @@ import 'package:tore/core/app_context/app_context.dart';
 import 'package:tore/core/perf/prefetch.dart';
 import 'package:tore/features/events/presentation/event_config_providers.dart';
 import 'package:tore/features/events/presentation/event_hub_screen.dart';
+import 'package:tore/features/events/presentation/create_event_wizard_screen.dart';
 import 'package:tore/features/menu_market/presentation/menu_screen.dart';
 import 'package:tore/features/navigation/presentation/polymarket_tab_screen.dart';
 import 'package:tore/features/navigation/presentation/profile_screen.dart';
@@ -67,10 +68,23 @@ class HomeHubScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
-        icon: const Icon(Icons.qr_code_scanner_outlined),
-        label: const Text('Scanner QR'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'create-event-fab',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+            icon: const Icon(Icons.add),
+            label: const Text('+ Créer'),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.extended(
+            heroTag: 'scan-qr-fab',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+            icon: const Icon(Icons.qr_code_scanner_outlined),
+            label: const Text('Scanner QR'),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

@@ -589,8 +589,22 @@ def ensure_event_wizard_tables(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE events ADD COLUMN last_state_updated_at DATETIME"))
         if "last_updated_at" not in event_cols:
             conn.execute(text("ALTER TABLE events ADD COLUMN last_updated_at DATETIME"))
+        if "host_type" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN host_type VARCHAR(16) DEFAULT 'user'"))
+        if "host_id" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN host_id VARCHAR(120)"))
+        if "host_display_name" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN host_display_name VARCHAR(180)"))
+        if "visibility" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN visibility VARCHAR(16) DEFAULT 'PRIVATE'"))
+        if "publication_status" not in event_cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN publication_status VARCHAR(16) DEFAULT 'DRAFT'"))
 
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_event_state ON events (event_state)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_host_type ON events (host_type)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_host_id ON events (host_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_visibility ON events (visibility)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_publication_status ON events (publication_status)"))
 
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS event_create_idempotency (
@@ -631,6 +645,21 @@ def ensure_event_wizard_tables(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_qr_pack_idempotency ON event_qr_pack_idempotency (event_id, idempotency_key)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_app_write_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                actor_user_id VARCHAR(64) NOT NULL,
+                action VARCHAR(64) NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                event_id INTEGER,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_app_write_idem UNIQUE (actor_user_id, action, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_app_write_idem_actor ON event_app_write_idempotency (actor_user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_app_write_idem_event ON event_app_write_idempotency (event_id)"))
 
 
 def ensure_broadcast_tables(engine: Engine) -> None:

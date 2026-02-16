@@ -73,6 +73,7 @@ from models import (
     EventRuntimeState,
     EventJoin,
     EventCharterAcceptance,
+    EventAppWriteIdempotency,
     TicketTransfer,
     Committee,
     CommitteeYear,
@@ -1185,12 +1186,40 @@ class EventCostOut(BaseModel):
     created_by_user_id: Optional[str] = None
 
 
+class EventVenueIn(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
 class CreateEventIn(BaseModel):
     name: str
-    starts_at: datetime
-    ends_at: datetime
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    startAt: Optional[datetime] = None
+    endAt: Optional[datetime] = None
     bar_id: Optional[int] = None
     city: Optional[str] = None
+    venue: Optional[EventVenueIn] = None
+    visibility: str = "PRIVATE"
+    host_type: str = "user"
+    host_id: Optional[str] = None
+    modulesOn: Optional[dict] = None
+    rulesFlags: Optional[dict] = None
+
+
+class EventRuntimeOut(BaseModel):
+    eventState: str
+    lastUpdatedAt: Optional[str] = None
+
+
+class EventShareOut(BaseModel):
+    deeplink: str
+    https_link: str
+    qr_payload_join: str
+    event_code: Optional[str] = None
+    staff_invite: Optional[dict] = None
 
 
 class CreateEventOut(BaseModel):
@@ -1199,6 +1228,17 @@ class CreateEventOut(BaseModel):
     starts_at: str
     ends_at: str
     bar_id: Optional[int] = None
+    event_code: Optional[str] = None
+    modulesOn: dict = Field(default_factory=dict)
+    runtime: EventRuntimeOut
+    publicationStatus: str
+    visibility: str
+    share: EventShareOut
+
+
+class EventPublishOut(BaseModel):
+    event_id: int
+    publicationStatus: str
 
 
 class EventSummaryOut(BaseModel):
@@ -5889,48 +5929,262 @@ def glossary_put_settings(
     return response
 
 
+def _app_event_runtime_payload(db: Session, event: Event) -> dict:
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
+    state = ((runtime.state if runtime else None) or (event.event_state or "LIVE")).upper()
+    updated = runtime.updated_at if runtime and runtime.updated_at else event.last_state_updated_at
+    return {"eventState": state, "lastUpdatedAt": updated.isoformat() if updated else None}
+
+
+def _app_event_share_payload(event: Event, public_base_url: str | None = None, include_staff: bool = False) -> dict:
+    public_base_url = (public_base_url or os.getenv("TORE_PUBLIC_APP_URL") or "https://app.tore.local").rstrip("/")
+    event_code = event.event_code
+    deeplink = f"tore://event/join?event_id={event.id}"
+    https_link = f"{public_base_url}/events/{event.id}"
+    payload = {
+        "deeplink": deeplink,
+        "https_link": https_link,
+        "qr_payload_join": f"tore://join_event?event_id={event.id}",
+        "event_code": event_code,
+    }
+    if include_staff:
+        payload["staff_invite"] = {
+            "deeplink": f"tore://event/staff_invite?event_id={event.id}",
+            "qr_payload": f"tore://staff_invite?event_id={event.id}",
+        }
+    return payload
+
+
+def _require_event_host_write_perms(db: Session, event: Event, user: AppUser) -> None:
+    host_type = (event.host_type or "user").lower()
+    host_id = (event.host_id or "").strip()
+    if host_type == "user":
+        if host_id and host_id != user.id:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden_host_user"})
+        return
+    if host_type == "orga":
+        org_id = int(host_id or "0")
+        membership = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == org_id,
+            OrganizationMembership.user_id == user.id,
+        ).first()
+        if membership is None or (membership.role or "").upper() not in {"OWNER", "MANAGER"}:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden_host_orga"})
+        return
+    raise HTTPException(status_code=400, detail={"reason": "invalid_host_type"})
+
+
 @app.post("/events", response_model=CreateEventOut)
 def create_event(
     payload: CreateEventIn,
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    if payload.bar_id is not None:
-        bar = db.get(Bar, payload.bar_id)
-        if not bar:
-            raise HTTPException(404, "Bar not found")
+    key = ensure_idempotency_key(idempotency_key)
+    existing = db.query(EventAppWriteIdempotency).filter(
+        EventAppWriteIdempotency.actor_user_id == user.id,
+        EventAppWriteIdempotency.action == "event_create",
+        EventAppWriteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
 
+    starts_at = payload.startAt or payload.starts_at
+    ends_at = payload.endAt or payload.ends_at
+    if starts_at is None or ends_at is None or ends_at <= starts_at:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_dates"})
+
+    host_type = (payload.host_type or "user").strip().lower()
+    if host_type not in {"user", "orga"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_host_type"})
+    host_id = (payload.host_id or user.id).strip()
+    if host_type == "user":
+        host_id = user.id
+    else:
+        org_id = int(host_id or "0")
+        membership = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == org_id,
+            OrganizationMembership.user_id == user.id,
+        ).first()
+        if membership is None or (membership.role or "").upper() not in {"OWNER", "MANAGER"}:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden_host_orga"})
+
+    visibility = (payload.visibility or "PRIVATE").upper()
+    if visibility not in {"PUBLIC", "PRIVATE"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_visibility"})
+
+    venue_parts = []
+    if payload.venue:
+        if payload.venue.name:
+            venue_parts.append(payload.venue.name.strip())
+        if payload.venue.address:
+            venue_parts.append(payload.venue.address.strip())
+    venue = " · ".join([v for v in venue_parts if v]) or None
+    now = now_utc()
     event = Event(
         bar_id=payload.bar_id,
         name=payload.name,
-        starts_at=payload.starts_at,
-        ends_at=payload.ends_at,
+        starts_at=starts_at,
+        ends_at=ends_at,
         event_code=random_code(6),
+        venue=venue,
+        event_state="LIVE",
+        modules_on=payload.modulesOn or {},
+        rules_flags=payload.rulesFlags or {},
+        created_by=f"app:{user.id}",
+        last_state_updated_at=now,
+        last_updated_at=now,
+        host_type=host_type,
+        host_id=host_id,
+        host_display_name=user.display_name,
+        visibility=visibility,
+        publication_status="DRAFT",
     )
     db.add(event)
     db.flush()
-
     get_or_create_event_config(db, event.id)
-    db.add(
-        EventStaff(
-            event_id=event.id,
-            user_id=user.id,
-            role="admin",
-            is_active=True,
-            created_at=now_utc(),
-            created_by_user_id=user.id,
-        )
-    )
-    db.commit()
+    db.add(EventRuntimeState(event_id=event.id, state="LIVE", updated_by_user_id=None, updated_at=now))
+    db.add(EventStaff(event_id=event.id, user_id=user.id, role="admin", is_active=True, created_at=now_utc(), created_by_user_id=user.id))
 
-    return {
+    response = {
         "event_id": event.id,
         "name": event.name,
         "starts_at": event.starts_at.isoformat(),
         "ends_at": event.ends_at.isoformat(),
         "bar_id": event.bar_id,
         "event_code": event.event_code,
+        "modulesOn": event.modules_on or {},
+        "runtime": _app_event_runtime_payload(db, event),
+        "publicationStatus": event.publication_status,
+        "visibility": event.visibility,
+        "share": _app_event_share_payload(event),
     }
+    db.add(EventAppWriteIdempotency(actor_user_id=user.id, action="event_create", idempotency_key=key, event_id=event.id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.create",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"host_type": host_type, "host_id": host_id, "scope": f"{host_type}:{host_id}"},
+    )
+    db.commit()
+    return response
+
+
+@app.post("/events/{event_id}/publish", response_model=EventPublishOut)
+def publish_event(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    existing = db.query(EventAppWriteIdempotency).filter(
+        EventAppWriteIdempotency.actor_user_id == user.id,
+        EventAppWriteIdempotency.action == f"event_publish:{event_id}",
+        EventAppWriteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+    event.publication_status = "PUBLISHED"
+    event.last_updated_at = now_utc()
+    response = {"event_id": event.id, "publicationStatus": event.publication_status}
+    db.add(EventAppWriteIdempotency(actor_user_id=user.id, action=f"event_publish:{event_id}", idempotency_key=key, event_id=event.id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.publish",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"scope": f"{event.host_type}:{event.host_id}"},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/events/{event_id}/share", response_model=EventShareOut)
+def get_event_share(
+    event_id: int,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    user = None
+    raw = _extract_bearer_token(authorization)
+    if raw:
+        user = _resolve_app_user_from_token(raw, db)
+    visibility = (event.visibility or "PRIVATE").upper()
+    if visibility != "PUBLIC" and user is None:
+        raise HTTPException(status_code=401, detail={"reason": "auth_required"})
+    include_staff = False
+    if user is not None:
+        try:
+            _require_event_host_write_perms(db, event, user)
+            include_staff = True
+        except HTTPException:
+            include_staff = False
+    return _app_event_share_payload(event, include_staff=include_staff)
+
+
+@app.post("/events/{event_id}/staff_invite_code")
+def create_event_staff_invite_code(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    existing = db.query(EventAppWriteIdempotency).filter(
+        EventAppWriteIdempotency.actor_user_id == user.id,
+        EventAppWriteIdempotency.action == f"event_staff_invite_code:{event_id}",
+        EventAppWriteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+    code = random_code(8)
+    response = {
+        "code": code,
+        "deeplink": f"tore://event/staff_invite?event_id={event.id}&code={code}",
+        "qr_payload": f"tore://staff_invite?event_id={event.id}&code={code}",
+    }
+    db.add(EventAppWriteIdempotency(actor_user_id=user.id, action=f"event_staff_invite_code:{event_id}", idempotency_key=key, event_id=event.id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.staff_invite_code.create",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"scope": f"{event.host_type}:{event.host_id}"},
+    )
+    db.commit()
+    return response
 
 
 @app.get("/events/{event_id}/qr-pack", response_model=QrPackOut)
@@ -7660,6 +7914,36 @@ def get_orga(org_id: int, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(404, "Organization not found")
     return _orga_to_out(row)
+
+
+@app.get("/orgas/{org_id}/events")
+def list_orga_public_events(org_id: int, db: Session = Depends(get_db)):
+    now = now_utc()
+    rows = db.query(Event).filter(
+        Event.host_type == "orga",
+        Event.host_id == str(org_id),
+        Event.visibility == "PUBLIC",
+        Event.publication_status == "PUBLISHED",
+    ).order_by(Event.starts_at.asc()).all()
+    items = []
+    for row in rows:
+        if row.ends_at < now:
+            bucket = "PAST"
+        elif row.starts_at.date() == now.date():
+            bucket = "TODAY"
+        else:
+            bucket = "UPCOMING"
+        runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == row.id).first()
+        items.append({
+            "id": row.id,
+            "name": row.name,
+            "startAt": row.starts_at.isoformat(),
+            "endAt": row.ends_at.isoformat(),
+            "bucket": bucket,
+            "eventState": ((runtime.state if runtime else None) or row.event_state or "LIVE").upper(),
+            "event_code": row.event_code,
+        })
+    return {"items": items}
 
 
 @app.post("/orgas/join_by_code")

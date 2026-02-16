@@ -1328,4 +1328,42 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> createEventV1({
+    required Map<String, dynamic> payload,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events',
+      data: payload,
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> publishEventV1({required int eventId, required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/publish',
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getEventShareV1(int eventId) async {
+    final res = await _client.dio.get('/events/$eventId/share');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createStaffInviteCodeV1({required int eventId, required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/staff_invite_code',
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> listOrgaPublicEvents(int orgId) async {
+    final res = await _client.dio.get('/orgas/$orgId/events');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
 }

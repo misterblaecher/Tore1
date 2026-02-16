@@ -71,6 +71,11 @@ class Event(Base):
     created_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     last_state_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
     last_updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    host_type: Mapped[str] = mapped_column(String(16), default="user", index=True)
+    host_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
+    host_display_name: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE", index=True)
+    publication_status: Mapped[str] = mapped_column(String(16), default="DRAFT", index=True)
 
     bar: Mapped["Bar"] = relationship(back_populates="events")
     drinks: Mapped[List["EventDrink"]] = relationship(back_populates="event")
@@ -85,7 +90,7 @@ class EventCreateIdempotency(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bar_id: Mapped[int] = mapped_column(ForeignKey("bars.id"), index=True)
+    bar_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bars.id"), index=True, nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
@@ -148,6 +153,21 @@ class EventQrPackIdempotency(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
     pack_json: Mapped[dict] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventAppWriteIdempotency(Base):
+    __tablename__ = "event_app_write_idempotency"
+    __table_args__ = (
+        UniqueConstraint("actor_user_id", "action", "idempotency_key", name="uq_event_app_write_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 

@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/state.dart';
+import 'package:tore/features/events/presentation/create_event_wizard_screen.dart';
+import 'package:tore/features/events/presentation/event_hub_screen.dart';
 
 class CommunityScreen extends ConsumerStatefulWidget {
   const CommunityScreen({super.key});
@@ -36,6 +38,11 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
   Widget build(BuildContext context) {
     final api = ref.read(apiProvider);
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+        icon: const Icon(Icons.add),
+        label: const Text('+ Créer'),
+      ),
       appBar: AppBar(
         title: const Text('Communauté'),
         bottom: TabBar(controller: _tabs, tabs: const [Tab(text: 'Explorer'), Tab(text: 'Mes Orgas')]),
@@ -82,6 +89,34 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
                       child: ListTile(
                         title: Text((raw as Map)['name']?.toString() ?? 'Orga'),
                         subtitle: Text('${raw['city'] ?? '-'} • ${raw['org_type'] ?? '-'}'),
+                        onTap: () async {
+                          final orgId = (raw['id'] as num?)?.toInt();
+                          if (orgId == null) return;
+                          final events = await api.listOrgaPublicEvents(orgId);
+                          if (!context.mounted) return;
+                          await showModalBottomSheet(
+                            context: context,
+                            builder: (_) {
+                              final items = ((events['items'] as List?) ?? const []).cast<dynamic>();
+                              return ListView(
+                                padding: const EdgeInsets.all(12),
+                                children: [
+                                  Text('Events publics', style: Theme.of(context).textTheme.titleMedium),
+                                  const SizedBox(height: 8),
+                                  for (final e in items)
+                                    ListTile(
+                                      title: Text((e['name'] ?? 'Event').toString()),
+                                      subtitle: Text('${e['bucket'] ?? ''} · ${e['eventState'] ?? ''}'),
+                                      trailing: TextButton(
+                                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: (e['id'] as num).toInt(), eventName: (e['name'] ?? '').toString()))),
+                                        child: const Text('Ouvrir'),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          );
+                        },
                       ),
                     ),
                 ],
@@ -101,7 +136,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
                         title: Text((item['orga']?['name'] ?? 'Orga').toString()),
                         subtitle: Text('Rôle: ${item['role']}'),
                         trailing: FilledButton(
-                          onPressed: () {},
+                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreateEventWizardScreen(prefillOrga: item['orga'] as Map<String, dynamic>?))),
                           child: const Text('Créer un event'),
                         ),
                       ),
