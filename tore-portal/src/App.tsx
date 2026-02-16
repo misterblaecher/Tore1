@@ -47,6 +47,7 @@ import AdminAuditGlobal from './pages/AdminAuditGlobal'
 import AdminUsersGlobal from './pages/AdminUsersGlobal'
 import AdminFlagsGlobal from './pages/AdminFlagsGlobal'
 import CreateOrga from './pages/CreateOrga'
+import OpenInApp from './pages/OpenInApp'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -79,6 +80,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/open" element={<OpenInApp />} />
 
       <Route
         path="/admin/audit"

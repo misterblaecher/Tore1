@@ -1306,11 +1306,26 @@ class EventRuntimeOut(BaseModel):
 
 
 class EventShareOut(BaseModel):
+    webUrl: Optional[str] = None
     deeplink: str
+    qrPayload: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
     https_link: str
     qr_payload_join: str
     event_code: Optional[str] = None
     staff_invite: Optional[dict] = None
+
+
+
+
+class OpenLinkOut(BaseModel):
+    ok: bool
+    type: str
+    target: Dict[str, Any]
+    deeplink: str
+    webFallback: str
+    expiresAt: Optional[str] = None
 
 
 class CreateEventOut(BaseModel):
@@ -6162,14 +6177,27 @@ def _app_event_runtime_payload(db: Session, event: Event) -> dict:
     return {"eventState": state, "lastUpdatedAt": updated.isoformat() if updated else None}
 
 
+def _public_app_base_url() -> str:
+    return (
+        os.getenv("PUBLIC_URL")
+        or os.getenv("BASE_URL")
+        or os.getenv("TORE_PUBLIC_APP_URL")
+        or "https://app.tore.be"
+    ).rstrip("/")
+
+
 def _app_event_share_payload(event: Event, public_base_url: str | None = None, include_staff: bool = False) -> dict:
-    public_base_url = (public_base_url or os.getenv("TORE_PUBLIC_APP_URL") or "https://app.tore.local").rstrip("/")
+    public_base_url = (public_base_url or _public_app_base_url()).rstrip("/")
     event_code = event.event_code
-    deeplink = f"tore://event/join?event_id={event.id}"
-    https_link = f"{public_base_url}/events/{event.id}"
+    deeplink = f"tore://open?type=event&id={event.id}"
+    web_url = f"{public_base_url}/open?type=event&id={event.id}"
     payload = {
+        "webUrl": web_url,
         "deeplink": deeplink,
-        "https_link": https_link,
+        "qrPayload": f"tore://join_event?event_id={event.id}",
+        "title": event.name,
+        "description": f"Ouvrir {event.name} dans TORÈ",
+        "https_link": web_url,
         "qr_payload_join": f"tore://join_event?event_id={event.id}",
         "event_code": event_code,
     }
@@ -6369,6 +6397,84 @@ def get_event_share(
             include_staff = False
     return _app_event_share_payload(event, include_staff=include_staff)
 
+
+
+
+def _orga_share_payload(org: Organization, public_base_url: str | None = None) -> dict[str, Any]:
+    public_base_url = (public_base_url or _public_app_base_url()).rstrip("/")
+    web_url = f"{public_base_url}/open?type=orga&id={org.id}"
+    return {
+        "webUrl": web_url,
+        "deeplink": f"tore://open?type=orga&id={org.id}",
+        "qrPayload": f"tore://open?type=orga&id={org.id}",
+        "title": org.name,
+        "description": f"Ouvrir {org.name} dans TORÈ",
+    }
+
+
+@app.get("/open", response_model=OpenLinkOut)
+def resolve_open_link(
+    type: str,
+    id: Optional[int] = None,
+    event_id: Optional[int] = None,
+    org_id: Optional[int] = None,
+    code: Optional[str] = None,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    user = None
+    raw = _extract_bearer_token(authorization)
+    if raw:
+        user = _resolve_app_user_from_token(raw, db)
+
+    type_normalized = (type or "").strip().lower()
+    target_id = id or event_id or org_id
+    if type_normalized == "event":
+        if target_id is None:
+            raise HTTPException(status_code=400, detail={"reason": "missing_id"})
+        event = db.get(Event, target_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        if (event.visibility or "PRIVATE").upper() != "PUBLIC" and user is None:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+        deeplink = f"tore://open?type=event&id={event.id}"
+        web_fallback = f"{_public_app_base_url()}/open?type=event&id={event.id}"
+        target = {"event_id": event.id, "name": event.name}
+    elif type_normalized == "orga":
+        if target_id is None:
+            raise HTTPException(status_code=400, detail={"reason": "missing_id"})
+        org = db.get(Organization, target_id)
+        if org is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        if (org.visibility or "PUBLIC").upper() != "PUBLIC" and user is None:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+        deeplink = f"tore://open?type=orga&id={org.id}"
+        web_fallback = f"{_public_app_base_url()}/open?type=orga&id={org.id}"
+        target = {"org_id": org.id, "name": org.name}
+    elif type_normalized == "join":
+        if not code:
+            raise HTTPException(status_code=400, detail={"reason": "missing_code"})
+        normalized = code.strip().upper()
+        deeplink = f"tore://open?type=join&code={normalized}"
+        web_fallback = f"{_public_app_base_url()}/open?type=join&code={normalized}"
+        target = {"code": normalized}
+    elif type_normalized == "staff_invite":
+        if not code:
+            raise HTTPException(status_code=400, detail={"reason": "missing_code"})
+        normalized = code.strip().upper()
+        deeplink = f"tore://open?type=staff_invite&code={normalized}"
+        web_fallback = f"{_public_app_base_url()}/open?type=staff_invite&code={normalized}"
+        target = {"code": normalized}
+    else:
+        raise HTTPException(status_code=400, detail={"reason": "unsupported_type"})
+
+    return {
+        "ok": True,
+        "type": type_normalized,
+        "target": target,
+        "deeplink": deeplink,
+        "webFallback": web_fallback,
+    }
 
 @app.post("/events/{event_id}/staff_invite_code")
 def create_event_staff_invite_code(
@@ -8039,6 +8145,15 @@ class OrgaInviteOut(BaseModel):
     expires_at: Optional[str] = None
 
 
+class OrgaShareOut(BaseModel):
+    webUrl: str
+    deeplink: str
+    qrPayload: Optional[str] = None
+    title: str
+    description: str
+
+
+
 def _orga_to_out(row: Organization) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -8510,6 +8625,28 @@ def join_orga_by_code(
     return response
 
 
+@app.get("/orgas/{org_id}/share", response_model=OrgaShareOut)
+def get_orga_share(
+    org_id: int,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    org = db.get(Organization, org_id)
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    user = None
+    raw = _extract_bearer_token(authorization)
+    if raw:
+        user = _resolve_app_user_from_token(raw, db)
+    if (org.visibility or "PUBLIC").upper() != "PUBLIC":
+        if user is None:
+            raise HTTPException(status_code=403, detail={"reason": "auth_required"})
+        membership = _membership_for(db, org_id=org_id, user_id=user.id)
+        if membership is None:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    return _orga_share_payload(org)
+
+
 @app.get("/orgas/{org_id}/invite", response_model=OrgaInviteOut)
 def get_orga_invite(
     org_id: int,
@@ -8543,7 +8680,7 @@ def get_orga_invite(
         "invite_code": code,
         "code": code,
         "deeplink": deeplink,
-        "https_link": f"https://app.tore.be/orgas/join?code={code}&orgId={org_id}",
+        "https_link": f"{_public_app_base_url()}/open?type=join&code={code}",
         "qr_payload": deeplink,
         "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
     }

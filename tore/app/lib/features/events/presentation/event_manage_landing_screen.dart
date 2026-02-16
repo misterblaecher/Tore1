@@ -42,7 +42,7 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
       final api = ref.read(apiProvider);
       final share = await api.getEventShareV1(widget.event.id);
       final code = await api.createStaffInviteCodeV1(eventId: widget.event.id, idempotencyKey: _idem('staff-invite'));
-      final text = '${share['https_link'] ?? ''}\n${share['deeplink'] ?? ''}\nstaff code: ${code['code'] ?? '-'}';
+      final text = '${share['webUrl'] ?? share['https_link'] ?? ''}\n${share['deeplink'] ?? ''}\nstaff code: ${code['code'] ?? '-'}';
       await Clipboard.setData(ClipboardData(text: text));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Share pack copié')));
@@ -79,7 +79,7 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
               OutlinedButton.icon(
                 onPressed: _loading ? null : _sharePack,
                 icon: const Icon(Icons.ios_share_outlined),
-                label: const Text('Share pack'),
+                label: const Text('Partager le lien'),
               ),
               if (snapshot != null) ...[
                 const SizedBox(height: 12),

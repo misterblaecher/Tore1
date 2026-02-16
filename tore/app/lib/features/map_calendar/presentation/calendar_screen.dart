@@ -76,12 +76,29 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                 FilledButton(
                                   onPressed: eventId == null
                                       ? null
-                                      : () {
+                                      : () async {
                                           final isPublic = (item['visibility'] ?? 'PUBLIC').toString().toUpperCase() == 'PUBLIC';
                                           if (isPublic) {
+                                            try {
+                                              final share = await ref.read(apiProvider).getEventShareV1(eventId);
+                                              final deepLink = (share['deeplink'] ?? '').toString();
+                                              final webUrl = (share['webUrl'] ?? share['https_link'] ?? '').toString();
+                                              if (deepLink.isNotEmpty && await canLaunchUrl(Uri.parse(deepLink))) {
+                                                await launchUrl(Uri.parse(deepLink), mode: LaunchMode.externalApplication);
+                                                return;
+                                              }
+                                              if (webUrl.isNotEmpty) {
+                                                await launchUrl(Uri.parse(webUrl), mode: LaunchMode.externalApplication);
+                                                return;
+                                              }
+                                            } catch (_) {
+                                              // fallback in-app join below
+                                            }
+                                            if (!context.mounted) return;
                                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => JoinEventScreen(prefillEventId: eventId)));
                                             return;
                                           }
+                                          if (!context.mounted) return;
                                           Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: (item['name'] ?? '').toString())));
                                         },
                                   child: const Text('Ouvrir'),
