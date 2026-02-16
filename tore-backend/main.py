@@ -19,12 +19,12 @@ from typing import List, Optional, Dict, Any, Literal
 from zoneinfo import ZoneInfo
 
 import jwt
-from fastapi import FastAPI, HTTPException, Query, Depends, Header
+from fastapi import FastAPI, HTTPException, Query, Depends, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc, case, text, or_
+from sqlalchemy import select, func, desc, case, text, or_, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,8 @@ from models import (
     Checkin,
     AppUser,
     AppToken,
+    RefreshToken,
+    AuthMagicLink,
     PartnerMembership,
     Wallet,
     WalletTx,
@@ -119,6 +121,12 @@ from app.services.idempotency_service import ensure_idempotency_key
 
 JWT_SECRET = os.getenv("TORE_JWT_SECRET", "dev-secret-change-me")
 JWT_ALG = "HS256"
+ACCESS_TOKEN_TTL_MIN = int(os.getenv("TORE_AUTH_ACCESS_TTL_MIN", "60"))
+REFRESH_TOKEN_TTL_DAYS = int(os.getenv("TORE_AUTH_REFRESH_TTL_DAYS", "30"))
+MAGIC_LINK_TTL_MIN = int(os.getenv("TORE_AUTH_MAGIC_LINK_TTL_MIN", "10"))
+MAGIC_LINK_RATE_SCOPE = "auth_email_request_link"
+GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 
 # Price engine knobs (simple but fun)
 MIN_MULT = 0.50
@@ -485,6 +493,64 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def _user_snapshot(db: Session, user: AppUser) -> Dict[str, Any]:
+    settings = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user.id).first()
+    return {
+        "id": user.id,
+        "display_name": user.display_name,
+        "avatar_url": user.avatar_url,
+        "address_text": user.address_text,
+        "show_address": user.show_address,
+        "show_avatar": user.show_avatar,
+        "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
+        "visibility": (settings.visibility if settings and settings.visibility else "public"),
+        "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
+        "email": user.email,
+    }
+
+
+def _issue_auth_tokens(db: Session, user: AppUser) -> Dict[str, str]:
+    _enforce_user_sanctions(db, user)
+
+    access_raw = secrets.token_urlsafe(32)
+    db.add(AppToken(user_id=user.id, token_hash=_hash_token(access_raw)))
+
+    refresh_raw = secrets.token_urlsafe(48)
+    expires_at = now_utc() + timedelta(days=REFRESH_TOKEN_TTL_DAYS)
+    db.add(RefreshToken(user_id=user.id, token_hash=_hash_token(refresh_raw), expires_at=expires_at))
+
+    return {"access_token": access_raw, "refresh_token": refresh_raw}
+
+
+def _verify_google_id_token(id_token: str) -> Dict[str, Any]:
+    client_id = (os.getenv("GOOGLE_CLIENT_ID") or "").strip()
+    if not client_id:
+        raise HTTPException(status_code=503, detail={"reason": "google_client_id_missing"})
+
+    try:
+        signing_key = jwt.PyJWKClient(GOOGLE_JWKS_URL).get_signing_key_from_jwt(id_token).key
+        payload = jwt.decode(
+            id_token,
+            signing_key,
+            algorithms=["RS256"],
+            audience=client_id,
+            issuer=list(GOOGLE_ISSUERS),
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail={"reason": "invalid_google_token"})
+
+    email = _normalize_email(str(payload.get("email") or ""))
+    if not email:
+        raise HTTPException(status_code=400, detail={"reason": "email_missing"})
+    if payload.get("email_verified") is False:
+        raise HTTPException(status_code=400, detail={"reason": "email_not_verified"})
+    return payload
 
 
 security = HTTPBearer(auto_error=False)
@@ -899,6 +965,29 @@ class GuestIn(BaseModel):
 class GuestOut(BaseModel):
     token: str
     user: Dict[str, Any]
+
+
+class GoogleAuthIn(BaseModel):
+    idToken: str
+
+
+class MagicLinkRequestIn(BaseModel):
+    email: str
+    device: Optional[str] = None
+
+
+class MagicLinkVerifyIn(BaseModel):
+    email: str
+    token: str
+
+
+class RefreshIn(BaseModel):
+    refreshToken: str
+
+
+class UpgradeGuestIn(BaseModel):
+    guest_device_id: str
+    merge_policy: str = "keep"
 
 
 class PatchMeIn(BaseModel):
@@ -3166,28 +3255,137 @@ def auth_guest(payload: GuestIn):
         s.add(u)
         s.flush()
 
-        raw = secrets.token_urlsafe(32)
-        th = _hash_token(raw)
-        t = AppToken(user_id=u.id, token_hash=th)
-        s.add(t)
+        access_raw = _issue_auth_tokens(s, u)["access_token"]
         s.commit()
 
-        return {
-            "token": raw,
-            "user": {
-                "id": u.id,
-                "display_name": u.display_name,
-                "avatar_url": u.avatar_url,
-                "address_text": u.address_text,
-                "show_address": u.show_address,
-                "show_avatar": u.show_avatar,
-                "show_identity_to_staff": False,
-                "visibility": "public",
-                "show_identity_in_bar": False,
-            },
-        }
+        return {"token": access_raw, "user": _user_snapshot(s, u)}
     finally:
         s.close()
+
+
+@app.post("/auth/google")
+def auth_google(payload: GoogleAuthIn, db: Session = Depends(get_db)):
+    claims = _verify_google_id_token(payload.idToken)
+    email = _normalize_email(str(claims.get("email") or ""))
+
+    user = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
+    if not user:
+        user = AppUser(
+            id=secrets.token_hex(16),
+            display_name=(claims.get("name") or claims.get("given_name") or email.split("@")[0])[:120],
+            email=email,
+            show_address=False,
+            show_avatar=True,
+        )
+        db.add(user)
+        db.flush()
+
+    tokens = _issue_auth_tokens(db, user)
+    db.commit()
+    return {**tokens, "user": _user_snapshot(db, user)}
+
+
+@app.post("/auth/email/request_link")
+def auth_email_request_link(payload: MagicLinkRequestIn, request: Request, db: Session = Depends(get_db)):
+    email = _normalize_email(payload.email)
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_email"})
+
+    actor = request.client.host if request.client else "unknown"
+    enforce_rate_limit(MAGIC_LINK_RATE_SCOPE, actor)
+
+    raw_token = secrets.token_urlsafe(24)
+    db.add(
+        AuthMagicLink(
+            email=email,
+            token_hash=_hash_token(raw_token),
+            expires_at=now_utc() + timedelta(minutes=MAGIC_LINK_TTL_MIN),
+            request_ip=actor,
+            request_device=(payload.device or "")[:180] or None,
+        )
+    )
+    db.commit()
+
+    print(f"[auth][magic-link] email={email} token={raw_token}")
+    out: Dict[str, Any] = {"ok": True}
+    if _strict_dev_env_enabled() and _env_bool("TORE_DEV_EXPOSE_MAGIC_TOKEN", True):
+        out["token"] = raw_token
+    return out
+
+
+@app.post("/auth/email/verify_link")
+def auth_email_verify_link(payload: MagicLinkVerifyIn, db: Session = Depends(get_db)):
+    email = _normalize_email(payload.email)
+    token_hash = _hash_token((payload.token or "").strip())
+    now = now_utc()
+
+    row = (
+        db.query(AuthMagicLink)
+        .filter(
+            AuthMagicLink.email == email,
+            AuthMagicLink.token_hash == token_hash,
+            AuthMagicLink.used_at.is_(None),
+            AuthMagicLink.expires_at > now,
+        )
+        .order_by(AuthMagicLink.created_at.desc())
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=401, detail={"reason": "invalid_or_expired_token"})
+
+    row.used_at = now
+    user = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
+    if not user:
+        user = AppUser(id=secrets.token_hex(16), display_name=email.split("@")[0], email=email)
+        db.add(user)
+        db.flush()
+
+    tokens = _issue_auth_tokens(db, user)
+    db.commit()
+    return {**tokens, "user": _user_snapshot(db, user)}
+
+
+@app.post("/auth/refresh")
+def auth_refresh(payload: RefreshIn, db: Session = Depends(get_db)):
+    token_hash = _hash_token((payload.refreshToken or "").strip())
+    now = now_utc()
+
+    row = (
+        db.query(RefreshToken)
+        .filter(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=401, detail={"reason": "invalid_refresh_token"})
+
+    user = db.get(AppUser, row.user_id)
+    if not user:
+        row.revoked_at = now
+        db.add(row)
+        db.commit()
+        raise HTTPException(status_code=401, detail={"reason": "user_not_found"})
+
+    _enforce_user_sanctions(db, user)
+
+    row.revoked_at = now
+    db.add(row)
+    tokens = _issue_auth_tokens(db, user)
+    db.commit()
+    return {**tokens, "user": _user_snapshot(db, user)}
+
+
+@app.post("/auth/upgrade_guest")
+def auth_upgrade_guest(payload: UpgradeGuestIn, user: AppUser = Depends(get_current_user)):
+    return {
+        "ok": True,
+        "guest_device_id": payload.guest_device_id,
+        "merge_policy": payload.merge_policy or "keep",
+        "upgraded_user_id": user.id,
+    }
 
 
 @app.get("/auth/me")

@@ -35,6 +35,32 @@ class ApiClient {
 
     // Order matters: auth header -> retry -> logs -> error mapping.
     dio.interceptors.add(AuthInterceptor(tokenStorage));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (e, handler) async {
+          final canRetry = e.response?.statusCode == 401 && e.requestOptions.extra['retried401'] != true;
+          if (!canRetry) {
+            handler.next(e);
+            return;
+          }
+
+          final refreshed = await _instance?.tryRefreshSession() ?? false;
+          if (!refreshed) {
+            handler.next(e);
+            return;
+          }
+
+          final retryReq = e.requestOptions;
+          retryReq.extra['retried401'] = true;
+          final newAccess = await tokenStorage.readToken();
+          if (newAccess != null && newAccess.isNotEmpty) {
+            retryReq.headers['Authorization'] = 'Bearer $newAccess';
+          }
+          final response = await dio.fetch(retryReq);
+          handler.resolve(response);
+        },
+      ),
+    );
     dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: 1));
 
     // Logs only in debug (and can be disabled with --dart-define=HTTP_LOGS=false)
@@ -71,6 +97,28 @@ class ApiClient {
       debugPrint('🔥 ApiClient CREATED (singleton)');
     }
     return _instance!;
+  }
+
+  Future<bool> tryRefreshSession() async {
+    final refreshToken = await tokenStorage.readRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    try {
+      final refreshClient = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
+      final res = await refreshClient.post(
+        ApiEndpoints.authRefresh,
+        data: {'refreshToken': refreshToken},
+      );
+      final data = (res.data as Map).cast<String, dynamic>();
+      final access = (data['access_token'] ?? '').toString();
+      final refresh = (data['refresh_token'] ?? '').toString();
+      if (access.isEmpty || refresh.isEmpty) return false;
+      await tokenStorage.writeTokens(accessToken: access, refreshToken: refresh);
+      return true;
+    } catch (_) {
+      await tokenStorage.clear();
+      return false;
+    }
   }
 
   /// Appelé au démarrage : garantit qu'un token existe
