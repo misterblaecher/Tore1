@@ -164,6 +164,8 @@ def ensure_organization_tables(engine: Engine) -> None:
                 city VARCHAR(120),
                 org_type VARCHAR(64),
                 website_url VARCHAR(255),
+                instagram_handle VARCHAR(64),
+                visibility VARCHAR(16) DEFAULT 'PUBLIC' NOT NULL,
                 created_by_user_id VARCHAR NOT NULL,
                 created_at DATETIME,
                 CONSTRAINT uq_organizations_slug UNIQUE (slug)
@@ -178,6 +180,9 @@ def ensure_organization_tables(engine: Engine) -> None:
                 organization_id INTEGER NOT NULL,
                 user_id VARCHAR NOT NULL,
                 role VARCHAR(16) DEFAULT 'MEMBER' NOT NULL,
+                status VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+                joined_at DATETIME,
+                updated_at DATETIME,
                 created_at DATETIME,
                 created_by_user_id VARCHAR NOT NULL,
                 CONSTRAINT uq_organization_memberships_org_user UNIQUE (organization_id, user_id)
@@ -214,6 +219,20 @@ def ensure_organization_tables(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_write_idem_actor ON organization_write_idempotency (actor_user_id)"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS organization_posts (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                author_user_id VARCHAR NOT NULL,
+                text TEXT NOT NULL,
+                image_url VARCHAR(512),
+                pinned BOOLEAN DEFAULT 0 NOT NULL,
+                deleted_at DATETIME,
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_posts_feed ON organization_posts (organization_id, deleted_at, pinned, created_at)"))
+
 
 
 def ensure_profitability_tables(engine: Engine) -> None:

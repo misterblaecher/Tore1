@@ -99,6 +99,7 @@ from models import (
     OrganizationMembership,
     OrganizationInviteCode,
     OrganizationWriteIdempotency,
+    OrgaPost,
     AuditLog,
     UserPrivacyDeleteRequest,
     UserSanction,
@@ -7759,6 +7760,8 @@ class OrgaCreateIn(BaseModel):
     city: Optional[str] = Field(default=None, max_length=120)
     org_type: Optional[str] = Field(default=None, max_length=64)
     website_url: Optional[str] = Field(default=None, max_length=255)
+    instagram_handle: Optional[str] = Field(default=None, max_length=64)
+    visibility: Literal["PUBLIC", "PRIVATE"] = "PUBLIC"
 
 
 class OrgaOut(BaseModel):
@@ -7769,21 +7772,44 @@ class OrgaOut(BaseModel):
     city: Optional[str] = None
     org_type: Optional[str] = None
     website_url: Optional[str] = None
+    instagram_handle: Optional[str] = None
+    visibility: str = "PUBLIC"
 
 
 class OrgaMembershipOut(BaseModel):
     orga: OrgaOut
-    role: Literal["OWNER", "MANAGER", "STAFF", "MEMBER"]
+    role: Literal["OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"]
+    status: Literal["ACTIVE", "PENDING"] = "ACTIVE"
 
 
 class JoinByCodeIn(BaseModel):
     code: str = Field(min_length=4, max_length=16)
 
 
+class OrgaMemberUpsertIn(BaseModel):
+    user_id: str = Field(min_length=3, max_length=64)
+    role: Literal["OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"] = "MEMBER"
+
+
+class OrgaPostCreateIn(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    image_url: Optional[str] = Field(default=None, max_length=512)
+
+
+class MeProfilePutIn(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+    photo_url: Optional[str] = Field(default=None, max_length=512)
+    bio: Optional[str] = Field(default=None, max_length=2000)
+    instagram_handle: Optional[str] = Field(default=None, max_length=64)
+    visibility: Literal["PUBLIC", "PRIVATE"] = "PUBLIC"
+
+
 class OrgaInviteOut(BaseModel):
     org_id: int
-    code: str
+    invite_code: str
+    code: Optional[str] = None
     deeplink: str
+    https_link: str
     qr_payload: str
     expires_at: Optional[str] = None
 
@@ -7797,6 +7823,8 @@ def _orga_to_out(row: Organization) -> dict[str, Any]:
         "city": row.city,
         "org_type": row.org_type,
         "website_url": row.website_url,
+        "instagram_handle": row.instagram_handle,
+        "visibility": row.visibility,
     }
 
 
@@ -7810,6 +7838,34 @@ def _slugify_orga_name(db: Session, base_name: str) -> str:
         idx += 1
         slug = f"{root}-{idx}"
     return slug
+
+
+_ORGA_ROLE_RANK = {"FOLLOWER": 0, "MEMBER": 1, "STAFF": 2, "MANAGER": 3, "OWNER": 4}
+
+
+def _membership_for(db: Session, *, org_id: int, user_id: str) -> Optional[OrganizationMembership]:
+    return db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == user_id,
+        OrganizationMembership.status == "ACTIVE",
+    ).first()
+
+
+def _require_membership_role(db: Session, *, org_id: int, user_id: str, min_role: str) -> OrganizationMembership:
+    membership = _membership_for(db, org_id=org_id, user_id=user_id)
+    if not membership:
+        raise HTTPException(403, "Forbidden")
+    if _ORGA_ROLE_RANK.get(membership.role, -1) < _ORGA_ROLE_RANK.get(min_role, 999):
+        raise HTTPException(403, "Forbidden")
+    return membership
+
+
+def _orga_write_idem(db: Session, *, actor_user_id: str, action: str, idempotency_key: str) -> Optional[OrganizationWriteIdempotency]:
+    return db.query(OrganizationWriteIdempotency).filter(
+        OrganizationWriteIdempotency.actor_user_id == actor_user_id,
+        OrganizationWriteIdempotency.action == action,
+        OrganizationWriteIdempotency.idempotency_key == idempotency_key,
+    ).first()
 
 
 @app.post("/orgas", response_model=OrgaMembershipOut)
@@ -7835,6 +7891,8 @@ def create_organization(
         city=(payload.city or "").strip() or None,
         org_type=(payload.org_type or "").strip() or None,
         website_url=(payload.website_url or "").strip() or None,
+        instagram_handle=(payload.instagram_handle or "").strip() or None,
+        visibility=(payload.visibility or "PUBLIC").upper(),
         created_by_user_id=user.id,
         created_at=now_utc(),
     )
@@ -7845,12 +7903,15 @@ def create_organization(
         organization_id=org.id,
         user_id=user.id,
         role="OWNER",
+        status="ACTIVE",
+        joined_at=now_utc(),
+        updated_at=now_utc(),
         created_by_user_id=user.id,
         created_at=now_utc(),
     )
     db.add(membership)
 
-    response = {"orga": _orga_to_out(org), "role": "OWNER"}
+    response = {"orga": _orga_to_out(org), "role": "OWNER", "status": "ACTIVE"}
     db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_create", idempotency_key=key, response_json=response))
     write_audit_log(
         db,
@@ -7905,7 +7966,7 @@ def my_orgas(
         .where(OrganizationMembership.user_id == user.id)
         .order_by(Organization.name.asc())
     ).all()
-    return [{"orga": _orga_to_out(org), "role": membership.role} for membership, org in rows]
+    return [{"orga": _orga_to_out(org), "role": membership.role, "status": (membership.status or "ACTIVE")} for membership, org in rows]
 
 
 @app.get("/orgas/{org_id}", response_model=OrgaOut)
@@ -7979,7 +8040,7 @@ def join_orga_by_code(
         OrganizationMembership.user_id == user.id,
     ).first()
     if membership:
-        response = {"ok": True, "organization_id": invite.organization_id, "role": membership.role, "idempotent": True}
+        response = {"ok": True, "organization_id": invite.organization_id, "role": membership.role, "status": membership.status, "idempotent": True}
         db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_join_by_code", idempotency_key=key, response_json=response))
         db.commit()
         return response
@@ -7988,12 +8049,15 @@ def join_orga_by_code(
         organization_id=invite.organization_id,
         user_id=user.id,
         role=invite.role,
+        status="ACTIVE",
+        joined_at=now,
+        updated_at=now,
         created_by_user_id=invite.created_by_user_id,
         created_at=now,
     )
     invite.used_count += 1
     db.add(membership)
-    response = {"ok": True, "organization_id": invite.organization_id, "role": invite.role, "idempotent": False}
+    response = {"ok": True, "organization_id": invite.organization_id, "role": invite.role, "status": "ACTIVE", "idempotent": False}
     db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_join_by_code", idempotency_key=key, response_json=response))
     write_audit_log(
         db,
@@ -8042,8 +8106,229 @@ def get_orga_invite(
     deeplink = f"tore://orgas/join?code={code}&orgId={org_id}"
     return {
         "org_id": org_id,
+        "invite_code": code,
         "code": code,
         "deeplink": deeplink,
+        "https_link": f"https://app.tore.be/orgas/join?code={code}&orgId={org_id}",
         "qr_payload": deeplink,
         "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
     }
+
+
+@app.get("/orgas/{org_id}/members")
+def list_orga_members(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    rows = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id).order_by(OrganizationMembership.joined_at.asc()).all()
+    return {"items": [{"id": r.id, "user_id": r.user_id, "role": r.role, "status": r.status, "joined_at": _serialize_dt(r.joined_at)} for r in rows]}
+
+
+@app.post("/orgas/{org_id}/members")
+def upsert_orga_member(org_id: int, payload: OrgaMemberUpsertIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    actor = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_members_upsert:{org_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id, OrganizationMembership.user_id == payload.user_id).first()
+    if row:
+        row.role = payload.role
+        row.status = "ACTIVE"
+        row.updated_at = now_utc()
+    else:
+        row = OrganizationMembership(organization_id=org_id, user_id=payload.user_id, role=payload.role, status="ACTIVE", joined_at=now_utc(), updated_at=now_utc(), created_by_user_id=user.id, created_at=now_utc())
+        db.add(row)
+    response = {"ok": True, "idempotent": False, "organization_id": org_id, "user_id": payload.user_id, "role": row.role}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=actor.role, action="organization.membership.upsert", entity_type="organization_membership", entity_id=f"{org_id}:{payload.user_id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}", "role": row.role})
+    db.commit()
+    return response
+
+
+@app.post("/orgas/{org_id}/leave")
+def leave_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_leave:{org_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = _membership_for(db, org_id=org_id, user_id=user.id)
+    if not row:
+        response = {"ok": True, "idempotent": True, "organization_id": org_id}
+    else:
+        db.delete(row)
+        response = {"ok": True, "idempotent": False, "organization_id": org_id}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=(row.role if row else "MEMBER"), action="organization.membership.leave", entity_type="organization_membership", entity_id=f"{org_id}:{user.id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
+    db.commit()
+    return response
+
+
+@app.post("/orgas/{org_id}/follow")
+def follow_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_follow:{org_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id, OrganizationMembership.user_id == user.id).first()
+    if row and row.role == "FOLLOWER" and row.status == "ACTIVE":
+        response = {"ok": True, "idempotent": True, "organization_id": org_id, "role": "FOLLOWER"}
+    else:
+        if not row:
+            row = OrganizationMembership(organization_id=org_id, user_id=user.id, role="FOLLOWER", status="ACTIVE", joined_at=now_utc(), updated_at=now_utc(), created_by_user_id=user.id, created_at=now_utc())
+            db.add(row)
+        else:
+            row.role = "FOLLOWER"
+            row.status = "ACTIVE"
+            row.updated_at = now_utc()
+        response = {"ok": True, "idempotent": False, "organization_id": org_id, "role": "FOLLOWER"}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role="FOLLOWER", action="organization.follow", entity_type="organization_membership", entity_id=f"{org_id}:{user.id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
+    db.commit()
+    return response
+
+
+@app.post("/orgas/{org_id}/unfollow")
+def unfollow_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_unfollow:{org_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id, OrganizationMembership.user_id == user.id, OrganizationMembership.role == "FOLLOWER").first()
+    if row:
+        db.delete(row)
+        response = {"ok": True, "idempotent": False, "organization_id": org_id}
+    else:
+        response = {"ok": True, "idempotent": True, "organization_id": org_id}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role="FOLLOWER", action="organization.unfollow", entity_type="organization_membership", entity_id=f"{org_id}:{user.id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
+    db.commit()
+    return response
+
+
+@app.get("/orgas/{org_id}/posts")
+def list_orga_posts(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = db.get(Organization, org_id)
+    if not org:
+        raise HTTPException(404, "Organization not found")
+    if org.visibility == "PRIVATE":
+        if not user or not _membership_for(db, org_id=org_id, user_id=user.id):
+            raise HTTPException(403, "Forbidden")
+    rows = db.query(OrgaPost).filter(OrgaPost.organization_id == org_id, OrgaPost.deleted_at.is_(None)).order_by(OrgaPost.pinned.desc(), OrgaPost.created_at.desc()).all()
+    return {"items": [{"id": r.id, "organization_id": r.organization_id, "author_user_id": r.author_user_id, "text": r.text, "image_url": r.image_url, "pinned": bool(r.pinned), "created_at": _serialize_dt(r.created_at)} for r in rows]}
+
+
+@app.post("/orgas/{org_id}/posts")
+def create_orga_post(org_id: int, payload: OrgaPostCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    membership = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MEMBER")
+    enforce_rate_limit("orga_posts_create", f"{org_id}:{user.id}")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_post_create:{org_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = OrgaPost(organization_id=org_id, author_user_id=user.id, text=payload.text.strip(), image_url=(payload.image_url or "").strip() or None, pinned=False, created_at=now_utc())
+    db.add(row)
+    db.flush()
+    response = {"id": row.id, "organization_id": org_id, "author_user_id": user.id, "text": row.text, "image_url": row.image_url, "pinned": False, "created_at": _serialize_dt(row.created_at)}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=membership.role, action="organization.post.create", entity_type="organization_post", entity_id=str(row.id), event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
+    db.commit()
+    return response
+
+
+@app.post("/orgas/{org_id}/posts/{post_id}/pin")
+def pin_orga_post(org_id: int, post_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    membership = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_post_pin:{post_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = db.get(OrgaPost, post_id)
+    if not row or row.organization_id != org_id:
+        raise HTTPException(404, "Post not found")
+    row.pinned = True
+    response = {"ok": True, "post_id": post_id, "pinned": True}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=membership.role, action="organization.post.pin", entity_type="organization_post", entity_id=str(post_id), event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
+    db.commit()
+    return response
+
+
+@app.post("/orgas/{org_id}/posts/{post_id}/delete")
+def delete_orga_post(org_id: int, post_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    membership = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_post_delete:{post_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    row = db.get(OrgaPost, post_id)
+    if not row or row.organization_id != org_id:
+        raise HTTPException(404, "Post not found")
+    row.deleted_at = now_utc()
+    response = {"ok": True, "post_id": post_id, "deleted": True}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=membership.role, action="organization.post.delete", entity_type="organization_post", entity_id=str(post_id), event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
+    db.commit()
+    return response
+
+
+@app.get("/users/{user_id}")
+def get_public_user_profile(user_id: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    target = db.get(AppUser, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    if (target.profile_visibility or "PUBLIC") == "PRIVATE" and (not user or user.id != target.id):
+        raise HTTPException(403, "Forbidden")
+    orgas = db.execute(select(OrganizationMembership, Organization).join(Organization, Organization.id == OrganizationMembership.organization_id).where(OrganizationMembership.user_id == target.id, OrganizationMembership.status == "ACTIVE", OrganizationMembership.role != "FOLLOWER")).all()
+    my_events = db.query(Event).filter(Event.created_by_user_id == target.id).order_by(Event.starts_at.desc()).limit(25).all()
+    return {
+        "id": target.id,
+        "display_name": target.display_name,
+        "photo_url": target.avatar_url,
+        "bio": target.bio,
+        "instagram_handle": target.instagram_handle,
+        "visibility": target.profile_visibility or "PUBLIC",
+        "orgas": [{"id": org.id, "name": org.name, "role": m.role} for m, org in orgas],
+        "events": [{"id": e.id, "name": e.name, "startAt": _serialize_dt(e.starts_at)} for e in my_events],
+    }
+
+
+@app.get("/me/profile")
+def me_profile(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    return get_public_user_profile(user.id, user, db)
+
+
+@app.put("/me/profile")
+def put_me_profile(payload: MeProfilePutIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    key = ensure_idempotency_key(idempotency_key)
+    action = "me_profile_put"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+    if not payload.display_name.strip():
+        raise HTTPException(status_code=422, detail={"reason": "DISPLAY_NAME_REQUIRED", "message": "display_name required"})
+    row = db.get(AppUser, user.id)
+    if not row:
+        raise HTTPException(404, "User not found")
+    row.display_name = payload.display_name.strip()
+    row.avatar_url = (payload.photo_url or "").strip() or None
+    row.bio = (payload.bio or "").strip() or None
+    row.instagram_handle = (payload.instagram_handle or "").strip() or None
+    row.profile_visibility = payload.visibility
+    response = {
+        "id": row.id,
+        "display_name": row.display_name,
+        "photo_url": row.avatar_url,
+        "bio": row.bio,
+        "instagram_handle": row.instagram_handle,
+        "visibility": row.profile_visibility,
+    }
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role="user", action="user.profile.update", entity_type="app_user", entity_id=row.id, event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"user:{row.id}", "visibility": row.profile_visibility})
+    db.commit()
+    return response
