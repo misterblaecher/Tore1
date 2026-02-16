@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../state.dart';
+import '../../../core/auth/providers.dart';
+import '../../../shared/widgets/network_banner.dart';
+import 'email_auth_screen.dart';
 
 class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
@@ -11,22 +13,37 @@ class WelcomeScreen extends ConsumerStatefulWidget {
 }
 
 class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
-  bool _loading = false;
+  bool _loadingGuest = false;
+  bool _loadingGoogle = false;
   String? _error;
 
-  Future<void> _continue() async {
+  Future<void> _continueGuest() async {
     setState(() {
-      _loading = true;
       _error = null;
+      _loadingGuest = true;
     });
     try {
-      await ref.read(authRepositoryProvider).ensureGuestSession();
-      await ref.read(appBootProvider.notifier).bootstrap();
+      await ref.read(authSessionProvider.notifier).continueAsGuest();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Erreur réseau, réessaie.');
+      setState(() => _error = 'Impossible de démarrer le mode invité.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _loadingGuest = false);
+    }
+  }
+
+  Future<void> _continueGoogle() async {
+    setState(() {
+      _error = null;
+      _loadingGoogle = true;
+    });
+    try {
+      await ref.read(authSessionProvider.notifier).loginWithGoogle();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _loadingGoogle = false);
     }
   }
 
@@ -34,28 +51,47 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              Text('TORÈ', style: Theme.of(context).textTheme.headlineMedium, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              const Text('Scanne un QR pour rejoindre ton event.', textAlign: TextAlign.center),
-              const Spacer(),
-              if (_error != null) ...[
-                Text(_error!, textAlign: TextAlign.center),
-                const SizedBox(height: 8),
-              ],
-              FilledButton(
-                onPressed: _loading ? null : _continue,
-                child: _loading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Continuer'),
+        child: Column(
+          children: [
+            const ToreNetworkBanner(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Spacer(),
+                    Text('TORÈ', style: Theme.of(context).textTheme.headlineMedium, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    const Text('Choisis une méthode de connexion.', textAlign: TextAlign.center),
+                    const Spacer(),
+                    if (_error != null) ...[
+                      Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+                      const SizedBox(height: 8),
+                    ],
+                    FilledButton(
+                      onPressed: _loadingGuest ? null : _continueGuest,
+                      child: _loadingGuest
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Continuer en invité'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: _loadingGoogle ? null : _continueGoogle,
+                      child: _loadingGoogle
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Continuer avec Google'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
+                      child: const Text('Continuer par Email'),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { getToken } from './lib/auth'
 import { hasBarModeAccess, hasGlobalAdmin, hasOrgaHubAccess, hasOrgaManagerAccess } from './lib/authz'
 import Login from './pages/Login'
@@ -50,7 +50,8 @@ import CreateOrga from './pages/CreateOrga'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
-  if (!token) return <Navigate to="/login" replace />
+  const location = useLocation()
+  if (!token) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return <>{children}</>
 }
 

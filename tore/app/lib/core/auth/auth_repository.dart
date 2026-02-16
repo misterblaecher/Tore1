@@ -1,48 +1,63 @@
 import 'package:dio/dio.dart';
 
 import '../network/api_client.dart';
-import '../network/api_endpoints.dart'; // ✅ AJOUTE ÇA
+import '../network/api_endpoints.dart';
 import 'auth_models.dart';
+
+class AuthTokens {
+  final String accessToken;
+  final String refreshToken;
+
+  const AuthTokens({required this.accessToken, required this.refreshToken});
+}
+
+class EmailRequestResult {
+  final String? devToken;
+
+  const EmailRequestResult({this.devToken});
+}
 
 class AuthRepository {
   final ApiClient api;
 
   AuthRepository(this.api);
 
-  /// Assure qu'un token guest existe (persisté). Si le token est invalide (401),
-  /// on en recrée un automatiquement.
-  Future<AppUser> ensureGuestSession({String? displayName}) async {
-    final token = await api.tokenStorage.readToken();
-    if (token != null && token.isNotEmpty) {
-      final me = await _tryMe();
-      if (me != null) return me;
-      await api.tokenStorage.clear();
-    }
-
-    // Créer un guest
-      final r = await api.dio.post(
-        ApiEndpoints.authGuest,
-        data: {
-          if (displayName != null) 'display_name': displayName,
-        },
-      );
-
-    final data = (r.data as Map).cast<String, dynamic>();
-    final newToken = (data['token'] ?? '').toString();
-    if (newToken.isEmpty) {
-      throw Exception('Token manquant dans /auth/guest');
-    }
-    await api.tokenStorage.writeToken(newToken);
-
-    final userJson =
-        (data['user'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    return AppUser.fromJson(userJson);
-  }
-
   Future<AppUser> getMe() async {
     final r = await api.dio.get(ApiEndpoints.authMe);
     final data = (r.data as Map).cast<String, dynamic>();
     return AppUser.fromJson(data);
+  }
+
+  Future<AppUser?> tryMe() async {
+    try {
+      return await getMe();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) return null;
+      rethrow;
+    }
+  }
+
+  Future<AuthTokens> loginWithGoogle(String idToken) async {
+    final r = await api.dio.post(ApiEndpoints.authGoogle, data: {'idToken': idToken});
+    return _parseTokens(r.data);
+  }
+
+  Future<EmailRequestResult> requestEmailLink(String email) async {
+    final r = await api.dio.post(ApiEndpoints.authEmailRequestLink, data: {'email': email});
+    final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    return EmailRequestResult(devToken: (data['token'] ?? data['dev_token'])?.toString());
+  }
+
+  Future<AuthTokens> verifyEmailLink({required String email, required String token}) async {
+    final r = await api.dio.post(
+      ApiEndpoints.authEmailVerifyLink,
+      data: {'email': email, 'token': token},
+    );
+    return _parseTokens(r.data);
+  }
+
+  Future<void> upgradeGuest({required String guestDeviceId}) async {
+    await api.dio.post(ApiEndpoints.authUpgradeGuest, data: {'guest_device_id': guestDeviceId});
   }
 
   Future<AppUser> patchMe({
@@ -67,12 +82,13 @@ class AuthRepository {
     return AppUser.fromJson(data);
   }
 
-  Future<AppUser?> _tryMe() async {
-    try {
-      return await getMe();
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 401) return null;
-      rethrow;
+  AuthTokens _parseTokens(dynamic rawData) {
+    final data = (rawData as Map).cast<String, dynamic>();
+    final access = (data['access_token'] ?? data['accessToken'] ?? '').toString();
+    final refresh = (data['refresh_token'] ?? data['refreshToken'] ?? '').toString();
+    if (access.isEmpty || refresh.isEmpty) {
+      throw Exception('Réponse auth invalide: tokens manquants');
     }
+    return AuthTokens(accessToken: access, refreshToken: refresh);
   }
 }

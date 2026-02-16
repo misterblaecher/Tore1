@@ -6,6 +6,7 @@ class TokenStorage {
   static const _accessKey = 'auth_token';
   static const _refreshKey = 'auth_refresh_token';
   static const _guestDeviceIdKey = 'guest_device_id';
+  static const _guestModeKey = 'guest_mode_enabled';
 
   Future<void> writeToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,10 +49,21 @@ class TokenStorage {
     return prefs.getString(_guestDeviceIdKey);
   }
 
+  Future<void> writeGuestModeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_guestModeKey, enabled);
+  }
+
+  Future<bool> readGuestModeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_guestModeKey) ?? false;
+  }
+
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_accessKey);
     await prefs.remove(_refreshKey);
+    await prefs.remove(_guestModeKey);
     if (AppConfig.enableAuthLogs) {
       debugPrint('🗑️ TOKENS CLEARED');
     }

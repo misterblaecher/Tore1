@@ -4,12 +4,13 @@ import 'package:dio/dio.dart';
 import 'api.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_models.dart';
+import 'core/auth/auth_session_provider.dart';
 import 'core/network/api_exception.dart';
 import 'core/network/providers.dart';
 import 'features/health/presentation/health_providers.dart';
 import 'shared/cache/cache_providers.dart';
 
-enum AppBootStatus { needsWelcome, ready }
+enum AppBootStatus { ready }
 
 enum BootStatus {
   bootLoading,
@@ -69,19 +70,7 @@ class AppBootController extends StateNotifier<AppBootState> {
         return;
       }
 
-      final auth = ref.read(authRepositoryProvider);
-      final token = await auth.api.tokenStorage.readToken();
-      if (token == null || token.isEmpty) {
-        if (kDebugMode) debugPrint('[boot] online / no token -> welcome');
-        state = const AppBootState(
-          bootStatus: BootStatus.bootOnline,
-          status: AppBootStatus.needsWelcome,
-        );
-        return;
-      }
-
-      await auth.ensureGuestSession();
-      if (kDebugMode) debugPrint('[boot] online / session ready');
+      if (kDebugMode) debugPrint('[boot] online / app ready');
       state = const AppBootState(
         bootStatus: BootStatus.bootOnline,
         status: AppBootStatus.ready,
@@ -126,11 +115,24 @@ final isReadOnlyProvider = Provider<bool>((ref) {
   return ref.watch(appBootProvider).isReadOnly;
 });
 
-/// ✅ Le user "connecté" (guest) récupéré depuis /auth/me
 final meProvider = FutureProvider<AppUser>((ref) async {
+  final session = ref.watch(authSessionProvider);
+  if (session.isGuest) {
+    final guestId = await ref.read(authRepositoryProvider).api.tokenStorage.readGuestDeviceId();
+    return AppUser(
+      id: guestId ?? 'guest',
+      displayName: 'Invité',
+      avatarUrl: null,
+      addressText: null,
+      showAddress: false,
+      showAvatar: true,
+      showIdentityToStaff: false,
+      visibility: 'public',
+      showIdentityInBar: false,
+    );
+  }
   final auth = ref.read(authRepositoryProvider);
-  // Ça garantit token valide + retourne un user
-  return auth.ensureGuestSession();
+  return auth.getMe();
 });
 
 /// ✅ Juste l'id (string) dérivé de meProvider
