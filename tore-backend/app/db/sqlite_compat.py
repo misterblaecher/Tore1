@@ -61,6 +61,73 @@ def ensure_battles_tables(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE battle_participants ADD COLUMN joined_at DATETIME"))
 
 
+
+
+def ensure_event_battles_v1_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_battle_rounds (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                title VARCHAR(180) DEFAULT '' NOT NULL,
+                kind VARCHAR(24) DEFAULT 'PARTICIPATION' NOT NULL,
+                optionA_label VARCHAR(120),
+                optionB_label VARCHAR(120),
+                status VARCHAR(16) DEFAULT 'IDLE' NOT NULL,
+                starts_at DATETIME,
+                ends_at DATETIME,
+                locked_at DATETIME,
+                created_by VARCHAR(120) DEFAULT '' NOT NULL,
+                created_at DATETIME,
+                winner VARCHAR(12) DEFAULT 'NONE' NOT NULL,
+                winner_count_a INTEGER DEFAULT 0 NOT NULL,
+                winner_count_b INTEGER DEFAULT 0 NOT NULL
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_battle_rounds_event_id ON event_battle_rounds (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_battle_rounds_status ON event_battle_rounds (status)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_battle_votes (
+                id INTEGER NOT NULL PRIMARY KEY,
+                round_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                choice VARCHAR(16) DEFAULT 'PARTICIPATE' NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_event_battle_vote_round_user UNIQUE (round_id, user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_battle_votes_round_id ON event_battle_votes (round_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_battle_votes_user_id ON event_battle_votes (user_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_battle_scores (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                score INTEGER DEFAULT 0 NOT NULL,
+                last_updated_at DATETIME,
+                CONSTRAINT uq_event_battle_score_event_user UNIQUE (event_id, user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_battle_scores_event_id ON event_battle_scores (event_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_battle_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                action_type VARCHAR(32) NOT NULL,
+                actor_id VARCHAR(120) NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_battle_idem UNIQUE (event_id, action_type, actor_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_battle_idempotency_event_id ON event_battle_idempotency (event_id)"))
+
 def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_battles_tables(engine)
     ensure_order_items_market_item_id(engine)
@@ -78,6 +145,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_incidents_tables(engine)
     ensure_profitability_tables(engine)
     ensure_menu_admin_columns(engine)
+    ensure_event_battles_v1_tables(engine)
 
 
 def ensure_profitability_tables(engine: Engine) -> None:
