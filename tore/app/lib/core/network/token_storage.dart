@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
-import '../../config.dart';
+import '../../config/app_config.dart';
 
 class TokenStorage {
   static const _key = 'auth_token';

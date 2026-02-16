@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import '../../config.dart';
+import '../../config/app_config.dart';
 import 'api_endpoints.dart';
 import 'api_exception.dart';
 import 'auth_interceptor.dart';
