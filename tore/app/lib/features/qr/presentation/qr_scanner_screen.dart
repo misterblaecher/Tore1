@@ -1,10 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../core/perf/perf_tracer.dart';
+import '../../../core/perf/scan_suppression.dart';
+import '../../../core/qr/qr_parser.dart';
 import '../qr_router.dart';
 
 enum QrScannerMode { route, pickRaw }
@@ -27,8 +31,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   bool _handling = false;
   bool _torchOn = false;
   int _failedScans = 0;
-  String? _lastRaw;
-  DateTime? _lastHandledAt;
+  final ScanSuppression _suppression = ScanSuppression();
   QrRouteOutcome? _lastOutcome;
   final List<String> _microLog = [];
 
@@ -38,54 +41,72 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     super.dispose();
   }
 
-  bool _isCooldownHit(String raw) {
-    final now = DateTime.now();
-    final isSame = _lastRaw == raw;
-    final isFast = _lastHandledAt != null && now.difference(_lastHandledAt!).inMilliseconds < 800;
-    _lastRaw = raw;
-    _lastHandledAt = now;
-    return isSame && isFast;
+  bool _localValidate(QrPayload payload) {
+    final expiry = payload.expiresAt;
+    if (expiry != null && expiry.isBefore(DateTime.now())) {
+      setState(() => _lastOutcome = const QrRouteOutcome.denied('QR expiré'));
+      return false;
+    }
+    return true;
   }
 
   Future<void> _handleDetectedRaw(String raw) async {
-    if (_handling || _isCooldownHit(raw)) return;
+    final now = DateTime.now();
+    final qrHash = hashQr(raw);
+    if (_handling || _suppression.shouldSuppress(hash: qrHash, now: now)) return;
+
+    HapticFeedback.selectionClick();
+    SystemSound.play(SystemSoundType.click);
+    setState(() => _lastOutcome = const QrRouteOutcome.success('Scan détecté…'));
+    ref.read(perfTracerProvider).mark('scan_detected');
 
     if (widget.mode == QrScannerMode.pickRaw) {
-      await HapticFeedback.selectionClick();
       if (!mounted) return;
       Navigator.of(context).pop(raw.trim());
       return;
     }
 
+    final payload = ref.read(qrParserProvider).parse(raw);
+    if (!_localValidate(payload)) return;
+
     setState(() => _handling = true);
     await _controller.stop();
     if (!mounted) return;
 
-    await ref.read(qrRouterServiceProvider).route(
-      context: context,
-      raw: raw,
-      onOutcome: (outcome) {
-        if (!mounted) return;
-        final ts = TimeOfDay.now().format(context);
-        _microLog.insert(0, '$ts · ${outcome.label}');
-        if (_microLog.length > 3) {
-          _microLog.removeRange(3, _microLog.length);
-        }
-        if (outcome.status == QrRouteStatus.success) {
-          _failedScans = 0;
-          HapticFeedback.lightImpact();
-          SystemSound.play(SystemSoundType.click);
-        } else {
-          _failedScans += 1;
-          HapticFeedback.mediumImpact();
-        }
-        setState(() => _lastOutcome = outcome);
-      },
-    );
+    SchedulerBinding.instance.addPostFrameCallback((_) async {
+      ref.read(perfTracerProvider).mark('route_resolved');
+      await ref.read(qrRouterServiceProvider).route(
+          context: context,
+          raw: raw,
+          onOutcome: (outcome) {
+            if (!mounted) return;
+            final ts = TimeOfDay.now().format(context);
+            _microLog.insert(0, '$ts · ${outcome.label}');
+            if (_microLog.length > 3) {
+              _microLog.removeRange(3, _microLog.length);
+            }
+            if (outcome.status == QrRouteStatus.success) {
+              _failedScans = 0;
+              HapticFeedback.lightImpact();
+            } else {
+              _failedScans += 1;
+              HapticFeedback.mediumImpact();
+            }
+            setState(() => _lastOutcome = outcome);
+          },
+        );
 
-    if (!mounted) return;
-    setState(() => _handling = false);
-    unawaited(_controller.start());
+      final tracer = ref.read(perfTracerProvider);
+      tracer.mark('screen_pushed');
+      final elapsed = tracer.elapsedBetween('scan_detected', 'screen_pushed');
+      if (elapsed != null) {
+        tracer.measure(PerfMetricKey.scannerFlow, elapsed);
+      }
+
+      if (!mounted) return;
+      setState(() => _handling = false);
+      unawaited(_controller.start());
+    });
   }
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {

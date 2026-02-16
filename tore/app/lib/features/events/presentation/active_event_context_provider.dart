@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/network_state_provider.dart';
+import '../../../core/perf/prefetch.dart';
 import '../../../state.dart';
 
 class ActiveEventContext {
@@ -119,6 +120,7 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
           lastUpdatedAt: _readDateTime(payload['lastUpdatedAt'] ?? payload['lastStateUpdatedAt']),
         ),
       );
+      prefetchEventEssentials(ref, eventId, modulesOn: modules);
     } catch (error, stackTrace) {
       final current = state.valueOrNull;
       if (current == null) {

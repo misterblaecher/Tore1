@@ -8,6 +8,8 @@ import 'features/auth/presentation/welcome_screen.dart';
 import 'package:tore/theme/theme.dart';
 import 'state.dart';
 import 'core/network/providers.dart';
+import 'core/perf/perf_overlay.dart';
+import 'core/perf/perf_tracer.dart';
 import 'config/app_config.dart';
 
 Future<void> main() async {
@@ -36,6 +38,14 @@ class ToreApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
       routes: {
         '/bars': (_) => const BarsScreen(),
+      },
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            const PerfOverlay(),
+          ],
+        );
       },
       onGenerateRoute: (settings) {
         final name = settings.name;
@@ -105,7 +115,7 @@ class _BootEntryState extends ConsumerState<_BootEntry> {
   }
 }
 
-class _BootSplash extends StatelessWidget {
+class _BootSplash extends ConsumerWidget {
   const _BootSplash({
     required this.title,
     required this.status,
@@ -121,7 +131,7 @@ class _BootSplash extends StatelessWidget {
   final VoidCallback? onContinueReadOnly;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: Center(
         child: Padding(
@@ -129,7 +139,15 @@ class _BootSplash extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(title, style: Theme.of(context).textTheme.headlineMedium),
+              GestureDetector(
+                onLongPress: () {
+                  final isDev = ref.read(appConfigProvider).environmentName == 'dev';
+                  if (!isDev) return;
+                  final enabled = ref.read(perfOverlayEnabledProvider);
+                  ref.read(perfOverlayEnabledProvider.notifier).state = !enabled;
+                },
+                child: Text(title, style: Theme.of(context).textTheme.headlineMedium),
+              ),
               const SizedBox(height: 16),
               if (onRetry == null) ...[
                 const CircularProgressIndicator(),

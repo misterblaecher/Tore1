@@ -1,10 +1,12 @@
 import 'package:tore/core/network/api_client.dart';
 import 'package:tore/core/network/api_endpoints.dart';
+import 'package:tore/core/perf/perf_tracer.dart';
 import 'market_models.dart';
 
 class MarketRepository {
   final ApiClient api;
-  MarketRepository(this.api);
+  final PerfTracer tracer;
+  MarketRepository(this.api, this.tracer);
 
   Future<List<MarketDrink>> fetchMenu({required int eventId}) async {
     final r = await api.dio.get(ApiEndpoints.eventMenu(eventId));
@@ -32,6 +34,6 @@ class MarketRepository {
       'gift_to_user_id': giftToUserId,
     };
 
-    await api.dio.post(ApiEndpoints.orders, data: payload);
+    await tracer.timeAsync(PerfMetricKey.orderCreate, () => api.dio.post(ApiEndpoints.orders, data: payload));
   }
 }

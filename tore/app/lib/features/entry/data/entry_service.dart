@@ -1,11 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/network/providers.dart';
+import 'package:tore/core/perf/perf_tracer.dart';
 
 class EntryService {
-  EntryService(this._dio);
+  EntryService(this._dio, this._tracer);
 
   final Dio _dio;
+  final PerfTracer _tracer;
 
   Future<Map<String, dynamic>> scanEntry({
     required int eventId,
@@ -30,16 +32,18 @@ class EntryService {
     required String idempotencyKey,
     DateTime? scannedAt,
   }) async {
-    final res = await _dio.post(
-      '/events/$eventId/entry/checkin',
-      data: {
-        'ticket_qr_raw': rawQr,
-        'scanned_at': (scannedAt ?? DateTime.now()).toIso8601String(),
-        'device_id': deviceId,
-      },
-      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
-    );
-    return Map<String, dynamic>.from(res.data as Map);
+    return _tracer.timeAsync(PerfMetricKey.entryCheckin, () async {
+      final res = await _dio.post(
+        '/events/$eventId/entry/checkin',
+        data: {
+          'ticket_qr_raw': rawQr,
+          'scanned_at': (scannedAt ?? DateTime.now()).toIso8601String(),
+          'device_id': deviceId,
+        },
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      );
+      return Map<String, dynamic>.from(res.data as Map);
+    });
   }
 
   Future<Map<String, dynamic>> getEntryCount(int eventId) async {
@@ -76,5 +80,5 @@ class EntryService {
 
 final entryServiceProvider = Provider<EntryService>((ref) {
   final client = ref.watch(apiClientProvider);
-  return EntryService(client.dio);
+  return EntryService(client.dio, ref.watch(perfTracerProvider));
 });
