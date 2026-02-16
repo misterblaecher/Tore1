@@ -1556,6 +1556,54 @@ class CommitteeBaptemeIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class CommitteeGlossarySettings(Base):
+    __tablename__ = "committee_glossary_settings"
+    __table_args__ = (
+        UniqueConstraint("committee_id", name="uq_committee_glossary_settings_committee"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    public_enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+
+
+class CommitteeGlossaryTerm(Base):
+    __tablename__ = "committee_glossary_terms"
+    __table_args__ = (
+        Index("ix_committee_glossary_terms_feed", "committee_id", "status", "year_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_id: Mapped[Optional[int]] = mapped_column(ForeignKey("committee_years.id"), nullable=True, index=True)
+    term: Mapped[str] = mapped_column(String(140), index=True)
+    definition: Mapped[str] = mapped_column(Text)
+    examples: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tags_json: Mapped[list] = mapped_column(JSON, default=list)
+    is_official: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+
+
+class CommitteeGlossaryIdempotency(Base):
+    __tablename__ = "committee_glossary_idempotency"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "action", "idempotency_key", name="uq_committee_glossary_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    action: Mapped[str] = mapped_column(String(48), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
