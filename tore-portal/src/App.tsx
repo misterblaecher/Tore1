@@ -46,6 +46,7 @@ import OrgaEventMap from './pages/OrgaEventMap'
 import AdminAuditGlobal from './pages/AdminAuditGlobal'
 import AdminUsersGlobal from './pages/AdminUsersGlobal'
 import AdminFlagsGlobal from './pages/AdminFlagsGlobal'
+import CreateOrga from './pages/CreateOrga'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -113,6 +114,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/create-orga"
+        element={
+          <RequireAuth>
+            <CreateOrga />
           </RequireAuth>
         }
       />

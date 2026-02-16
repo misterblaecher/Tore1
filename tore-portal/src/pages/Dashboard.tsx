@@ -186,6 +186,21 @@ export default function Dashboard() {
           Ouvrir Polymarket Global
         </Link>
         <Link
+          to="/create-orga"
+          style={{
+            display: 'inline-block',
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(100,255,180,0.45)',
+            background: 'rgba(100,255,180,0.2)',
+            color: '#fff',
+            fontWeight: 800,
+            textDecoration: 'none',
+          }}
+        >
+          Create Orga
+        </Link>
+        <Link
           to="/analytics"
           style={{
             display: 'inline-block',

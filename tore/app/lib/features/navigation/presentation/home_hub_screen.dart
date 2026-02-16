@@ -10,6 +10,7 @@ import 'package:tore/features/committees/presentation/committees_screens.dart';
 import 'package:tore/features/glossary/glossary_screens.dart';
 import 'package:tore/features/navigation/presentation/ticker_screen.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
+import 'package:tore/features/community/presentation/community_screen.dart';
 import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
 import 'package:tore/features/ticker/ticker_providers.dart';
 import 'package:tore/features/wallet/presentation/wallet_screen.dart';
@@ -108,6 +109,13 @@ class HomeHubScreen extends ConsumerWidget {
               title: 'Calendrier',
               subtitle: 'Events publics: Live / Today / Upcoming',
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen())),
+            ),
+          if (!hasEvent)
+            _ModuleCard(
+              icon: Icons.groups_outlined,
+              title: 'Communauté',
+              subtitle: 'Explorer + Join by code + Mes orgas',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityScreen())),
             ),
           if (hasEvent)
             _ModuleCard(
