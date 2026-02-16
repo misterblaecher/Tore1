@@ -125,7 +125,7 @@ def create_order_route(
     if token_user_id and payload.user_id and payload.user_id != token_user_id:
         raise HTTPException(403, "Forbidden")
 
-    idem_key = ensure_idempotency_key(idempotency_header)
+    idem_key = ensure_idempotency_key(idempotency_header or payload.idempotency_key)
 
     order = create_order(
         db,
