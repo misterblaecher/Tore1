@@ -148,6 +148,45 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_event_battles_v1_tables(engine)
     ensure_event_safety_v1_tables(engine)
     ensure_organization_tables(engine)
+    ensure_auth_tables(engine)
+
+
+def ensure_auth_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS auth_magic_links (
+                id INTEGER NOT NULL PRIMARY KEY,
+                email VARCHAR(255) NOT NULL,
+                token_hash VARCHAR(64) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                used_at DATETIME,
+                request_ip VARCHAR(64),
+                request_device VARCHAR(180),
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_magic_links_email ON auth_magic_links (email)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_magic_links_token_hash ON auth_magic_links (token_hash)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_magic_links_expires_at ON auth_magic_links (expires_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_magic_links_used_at ON auth_magic_links (used_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id INTEGER NOT NULL PRIMARY KEY,
+                user_id VARCHAR NOT NULL,
+                token_hash VARCHAR(64) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                revoked_at DATETIME,
+                created_at DATETIME,
+                CONSTRAINT uq_refresh_tokens_token_hash UNIQUE (token_hash)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id ON refresh_tokens (user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON refresh_tokens (expires_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_refresh_tokens_revoked_at ON refresh_tokens (revoked_at)"))
 
 
 def ensure_organization_tables(engine: Engine) -> None:
