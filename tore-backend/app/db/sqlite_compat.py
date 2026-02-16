@@ -146,6 +146,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_profitability_tables(engine)
     ensure_menu_admin_columns(engine)
     ensure_event_battles_v1_tables(engine)
+    ensure_event_safety_v1_tables(engine)
 
 
 def ensure_profitability_tables(engine: Engine) -> None:
@@ -676,3 +677,67 @@ def ensure_menu_admin_columns(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_menu_admin_idempotency_event_id ON menu_admin_idempotency (event_id)"))
+
+
+
+def ensure_event_safety_v1_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_safety_settings (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                enabled BOOLEAN DEFAULT 1 NOT NULL,
+                orga_phone VARCHAR(64),
+                message_hint TEXT,
+                updated_at DATETIME,
+                updated_by INTEGER,
+                CONSTRAINT uq_event_safety_settings_event UNIQUE (event_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_safety_settings_event_id ON event_safety_settings (event_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_safety_buddies (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                buddy_user_id VARCHAR NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_event_safety_buddy_user UNIQUE (event_id, user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_safety_buddies_event_user ON event_safety_buddies (event_id, user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_safety_buddies_event_buddy ON event_safety_buddies (event_id, buddy_user_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_safety_checkins (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id VARCHAR NOT NULL,
+                type VARCHAR(16) NOT NULL,
+                created_at DATETIME,
+                resolved_at DATETIME,
+                resolved_by INTEGER,
+                resolve_reason VARCHAR(240),
+                assigned_to_user_id INTEGER
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_safety_checkins_event_created ON event_safety_checkins (event_id, created_at DESC, id DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_safety_checkins_event_type_resolved ON event_safety_checkins (event_id, type, resolved_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_safety_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                action VARCHAR(32) NOT NULL,
+                actor_scope VARCHAR(16) NOT NULL,
+                actor_id VARCHAR(64) NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_safety_idem UNIQUE (event_id, action, actor_scope, actor_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_safety_idempotency_event_id ON event_safety_idempotency (event_id)"))
