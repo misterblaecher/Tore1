@@ -150,10 +150,11 @@ class TickerController extends StateNotifier<TickerState> {
   }
 }
 
-final tickerControllerProvider = StateNotifierProvider.autoDispose
-    .family<TickerController, TickerState, int>((ref, eventId) {
-  ref.listen(networkStatusProvider, (_, __) {
-    ref.read(tickerControllerProvider(eventId).notifier)._startPolling();
-  });
-  return TickerController(ref, eventId);
-});
+final AutoDisposeStateNotifierProviderFamily<TickerController, TickerState, int>
+    tickerControllerProvider = StateNotifierProvider.autoDispose
+        .family<TickerController, TickerState, int>((ref, eventId) {
+      ref.listen(networkStatusProvider, (_, __) {
+        ref.read(tickerControllerProvider(eventId).notifier)._startPolling();
+      });
+      return TickerController(ref, eventId);
+    });

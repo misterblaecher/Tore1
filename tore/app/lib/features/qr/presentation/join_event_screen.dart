@@ -112,10 +112,11 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
       );
     } on DioException catch (e) {
       final detail = e.response?.data;
-      final reason = detail is Map ? detail['detail']?['reason']?.toString() : null;
+      final detailMap = detail is Map ? Map<String, dynamic>.from(detail) : const <String, dynamic>{};
+      final reason = (((detailMap['detail'] as Map?)?['reason'])?.toString());
       if (reason == 'charter_acceptance_required') {
-        final eventId = int.tryParse((detail['detail']?['event_id'] ?? '').toString());
-        final version = detail['detail']?['charter_version']?.toString();
+        final eventId = int.tryParse((((detailMap['detail'] as Map?)?['event_id']) ?? '').toString());
+        final version = (((detailMap['detail'] as Map?)?['charter_version'])?.toString());
         if (eventId != null && version != null) {
           final accepted = await _ensureCharterAcceptance(eventId: eventId, version: version);
           if (accepted) {

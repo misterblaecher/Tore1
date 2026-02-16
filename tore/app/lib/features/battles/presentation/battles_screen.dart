@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../api.dart';
-import '../../../shared/utils/write_gate.dart';
+import 'package:tore/core/write_gate.dart';
+import 'package:tore/state.dart';
 import '../battle_providers.dart';
 import 'battles_leaderboard_screen.dart';
 

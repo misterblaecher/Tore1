@@ -15,7 +15,7 @@ class AppConfig {
   static const String _defaultEnvironment = 'dev';
 
 
-  static String get apiBaseUrl => AppConfig.fromDartDefines().apiBaseUrl;
+  static String get apiBaseUrlResolved => AppConfig.fromDartDefines().apiBaseUrl;
 
   factory AppConfig.fromDartDefines() {
     const definedApiBaseUrl = String.fromEnvironment(_apiBaseUrlDefine, defaultValue: '');
