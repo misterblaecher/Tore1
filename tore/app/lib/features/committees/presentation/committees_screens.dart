@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/network/network_state_provider.dart';
+import 'package:tore/features/glossary/glossary_providers.dart';
+import 'package:tore/features/glossary/glossary_screens.dart';
 import 'package:tore/shared/utils/write_gate.dart';
 import 'package:tore/state.dart';
 
@@ -152,13 +154,24 @@ class CommitteeHomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Comité privé')),
       body: FutureBuilder(
-        future: Future.wait([ref.read(apiProvider).committeeMeWithCacheStatus(committeeId), ref.read(apiProvider).committeeYears(committeeId), ref.read(apiProvider).committee(committeeId)]),
+        future: Future.wait([
+          ref.read(apiProvider).committeeMeWithCacheStatus(committeeId),
+          ref.read(apiProvider).committeeYears(committeeId),
+          ref.read(apiProvider).committee(committeeId),
+          ref.read(apiProvider).modulesState(),
+        ]),
         builder: (context, snap) {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final meResult = snap.data![0] as CommitteeFetchResult;
           final me = meResult.payload as Map<String, dynamic>;
           final perms = (me['permissions'] as Map?)?.cast<String, dynamic>() ?? const {};
           final committee = snap.data![2] as Map<String, dynamic>;
+          final modules = snap.data![3] as Map<String, dynamic>;
+          final committeeModuleOn = modules['committee_os'] == true;
+          final glossaryModuleOn = modules['folklore_glossary'] == true;
+          final settingsAsync = glossaryModuleOn ? ref.watch(committeeGlossarySettingsProvider(committeeId)) : null;
+          final role = (me['membership']?['role'] ?? '').toString().toUpperCase();
+          final canModerateGlossary = ['MOD', 'ADMIN', 'OWNER'].contains(role);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -178,6 +191,40 @@ class CommitteeHomeScreen extends ConsumerWidget {
                   ),
                 )),
               ),
+              if (committeeModuleOn && glossaryModuleOn)
+                settingsAsync!.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (settings) => Column(
+                    children: [
+                      if (settings.data.publicEnabled)
+                        ListTile(
+                          title: const Text('Glossaire'),
+                          subtitle: const Text('Voir les termes du comité'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => GlossaryTermsScreen(
+                              committeeId: committeeId,
+                              committeeName: committee['name']?.toString() ?? 'Comité',
+                              isPublicScope: true,
+                            ),
+                          )),
+                        ),
+                      if (canModerateGlossary)
+                        ListTile(
+                          title: const Text('Gérer Glossaire'),
+                          subtitle: const Text('Toggle public + créer/éditer/archiver/delete'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => CommitteeGlossaryAdminScreen(
+                              committeeId: committeeId,
+                              committeeName: committee['name']?.toString() ?? 'Comité',
+                            ),
+                          )),
+                        ),
+                    ],
+                  ),
+                ),
               ListTile(
                 title: const Text('Finances'),
                 subtitle: Text(perms['can_manage_finances'] == true ? 'Ledger + exports + ajout entrées' : 'Ledger + exports (lecture)'),
