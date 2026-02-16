@@ -1,12 +1,12 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/community/community_models.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../../../state.dart';
+import 'event_share_pack_screen.dart';
 
 class EventManageLandingScreen extends ConsumerStatefulWidget {
   const EventManageLandingScreen({super.key, required this.event});
@@ -36,19 +36,7 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
   }
 
   Future<void> _sharePack() async {
-    if (!canWrite(ref, intent: WriteIntent.nonCritical)) return;
-    setState(() => _loading = true);
-    try {
-      final api = ref.read(apiProvider);
-      final share = await api.getEventShareV1(widget.event.id);
-      final code = await api.createStaffInviteCodeV1(eventId: widget.event.id, idempotencyKey: _idem('staff-invite'));
-      final text = '${share['webUrl'] ?? share['https_link'] ?? ''}\n${share['deeplink'] ?? ''}\nstaff code: ${code['code'] ?? '-'}';
-      await Clipboard.setData(ClipboardData(text: text));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Share pack copié')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventSharePackScreen(eventId: widget.event.id)));
   }
 
   @override
@@ -79,7 +67,7 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
               OutlinedButton.icon(
                 onPressed: _loading ? null : _sharePack,
                 icon: const Icon(Icons.ios_share_outlined),
-                label: const Text('Partager le lien'),
+                label: const Text('Share pack'),
               ),
               if (snapshot != null) ...[
                 const SizedBox(height: 12),

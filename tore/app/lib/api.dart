@@ -1354,11 +1354,55 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> createStaffInviteCodeV1({required int eventId, required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> createStaffInviteCodeV1({
+    required int eventId,
+    required String idempotencyKey,
+    String role = 'ENTRY',
+    int expiresInHours = 12,
+    String? label,
+  }) async {
     final res = await _client.dio.post(
       '/events/$eventId/staff_invite_code',
+      data: {'role': role, 'expiresInHours': expiresInHours, if (label != null && label.isNotEmpty) 'label': label},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> revokeStaffInviteCodeV1({
+    required int eventId,
+    required String code,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/staff_invites/$code/revoke',
+      data: {'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> joinStaffByInviteV1({
+    required int eventId,
+    required String code,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/staff/join_by_invite',
+      data: {'code': code},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getEventSharePackV1(int eventId) async {
+    final res = await _client.dio.get('/events/$eventId/share_pack');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> resolveOpenLink({required String type, String? code, int? id}) async {
+    final res = await _client.dio.get('/open', queryParameters: {'type': type, if (code != null) 'code': code, if (id != null) 'id': id});
     return Map<String, dynamic>.from(res.data as Map);
   }
 

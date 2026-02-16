@@ -64,6 +64,16 @@ export default function OpenInApp() {
         Ouvrir dans TORÈ
       </button>
 
+      {payload?.type === 'staff_invite' && (
+        <section style={{ marginTop: 16, padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Invitation staff</h2>
+          <p style={{ margin: 0, opacity: 0.8 }}>
+            Role: <strong>{String(payload.target?.role ?? 'STAFF')}</strong>
+          </p>
+          <p style={{ marginTop: 6, opacity: 0.7 }}>Tu devras être connecté dans l’app.</p>
+        </section>
+      )}
+
       {showInstall && (
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
           <a href={PLAY_STORE_URL} target="_blank" rel="noreferrer" style={{ color: '#5f5cff' }}>
