@@ -1,0 +1,29 @@
+.print-pack-page { padding: 16px; }
+.print-pack-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.print-pack {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+  color: #111;
+  padding: 14mm;
+  box-sizing: border-box;
+  border-radius: 8px;
+}
+.print-pack__header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+.print-pack__brand { margin: 0; font-weight: 700; letter-spacing: 0.08em; }
+.print-pack__tag { background: #111; color: #fff; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.print-pack__meta p { margin: 4px 0; }
+.print-pack__section { margin-top: 14px; page-break-inside: avoid; }
+.print-pack__qr-item { display: grid; grid-template-columns: 1fr 220px; align-items: center; gap: 16px; margin-top: 8px; }
+.print-pack__qr-meta code { display: block; word-break: break-all; margin-top: 4px; }
+.print-pack__qr { border: 14px solid #fff; outline: 1px solid #ddd; }
+.print-pack__staff { border-top: 1px dashed #ccc; padding-top: 10px; margin-top: 10px; }
+.print-pack__note { font-size: 13px; color: #444; }
+
+@media print {
+  body { background: #fff !important; }
+  .no-print { display: none !important; }
+  .print-pack { margin: 0; border-radius: 0; width: auto; min-height: auto; padding: 0; }
+  @page { size: A4; margin: 10mm; }
+}
