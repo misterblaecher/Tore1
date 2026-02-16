@@ -406,6 +406,119 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<CommitteeFetchResult> committeeFinancesLedgerWithCacheStatus({
+    required int committeeId,
+    required int yearId,
+  }) async {
+    final cacheKey = 'committee_finances_ledger_${committeeId}_$yearId';
+    try {
+      final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/finances/ledger', queryParameters: {'year_id': yearId})).data as Map);
+      await _cache.setJson(cacheKey, data, ttl: const Duration(days: 3));
+      return CommitteeFetchResult(payload: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      throw const OfflineNoCacheException('committee_finances_ledger');
+    }
+  }
+
+  Future<CommitteeFetchResult> committeeFinancesSummaryWithCacheStatus({
+    required int committeeId,
+    required int yearId,
+  }) async {
+    final cacheKey = 'committee_finances_summary_${committeeId}_$yearId';
+    try {
+      final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/finances/summary', queryParameters: {'year_id': yearId})).data as Map);
+      await _cache.setJson(cacheKey, data, ttl: const Duration(days: 3));
+      return CommitteeFetchResult(payload: data, fromCache: false);
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      throw const OfflineNoCacheException('committee_finances_summary');
+    }
+  }
+
+  Future<Map<String, dynamic>> createCommitteeFinanceEntry({
+    required int committeeId,
+    required Map<String, dynamic> body,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post('/committees/$committeeId/finances/ledger', data: body, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  String committeeFinancesExportCsvUrl({required int committeeId, required int yearId}) =>
+      '${_client.dio.options.baseUrl}/committees/$committeeId/finances/export.csv?year_id=$yearId';
+
+  String committeeFinancesSnapshotUrl({required int committeeId, required int yearId}) =>
+      '${_client.dio.options.baseUrl}/committees/$committeeId/finances/snapshot.json?year_id=$yearId';
+
+  Future<Map<String, dynamic>> committeeBaptemeCampaign({required int committeeId, required int yearId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/bapteme/campaign', queryParameters: {'year_id': yearId})).data as Map);
+
+  Future<Map<String, dynamic>> createCommitteeBaptemeCampaign({
+    required int committeeId,
+    required int yearId,
+    required String name,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post('/committees/$committeeId/bapteme/campaign', data: {'yearId': yearId, 'name': name}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createCommitteeBaptemeInvite({
+    required int committeeId,
+    required int campaignId,
+    required String blueDisplayName,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post('/committees/$committeeId/bapteme/invites', data: {'campaignId': campaignId, 'blueDisplayName': blueDisplayName}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeBaptemeInvites({required int committeeId, required int campaignId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/bapteme/invites', queryParameters: {'campaignId': campaignId})).data as Map);
+
+  Future<Map<String, dynamic>> createCommitteeBaptemeSlot({
+    required int committeeId,
+    required Map<String, dynamic> body,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post('/committees/$committeeId/bapteme/slots', data: body, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeBaptemeSlots({required int committeeId, required int campaignId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/bapteme/slots', queryParameters: {'campaignId': campaignId})).data as Map);
+
+  Future<Map<String, dynamic>> createCommitteeBaptemeAssignment({
+    required int committeeId,
+    required int inviteId,
+    required int slotId,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post('/committees/$committeeId/bapteme/assign', data: {'inviteId': inviteId, 'slotId': slotId}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createCommitteeBaptemeIncident({
+    required int committeeId,
+    required int campaignId,
+    int? inviteId,
+    required String type,
+    required String note,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post('/committees/$committeeId/bapteme/incidents', data: {'campaignId': campaignId, 'inviteId': inviteId, 'type': type, 'note': note}..removeWhere((k, v) => v == null), options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  String committeeBaptemeInvitesExportUrl({required int committeeId, required int campaignId}) =>
+      '${_client.dio.options.baseUrl}/committees/$committeeId/bapteme/export_invites.csv?campaignId=$campaignId';
+
+  String committeeBaptemeSlotsExportUrl({required int committeeId, required int campaignId}) =>
+      '${_client.dio.options.baseUrl}/committees/$committeeId/bapteme/export_slots.csv?campaignId=$campaignId';
+
   Future<List<dynamic>> menu(int eventId) async {
     final result = await menuWithCacheStatus(eventId);
     return result.items;

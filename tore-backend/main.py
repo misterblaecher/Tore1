@@ -77,6 +77,15 @@ from models import (
     CommitteeAdminIdempotency,
     CommitteeForumCategory,
     CommitteeForumPost,
+    CommitteeLedgerEntry,
+    CommitteeLedgerIdempotency,
+    CommitteeBudgetBucket,
+    CommitteeBaptemeCampaign,
+    CommitteeBaptemeInvite,
+    CommitteeBaptemeSlot,
+    CommitteeBaptemeAssignment,
+    CommitteeBaptemeIncident,
+    CommitteeBaptemeIdempotency,
 )
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
@@ -1076,6 +1085,58 @@ class CommitteeForumUpdateCategoryIn(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     orderIndex: Optional[int] = Field(default=None, ge=0, le=1000)
     isArchived: Optional[bool] = None
+
+
+class CommitteeFinanceLedgerCreateIn(BaseModel):
+    yearId: int
+    type: Literal["INCOME", "EXPENSE"]
+    amountCents: int = Field(ge=1)
+    currency: str = Field(default="EUR", min_length=3, max_length=8)
+    category: str = Field(min_length=2, max_length=120)
+    occurredAt: str = Field(min_length=10, max_length=10)
+    note: Optional[str] = Field(default=None, max_length=5000)
+    attachmentUrl: Optional[str] = Field(default=None, max_length=512)
+
+
+class CommitteeBudgetBucketIn(BaseModel):
+    month: str = Field(min_length=7, max_length=7)
+    category: str = Field(min_length=2, max_length=120)
+    budgetCents: int = Field(ge=0)
+
+
+class CommitteeBaptemeCampaignIn(BaseModel):
+    yearId: int
+    name: str = Field(min_length=2, max_length=180)
+
+
+class CommitteeBaptemeInviteIn(BaseModel):
+    campaignId: int
+    blueDisplayName: str = Field(min_length=2, max_length=180)
+    expiresAt: Optional[datetime] = None
+
+
+class CommitteeBaptemeAcceptIn(BaseModel):
+    inviteCode: str = Field(min_length=4, max_length=32)
+
+
+class CommitteeBaptemeSlotIn(BaseModel):
+    campaignId: int
+    startsAt: datetime
+    endsAt: datetime
+    location: str = Field(min_length=2, max_length=180)
+    description: str = Field(min_length=2, max_length=1000)
+
+
+class CommitteeBaptemeAssignIn(BaseModel):
+    inviteId: int
+    slotId: int
+
+
+class CommitteeBaptemeIncidentIn(BaseModel):
+    campaignId: int
+    inviteId: Optional[int] = None
+    type: str = Field(min_length=2, max_length=48)
+    note: str = Field(min_length=2, max_length=2000)
 
 
 class EventCharterOut(BaseModel):
@@ -3558,8 +3619,8 @@ def _committee_default_permissions(role: str) -> dict[str, bool]:
         "ADMIN": {
             "can_manage_members": True,
             "can_post_forum": True,
-            "can_manage_finances": False,
-            "can_manage_bapteme": False,
+            "can_manage_finances": True,
+            "can_manage_bapteme": True,
         },
         "MOD": {
             "can_manage_members": False,
@@ -3616,6 +3677,8 @@ def _committee_me_payload(db: Session, committee_id: int, user: AppUser) -> dict
             "isMember": False,
             "membership": None,
             "permissions": _committee_default_permissions("MEMBER"),
+            "canManageFinances": False,
+            "canManageBapteme": False,
             "activeYear": active_year.year_label if active_year else None,
         }
     return {
@@ -3628,6 +3691,8 @@ def _committee_me_payload(db: Session, committee_id: int, user: AppUser) -> dict
             "isActive": bool(membership.is_active),
         },
         "permissions": _committee_permissions(db, committee_id, membership.role),
+        "canManageFinances": bool(_committee_permissions(db, committee_id, membership.role).get("can_manage_finances", False)),
+        "canManageBapteme": bool(_committee_permissions(db, committee_id, membership.role).get("can_manage_bapteme", False)),
         "activeYear": active_year.year_label if active_year else None,
     }
 
@@ -3654,6 +3719,50 @@ def _require_idempotency(idempotency_key: Optional[str]) -> str:
     if not key:
         raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
     return key
+
+
+def _require_committee_finance_manager(db: Session, committee_id: int, user: AppUser) -> CommitteeMembership:
+    membership = _committee_membership(db, committee_id, user.id)
+    if membership is None:
+        raise HTTPException(status_code=403, detail={"reason": "not_member"})
+    perms = _committee_permissions(db, committee_id, membership.role)
+    if not perms.get("can_manage_finances", False):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    return membership
+
+
+def _require_committee_bapteme_manager(db: Session, committee_id: int, user: AppUser) -> CommitteeMembership:
+    membership = _committee_membership(db, committee_id, user.id)
+    if membership is None:
+        raise HTTPException(status_code=403, detail={"reason": "not_member"})
+    perms = _committee_permissions(db, committee_id, membership.role)
+    if not perms.get("can_manage_bapteme", False):
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    return membership
+
+
+def _committee_year_or_404(db: Session, committee_id: int, year_id: int) -> CommitteeYear:
+    year = db.get(CommitteeYear, year_id)
+    if year is None or year.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "year_not_found"})
+    return year
+
+
+def _ledger_payload(row: CommitteeLedgerEntry) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "committeeId": row.committee_id,
+        "yearId": row.year_id,
+        "type": row.entry_type,
+        "amountCents": row.amount_cents,
+        "currency": row.currency,
+        "category": row.category,
+        "occurredAt": row.occurred_at,
+        "note": row.note,
+        "attachmentUrl": row.attachment_url,
+        "createdBy": row.created_by,
+        "createdAt": row.created_at.isoformat(),
+    }
 
 
 def _forum_year_or_404(db: Session, committee_id: int, year_id: int) -> CommitteeYear:
@@ -4049,6 +4158,402 @@ def committees_revoke_member(
     )
     db.commit()
     return response
+
+
+@app.get("/committees/{committee_id}/finances/ledger")
+def committee_finances_ledger(
+    committee_id: int,
+    year_id: int = Query(...),
+    cursor: Optional[int] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, year_id)
+    q = db.query(CommitteeLedgerEntry).filter(CommitteeLedgerEntry.committee_id == committee_id, CommitteeLedgerEntry.year_id == year_id)
+    if cursor is not None:
+        q = q.filter(CommitteeLedgerEntry.id < cursor)
+    rows = q.order_by(CommitteeLedgerEntry.id.desc()).limit(limit + 1).all()
+    page = rows[:limit]
+    next_cursor = page[-1].id if len(rows) > limit and page else None
+    return {"items": [_ledger_payload(r) for r in page], "next_cursor": next_cursor}
+
+
+@app.post("/committees/{committee_id}/finances/ledger")
+def committee_finances_create_ledger(
+    committee_id: int,
+    payload: CommitteeFinanceLedgerCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_finance_manager(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, payload.yearId)
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeLedgerIdempotency).filter(CommitteeLedgerIdempotency.committee_id == committee_id, CommitteeLedgerIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    entry = CommitteeLedgerEntry(
+        committee_id=committee_id,
+        year_id=payload.yearId,
+        entry_type=payload.type,
+        amount_cents=payload.amountCents,
+        currency=payload.currency.upper(),
+        category=payload.category.strip(),
+        occurred_at=payload.occurredAt,
+        note=payload.note,
+        attachment_url=payload.attachmentUrl,
+        created_by=user.id,
+    )
+    db.add(entry)
+    db.flush()
+    response = _ledger_payload(entry)
+    db.add(CommitteeLedgerIdempotency(committee_id=committee_id, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.finances.ledger.create', entity_type='committee_ledger_entry', entity_id=str(entry.id), event_id=None, bar_id=None, payload={'committee_id': committee_id, 'year_id': payload.yearId, 'idempotency_key': key})
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/finances/summary")
+def committee_finances_summary(
+    committee_id: int,
+    year_id: int = Query(...),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, year_id)
+    rows = db.query(CommitteeLedgerEntry).filter(CommitteeLedgerEntry.committee_id == committee_id, CommitteeLedgerEntry.year_id == year_id).all()
+    income = sum(r.amount_cents for r in rows if r.entry_type == 'INCOME')
+    expense = sum(r.amount_cents for r in rows if r.entry_type == 'EXPENSE')
+    by_category: dict[str, dict[str, int]] = {}
+    by_month: dict[str, dict[str, int]] = {}
+    for r in rows:
+        cat = by_category.setdefault(r.category, {'incomeCents': 0, 'expenseCents': 0})
+        month = (r.occurred_at or '')[:7]
+        mo = by_month.setdefault(month, {'incomeCents': 0, 'expenseCents': 0})
+        if r.entry_type == 'INCOME':
+            cat['incomeCents'] += r.amount_cents
+            mo['incomeCents'] += r.amount_cents
+        else:
+            cat['expenseCents'] += r.amount_cents
+            mo['expenseCents'] += r.amount_cents
+    return {'yearId': year_id, 'incomeCents': income, 'expenseCents': expense, 'netCents': income - expense, 'byCategory': by_category, 'byMonth': by_month}
+
+
+@app.get("/committees/{committee_id}/finances/export.csv")
+def committee_finances_export_csv(
+    committee_id: int,
+    year_id: int = Query(...),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, year_id)
+    rows = db.query(CommitteeLedgerEntry).filter(CommitteeLedgerEntry.committee_id == committee_id, CommitteeLedgerEntry.year_id == year_id).order_by(CommitteeLedgerEntry.occurred_at.asc(), CommitteeLedgerEntry.id.asc()).all()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['id', 'type', 'amount_cents', 'currency', 'category', 'occurred_at', 'note', 'attachment_url', 'created_by', 'created_at'])
+    for r in rows:
+        writer.writerow([r.id, r.entry_type, r.amount_cents, r.currency, r.category, r.occurred_at, r.note or '', r.attachment_url or '', r.created_by, r.created_at.isoformat()])
+    return StreamingResponse(iter([buf.getvalue()]), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename=committee_{committee_id}_ledger_{year_id}.csv'})
+
+
+@app.get("/committees/{committee_id}/finances/snapshot.json")
+def committee_finances_snapshot_json(
+    committee_id: int,
+    year_id: int = Query(...),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    summary = committee_finances_summary(committee_id=committee_id, year_id=year_id, user=user, db=db)
+    ledger = committee_finances_ledger(committee_id=committee_id, year_id=year_id, cursor=None, limit=5000, user=user, db=db)
+    return {'committeeId': committee_id, 'yearId': year_id, 'summary': summary, 'ledger': ledger['items'], 'generatedAt': now_utc().isoformat()}
+
+
+@app.get("/committees/{committee_id}/finances/budgets")
+def committee_finances_budgets(
+    committee_id: int,
+    year_id: int = Query(...),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, year_id)
+    rows = db.query(CommitteeBudgetBucket).filter(CommitteeBudgetBucket.committee_id == committee_id, CommitteeBudgetBucket.year_id == year_id).order_by(CommitteeBudgetBucket.month.asc(), CommitteeBudgetBucket.category.asc()).all()
+    return {'items': [{'id': r.id, 'month': r.month, 'category': r.category, 'budgetCents': r.budget_cents} for r in rows]}
+
+
+@app.put("/committees/{committee_id}/finances/budgets")
+def committee_finances_put_budgets(
+    committee_id: int,
+    year_id: int = Query(...),
+    payload: list[CommitteeBudgetBucketIn] = [],
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_admin(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, year_id)
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'finances_budgets_put', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    db.query(CommitteeBudgetBucket).filter(CommitteeBudgetBucket.committee_id == committee_id, CommitteeBudgetBucket.year_id == year_id).delete()
+    for b in payload:
+        db.add(CommitteeBudgetBucket(committee_id=committee_id, year_id=year_id, month=b.month, category=b.category, budget_cents=b.budgetCents))
+    db.flush()
+    response = committee_finances_budgets(committee_id=committee_id, year_id=year_id, user=user, db=db)
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='finances_budgets_put', idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.finances.budgets.put', entity_type='committee_budget_bucket', entity_id=str(committee_id), event_id=None, bar_id=None, payload={'committee_id': committee_id, 'year_id': year_id, 'count': len(payload), 'idempotency_key': key})
+    db.commit()
+    return response
+
+
+def _committee_bapteme_campaign_payload(row: CommitteeBaptemeCampaign) -> dict[str, Any]:
+    return {'id': row.id, 'committeeId': row.committee_id, 'yearId': row.year_id, 'name': row.name, 'isActive': bool(row.is_active), 'createdAt': row.created_at.isoformat()}
+
+
+@app.get("/committees/{committee_id}/bapteme/campaign")
+def committee_bapteme_campaign_get(
+    committee_id: int,
+    year_id: int = Query(...),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    row = db.query(CommitteeBaptemeCampaign).filter(CommitteeBaptemeCampaign.committee_id == committee_id, CommitteeBaptemeCampaign.year_id == year_id).order_by(CommitteeBaptemeCampaign.id.desc()).first()
+    return {'campaign': _committee_bapteme_campaign_payload(row) if row else None}
+
+
+@app.post("/committees/{committee_id}/bapteme/campaign")
+def committee_bapteme_campaign_create(
+    committee_id: int,
+    payload: CommitteeBaptemeCampaignIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    _committee_year_or_404(db, committee_id, payload.yearId)
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'campaign_create', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    db.query(CommitteeBaptemeCampaign).filter(CommitteeBaptemeCampaign.committee_id == committee_id, CommitteeBaptemeCampaign.year_id == payload.yearId).update({'is_active': False})
+    row = CommitteeBaptemeCampaign(committee_id=committee_id, year_id=payload.yearId, name=payload.name, is_active=True)
+    db.add(row)
+    db.flush()
+    response = _committee_bapteme_campaign_payload(row)
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='campaign_create', idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.bapteme.campaign.create', entity_type='committee_bapteme_campaign', entity_id=str(row.id), event_id=None, bar_id=None, payload={'committee_id': committee_id, 'idempotency_key': key})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/bapteme/invites")
+def committee_bapteme_invite_create(
+    committee_id: int,
+    payload: CommitteeBaptemeInviteIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    campaign = db.get(CommitteeBaptemeCampaign, payload.campaignId)
+    if campaign is None or campaign.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={'reason': 'campaign_not_found'})
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'invite_create', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    invite_code = secrets.token_hex(4).upper()
+    row = CommitteeBaptemeInvite(campaign_id=payload.campaignId, invite_code=invite_code, expires_at=payload.expiresAt, created_by=user.id, blue_display_name=payload.blueDisplayName, status='INVITED')
+    db.add(row)
+    db.flush()
+    response = {'id': row.id, 'campaignId': row.campaign_id, 'inviteCode': row.invite_code, 'blueDisplayName': row.blue_display_name, 'status': row.status, 'expiresAt': row.expires_at.isoformat() if row.expires_at else None}
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='invite_create', idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.bapteme.invite.create', entity_type='committee_bapteme_invite', entity_id=str(row.id), event_id=None, bar_id=None, payload={'committee_id': committee_id, 'campaign_id': payload.campaignId, 'idempotency_key': key})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/bapteme/invites/accept")
+def committee_bapteme_invite_accept(
+    committee_id: int,
+    payload: CommitteeBaptemeAcceptIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'invite_accept', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    invite = db.query(CommitteeBaptemeInvite).filter(CommitteeBaptemeInvite.invite_code == payload.inviteCode.strip().upper()).first()
+    if invite is None:
+        raise HTTPException(status_code=404, detail={'reason': 'invite_not_found'})
+    campaign = db.get(CommitteeBaptemeCampaign, invite.campaign_id)
+    if campaign is None or campaign.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={'reason': 'invite_not_found'})
+    if invite.expires_at and invite.expires_at < now_utc():
+        raise HTTPException(status_code=400, detail={'reason': 'invite_expired'})
+    invite.status = 'ACCEPTED'
+    invite.accepted_at = now_utc()
+    response = {'inviteId': invite.id, 'status': invite.status, 'acceptedAt': invite.accepted_at.isoformat()}
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='invite_accept', idempotency_key=key, response_json=response))
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/bapteme/invites")
+def committee_bapteme_invites(
+    committee_id: int,
+    campaignId: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    rows = db.query(CommitteeBaptemeInvite).filter(CommitteeBaptemeInvite.campaign_id == campaignId).order_by(CommitteeBaptemeInvite.id.desc()).all()
+    return {'items': [{'id': r.id, 'campaignId': r.campaign_id, 'inviteCode': r.invite_code, 'blueDisplayName': r.blue_display_name, 'status': r.status, 'acceptedAt': r.accepted_at.isoformat() if r.accepted_at else None} for r in rows]}
+
+
+@app.post("/committees/{committee_id}/bapteme/slots")
+def committee_bapteme_create_slot(
+    committee_id: int,
+    payload: CommitteeBaptemeSlotIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'slot_create', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    row = CommitteeBaptemeSlot(campaign_id=payload.campaignId, starts_at=payload.startsAt, ends_at=payload.endsAt, location=payload.location, description=payload.description)
+    db.add(row)
+    db.flush()
+    response = {'id': row.id, 'campaignId': row.campaign_id, 'startsAt': row.starts_at.isoformat(), 'endsAt': row.ends_at.isoformat(), 'location': row.location, 'description': row.description}
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='slot_create', idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.bapteme.slot.create', entity_type='committee_bapteme_slot', entity_id=str(row.id), event_id=None, bar_id=None, payload={'committee_id': committee_id, 'idempotency_key': key})
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/bapteme/assign")
+def committee_bapteme_assign(
+    committee_id: int,
+    payload: CommitteeBaptemeAssignIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'assign_create', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    invite = db.get(CommitteeBaptemeInvite, payload.inviteId)
+    slot = db.get(CommitteeBaptemeSlot, payload.slotId)
+    if invite is None or slot is None:
+        raise HTTPException(status_code=404, detail={'reason': 'not_found'})
+    row = CommitteeBaptemeAssignment(invite_id=payload.inviteId, slot_id=payload.slotId)
+    db.add(row)
+    db.flush()
+    response = {'id': row.id, 'inviteId': row.invite_id, 'slotId': row.slot_id, 'assignedAt': row.assigned_at.isoformat()}
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='assign_create', idempotency_key=key, response_json=response))
+    db.commit()
+    return response
+
+
+@app.post("/committees/{committee_id}/bapteme/incidents")
+def committee_bapteme_incident_create(
+    committee_id: int,
+    payload: CommitteeBaptemeIncidentIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    key = _require_idempotency(idempotency_key)
+    existing = db.query(CommitteeBaptemeIdempotency).filter(CommitteeBaptemeIdempotency.committee_id == committee_id, CommitteeBaptemeIdempotency.action == 'incident_create', CommitteeBaptemeIdempotency.idempotency_key == key).first()
+    if existing is not None:
+        return existing.response_json
+    row = CommitteeBaptemeIncident(campaign_id=payload.campaignId, invite_id=payload.inviteId, incident_type=payload.type.upper(), note=payload.note, created_by=user.id)
+    db.add(row)
+    db.flush()
+    response = {'id': row.id, 'campaignId': row.campaign_id, 'inviteId': row.invite_id, 'type': row.incident_type, 'note': row.note, 'createdAt': row.created_at.isoformat(), 'createdBy': row.created_by}
+    db.add(CommitteeBaptemeIdempotency(committee_id=committee_id, action='incident_create', idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.bapteme.incident.create', entity_type='committee_bapteme_incident', entity_id=str(row.id), event_id=None, bar_id=None, payload={'committee_id': committee_id, 'campaign_id': payload.campaignId, 'idempotency_key': key})
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/bapteme/slots")
+def committee_bapteme_slots(
+    committee_id: int,
+    campaignId: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    rows = db.query(CommitteeBaptemeSlot).filter(CommitteeBaptemeSlot.campaign_id == campaignId).order_by(CommitteeBaptemeSlot.starts_at.asc()).all()
+    return {'items': [{'id': r.id, 'campaignId': r.campaign_id, 'startsAt': r.starts_at.isoformat(), 'endsAt': r.ends_at.isoformat(), 'location': r.location, 'description': r.description} for r in rows]}
+
+
+@app.get("/committees/{committee_id}/bapteme/export_invites.csv")
+def committee_bapteme_export_invites_csv(
+    committee_id: int,
+    campaignId: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    rows = db.query(CommitteeBaptemeInvite).filter(CommitteeBaptemeInvite.campaign_id == campaignId).order_by(CommitteeBaptemeInvite.id.asc()).all()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['id', 'invite_code', 'blue_display_name', 'status', 'accepted_at'])
+    for r in rows:
+        writer.writerow([r.id, r.invite_code, r.blue_display_name, r.status, r.accepted_at.isoformat() if r.accepted_at else ''])
+    return StreamingResponse(iter([buf.getvalue()]), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename=committee_{committee_id}_bapteme_invites_{campaignId}.csv'})
+
+
+@app.get("/committees/{committee_id}/bapteme/export_slots.csv")
+def committee_bapteme_export_slots_csv(
+    committee_id: int,
+    campaignId: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_bapteme_manager(db, committee_id, user)
+    rows = db.query(CommitteeBaptemeSlot).filter(CommitteeBaptemeSlot.campaign_id == campaignId).order_by(CommitteeBaptemeSlot.starts_at.asc()).all()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['id', 'starts_at', 'ends_at', 'location', 'description'])
+    for r in rows:
+        writer.writerow([r.id, r.starts_at.isoformat(), r.ends_at.isoformat(), r.location, r.description])
+    return StreamingResponse(iter([buf.getvalue()]), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename=committee_{committee_id}_bapteme_slots_{campaignId}.csv'})
 
 
 @app.get("/committees/{committee_id}/forum/categories")

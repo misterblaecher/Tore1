@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/network/network_state_provider.dart';
 import 'package:tore/shared/utils/write_gate.dart';
@@ -177,8 +178,19 @@ class CommitteeHomeScreen extends ConsumerWidget {
                   ),
                 )),
               ),
-              const ListTile(title: Text('Finances'), subtitle: Text('Placeholder PR29')),
-              const ListTile(title: Text('Baptême'), subtitle: Text('Placeholder PR29')),
+              ListTile(
+                title: const Text('Finances'),
+                subtitle: Text(perms['can_manage_finances'] == true ? 'Ledger + exports + ajout entrées' : 'Ledger + exports (lecture)'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeFinancesScreen(committeeId: committeeId, canManageFinances: me['canManageFinances'] == true))),
+              ),
+              if (me['canManageBapteme'] == true)
+                ListTile(
+                  title: const Text('Baptême'),
+                  subtitle: const Text('Campagnes, invités, créneaux, incidents'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeBaptemeScreen(committeeId: committeeId))),
+                ),
               if (perms['can_manage_members'] == true)
                 ListTile(
                   title: const Text('Members (admin)'),
@@ -633,6 +645,214 @@ class _CommitteeMembersScreenState extends ConsumerState<CommitteeMembersScreen>
                   ),
                 ),
             ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class CommitteeFinancesScreen extends ConsumerStatefulWidget {
+  const CommitteeFinancesScreen({super.key, required this.committeeId, required this.canManageFinances});
+  final int committeeId;
+  final bool canManageFinances;
+
+  @override
+  ConsumerState<CommitteeFinancesScreen> createState() => _CommitteeFinancesScreenState();
+}
+
+class _CommitteeFinancesScreenState extends ConsumerState<CommitteeFinancesScreen> {
+  int? _yearId;
+
+  @override
+  Widget build(BuildContext context) {
+    final readOnly = isReadOnly(ref) || ref.watch(networkStatusProvider) != NetworkState.online;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Finances comité')),
+      floatingActionButton: widget.canManageFinances
+          ? FloatingActionButton.extended(
+              onPressed: readOnly || _yearId == null
+                  ? null
+                  : () async {
+                      await showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => _AddLedgerEntrySheet(committeeId: widget.committeeId, yearId: _yearId!),
+                      );
+                      setState(() {});
+                    },
+              label: const Text('Add entry'),
+              icon: const Icon(Icons.add),
+            )
+          : null,
+      body: FutureBuilder(
+        future: ref.read(apiProvider).committeeYears(widget.committeeId),
+        builder: (context, yearsSnap) {
+          if (!yearsSnap.hasData) return const Center(child: CircularProgressIndicator());
+          final years = (yearsSnap.data! as List).cast<Map>();
+          _yearId ??= (years.firstWhere((y) => y['isActive'] == true, orElse: () => years.first)['id'] as int);
+          return FutureBuilder(
+            future: Future.wait([
+              ref.read(apiProvider).committeeFinancesSummaryWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!),
+              ref.read(apiProvider).committeeFinancesLedgerWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!),
+            ]),
+            builder: (context, snap) {
+              if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+              final summaryRes = snap.data![0] as CommitteeFetchResult;
+              final ledgerRes = snap.data![1] as CommitteeFetchResult;
+              final summary = (summaryRes.payload as Map<String, dynamic>);
+              final ledgerItems = ((ledgerRes.payload as Map<String, dynamic>)['items'] as List<dynamic>? ?? const []);
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (summaryRes.fromCache || ledgerRes.fromCache || readOnly) const _ReadOnlyBanner(label: 'Mode lecture (offline/degraded/cache)'),
+                  Wrap(spacing: 8, children: years.map((y) => ChoiceChip(label: Text(y['yearLabel'].toString()), selected: _yearId == y['id'], onSelected: (_) => setState(() => _yearId = y['id'] as int))).toList()),
+                  const SizedBox(height: 8),
+                  Text('Income: ${summary['incomeCents'] ?? 0}c · Expense: ${summary['expenseCents'] ?? 0}c · Net: ${summary['netCents'] ?? 0}c'),
+                  const SizedBox(height: 8),
+                  Text('Exports', style: Theme.of(context).textTheme.titleMedium),
+                  SelectableText(ref.read(apiProvider).committeeFinancesExportCsvUrl(committeeId: widget.committeeId, yearId: _yearId!)),
+                  SelectableText(ref.read(apiProvider).committeeFinancesSnapshotUrl(committeeId: widget.committeeId, yearId: _yearId!)),
+                  const Divider(),
+                  Text('Par catégorie', style: Theme.of(context).textTheme.titleMedium),
+                  for (final e in (summary['byCategory'] as Map<String, dynamic>? ?? const {}).entries)
+                    ListTile(title: Text(e.key), subtitle: Text('in ${(e.value['incomeCents'] ?? 0)} · out ${(e.value['expenseCents'] ?? 0)}')),
+                  const Divider(),
+                  Text('Ledger', style: Theme.of(context).textTheme.titleMedium),
+                  for (final row in ledgerItems)
+                    ListTile(
+                      dense: true,
+                      title: Text('${row['occurredAt']} · ${row['category']} · ${row['amountCents']}c'),
+                      subtitle: Text('${row['type']} · ${row['note'] ?? ''}'),
+                    ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AddLedgerEntrySheet extends ConsumerStatefulWidget {
+  const _AddLedgerEntrySheet({required this.committeeId, required this.yearId});
+  final int committeeId;
+  final int yearId;
+
+  @override
+  ConsumerState<_AddLedgerEntrySheet> createState() => _AddLedgerEntrySheetState();
+}
+
+class _AddLedgerEntrySheetState extends ConsumerState<_AddLedgerEntrySheet> {
+  final _amount = TextEditingController();
+  final _category = TextEditingController();
+  final _note = TextEditingController();
+  String _type = 'EXPENSE';
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(value: _type, items: const [DropdownMenuItem(value: 'EXPENSE', child: Text('EXPENSE')), DropdownMenuItem(value: 'INCOME', child: Text('INCOME'))], onChanged: (v) => setState(() => _type = v ?? 'EXPENSE')),
+          TextField(controller: _amount, decoration: const InputDecoration(labelText: 'Amount (cents)'), keyboardType: TextInputType.number),
+          TextField(controller: _category, decoration: const InputDecoration(labelText: 'Category')),
+          TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note')),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () async {
+              await ref.read(apiProvider).createCommitteeFinanceEntry(
+                    committeeId: widget.committeeId,
+                    body: {
+                      'yearId': widget.yearId,
+                      'type': _type,
+                      'amountCents': int.tryParse(_amount.text) ?? 0,
+                      'currency': 'EUR',
+                      'category': _category.text,
+                      'occurredAt': DateTime.now().toIso8601String().substring(0, 10),
+                      'note': _note.text,
+                    },
+                    idempotencyKey: 'committee-finance-${DateTime.now().millisecondsSinceEpoch}',
+                  );
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CommitteeBaptemeScreen extends ConsumerStatefulWidget {
+  const CommitteeBaptemeScreen({super.key, required this.committeeId});
+  final int committeeId;
+
+  @override
+  ConsumerState<CommitteeBaptemeScreen> createState() => _CommitteeBaptemeScreenState();
+}
+
+class _CommitteeBaptemeScreenState extends ConsumerState<CommitteeBaptemeScreen> {
+  int? _yearId;
+  int? _campaignId;
+  final _campaignName = TextEditingController();
+  final _inviteName = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final readOnly = isReadOnly(ref) || ref.watch(networkStatusProvider) != NetworkState.online;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Baptême (admin)')),
+      body: FutureBuilder(
+        future: ref.read(apiProvider).committeeYears(widget.committeeId),
+        builder: (context, yearsSnap) {
+          if (!yearsSnap.hasData) return const Center(child: CircularProgressIndicator());
+          final years = (yearsSnap.data! as List).cast<Map>();
+          _yearId ??= (years.firstWhere((y) => y['isActive'] == true, orElse: () => years.first)['id'] as int);
+          return FutureBuilder(
+            future: ref.read(apiProvider).committeeBaptemeCampaign(committeeId: widget.committeeId, yearId: _yearId!),
+            builder: (context, campSnap) {
+              if (!campSnap.hasData) return const Center(child: CircularProgressIndicator());
+              final campaign = (campSnap.data!['campaign'] as Map<String, dynamic>?);
+              _campaignId = campaign?['id'] as int?;
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (readOnly) const _ReadOnlyBanner(label: 'Mode lecture (offline/degraded/cache)'),
+                  TextField(controller: _campaignName, decoration: const InputDecoration(labelText: 'Nom campagne')),
+                  FilledButton(onPressed: readOnly ? null : () async {
+                    final created = await ref.read(apiProvider).createCommitteeBaptemeCampaign(committeeId: widget.committeeId, yearId: _yearId!, name: _campaignName.text, idempotencyKey: 'bap-campaign-${DateTime.now().millisecondsSinceEpoch}');
+                    _campaignId = created['id'] as int;
+                    setState(() {});
+                  }, child: const Text('Créer campagne')),
+                  if (_campaignId != null) ...[
+                    const SizedBox(height: 8),
+                    Text('Campaign #$_campaignId'),
+                    TextField(controller: _inviteName, decoration: const InputDecoration(labelText: 'Blue name')),
+                    FilledButton(onPressed: readOnly ? null : () async {
+                      final invite = await ref.read(apiProvider).createCommitteeBaptemeInvite(committeeId: widget.committeeId, campaignId: _campaignId!, blueDisplayName: _inviteName.text, idempotencyKey: 'bap-invite-${DateTime.now().millisecondsSinceEpoch}');
+                      await Clipboard.setData(ClipboardData(text: invite['inviteCode'].toString()));
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invite code copié: ${invite['inviteCode']}')));
+                      setState(() {});
+                    }, child: const Text('Créer invite')),
+                    FutureBuilder(
+                      future: ref.read(apiProvider).committeeBaptemeInvites(committeeId: widget.committeeId, campaignId: _campaignId!),
+                      builder: (context, invitesSnap) {
+                        if (!invitesSnap.hasData) return const SizedBox.shrink();
+                        final invites = (invitesSnap.data!['items'] as List<dynamic>);
+                        return Column(children: [for (final i in invites) ListTile(title: Text(i['blueDisplayName'].toString()), subtitle: Text('${i['status']} · ${i['inviteCode']}'))]);
+                      },
+                    ),
+                    SelectableText(ref.read(apiProvider).committeeBaptemeInvitesExportUrl(committeeId: widget.committeeId, campaignId: _campaignId!)),
+                    SelectableText(ref.read(apiProvider).committeeBaptemeSlotsExportUrl(committeeId: widget.committeeId, campaignId: _campaignId!)),
+                  ],
+                ],
+              );
+            },
           );
         },
       ),

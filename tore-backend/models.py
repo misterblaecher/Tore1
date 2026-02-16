@@ -1261,6 +1261,128 @@ class CommitteeForumPost(Base):
     deleted_by: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
 
 
+class CommitteeLedgerEntry(Base):
+    __tablename__ = "committee_ledger_entries"
+    __table_args__ = (
+        Index("ix_committee_ledger_entries_feed", "committee_id", "year_id", "occurred_at", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_id: Mapped[int] = mapped_column(ForeignKey("committee_years.id"), index=True)
+    entry_type: Mapped[str] = mapped_column(String(16), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="EUR")
+    category: Mapped[str] = mapped_column(String(120), index=True)
+    occurred_at: Mapped[str] = mapped_column(String(10), index=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attachment_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeLedgerIdempotency(Base):
+    __tablename__ = "committee_ledger_idempotency"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "idempotency_key", name="uq_committee_ledger_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBudgetBucket(Base):
+    __tablename__ = "committee_budget_buckets"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "year_id", "month", "category", name="uq_committee_budget_bucket"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_id: Mapped[int] = mapped_column(ForeignKey("committee_years.id"), index=True)
+    month: Mapped[str] = mapped_column(String(7), index=True)
+    category: Mapped[str] = mapped_column(String(120), index=True)
+    budget_cents: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBaptemeCampaign(Base):
+    __tablename__ = "committee_bapteme_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    year_id: Mapped[int] = mapped_column(ForeignKey("committee_years.id"), index=True)
+    name: Mapped[str] = mapped_column(String(180))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBaptemeInvite(Base):
+    __tablename__ = "committee_bapteme_invites"
+    __table_args__ = (UniqueConstraint("invite_code", name="uq_committee_bapteme_invite_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("committee_bapteme_campaigns.id"), index=True)
+    invite_code: Mapped[str] = mapped_column(String(32), index=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    blue_display_name: Mapped[str] = mapped_column(String(180), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="INVITED", index=True)
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBaptemeSlot(Base):
+    __tablename__ = "committee_bapteme_slots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("committee_bapteme_campaigns.id"), index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    location: Mapped[str] = mapped_column(String(180))
+    description: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBaptemeAssignment(Base):
+    __tablename__ = "committee_bapteme_assignments"
+    __table_args__ = (UniqueConstraint("invite_id", "slot_id", name="uq_committee_bapteme_assignment"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    invite_id: Mapped[int] = mapped_column(ForeignKey("committee_bapteme_invites.id"), index=True)
+    slot_id: Mapped[int] = mapped_column(ForeignKey("committee_bapteme_slots.id"), index=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBaptemeIncident(Base):
+    __tablename__ = "committee_bapteme_incidents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("committee_bapteme_campaigns.id"), index=True)
+    invite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("committee_bapteme_invites.id"), nullable=True, index=True)
+    incident_type: Mapped[str] = mapped_column(String(48), index=True)
+    note: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeBaptemeIdempotency(Base):
+    __tablename__ = "committee_bapteme_idempotency"
+    __table_args__ = (
+        UniqueConstraint("committee_id", "action", "idempotency_key", name="uq_committee_bapteme_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    action: Mapped[str] = mapped_column(String(48), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
