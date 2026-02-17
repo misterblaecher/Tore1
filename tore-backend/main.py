@@ -1150,6 +1150,17 @@ class EntryCheckinOut(BaseModel):
     timestamp: datetime
     pendingSync: bool = False
 
+class EntryManualIncrementIn(BaseModel):
+    delta: int = Field(default=1, ge=1, le=20)
+    reason: str = Field(min_length=3)
+    note: Optional[str] = None
+
+
+class EntryManualIncrementOut(BaseModel):
+    count: int
+    deltaApplied: int
+    serverTime: datetime
+
 
 class EntryCountOut(BaseModel):
     entryCount: int
@@ -8182,6 +8193,123 @@ def record_entry_scan(
     return entry_stats(db, event_id)
 
 
+@app.post("/events/{event_id}/entry/manual_increment", response_model=EntryManualIncrementOut)
+def event_entry_manual_increment(
+    event_id: int,
+    payload: EntryManualIncrementIn,
+    authorization: Optional[str] = Header(default=None),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key or not idempotency_key.strip():
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key required"})
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    state = (event.event_state or "LIVE").upper()
+    allow_degraded = bool((event.rules_flags or {}).get("entry_manual_allow_degraded", False))
+    if state in {"FROZEN", "CLOSED"} or (state == "DEGRADED" and not allow_degraded):
+        raise HTTPException(status_code=403, detail={"reason": "runtime_blocked", "state": state})
+
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    actor_staff = None
+    actor_partner = None
+    actor_role = "entry_staff"
+    user = _resolve_app_user_from_token(raw, db)
+    if user:
+        require_feature(db, event_id, "entry_enabled")
+        require_role_for_event(db, user.id, event_id, "entry")
+        actor_staff = user.id
+    else:
+        identity = _resolve_partner_identity_from_token(raw, db)
+        if not identity:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if event.bar_id != identity["bar_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        require_feature(db, event_id, "entry_enabled")
+        _require_partner_roles(identity, {"entry", "manager"})
+        actor_staff = str(identity["user_id"])
+        actor_partner = identity["user_id"]
+        actor_role = identity.get("role") or "entry"
+
+    key = idempotency_key.strip()
+    existing_idem = db.query(EntryLog).filter(EntryLog.event_id == event_id, EntryLog.idempotency_key == key).first()
+    if existing_idem:
+        return EntryManualIncrementOut(count=entry_count(db, event_id), deltaApplied=existing_idem.delta, serverTime=existing_idem.created_at)
+
+    since = now_utc() - timedelta(minutes=10)
+    recent_manual = db.query(func.count(EntryLog.id)).filter(
+        EntryLog.event_id == event_id,
+        EntryLog.source == "manual",
+        EntryLog.staff_id == actor_staff,
+        EntryLog.created_at >= since,
+    ).scalar() or 0
+    if int(recent_manual) >= 60:
+        raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Too many manual increments"})
+
+    delta = int(payload.delta)
+    note = (payload.note or "").strip()
+    reason = payload.reason.strip()
+    log = EntryLog(
+        event_id=event_id,
+        created_at=now_utc(),
+        delta=delta,
+        source="manual",
+        staff_id=actor_staff,
+        device_id="orga-mobile",
+        idempotency_key=key,
+        raw_qr=f"reason={reason};note={note}" if note else f"reason={reason}",
+    )
+    db.add(log)
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner,
+        actor_role=actor_role,
+        action="entry_manual_increment",
+        entity_type="entry_log",
+        entity_id=None,
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"delta": delta, "reason": reason, "note": note, "staff_id": actor_staff, "idempotency_key": key},
+    )
+    db.commit()
+    return EntryManualIncrementOut(count=entry_count(db, event_id), deltaApplied=delta, serverTime=log.created_at)
+
+
+@app.get("/events/{event_id}/entry/manual_increments")
+def event_entry_manual_increments(
+    event_id: int,
+    authorization: Optional[str] = Header(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    raw = _extract_bearer_token(authorization)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing token")
+    identity = _resolve_partner_identity_from_token(raw, db)
+    if not identity:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if event.bar_id != identity["bar_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    rows = db.query(EntryLog).filter(EntryLog.event_id == event_id, EntryLog.source == "manual").order_by(EntryLog.created_at.desc(), EntryLog.id.desc()).limit(limit).all()
+    items = []
+    for row in rows:
+        raw_text = row.raw_qr or ""
+        reason = "manual"
+        if raw_text.startswith("reason="):
+            reason = raw_text.split(";", 1)[0].replace("reason=", "")
+        items.append({"id": row.id, "delta": row.delta, "reason": reason, "time": row.created_at.isoformat()})
+    return {"items": items}
+
+
 @app.post("/events/{event_id}/entry/checkin", response_model=EntryCheckinOut)
 def event_entry_checkin(
     event_id: int,
@@ -8325,11 +8453,22 @@ def export_event_entry_csv(
     rows = db.query(EntryLog).filter(EntryLog.event_id == event_id).order_by(EntryLog.created_at.desc(), EntryLog.id.desc()).all()
     stream = io.StringIO()
     writer = csv.writer(stream)
-    writer.writerow(["timestamp", "status", "ticket_or_user", "deviceId"])
+    writer.writerow(["timestamp", "status", "source", "delta", "reason", "actor", "deviceId"])
     for row in rows:
         raw_qr = (row.raw_qr or "")
-        masked = f"***{raw_qr[-6:]}" if raw_qr else ""
-        writer.writerow([row.created_at.isoformat(), "accepted" if row.delta > 0 else "already_checked", masked, row.device_id or ""])
+        reason = "scan"
+        if row.source == "manual" and raw_qr.startswith("reason="):
+            reason = raw_qr.split(";", 1)[0].replace("reason=", "")
+        actor = f"staff:{(row.staff_id or '')[-6:]}" if row.staff_id else "staff"
+        writer.writerow([
+            row.created_at.isoformat(),
+            "accepted" if row.delta > 0 else "already_checked",
+            "MANUAL" if row.source == "manual" else "QR",
+            row.delta,
+            reason,
+            actor,
+            row.device_id or "",
+        ])
 
     payload = io.BytesIO(stream.getvalue().encode("utf-8"))
     headers = {"Content-Disposition": f'attachment; filename="entry_export_event_{event_id}.csv"'}

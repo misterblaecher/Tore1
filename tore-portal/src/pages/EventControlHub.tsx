@@ -23,6 +23,13 @@ type AuditItem = {
   created_at: string
 }
 
+type ManualIncrementItem = {
+  id: number
+  delta: number
+  reason: string
+  time: string
+}
+
 function isCriticalModule(field: string) {
   return ['entry_enabled', 'checkins_enabled', 'wifi_enabled', 'safety_enabled'].includes(field)
 }
@@ -36,6 +43,7 @@ export default function EventControlHub() {
   const [runtimeReason, setRuntimeReason] = useState('')
   const [auditItems, setAuditItems] = useState<AuditItem[]>([])
   const [savingState, setSavingState] = useState(false)
+  const [manualItems, setManualItems] = useState<ManualIncrementItem[]>([])
   const [savingModules, setSavingModules] = useState(false)
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [error, setError] = useState<string | null>(null)
@@ -66,16 +74,18 @@ export default function EventControlHub() {
 
   const refresh = async () => {
     if (!eventId) return
-    const [modules, snap, audit] = await Promise.all([
+    const [modules, snap, audit, manual] = await Promise.all([
       api<any>(`/partner/portal/event/${eventId}/modules`),
       api<Snapshot>(`/partner/portal/event/${eventId}/state-snapshot`),
       api<{ items: AuditItem[] }>(`/partner/portal/audit/logs?event_id=${eventId}&limit=8`),
+      api<{ items: ManualIncrementItem[] }>(`/events/${eventId}/entry/manual_increments?limit=20`),
     ])
     setState(modules)
     setSnapshot(snap)
     setRuntimeState(snap.event_state)
     setRuntimeReason(snap.runtime_reason || '')
     setAuditItems(audit.items || [])
+    setManualItems(manual.items || [])
     try {
       await api(`/events/${eventId}/map`)
       setMapModuleOn(true)
@@ -200,6 +210,21 @@ export default function EventControlHub() {
         </label>
       ))}
       <Button onClick={save} disabled={savingModules || networkMode === 'OFFLINE'}>{savingModules ? 'Saving…' : 'Save toggles'}</Button>
+
+
+      <div style={{ marginTop: 14 }}>
+        <Card>
+          <strong>Manual increments (20 derniers)</strong>
+          <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+            {manualItems.map((item) => (
+              <div key={item.id} style={{ fontSize: 14 }}>
+                [{new Date(item.time).toLocaleTimeString()}] +{item.delta} — {item.reason}
+              </div>
+            ))}
+            {manualItems.length === 0 ? <span style={{ opacity: 0.75 }}>Aucun increment manuel.</span> : null}
+          </div>
+        </Card>
+      </div>
 
       <div style={{ marginTop: 14 }}>
         <Card>
