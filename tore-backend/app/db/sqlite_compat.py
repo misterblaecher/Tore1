@@ -263,6 +263,38 @@ def ensure_organization_tables(engine: Engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_write_idem_actor ON organization_write_idempotency (actor_user_id)"))
         conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS orga_invite_links (
+                id INTEGER NOT NULL PRIMARY KEY,
+                org_id INTEGER NOT NULL,
+                code_short VARCHAR(24) NOT NULL,
+                code_hash VARCHAR(128) NOT NULL,
+                invite_type VARCHAR(16) DEFAULT 'MEMBER' NOT NULL,
+                status VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+                expires_at DATETIME,
+                created_by_user_id VARCHAR NOT NULL,
+                revoked_at DATETIME,
+                revoked_reason VARCHAR(280),
+                created_at DATETIME,
+                updated_at DATETIME,
+                CONSTRAINT uq_orga_invite_links_code_hash UNIQUE (code_hash)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orga_invite_links_org_status ON orga_invite_links (org_id, status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orga_invite_links_org_expires ON orga_invite_links (org_id, expires_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS orga_invite_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                org_id INTEGER NOT NULL,
+                action VARCHAR(48) NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_orga_invite_idempotency UNIQUE (org_id, action, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orga_invite_idempotency_org_action ON orga_invite_idempotency (org_id, action)"))
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS organization_posts (
                 id INTEGER NOT NULL PRIMARY KEY,
                 organization_id INTEGER NOT NULL,

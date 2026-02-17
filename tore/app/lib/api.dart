@@ -1508,6 +1508,39 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> orgaCreateInvite({required int orgId, required String inviteType, int? expiresInHours, required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/orgas/$orgId/invites',
+      data: {'inviteType': inviteType, if (expiresInHours != null) 'expiresInHours': expiresInHours},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaListInvites({required int orgId}) async {
+    final res = await _client.dio.get('/orgas/$orgId/invites');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaRevokeInvite({required int orgId, required int inviteId, required String reason, required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/orgas/$orgId/invites/$inviteId/revoke',
+      data: {'reason': reason},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaJoinByInvite({required String code, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/join_by_invite', data: {'code': code}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaInvitePreview({required String code}) async {
+    final res = await _client.dio.get('/orgas/invites/$code/preview');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> listOrgaPosts(int orgId) async {
     final res = await _client.dio.get('/orgas/$orgId/posts');
     return Map<String, dynamic>.from(res.data as Map);

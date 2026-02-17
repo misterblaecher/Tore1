@@ -88,6 +88,12 @@ void main() {
       expect(payload.eventId, 12);
       expect(payload.tokenId, 'ABCD2345');
     });
+
+    test('parse open orga invite deeplink', () {
+      final payload = parser.parse('tore://open?type=orga_invite&code=ABC123ZZ');
+      expect(payload.type, QrType.orgaInvite);
+      expect(payload.tokenId, 'ABC123ZZ');
+    });
     test('parse json payload', () {
       final payload = parser.parse('{"type":"join_event","event_id":88,"exp":9999999999}');
       expect(payload.type, QrType.joinEvent);
