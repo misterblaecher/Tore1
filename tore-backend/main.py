@@ -105,6 +105,8 @@ from models import (
     Organization,
     OrganizationMembership,
     OrganizationInviteCode,
+    OrganizationInviteLink,
+    OrganizationInviteIdempotency,
     OrganizationWriteIdempotency,
     OrgaPost,
     AuditLog,
@@ -6720,6 +6722,16 @@ def resolve_open_link(
         deeplink = f"tore://open?type=staff_backup&eventId={event_id_param}&code={normalized}"
         web_fallback = f"{_public_app_base_url()}/open?type=staff_backup&eventId={event_id_param}&code={normalized}"
         target = {"code": normalized, "event_id": int(event_id_param)}
+    elif type_normalized == "orga_invite":
+        if not code:
+            raise HTTPException(status_code=400, detail={"reason": "missing_code"})
+        normalized = code.strip().upper()
+        deeplink = f"tore://open?type=orga_invite&code={normalized}"
+        web_fallback = f"{_public_app_base_url()}/open?type=orga_invite&code={normalized}"
+        target = {"code": normalized}
+        invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(normalized)).first()
+        if invite is not None:
+            target["inviteType"] = (invite.invite_type or "MEMBER").upper()
     else:
         raise HTTPException(status_code=400, detail={"reason": "unsupported_type"})
 
@@ -6733,6 +6745,10 @@ def resolve_open_link(
     if type_normalized == "staff_invite":
         payload["title"] = "Invitation staff"
         payload["description"] = "Rejoins le staff dans TORÈ"
+    elif type_normalized == "orga_invite":
+        role = payload["target"].get("inviteType", "MEMBER")
+        payload["title"] = f"Invitation Orga: {role.title()}"
+        payload["description"] = "Rejoins une organisation dans TORÈ"
     return payload
 
 @app.post("/events/{event_id}/staff_invite_code")
@@ -9074,6 +9090,20 @@ class MeProfilePutIn(BaseModel):
     visibility: Literal["PUBLIC", "PRIVATE"] = "PUBLIC"
 
 
+
+
+class OrgaInviteCreateIn(BaseModel):
+    inviteType: Literal["MEMBER", "MANAGER", "STAFF", "FOLLOWER"] = "MEMBER"
+    expiresInHours: Optional[int] = Field(default=None, ge=1, le=24 * 90)
+
+
+class OrgaInviteRevokeIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=280)
+
+
+class OrgaJoinByInviteIn(BaseModel):
+    code: str = Field(min_length=4, max_length=64)
+
 class OrgaInviteOut(BaseModel):
     org_id: int
     invite_code: str
@@ -9142,6 +9172,24 @@ def _slugify_orga_name(db: Session, base_name: str) -> str:
 
 
 _ORGA_ROLE_RANK = {"FOLLOWER": 0, "MEMBER": 1, "STAFF": 2, "MANAGER": 3, "OWNER": 4}
+_ORGA_INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_ORGA_INVITE_TYPES = {"MEMBER", "MANAGER", "STAFF", "FOLLOWER"}
+
+
+def _orga_invite_code_hash(code: str) -> str:
+    normalized = (code or "").strip().upper()
+    return hashlib.sha256(f"orga-invite:{normalized}".encode("utf-8")).hexdigest()
+
+
+def _generate_orga_invite_code(length: int = 10) -> str:
+    return "".join(secrets.choice(_ORGA_INVITE_CODE_ALPHABET) for _ in range(length))
+
+
+def _orga_invite_target_role(invite_type: str) -> str:
+    normalized = (invite_type or "MEMBER").strip().upper()
+    if normalized not in _ORGA_INVITE_TYPES:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_invite_type"})
+    return normalized
 
 
 def _membership_for(db: Session, *, org_id: int, user_id: str) -> Optional[OrganizationMembership]:
@@ -9594,6 +9642,273 @@ def join_orga_by_code(
     return response
 
 
+@app.post("/orgas/{org_id}/invites")
+def create_orga_invite(
+    org_id: int,
+    payload: OrgaInviteCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    actor = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = "orga_invite_create"
+    idem = db.query(OrganizationInviteIdempotency).filter(
+        OrganizationInviteIdempotency.org_id == org_id,
+        OrganizationInviteIdempotency.action == action,
+        OrganizationInviteIdempotency.idempotency_key == key,
+    ).first()
+    if idem:
+        return idem.response_json
+
+    invite_type = _orga_invite_target_role(payload.inviteType)
+    expires_at = None
+    if payload.expiresInHours is not None:
+        expires_at = now_utc() + timedelta(hours=int(payload.expiresInHours))
+
+    while True:
+        code = _generate_orga_invite_code()
+        code_hash = _orga_invite_code_hash(code)
+        exists = db.query(OrganizationInviteLink.id).filter(OrganizationInviteLink.code_hash == code_hash).first()
+        if not exists:
+            break
+
+    invite = OrganizationInviteLink(
+        org_id=org_id,
+        code_short=code[-4:],
+        code_hash=code_hash,
+        invite_type=invite_type,
+        status="ACTIVE",
+        expires_at=expires_at,
+        created_by_user_id=user.id,
+        created_at=now_utc(),
+        updated_at=now_utc(),
+    )
+    db.add(invite)
+    db.flush()
+
+    response = {
+        "id": invite.id,
+        "org_id": org_id,
+        "inviteType": invite_type,
+        "status": "ACTIVE",
+        "expiresAt": _serialize_dt(expires_at),
+        "code": code,
+        "suffix": invite.code_short,
+        "deeplink": f"tore://open?type=orga_invite&code={code}",
+        "webUrl": f"{_public_app_base_url()}/open?type=orga_invite&code={code}",
+        "qrPayload": f"tore://open?type=orga_invite&code={code}",
+    }
+    db.add(OrganizationInviteIdempotency(org_id=org_id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=actor.role,
+        action="orga_invite_created",
+        entity_type="orga_invite",
+        entity_id=str(invite.id),
+        event_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"org_id": org_id, "invite_type": invite_type, "expires_at": _serialize_dt(expires_at)},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/orgas/{org_id}/invites")
+def list_orga_invites(
+    org_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    actor = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    rows = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.org_id == org_id).order_by(OrganizationInviteLink.id.desc()).all()
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=actor.role,
+        action="orga_invites_listed",
+        entity_type="organization",
+        entity_id=str(org_id),
+        event_id=None,
+        bar_id=None,
+        payload={"count": len(rows)},
+    )
+    db.commit()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "inviteType": (row.invite_type or "MEMBER").upper(),
+                "status": (row.status or "ACTIVE").upper(),
+                "suffix": row.code_short,
+                "expiresAt": _serialize_dt(row.expires_at),
+                "revokedAt": _serialize_dt(row.revoked_at),
+                "createdAt": _serialize_dt(row.created_at),
+            }
+            for row in rows
+        ]
+    }
+
+
+@app.post("/orgas/{org_id}/invites/{invite_id}/revoke")
+def revoke_orga_invite(
+    org_id: int,
+    invite_id: int,
+    payload: OrgaInviteRevokeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    actor = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_invite_revoke:{invite_id}"
+    idem = db.query(OrganizationInviteIdempotency).filter(
+        OrganizationInviteIdempotency.org_id == org_id,
+        OrganizationInviteIdempotency.action == action,
+        OrganizationInviteIdempotency.idempotency_key == key,
+    ).first()
+    if idem:
+        return idem.response_json
+
+    invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.id == invite_id, OrganizationInviteLink.org_id == org_id).first()
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invite not found")
+
+    invite.status = "REVOKED"
+    invite.revoked_at = now_utc()
+    invite.revoked_reason = payload.reason.strip()
+    invite.updated_at = now_utc()
+    response = {"ok": True, "id": invite.id, "status": invite.status, "revokedAt": _serialize_dt(invite.revoked_at)}
+    db.add(OrganizationInviteIdempotency(org_id=org_id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=actor.role,
+        action="orga_invite_revoked",
+        entity_type="orga_invite",
+        entity_id=str(invite.id),
+        event_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"reason": payload.reason.strip()},
+    )
+    db.commit()
+    return response
+
+
+@app.post("/orgas/join_by_invite")
+def join_orga_by_invite(
+    payload: OrgaJoinByInviteIn,
+    request: Request,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    idem = db.query(OrganizationWriteIdempotency).filter(
+        OrganizationWriteIdempotency.actor_user_id == user.id,
+        OrganizationWriteIdempotency.action == "orga_join_by_invite",
+        OrganizationWriteIdempotency.idempotency_key == key,
+    ).first()
+    if idem:
+        return idem.response_json
+
+    client_ip = (request.client.host if request.client else "unknown")
+    enforce_rate_limit("orga_invite_join", f"{user.id}:{client_ip}")
+
+    normalized = payload.code.strip().upper()
+    code_hash = _orga_invite_code_hash(normalized)
+    invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == code_hash).first()
+    now = now_utc()
+    if invite is None:
+        raise HTTPException(status_code=404, detail={"reason": "INVALID_CODE"})
+    if invite.status != "ACTIVE":
+        raise HTTPException(status_code=400, detail={"reason": "INVITE_NOT_ACTIVE"})
+    if invite.expires_at and invite.expires_at < now:
+        invite.status = "EXPIRED"
+        invite.updated_at = now
+        db.commit()
+        raise HTTPException(status_code=400, detail={"reason": "EXPIRED_CODE"})
+
+    target_role = _orga_invite_target_role(invite.invite_type)
+    membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == invite.org_id,
+        OrganizationMembership.user_id == user.id,
+    ).first()
+    idempotent = False
+    if membership:
+        current_rank = _ORGA_ROLE_RANK.get((membership.role or "FOLLOWER").upper(), 0)
+        target_rank = _ORGA_ROLE_RANK.get(target_role, 0)
+        if membership.status == "ACTIVE" and current_rank >= target_rank:
+            idempotent = True
+        else:
+            membership.role = target_role if target_rank >= current_rank else membership.role
+            membership.status = "ACTIVE"
+            membership.updated_at = now
+            if membership.joined_at is None:
+                membership.joined_at = now
+    else:
+        membership = OrganizationMembership(
+            organization_id=invite.org_id,
+            user_id=user.id,
+            role=target_role,
+            status="ACTIVE",
+            joined_at=now,
+            updated_at=now,
+            created_by_user_id=invite.created_by_user_id,
+            created_at=now,
+        )
+        db.add(membership)
+
+    response = {
+        "ok": True,
+        "organization_id": invite.org_id,
+        "role": membership.role,
+        "status": membership.status,
+        "idempotent": idempotent,
+    }
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action="orga_join_by_invite", idempotency_key=key, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=membership.role,
+        action="orga_join_by_invite",
+        entity_type="organization_membership",
+        entity_id=f"{invite.org_id}:{user.id}",
+        event_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"invite_id": invite.id, "invite_type": invite.invite_type},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/orgas/invites/{code}/preview")
+def orga_invite_preview(code: str, db: Session = Depends(get_db)):
+    normalized = (code or "").strip().upper()
+    invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(normalized)).first()
+    if invite is None:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    org = db.get(Organization, invite.org_id)
+    if org is None:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    if (org.visibility or "PUBLIC").upper() != "PUBLIC":
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    return {
+        "org": {"name": org.name, "city": org.city},
+        "inviteType": invite.invite_type,
+        "status": invite.status,
+        "expiresAt": _serialize_dt(invite.expires_at),
+    }
+
+
 @app.get("/orgas/{org_id}/share", response_model=OrgaShareOut)
 def get_orga_share(
     org_id: int,
@@ -9622,36 +9937,23 @@ def get_orga_invite(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    membership = db.query(OrganizationMembership).filter(
-        OrganizationMembership.organization_id == org_id,
-        OrganizationMembership.user_id == user.id,
-    ).first()
-    if not membership or membership.role not in {"OWNER", "MANAGER"}:
-        raise HTTPException(403, "Forbidden")
-
-    code = random_code(8)
-    invite = OrganizationInviteCode(
-        organization_id=org_id,
-        code=code,
-        role="MEMBER",
-        max_uses=100,
-        used_count=0,
-        expires_at=now_utc() + timedelta(days=7),
-        created_by_user_id=user.id,
-        created_at=now_utc(),
+    payload = create_orga_invite(
+        org_id=org_id,
+        payload=OrgaInviteCreateIn(inviteType="MEMBER", expiresInHours=24 * 7),
+        user=user,
+        db=db,
+        idempotency_key=f"legacy-orga-invite-{org_id}-{user.id}",
     )
-    db.add(invite)
-    db.commit()
 
-    deeplink = f"tore://orgas/join?code={code}&orgId={org_id}"
+    code = payload["code"]
     return {
         "org_id": org_id,
         "invite_code": code,
         "code": code,
-        "deeplink": deeplink,
-        "https_link": f"{_public_app_base_url()}/open?type=join&code={code}",
-        "qr_payload": deeplink,
-        "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
+        "deeplink": payload["deeplink"],
+        "https_link": payload["webUrl"],
+        "qr_payload": payload["qrPayload"],
+        "expires_at": payload["expiresAt"],
     }
 
 

@@ -14,6 +14,7 @@ import '../events/presentation/staff_invite_join_screen.dart';
 import '../events/presentation/staff_backup_join_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
 import '../community/presentation/orga_detail_screen.dart';
+import '../community/presentation/orga_invite_join_screen.dart';
 import '../qr/presentation/join_event_screen.dart';
 import '../qr/presentation/module_unavailable_screen.dart';
 import '../qr/presentation/qr_expired_screen.dart';
@@ -193,6 +194,15 @@ class QrRouterService {
             builder: (_) => StaffBackupJoinScreen(prefillEventId: payload.eventId, prefillCode: payload.tokenId),
           ),
         );
+        return;
+      case QrType.orgaInvite:
+        final code = (payload.tokenId ?? payload.fields['code'] ?? '').trim();
+        if (code.isEmpty) {
+          await _openUnknown(context: context, payload: payload, reason: 'code invite orga manquant');
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('Orga invite'));
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaInviteJoinScreen(code: code)));
         return;
       case QrType.wifi:
         if (payload.eventId == null || payload.tokenId == null || payload.tokenId!.isEmpty) {

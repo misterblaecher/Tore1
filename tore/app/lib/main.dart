@@ -6,6 +6,7 @@ import 'package:tore/features/bars/presentation/bars_screen.dart';
 import 'app_shell.dart';
 import 'features/auth/presentation/welcome_screen.dart';
 import 'features/community/presentation/orga_detail_screen.dart';
+import 'features/community/presentation/orga_invite_join_screen.dart';
 import 'features/qr/presentation/join_event_screen.dart';
 import 'features/events/presentation/staff_invite_join_screen.dart';
 import 'features/events/presentation/staff_backup_join_screen.dart';
@@ -91,6 +92,12 @@ class ToreApp extends ConsumerWidget {
               return MaterialPageRoute(
                 settings: settings,
                 builder: (_) => StaffBackupJoinScreen(prefillEventId: id, prefillCode: code),
+              );
+            }
+            if (type == 'orga_invite') {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => OrgaInviteJoinScreen(code: code),
               );
             }
           }

@@ -1771,6 +1771,42 @@ class OrganizationWriteIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class OrganizationInviteLink(Base):
+    __tablename__ = "orga_invite_links"
+    __table_args__ = (
+        UniqueConstraint("code_hash", name="uq_orga_invite_links_code_hash"),
+        Index("ix_orga_invite_links_org_status", "org_id", "status"),
+        Index("ix_orga_invite_links_org_expires", "org_id", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    code_short: Mapped[str] = mapped_column(String(24), index=True)
+    code_hash: Mapped[str] = mapped_column(String(128), index=True)
+    invite_type: Mapped[str] = mapped_column(String(16), default="MEMBER", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_reason: Mapped[Optional[str]] = mapped_column(String(280), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class OrganizationInviteIdempotency(Base):
+    __tablename__ = "orga_invite_idempotency"
+    __table_args__ = (
+        UniqueConstraint("org_id", "action", "idempotency_key", name="uq_orga_invite_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    action: Mapped[str] = mapped_column(String(48), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class OrgaPost(Base):
     __tablename__ = "organization_posts"
     __table_args__ = (
