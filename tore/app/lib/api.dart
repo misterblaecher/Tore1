@@ -1383,6 +1383,26 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+
+  Future<Map<String, dynamic>> rotateStaffInviteV1({
+    required int eventId,
+    required String role,
+    required String idempotencyKey,
+    int? expiresInMinutes,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/staff_invites/rotate',
+      data: {'role': role, if (expiresInMinutes != null) 'expiresInMinutes': expiresInMinutes},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getCurrentStaffInvitesV1(int eventId) async {
+    final res = await _client.dio.get('/events/$eventId/staff_invites/current');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> joinStaffByInviteV1({
     required int eventId,
     required String code,

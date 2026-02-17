@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../state.dart';
@@ -21,9 +22,12 @@ class EventSharePackScreen extends ConsumerStatefulWidget {
 
 class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
   static const String _publicWebBaseUrl = 'https://app.tore.be';
+  static const Duration _ttl = Duration(hours: 24);
   Map<String, dynamic>? _pack;
+  bool _fromCache = false;
 
   String _idem(String action) => '$action-${widget.eventId}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String get _cacheKey => 'share_pack_${widget.eventId}';
 
   @override
   void initState() {
@@ -32,8 +36,25 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
   }
 
   Future<void> _refresh() async {
-    final pack = await ref.read(apiProvider).getEventSharePackV1(widget.eventId);
-    if (mounted) setState(() => _pack = pack);
+    try {
+      final pack = await ref.read(apiProvider).getEventSharePackV1(widget.eventId);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode({'payload': pack, 'exp': DateTime.now().toUtc().add(_ttl).toIso8601String()}));
+      if (mounted) setState(() { _pack = pack; _fromCache = false; });
+    } catch (_) {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw != null) {
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        final exp = DateTime.tryParse((decoded['exp'] ?? '').toString());
+        final payload = decoded['payload'];
+        if (exp != null && exp.isAfter(DateTime.now().toUtc()) && payload is Map) {
+          if (mounted) setState(() { _pack = Map<String, dynamic>.from(payload); _fromCache = true; });
+          return;
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<void> _copy(String value, {String message = 'Copié'}) async {
@@ -43,31 +64,26 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
   }
 
   Future<void> _openPrintableVersion({required bool canManage}) async {
-    final path = canManage
-        ? '/orga/events/${widget.eventId}/share-pack/print'
-        : '/share/event/${widget.eventId}/print';
-    final uri = Uri.parse('$_publicWebBaseUrl$path');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final path = canManage ? '/orga/events/${widget.eventId}/share-pack/print' : '/share/event/${widget.eventId}/print';
+    await launchUrl(Uri.parse('$_publicWebBaseUrl$path'), mode: LaunchMode.externalApplication);
   }
 
   Future<void> _sharePrintableLink({required bool canManage}) async {
-    final path = canManage
-        ? '/orga/events/${widget.eventId}/share-pack/print'
-        : '/share/event/${widget.eventId}/print';
-    final url = '$_publicWebBaseUrl$path';
-    await Share.share(url, subject: 'Print pack TORÈ #${widget.eventId}');
+    final path = canManage ? '/orga/events/${widget.eventId}/share-pack/print' : '/share/event/${widget.eventId}/print';
+    await Share.share('$_publicWebBaseUrl$path', subject: 'Print pack TORÈ #${widget.eventId}');
   }
 
-  Future<void> _createStaffInvite(String role) async {
+  Future<void> _rotateStaffInvite(String role) async {
     if (!canWrite(ref, intent: WriteIntent.critical)) return;
-    await ref.read(apiProvider).createStaffInviteCodeV1(eventId: widget.eventId, idempotencyKey: _idem('create-$role'), role: role);
-    await _refresh();
-  }
-
-  Future<void> _revokeStaffInvite(String code) async {
-    if (!canWrite(ref, intent: WriteIntent.critical)) return;
-    await ref.read(apiProvider).revokeStaffInviteCodeV1(eventId: widget.eventId, code: code, reason: 'Revoked from share pack', idempotencyKey: _idem('revoke-$code'));
-    await _refresh();
+    try {
+      await ref.read(apiProvider).rotateStaffInviteV1(eventId: widget.eventId, role: role, idempotencyKey: _idem('rotate-$role'));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invite $role régénérée')));
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Échec régénération $role: $e')));
+    }
   }
 
   @override
@@ -77,9 +93,7 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
     final staffInvites = ((links['staffInvites'] as List?) ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     final canManage = links.containsKey('staffInvites');
     final qr = Map<String, dynamic>.from((pack?['qr'] as Map?) ?? const <String, dynamic>{});
-    final printUrl = canManage
-        ? '$_publicWebBaseUrl/orga/events/${widget.eventId}/share-pack/print'
-        : '$_publicWebBaseUrl/share/event/${widget.eventId}/print';
+    final printUrl = canManage ? '$_publicWebBaseUrl/orga/events/${widget.eventId}/share-pack/print' : '$_publicWebBaseUrl/share/event/${widget.eventId}/print';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Share pack')),
@@ -88,30 +102,15 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (_fromCache) const Card(child: ListTile(leading: Icon(Icons.cloud_off), title: Text('CACHE / OFFLINE'), subtitle: Text('Affichage du dernier share pack sauvegardé (TTL 24h).'))),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: () => _openPrintableVersion(canManage: canManage),
-                          icon: const Icon(Icons.print),
-                          label: const Text('Version imprimable'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => _copy(printUrl, message: 'Lien print copié'),
-                          icon: const Icon(Icons.link),
-                          label: const Text('Copier lien print'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => _sharePrintableLink(canManage: canManage),
-                          icon: const Icon(Icons.share),
-                          label: const Text('Partager'),
-                        ),
-                      ],
-                    ),
+                    child: Wrap(spacing: 8, runSpacing: 8, children: [
+                      FilledButton.icon(onPressed: () => _openPrintableVersion(canManage: canManage), icon: const Icon(Icons.print), label: const Text('Version imprimable')),
+                      OutlinedButton.icon(onPressed: () => _copy(printUrl, message: 'Lien print copié'), icon: const Icon(Icons.link), label: const Text('Copier lien print')),
+                      OutlinedButton.icon(onPressed: () => _sharePrintableLink(canManage: canManage), icon: const Icon(Icons.share), label: const Text('Partager')),
+                    ]),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -125,16 +124,15 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Staff invites', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      Wrap(spacing: 8, children: [for (final role in const ['ENTRY', 'BAR', 'MANAGER', 'HELPER']) OutlinedButton(onPressed: canManage ? () => _createStaffInvite(role) : null, child: Text('Créer $role'))]),
-                      const SizedBox(height: 8),
                       for (final invite in staffInvites)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text('${invite['role']} · ${invite['code']}'),
-                          subtitle: Text('Expire: ${invite['expiresAt'] ?? '-'} · ${invite['status'] ?? '-'}'),
+                          subtitle: Text('Expire: ${invite['expiresAt'] ?? '-'} · ${invite['status'] ?? '-'}\nSi QR ne marche pas: ouvre app.tore.be/open et entre le code: ${(((invite['code'] ?? '') as String).length > 6 ? ((invite['code'] ?? '') as String).substring(((invite['code'] ?? '') as String).length - 6) : (invite['code'] ?? '').toString())}'),
                           trailing: Wrap(spacing: 4, children: [
-                            IconButton(onPressed: () => _copy((invite['webUrl'] ?? '').toString()), icon: const Icon(Icons.copy)),
-                            IconButton(onPressed: canManage ? () => _revokeStaffInvite((invite['code'] ?? '').toString()) : null, icon: const Icon(Icons.block)),
+                            IconButton(onPressed: () => _copy((invite['webUrl'] ?? '').toString(), message: 'Lien staff copié'), icon: const Icon(Icons.copy), tooltip: 'Copier lien staff'),
+                            if ((invite['role'] ?? '').toString().toUpperCase() == 'MANAGER' && canManage)
+                              IconButton(onPressed: () => _rotateStaffInvite('MANAGER'), icon: const Icon(Icons.autorenew), tooltip: 'Régénérer invite staff'),
                           ]),
                         ),
                     ]),
@@ -147,7 +145,8 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('QR payloads', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      for (final e in qr.entries) ListTile(contentPadding: EdgeInsets.zero, title: Text(e.key), subtitle: Text(e.value.toString()), trailing: IconButton(onPressed: () => _copy(e.value.toString()), icon: const Icon(Icons.copy))),
+                      for (final e in qr.entries)
+                        ListTile(contentPadding: EdgeInsets.zero, title: Text(e.key), subtitle: Text(e.value.toString()), trailing: IconButton(onPressed: () => _copy(e.value.toString()), icon: const Icon(Icons.copy))),
                     ]),
                   ),
                 ),
