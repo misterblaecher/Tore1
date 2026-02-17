@@ -81,6 +81,13 @@ void main() {
       expect(payload.type, QrType.staffInvite);
       expect(payload.tokenId, 'ABC123');
     });
+
+    test('parse open staff backup deeplink', () {
+      final payload = parser.parse('tore://open?type=staff_backup&eventId=12&code=ABCD2345');
+      expect(payload.type, QrType.staffBackup);
+      expect(payload.eventId, 12);
+      expect(payload.tokenId, 'ABCD2345');
+    });
     test('parse json payload', () {
       final payload = parser.parse('{"type":"join_event","event_id":88,"exp":9999999999}');
       expect(payload.type, QrType.joinEvent);

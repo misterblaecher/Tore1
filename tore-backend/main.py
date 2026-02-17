@@ -79,6 +79,8 @@ from models import (
     EventAppWriteIdempotency,
     EventStaffInviteCode,
     EventStaffInviteIdempotency,
+    EventStaffBackupCode,
+    EventStaffBackupIdempotency,
     TicketTransfer,
     Committee,
     CommitteeYear,
@@ -1233,6 +1235,16 @@ class StaffInviteRotateIn(BaseModel):
 
 
 class StaffJoinByInviteIn(BaseModel):
+    code: str
+
+
+class StaffBackupGenerateIn(BaseModel):
+    role: str
+    count: int = Field(default=12, ge=1, le=64)
+    expiresInHours: int = Field(default=12, ge=1, le=168)
+
+
+class StaffBackupJoinIn(BaseModel):
     code: str
 
 
@@ -6272,6 +6284,55 @@ def _staff_invite_public_payload(invite: EventStaffInviteCode, *, public_base_ur
     }
 
 
+_BACKUP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def _normalize_backup_code(raw: str | None) -> str:
+    return "".join(ch for ch in (raw or "").strip().upper() if ch in _BACKUP_CODE_ALPHABET)
+
+
+def _generate_backup_code(length: int = 8) -> str:
+    return "".join(secrets.choice(_BACKUP_CODE_ALPHABET) for _ in range(length))
+
+
+def _hash_staff_backup_code(event_id: int, code: str) -> str:
+    material = f"{event_id}:{_normalize_backup_code(code)}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
+
+
+def _staff_backup_status(item: EventStaffBackupCode) -> str:
+    now = now_utc()
+    if item.used_at is not None:
+        return "USED"
+    if item.status == "REVOKED" or item.revoked_at is not None:
+        return "REVOKED"
+    if item.expires_at and now > item.expires_at:
+        return "EXPIRED"
+    return "ACTIVE"
+
+
+def _staff_backup_admin_payload(item: EventStaffBackupCode) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "role": (item.role or "").upper(),
+        "status": _staff_backup_status(item),
+        "expiresAt": item.expires_at.isoformat() if item.expires_at else None,
+        "suffix4": item.suffix4,
+        "usedAt": item.used_at.isoformat() if item.used_at else None,
+        "revokedAt": item.revoked_at.isoformat() if item.revoked_at else None,
+    }
+
+
+def _staff_backup_open_payload(event_id: int, code: str, *, public_base_url: str | None = None) -> dict[str, str]:
+    public_base_url = (public_base_url or _public_app_base_url()).rstrip("/")
+    normalized = _normalize_backup_code(code)
+    return {
+        "webUrl": f"{public_base_url}/open?type=staff_backup&eventId={event_id}&code={normalized}",
+        "deeplink": f"tore://open?type=staff_backup&eventId={event_id}&code={normalized}",
+        "qrPayload": f"tore://open?type=staff_backup&eventId={event_id}&code={normalized}",
+    }
+
+
 def _staff_invite_current_role_payload(invite: EventStaffInviteCode | None, *, public_base_url: str | None = None) -> dict[str, Any] | None:
     if invite is None:
         return None
@@ -6305,6 +6366,7 @@ def _event_share_pack_payload(db: Session, event: Event, *, include_staff: bool)
             .all()
         )
         links["staffInvites"] = [_staff_invite_public_payload(item, public_base_url=public_base) for item in invites]
+        links["staffBackupPrintUrl"] = f"{public_base}/orga/events/{event.id}/staff-backup/print"
     if module_cfg and module_cfg.hunt_enabled:
         links["hunts"] = {"webUrl": f"{public_base}/events/{event.id}/hunt", "deeplink": f"tore://open?type=event&id={event.id}&module=hunts"}
     if module_cfg and module_cfg.battles_enabled:
@@ -6585,6 +6647,7 @@ def resolve_open_link(
     type: str,
     id: Optional[int] = None,
     event_id: Optional[int] = None,
+    eventId: Optional[int] = Query(default=None),
     org_id: Optional[int] = None,
     code: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -6596,7 +6659,7 @@ def resolve_open_link(
         user = _resolve_app_user_from_token(raw, db)
 
     type_normalized = (type or "").strip().lower()
-    target_id = id or event_id or org_id
+    target_id = id or event_id or eventId or org_id
     if type_normalized == "event":
         if target_id is None:
             raise HTTPException(status_code=400, detail={"reason": "missing_id"})
@@ -6636,6 +6699,16 @@ def resolve_open_link(
         deeplink = f"tore://open?type=staff_invite&code={normalized}"
         web_fallback = f"{_public_app_base_url()}/open?type=staff_invite&code={normalized}"
         target = {"code": normalized, "event_id": invite.event_id, "role": (invite.role or "").upper()}
+    elif type_normalized == "staff_backup":
+        if not code:
+            raise HTTPException(status_code=400, detail={"reason": "missing_code"})
+        event_id_param = event_id or target_id
+        if event_id_param is None:
+            raise HTTPException(status_code=400, detail={"reason": "missing_event_id"})
+        normalized = _normalize_backup_code(code)
+        deeplink = f"tore://open?type=staff_backup&eventId={event_id_param}&code={normalized}"
+        web_fallback = f"{_public_app_base_url()}/open?type=staff_backup&eventId={event_id_param}&code={normalized}"
+        target = {"code": normalized, "event_id": int(event_id_param)}
     else:
         raise HTTPException(status_code=400, detail={"reason": "unsupported_type"})
 
@@ -6975,6 +7048,194 @@ def join_staff_by_invite(
     )
     db.commit()
     return response
+
+
+@app.post("/events/{event_id}/staff_backup_codes/generate")
+def generate_staff_backup_codes(
+    event_id: int,
+    payload: StaffBackupGenerateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+
+    action = f"generate:{(payload.role or '').upper()}"
+    existing = db.query(EventStaffBackupIdempotency).filter(
+        EventStaffBackupIdempotency.event_id == event_id,
+        EventStaffBackupIdempotency.action == action,
+        EventStaffBackupIdempotency.actor_user_id == user.id,
+        EventStaffBackupIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    _guard_event_write_runtime(db, event_id, critical_write=True)
+
+    role = (payload.role or "").upper().strip()
+    if role not in {"ENTRY", "BAR", "MANAGER", "HELPER"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_role"})
+
+    active = db.query(EventStaffBackupCode).filter(
+        EventStaffBackupCode.event_id == event_id,
+        EventStaffBackupCode.role == role,
+        EventStaffBackupCode.status == "ACTIVE",
+        EventStaffBackupCode.revoked_at.is_(None),
+        EventStaffBackupCode.used_at.is_(None),
+    ).all()
+    now = now_utc()
+    for item in active:
+        item.status = "REVOKED"
+        item.revoked_at = now
+        item.revoked_reason = "REGENERATED"
+
+    expires_at = now + timedelta(hours=payload.expiresInHours or 12)
+    generated: list[dict[str, Any]] = []
+    for _ in range(payload.count or 12):
+        plain = _generate_backup_code(8)
+        code_hash = _hash_staff_backup_code(event_id, plain)
+        row = EventStaffBackupCode(
+            event_id=event_id,
+            role=role,
+            code_hash=code_hash,
+            suffix4=plain[-4:],
+            expires_at=expires_at,
+            status="ACTIVE",
+            created_by=user.id,
+        )
+        db.add(row)
+        generated.append({"code": plain, "suffix4": plain[-4:], "expiresAt": expires_at.isoformat(), **_staff_backup_open_payload(event_id, plain)})
+
+    response = {"ok": True, "eventId": event_id, "role": role, "count": len(generated), "expiresAt": expires_at.isoformat(), "codes": generated}
+    db.add(EventStaffBackupIdempotency(event_id=event_id, action=action, actor_user_id=user.id, idempotency_key=key, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="staff_backup_generated",
+        entity_type="event_staff_backup_code",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"role": role, "count": len(generated), "expiresAt": expires_at.isoformat()},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/events/{event_id}/staff_backup_codes")
+def list_staff_backup_codes(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+
+    rows = db.query(EventStaffBackupCode).filter(EventStaffBackupCode.event_id == event_id).order_by(EventStaffBackupCode.created_at.desc()).all()
+    by_role: dict[str, list[dict[str, Any]]] = {"ENTRY": [], "BAR": [], "MANAGER": [], "HELPER": []}
+    for row in rows:
+        by_role.setdefault((row.role or "").upper(), []).append(_staff_backup_admin_payload(row))
+
+    payload = {"eventId": event_id, "roles": by_role}
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.staff_backup.read",
+        entity_type="event",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        payload={"scope": "staff_backup_list"},
+    )
+    db.commit()
+    return payload
+
+
+@app.post("/events/{event_id}/staff/join_by_backup_code")
+def join_staff_by_backup_code(
+    event_id: int,
+    payload: StaffBackupJoinIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    existing = db.query(EventStaffBackupIdempotency).filter(
+        EventStaffBackupIdempotency.event_id == event_id,
+        EventStaffBackupIdempotency.action == "consume",
+        EventStaffBackupIdempotency.actor_user_id == user.id,
+        EventStaffBackupIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    _guard_event_write_runtime(db, event_id, critical_write=True)
+    enforce_rate_limit("staff_backup_join", f"{user.id}:{event_id}")
+
+    normalized = _normalize_backup_code(payload.code)
+    if len(normalized) < 8:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_code"})
+    code_hash = _hash_staff_backup_code(event_id, normalized)
+    row = db.query(EventStaffBackupCode).filter(
+        EventStaffBackupCode.event_id == event_id,
+        EventStaffBackupCode.code_hash == code_hash,
+    ).order_by(EventStaffBackupCode.created_at.desc()).first()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail={"reason": "backup_not_found"})
+
+    status = _staff_backup_status(row)
+    if status != "ACTIVE":
+        raise HTTPException(status_code=409, detail={"reason": "backup_not_active", "status": status})
+
+    role = (row.role or "HELPER").lower()
+    staff = db.query(EventStaff).filter(EventStaff.event_id == event_id, EventStaff.user_id == user.id).first()
+    if staff is None:
+        staff = EventStaff(event_id=event_id, user_id=user.id, role=role, is_active=True, created_at=now_utc(), created_by_user_id=row.created_by)
+        db.add(staff)
+    else:
+        staff.role = role
+        staff.is_active = True
+        staff.revoked_at = None
+        staff.revoked_by_user_id = None
+
+    row.used_at = now_utc()
+    row.used_by = user.id
+    row.status = "USED"
+
+    response = {"ok": True, "eventId": event_id, "role": (row.role or role).upper(), "expiresAt": row.expires_at.isoformat() if row.expires_at else None, "tokenId": f"staff-backup:{row.id}"}
+    db.add(EventStaffBackupIdempotency(event_id=event_id, action="consume", actor_user_id=user.id, idempotency_key=key, code_id=row.id, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="staff_backup_consumed",
+        entity_type="event_staff_backup_code",
+        entity_id=str(row.id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"role": response["role"], "suffix4": row.suffix4},
+    )
+    db.commit()
+    return response
+
 
 
 @app.get("/events/{event_id}/share_pack")
