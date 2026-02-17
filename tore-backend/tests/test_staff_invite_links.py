@@ -146,3 +146,84 @@ def test_open_resolves_staff_invite_and_private_share_pack_requires_auth() -> No
 
     no_auth_pack = client.get(f'/events/{event_id}/share_pack')
     assert no_auth_pack.status_code == 401
+
+
+def test_rotate_staff_invite_is_idempotent_and_revokes_previous() -> None:
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    owner_id, owner_token = _seed_user(client, f'staff-owner-{secrets.token_hex(2)}')
+    event_id = _create_event(client, owner_id, owner_token)
+
+    created = client.post(
+        f'/events/{event_id}/staff_invite_code',
+        json={'role': 'ENTRY'},
+        headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': f'invite-{secrets.token_hex(2)}'},
+    )
+    assert created.status_code == 200
+    old_code = created.json()['code']
+
+    headers = {'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': 'rotate-entry-idem-1'}
+    first = client.post(
+        f'/events/{event_id}/staff_invites/rotate',
+        json={'role': 'ENTRY', 'expiresInMinutes': 90},
+        headers=headers,
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        f'/events/{event_id}/staff_invites/rotate',
+        json={'role': 'ENTRY', 'expiresInMinutes': 90},
+        headers=headers,
+    )
+    assert second.status_code == 200
+    assert first.json()['code'] == second.json()['code']
+
+    current = client.get(f'/events/{event_id}/staff_invites/current', headers={'Authorization': f'Bearer {owner_token}'})
+    assert current.status_code == 200
+    roles = current.json()['roles']
+    assert roles['ENTRY']['code'] == first.json()['code']
+    assert roles['ENTRY']['status'] == 'ACTIVE'
+
+    session = get_session()
+    try:
+        old = session.query(AuditLog).filter(AuditLog.event_id == event_id, AuditLog.action == 'staff_invite_rotated').all()
+        assert len(old) >= 1
+    finally:
+        session.close()
+
+    join_old = client.post(
+        f'/events/{event_id}/staff/join_by_invite',
+        json={'code': old_code},
+        headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': f'join-rot-old-{secrets.token_hex(2)}'},
+    )
+    assert join_old.status_code == 409
+
+
+def test_current_staff_invites_returns_one_active_per_role_and_audit() -> None:
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    owner_id, owner_token = _seed_user(client, f'staff-owner-{secrets.token_hex(2)}')
+    event_id = _create_event(client, owner_id, owner_token)
+
+    for role in ('ENTRY', 'BAR'):
+        res = client.post(
+            f'/events/{event_id}/staff_invites/rotate',
+            json={'role': role},
+            headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': f'rot-{role}-{secrets.token_hex(2)}'},
+        )
+        assert res.status_code == 200
+
+    current = client.get(f'/events/{event_id}/staff_invites/current', headers={'Authorization': f'Bearer {owner_token}'})
+    assert current.status_code == 200
+    payload = current.json()
+    assert set(payload['roles'].keys()) == {'ENTRY', 'BAR', 'MANAGER', 'HELPER'}
+    assert payload['roles']['ENTRY']['status'] == 'ACTIVE'
+    assert payload['roles']['BAR']['status'] == 'ACTIVE'
+    assert payload['roles']['MANAGER'] is None
+
+    session = get_session()
+    try:
+        audits = session.query(AuditLog).filter(AuditLog.event_id == event_id, AuditLog.action == 'event.staff_invites.current.read').all()
+        assert len(audits) >= 1
+    finally:
+        session.close()

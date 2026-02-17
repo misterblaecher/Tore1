@@ -1227,6 +1227,11 @@ class StaffInviteRevokeIn(BaseModel):
     reason: str = Field(min_length=1, max_length=280)
 
 
+class StaffInviteRotateIn(BaseModel):
+    role: str
+    expiresInMinutes: Optional[int] = Field(default=None, ge=5, le=10080)
+
+
 class StaffJoinByInviteIn(BaseModel):
     code: str
 
@@ -4055,6 +4060,7 @@ def _event_join_payload(db: Session, event: Event) -> dict[str, Any]:
         bar = db.get(Bar, event.bar_id)
         bar_name = bar.name if bar else None
     return {
+        "serverTime": now_utc().isoformat(),
         "event": {
             "id": event.id,
             "bar_id": event.bar_id,
@@ -6266,6 +6272,19 @@ def _staff_invite_public_payload(invite: EventStaffInviteCode, *, public_base_ur
     }
 
 
+def _staff_invite_current_role_payload(invite: EventStaffInviteCode | None, *, public_base_url: str | None = None) -> dict[str, Any] | None:
+    if invite is None:
+        return None
+    payload = _staff_invite_public_payload(invite, public_base_url=public_base_url)
+    return {
+        "code": payload["code"],
+        "status": payload["status"],
+        "expiresAt": payload["expiresAt"],
+        "openUrl": payload["webUrl"],
+        "webUrl": payload["webUrl"],
+    }
+
+
 def _event_share_pack_payload(db: Session, event: Event, *, include_staff: bool) -> dict[str, Any]:
     public_base = _public_app_base_url()
     share = _app_event_share_payload(event, public_base_url=public_base, include_staff=include_staff)
@@ -6314,6 +6333,7 @@ def _event_share_pack_payload(db: Session, event: Event, *, include_staff: bool)
     }
 
     return {
+        "serverTime": now_utc().isoformat(),
         "event": {
             "id": event.id,
             "name": event.name,
@@ -6757,6 +6777,133 @@ def revoke_event_staff_invite_code(
     )
     db.commit()
     return response
+
+
+@app.post("/events/{event_id}/staff_invites/rotate")
+def rotate_event_staff_invite_code(
+    event_id: int,
+    payload: StaffInviteRotateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+    _guard_event_write_runtime(db, event_id, critical_write=True)
+
+    role = (payload.role or "").upper().strip()
+    if role not in {"ENTRY", "BAR", "MANAGER", "HELPER"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_role"})
+
+    existing = db.query(EventStaffInviteIdempotency).filter(
+        EventStaffInviteIdempotency.event_id == event_id,
+        EventStaffInviteIdempotency.action == f"rotate:{role}",
+        EventStaffInviteIdempotency.actor_user_id == user.id,
+        EventStaffInviteIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    now = now_utc()
+    active = db.query(EventStaffInviteCode).filter(
+        EventStaffInviteCode.event_id == event_id,
+        EventStaffInviteCode.role == role,
+        EventStaffInviteCode.status == "ACTIVE",
+        EventStaffInviteCode.revoked_at.is_(None),
+    ).order_by(EventStaffInviteCode.created_at.desc()).all()
+    revoked_codes: list[str] = []
+    for invite in active:
+        if invite.expires_at and invite.expires_at <= now:
+            continue
+        invite.status = "REVOKED"
+        invite.revoked_at = now
+        invite.revoked_reason = "ROTATED"
+        revoked_codes.append((invite.code or "").upper())
+
+    expires_in_minutes = payload.expiresInMinutes or (12 * 60)
+    expires_at = now + timedelta(minutes=expires_in_minutes)
+    invite = EventStaffInviteCode(
+        event_id=event.id,
+        role=role,
+        code=random_code(8).upper(),
+        expires_at=expires_at,
+        created_by=user.id,
+        status="ACTIVE",
+    )
+    db.add(invite)
+    db.flush()
+
+    response = _staff_invite_public_payload(invite)
+    db.add(EventStaffInviteIdempotency(
+        event_id=event.id,
+        action=f"rotate:{role}",
+        actor_user_id=user.id,
+        idempotency_key=key,
+        invite_id=invite.id,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="staff_invite_rotated",
+        entity_type="event_staff_invite_code",
+        entity_id=str(invite.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=key,
+        payload={"role": role, "newCode": response.get("code"), "revokedCodes": revoked_codes, "expiresAt": response.get("expiresAt")},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/events/{event_id}/staff_invites/current")
+def get_event_staff_invites_current(
+    event_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+
+    now = now_utc()
+    roles: dict[str, Any] = {}
+    for role in ("ENTRY", "BAR", "MANAGER", "HELPER"):
+        invite = db.query(EventStaffInviteCode).filter(
+            EventStaffInviteCode.event_id == event_id,
+            EventStaffInviteCode.role == role,
+            EventStaffInviteCode.status == "ACTIVE",
+            EventStaffInviteCode.revoked_at.is_(None),
+        ).order_by(EventStaffInviteCode.created_at.desc()).first()
+        if invite is not None and invite.expires_at and invite.expires_at <= now:
+            invite = None
+        roles[role] = _staff_invite_current_role_payload(invite)
+
+    payload = {
+        "roles": roles,
+        "serverTime": now.isoformat(),
+    }
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.staff_invites.current.read",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        payload={"scope": "staff_invites_current"},
+    )
+    db.commit()
+    return payload
 
 
 @app.post("/events/{event_id}/staff/join_by_invite")
