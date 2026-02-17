@@ -9022,6 +9022,7 @@ class OrgaCreateIn(BaseModel):
     website_url: Optional[str] = Field(default=None, max_length=255)
     instagram_handle: Optional[str] = Field(default=None, max_length=64)
     visibility: Literal["PUBLIC", "PRIVATE"] = "PUBLIC"
+    join_mode: Literal["FOLLOW_ONLY", "OPEN_MEMBERSHIP", "REQUEST_TO_JOIN"] = "OPEN_MEMBERSHIP"
 
 
 class OrgaOut(BaseModel):
@@ -9034,12 +9035,13 @@ class OrgaOut(BaseModel):
     website_url: Optional[str] = None
     instagram_handle: Optional[str] = None
     visibility: str = "PUBLIC"
+    join_mode: str = "OPEN_MEMBERSHIP"
 
 
 class OrgaMembershipOut(BaseModel):
     orga: OrgaOut
     role: Literal["OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"]
-    status: Literal["ACTIVE", "PENDING"] = "ACTIVE"
+    status: Literal["ACTIVE", "PENDING", "REJECTED", "LEFT"] = "ACTIVE"
 
 
 class JoinByCodeIn(BaseModel):
@@ -9049,6 +9051,14 @@ class JoinByCodeIn(BaseModel):
 class OrgaMemberUpsertIn(BaseModel):
     user_id: str = Field(min_length=3, max_length=64)
     role: Literal["OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"] = "MEMBER"
+
+
+class MembershipDecisionIn(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=280)
+
+
+class MembershipRejectIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=280)
 
 
 class OrgaPostCreateIn(BaseModel):
@@ -9094,7 +9104,29 @@ def _orga_to_out(row: Organization) -> dict[str, Any]:
         "website_url": row.website_url,
         "instagram_handle": row.instagram_handle,
         "visibility": row.visibility,
+        "join_mode": (row.join_mode or "OPEN_MEMBERSHIP").upper(),
     }
+
+
+def _membership_snapshot(row: Optional[OrganizationMembership]) -> Optional[dict[str, Any]]:
+    if row is None:
+        return None
+    return {
+        "organization_id": row.organization_id,
+        "user_id": row.user_id,
+        "role": (row.role or "MEMBER").upper(),
+        "status": (row.status or "ACTIVE").upper(),
+        "created_at": _serialize_dt(row.created_at),
+        "updated_at": _serialize_dt(row.updated_at),
+        "joined_at": _serialize_dt(row.joined_at),
+    }
+
+
+def _get_orga_or_404(db: Session, org_id: int) -> Organization:
+    org = db.get(Organization, org_id)
+    if org is None:
+        raise HTTPException(404, "Organization not found")
+    return org
 
 
 def _slugify_orga_name(db: Session, base_name: str) -> str:
@@ -9117,6 +9149,13 @@ def _membership_for(db: Session, *, org_id: int, user_id: str) -> Optional[Organ
         OrganizationMembership.organization_id == org_id,
         OrganizationMembership.user_id == user_id,
         OrganizationMembership.status == "ACTIVE",
+    ).first()
+
+
+def _membership_any_status(db: Session, *, org_id: int, user_id: str) -> Optional[OrganizationMembership]:
+    return db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == user_id,
     ).first()
 
 
@@ -9162,6 +9201,7 @@ def create_organization(
         website_url=(payload.website_url or "").strip() or None,
         instagram_handle=(payload.instagram_handle or "").strip() or None,
         visibility=(payload.visibility or "PUBLIC").upper(),
+        join_mode=(payload.join_mode or "OPEN_MEMBERSHIP").upper(),
         created_by_user_id=user.id,
         created_at=now_utc(),
     )
@@ -9645,33 +9685,136 @@ def upsert_orga_member(org_id: int, payload: OrgaMemberUpsertIn, user: AppUser =
     return response
 
 
+@app.get("/orgas/{org_id}/memberships/me")
+def orga_my_membership(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _get_orga_or_404(db, org_id)
+    row = _membership_any_status(db, org_id=org_id, user_id=user.id)
+    return {"membership": _membership_snapshot(row)}
+
+
+@app.get("/orgas/{org_id}/memberships")
+def list_orga_memberships(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _get_orga_or_404(db, org_id)
+    _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    rows = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id).order_by(OrganizationMembership.created_at.asc()).all()
+    return {"items": [_membership_snapshot(r) for r in rows]}
+
+
+@app.post("/orgas/{org_id}/join")
+def join_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    org = _get_orga_or_404(db, org_id)
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_join:{org_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+
+    now = now_utc()
+    join_mode = (org.join_mode or "OPEN_MEMBERSHIP").upper()
+    target_role = "FOLLOWER" if join_mode == "FOLLOW_ONLY" else "MEMBER"
+    target_status = "PENDING" if join_mode == "REQUEST_TO_JOIN" else "ACTIVE"
+
+    row = _membership_any_status(db, org_id=org_id, user_id=user.id)
+    idempotent = False
+    if row is None:
+        row = OrganizationMembership(organization_id=org_id, user_id=user.id, role=target_role, status=target_status, joined_at=now, updated_at=now, created_by_user_id=user.id, created_at=now)
+        db.add(row)
+        db.flush()
+    else:
+        if row.role == target_role and row.status == target_status:
+            idempotent = True
+        else:
+            row.role = target_role
+            row.status = target_status
+            row.updated_at = now
+
+    response = {"ok": True, "idempotent": idempotent, "organization_id": org_id, "join_mode": join_mode, "membership": _membership_snapshot(row)}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=target_role, action="organization.membership.join", entity_type="organization_membership", entity_id=f"{org_id}:{user.id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}", "join_mode": join_mode, "status": target_status})
+    db.commit()
+    return response
+
+
 @app.post("/orgas/{org_id}/leave")
 def leave_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    _get_orga_or_404(db, org_id)
     key = ensure_idempotency_key(idempotency_key)
     action = f"orga_leave:{org_id}"
     idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
     if idem:
         return idem.response_json
-    row = _membership_for(db, org_id=org_id, user_id=user.id)
-    if not row:
+    row = _membership_any_status(db, org_id=org_id, user_id=user.id)
+    if not row or row.status == "LEFT":
         response = {"ok": True, "idempotent": True, "organization_id": org_id}
     else:
-        db.delete(row)
-        response = {"ok": True, "idempotent": False, "organization_id": org_id}
+        row.status = "LEFT"
+        row.updated_at = now_utc()
+        response = {"ok": True, "idempotent": False, "organization_id": org_id, "membership": _membership_snapshot(row)}
     db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
     write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=(row.role if row else "MEMBER"), action="organization.membership.leave", entity_type="organization_membership", entity_id=f"{org_id}:{user.id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}"})
     db.commit()
     return response
 
 
+@app.post("/orgas/{org_id}/memberships/{member_user_id}/approve")
+def approve_orga_membership(org_id: int, member_user_id: str, payload: MembershipDecisionIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    actor = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_approve:{org_id}:{member_user_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+
+    row = _membership_any_status(db, org_id=org_id, user_id=member_user_id)
+    if row is None:
+        raise HTTPException(404, "Membership not found")
+    if row.status == "ACTIVE":
+        idempotent = True
+    else:
+        row.status = "ACTIVE"
+        row.updated_at = now_utc()
+        idempotent = False
+    response = {"ok": True, "idempotent": idempotent, "organization_id": org_id, "membership": _membership_snapshot(row)}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=actor.role, action="organization.membership.approve", entity_type="organization_membership", entity_id=f"{org_id}:{member_user_id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}", "reason": (payload.reason or "").strip() or None})
+    db.commit()
+    return response
+
+
+@app.post("/orgas/{org_id}/memberships/{member_user_id}/reject")
+def reject_orga_membership(org_id: int, member_user_id: str, payload: MembershipRejectIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    actor = _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
+    key = ensure_idempotency_key(idempotency_key)
+    action = f"orga_reject:{org_id}:{member_user_id}"
+    idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
+    if idem:
+        return idem.response_json
+
+    row = _membership_any_status(db, org_id=org_id, user_id=member_user_id)
+    if row is None:
+        raise HTTPException(404, "Membership not found")
+    if row.status == "REJECTED":
+        idempotent = True
+    else:
+        row.status = "REJECTED"
+        row.updated_at = now_utc()
+        idempotent = False
+    response = {"ok": True, "idempotent": idempotent, "organization_id": org_id, "membership": _membership_snapshot(row)}
+    db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
+    write_audit_log(db, actor_user_id=user.id, actor_partner_id=None, actor_role=actor.role, action="organization.membership.reject", entity_type="organization_membership", entity_id=f"{org_id}:{member_user_id}", event_id=None, bar_id=None, idempotency_key=key, payload={"scope": f"orga:{org_id}", "reason": payload.reason.strip()})
+    db.commit()
+    return response
+
+
 @app.post("/orgas/{org_id}/follow")
 def follow_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    _get_orga_or_404(db, org_id)
     key = ensure_idempotency_key(idempotency_key)
     action = f"orga_follow:{org_id}"
     idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
     if idem:
         return idem.response_json
-    row = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id, OrganizationMembership.user_id == user.id).first()
+    row = _membership_any_status(db, org_id=org_id, user_id=user.id)
     if row and row.role == "FOLLOWER" and row.status == "ACTIVE":
         response = {"ok": True, "idempotent": True, "organization_id": org_id, "role": "FOLLOWER"}
     else:
@@ -9691,14 +9834,16 @@ def follow_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Sess
 
 @app.post("/orgas/{org_id}/unfollow")
 def unfollow_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    _get_orga_or_404(db, org_id)
     key = ensure_idempotency_key(idempotency_key)
     action = f"orga_unfollow:{org_id}"
     idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
     if idem:
         return idem.response_json
     row = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id, OrganizationMembership.user_id == user.id, OrganizationMembership.role == "FOLLOWER").first()
-    if row:
-        db.delete(row)
+    if row and row.status != "LEFT":
+        row.status = "LEFT"
+        row.updated_at = now_utc()
         response = {"ok": True, "idempotent": False, "organization_id": org_id}
     else:
         response = {"ok": True, "idempotent": True, "organization_id": org_id}

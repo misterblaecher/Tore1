@@ -205,6 +205,7 @@ def ensure_organization_tables(engine: Engine) -> None:
                 website_url VARCHAR(255),
                 instagram_handle VARCHAR(64),
                 visibility VARCHAR(16) DEFAULT 'PUBLIC' NOT NULL,
+                join_mode VARCHAR(24) DEFAULT 'OPEN_MEMBERSHIP' NOT NULL,
                 created_by_user_id VARCHAR NOT NULL,
                 created_at DATETIME,
                 CONSTRAINT uq_organizations_slug UNIQUE (slug)
@@ -212,6 +213,9 @@ def ensure_organization_tables(engine: Engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organizations_name ON organizations (name)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organizations_city_type ON organizations (city, org_type)"))
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(organizations)"))]
+        if "join_mode" not in cols:
+            conn.execute(text("ALTER TABLE organizations ADD COLUMN join_mode VARCHAR(24) DEFAULT 'OPEN_MEMBERSHIP'"))
 
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS organization_memberships (

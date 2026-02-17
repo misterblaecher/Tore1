@@ -64,6 +64,78 @@ class MyEventSummary {
       };
 }
 
+enum OrgaJoinMode { followOnly, openMembership, requestToJoin }
+enum MembershipRole { owner, manager, staff, member, follower }
+enum MembershipStatus { active, pending, rejected, left }
+
+OrgaJoinMode parseOrgaJoinMode(String? raw) {
+  switch ((raw ?? '').toUpperCase()) {
+    case 'FOLLOW_ONLY':
+      return OrgaJoinMode.followOnly;
+    case 'REQUEST_TO_JOIN':
+      return OrgaJoinMode.requestToJoin;
+    default:
+      return OrgaJoinMode.openMembership;
+  }
+}
+
+MembershipStatus parseMembershipStatus(String? raw) {
+  switch ((raw ?? '').toUpperCase()) {
+    case 'PENDING':
+      return MembershipStatus.pending;
+    case 'REJECTED':
+      return MembershipStatus.rejected;
+    case 'LEFT':
+      return MembershipStatus.left;
+    default:
+      return MembershipStatus.active;
+  }
+}
+
+String orgaPrimaryCtaLabel({required OrgaJoinMode joinMode, MembershipStatus? status}) {
+  if (status == MembershipStatus.pending) return 'Demande envoyée';
+  if (status == MembershipStatus.active) return 'Quitter';
+  switch (joinMode) {
+    case OrgaJoinMode.followOnly:
+      return 'Suivre';
+    case OrgaJoinMode.requestToJoin:
+      return 'Demander à rejoindre';
+    case OrgaJoinMode.openMembership:
+      return 'Rejoindre';
+  }
+}
+
+class OrgaMembership {
+  const OrgaMembership({required this.userId, required this.role, required this.status});
+
+  final String userId;
+  final MembershipRole role;
+  final MembershipStatus status;
+
+  factory OrgaMembership.fromJson(Map<String, dynamic> json) {
+    return OrgaMembership(
+      userId: (json['user_id'] ?? '').toString(),
+      role: _parseMembershipRole(json['role']?.toString()),
+      status: parseMembershipStatus(json['status']?.toString()),
+    );
+  }
+}
+
+MembershipRole _parseMembershipRole(String? raw) {
+  switch ((raw ?? '').toUpperCase()) {
+    case 'OWNER':
+      return MembershipRole.owner;
+    case 'MANAGER':
+      return MembershipRole.manager;
+    case 'STAFF':
+      return MembershipRole.staff;
+    case 'FOLLOWER':
+      return MembershipRole.follower;
+    default:
+      return MembershipRole.member;
+  }
+}
+
 class MyEventsFetchResult {
   final Map<String, List<MyEventSummary>> buckets;
   final bool fromCache;

@@ -111,7 +111,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
                     Card(
                       child: ListTile(
                         title: Text((item['orga']?['name'] ?? 'Orga').toString()),
-                        subtitle: Text('Rôle: ${item['role']}'),
+                        subtitle: Text('Rôle: ${item['role']} • Status: ${item['status']}'),
                         onTap: () {
                           final orgId = ((item['orga']?['id'] as num?) ?? 0).toInt();
                           if (orgId <= 0) return;
