@@ -105,3 +105,92 @@ def test_entry_checkin_already_checked_is_stable():
     assert second.status_code == 200
     assert second.json()['status'] == 'already_checked'
     assert second.json()['entryCount'] == 1
+
+
+def test_manual_increment_ok_and_idempotent_replay():
+    event_id = _seed()
+    client = TestClient(app)
+    token, user_id = _staff_token(client)
+    s = get_session()
+    try:
+      s.add(EventStaff(event_id=event_id, user_id=user_id, role='entry', is_active=True))
+      s.commit()
+    finally:
+      s.close()
+
+    payload = {'delta': 5, 'reason': 'file rush'}
+    one = client.post(f'/events/{event_id}/entry/manual_increment', json=payload, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'manual-1'})
+    two = client.post(f'/events/{event_id}/entry/manual_increment', json=payload, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'manual-1'})
+    assert one.status_code == 200
+    assert two.status_code == 200
+    assert one.json()['count'] == two.json()['count'] == 5
+
+
+def test_manual_increment_requires_reason():
+    event_id = _seed()
+    client = TestClient(app)
+    token, user_id = _staff_token(client)
+    s = get_session()
+    try:
+      s.add(EventStaff(event_id=event_id, user_id=user_id, role='entry', is_active=True))
+      s.commit()
+    finally:
+      s.close()
+
+    res = client.post(
+        f'/events/{event_id}/entry/manual_increment',
+        json={'delta': 1, 'reason': 'x'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'manual-bad'},
+    )
+    assert res.status_code == 422
+
+
+def test_manual_increment_guard_staff_entry_only():
+    event_id = _seed()
+    client = TestClient(app)
+    token, _ = _staff_token(client)
+    res = client.post(
+        f'/events/{event_id}/entry/manual_increment',
+        json={'delta': 1, 'reason': 'file rush'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'manual-forbidden'},
+    )
+    assert res.status_code == 403
+
+
+def test_manual_increment_runtime_blocked():
+    event_id = _seed()
+    client = TestClient(app)
+    token, user_id = _staff_token(client)
+    s = get_session()
+    try:
+      s.add(EventStaff(event_id=event_id, user_id=user_id, role='entry', is_active=True))
+      event = s.get(Event, event_id)
+      event.event_state = 'FROZEN'
+      s.commit()
+    finally:
+      s.close()
+
+    res = client.post(
+        f'/events/{event_id}/entry/manual_increment',
+        json={'delta': 1, 'reason': 'file rush'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'manual-frozen'},
+    )
+    assert res.status_code == 403
+
+
+def test_entry_export_includes_manual_source_lines():
+    event_id = _seed()
+    client = TestClient(app)
+    token, user_id = _staff_token(client)
+    s = get_session()
+    try:
+      s.add(EventStaff(event_id=event_id, user_id=user_id, role='entry', is_active=True))
+      s.commit()
+    finally:
+      s.close()
+
+    client.post(f'/events/{event_id}/entry/manual_increment', json={'delta': 2, 'reason': 'caméra HS'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'manual-export'})
+    csv_res = client.get(f'/events/{event_id}/entry/export.csv', headers={'Authorization': f'Bearer {token}'})
+    assert csv_res.status_code == 200
+    assert 'source' in csv_res.text
+    assert 'MANUAL' in csv_res.text

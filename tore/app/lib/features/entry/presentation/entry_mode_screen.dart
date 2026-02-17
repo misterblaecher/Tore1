@@ -9,13 +9,13 @@ import '../../../core/perf/perf_tracer.dart';
 import '../../../core/perf/scan_suppression.dart';
 import '../../../core/qr/qr_parser.dart';
 import '../../../core/qr/qr_validator.dart';
+import '../../events/presentation/staff_backup_join_screen.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
 import '../data/entry_offline_queue.dart';
 import '../data/entry_service.dart';
 
 class EntryModeScreen extends ConsumerStatefulWidget {
   const EntryModeScreen({super.key, required this.eventId});
-
   final int? eventId;
 
   @override
@@ -26,15 +26,17 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   int _total = 0;
   int _delta10 = 0;
   bool _loading = true;
+  bool _manualMode = false;
+  bool _pendingEstimate = false;
+  String _manualReason = 'QR illisible';
+  final TextEditingController _noteCtrl = TextEditingController();
   String _banner = 'Prêt à scanner';
   Color _bannerColor = const Color(0xFF1F2937);
-  bool _pendingEstimate = false;
   final ScanSuppression _suppression = ScanSuppression(cooldown: const Duration(milliseconds: 800));
-  Timer? _syncTimer;
+  final List<String> _reasonChips = const ['QR illisible', 'caméra HS', 'file rush', 'autre…'];
 
+  Timer? _syncTimer;
   List<EntryQueueItem> _queue = [];
-  Timer? _queuePersistTimer;
-  int _queueSinceLastFlush = 0;
 
   @override
   void initState() {
@@ -46,19 +48,14 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   @override
   void dispose() {
     _syncTimer?.cancel();
-    _queuePersistTimer?.cancel();
+    _noteCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    if (widget.eventId == null) {
-      setState(() => _loading = false);
-      return;
-    }
-    final store = ref.read(entryOfflineQueueStoreProvider);
-    _queue = await store.load();
+    if (widget.eventId == null) return;
+    _queue = await ref.read(entryOfflineQueueStoreProvider).load();
     await _refreshStats();
-    await _refreshLogs();
     if (!mounted) return;
     setState(() => _loading = false);
   }
@@ -68,7 +65,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     try {
       final count = await ref.read(entryServiceProvider).getEntryCount(widget.eventId!);
       if (!mounted) return;
-      final pending = _queue.where((q) => q.eventId == widget.eventId && q.status == 'pending').length;
+      final pending = _queue.where((q) => q.eventId == widget.eventId && q.status == 'pending' && q.delta > 0).fold<int>(0, (a, b) => a + b.delta);
       setState(() {
         _total = (count['entryCount'] ?? 0) as int;
         _pendingEstimate = pending > 0;
@@ -77,114 +74,120 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     try {
       final stats = await ref.read(entryServiceProvider).getEntryStats(widget.eventId!);
       if (!mounted) return;
-      setState(() {
-        _delta10 = (stats['accepted_last_10_min'] ?? _delta10) as int;
-      });
+      setState(() => _delta10 = (stats['accepted_last_10_min'] ?? _delta10) as int);
     } catch (_) {}
-  }
-
-  Future<void> _refreshLogs() async {
-    if (widget.eventId == null) return;
-    final logs = await ref.read(entryServiceProvider).getEntryLogs(eventId: widget.eventId!, limit: 8);
-    ref.read(entryUiStateProvider.notifier).seed(
-          logs
-              .map(
-                (r) => _ScanResult(
-                  status: (r['decision'] == 'ACCEPT') ? 'accepted' : ((r['reason'] == 'already_used') ? 'already_checked' : 'invalid'),
-                  reason: (r['reason'] ?? '').toString(),
-                  at: DateTime.tryParse((r['created_at'] ?? '').toString()) ?? DateTime.now(),
-                ),
-              )
-              .toList(),
-        );
   }
 
   Future<void> _openScanner() async {
     final raw = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const QrScannerScreen(mode: QrScannerMode.pickRaw)));
     if (raw == null || raw.trim().isEmpty || widget.eventId == null) return;
-
     if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now())) return;
-
     final payload = ref.read(qrParserProvider).parse(raw);
     final validation = await ref.read(qrValidatorProvider).validate(payload);
-    if (!validation.isOk) {
-      _applyFeedback(status: 'invalid', reason: validation.reason ?? 'INVALID');
-      return;
-    }
-    await _handleScan(raw, scannedAt: DateTime.now());
+    if (!validation.isOk) return _feedback('invalid', validation.reason ?? 'INVALID', type: 'QR');
+    await _performCheckin(raw);
   }
 
-  Future<void> _handleScan(String raw, {required DateTime scannedAt}) async {
+  Future<void> _performCheckin(String raw) async {
     final eventId = widget.eventId;
     if (eventId == null) return;
-    final status = ref.read(networkStatusProvider);
-    final queueMode = status != NetworkState.online;
+    final scannedAt = DateTime.now();
     final item = EntryQueueItem(
       id: '$eventId-${scannedAt.millisecondsSinceEpoch}-${raw.hashCode}',
       eventId: eventId,
+      type: 'CHECKIN',
       rawQr: raw,
       scannedAt: scannedAt,
       idempotencyKey: 'entry-$eventId-${scannedAt.millisecondsSinceEpoch}-${raw.hashCode}',
     );
-
-    if (queueMode) {
-      _enqueue(item, reason: 'PENDING SYNC');
-      _applyFeedback(status: 'pending', reason: 'PENDING SYNC');
-      return;
+    if (ref.read(networkStatusProvider) != NetworkState.online) {
+      await _enqueue(item, 'PENDING SYNC');
+      return _feedback('pending', '+1 ajouté (PENDING SYNC)', type: 'QR');
     }
-
     try {
-      final res = await ref.read(entryServiceProvider).checkin(
-            eventId: eventId,
-            rawQr: raw,
-            deviceId: 'orga-mobile',
-            idempotencyKey: item.idempotencyKey,
-            scannedAt: scannedAt,
-          );
-      _applyFeedback(status: (res['status'] ?? 'invalid').toString(), reason: (res['status'] ?? '').toString().toUpperCase());
+      final res = await ref.read(entryServiceProvider).checkin(eventId: eventId, rawQr: raw, deviceId: 'orga-mobile', idempotencyKey: item.idempotencyKey, scannedAt: scannedAt);
+      _feedback((res['status'] ?? 'accepted').toString(), 'QR ${(res['status'] ?? 'accepted').toString()}', type: 'QR');
       unawaited(_refreshStats());
-      unawaited(_refreshLogs());
-    } catch (e) {
-      _enqueue(item, reason: e.toString());
-      _applyFeedback(status: 'pending', reason: 'PENDING SYNC');
+    } catch (_) {
+      await _enqueue(item, 'PENDING SYNC');
+      _feedback('pending', '+1 ajouté (PENDING SYNC)', type: 'QR');
     }
   }
 
-  void _enqueue(EntryQueueItem item, {required String reason}) {
-    _queue.insert(0, item..lastError = reason);
-    _pendingEstimate = true;
-    _queueSinceLastFlush += 1;
-    if (mounted) setState(() {});
-
-    if (_queueSinceLastFlush >= 10) {
-      _queueSinceLastFlush = 0;
-      unawaited(ref.read(entryOfflineQueueStoreProvider).save(_queue));
-      return;
+  Future<void> _manualIncrement(int delta) async {
+    final eventId = widget.eventId;
+    if (eventId == null) return;
+    if (delta < 0) {
+      final ok = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Confirmer correction'),
+              content: const Text('Retirer 1 entrée ?'),
+              actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Retirer'))],
+            ),
+          ) ??
+          false;
+      if (!ok) return;
+      return _feedback('invalid', 'Correction -1 non autorisée sur ce mode', type: 'MANUAL');
     }
 
-    _queuePersistTimer?.cancel();
-    _queuePersistTimer = Timer(const Duration(milliseconds: 500), () {
-      _queueSinceLastFlush = 0;
-      unawaited(ref.read(entryOfflineQueueStoreProvider).save(_queue));
-    });
+    final now = DateTime.now();
+    final item = EntryQueueItem(
+      id: 'manual-$eventId-${now.millisecondsSinceEpoch}-$delta',
+      eventId: eventId,
+      type: 'MANUAL',
+      scannedAt: now,
+      idempotencyKey: 'manual-$eventId-${now.millisecondsSinceEpoch}-$delta',
+      delta: delta,
+      reason: _manualReason,
+      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+    );
+
+    if (ref.read(networkStatusProvider) != NetworkState.online) {
+      await _enqueue(item, 'PENDING SYNC');
+      return _feedback('pending', '${delta > 0 ? '+' : ''}$delta ajouté (PENDING SYNC)', type: 'MANUAL');
+    }
+    try {
+      await ref.read(entryServiceProvider).manualIncrement(eventId: eventId, delta: delta.abs(), reason: _manualReason, note: item.note, idempotencyKey: item.idempotencyKey);
+      _feedback('accepted', '${delta > 0 ? '+' : ''}$delta ajouté', type: 'MANUAL');
+      unawaited(_refreshStats());
+    } catch (_) {
+      await _enqueue(item, 'PENDING SYNC');
+      _feedback('pending', '${delta > 0 ? '+' : ''}$delta ajouté (PENDING SYNC)', type: 'MANUAL');
+    }
+  }
+
+  Future<void> _enqueue(EntryQueueItem item, String reason) async {
+    item.lastError = reason;
+    _queue.insert(0, item);
+    await ref.read(entryOfflineQueueStoreProvider).save(_queue);
+    await _refreshStats();
+    if (mounted) setState(() {});
   }
 
   Future<void> _syncPending() async {
-    if (widget.eventId == null) return;
-    if (ref.read(networkStatusProvider) != NetworkState.online) return;
-
+    if (widget.eventId == null || ref.read(networkStatusProvider) != NetworkState.online) return;
     bool updated = false;
-    for (final item in _queue.where((q) => q.status == 'pending' && q.eventId == widget.eventId).take(25)) {
+    for (final item in _queue.where((i) => i.status == 'pending' && i.eventId == widget.eventId)) {
       try {
-        await ref.read(entryServiceProvider).checkin(
-              eventId: item.eventId,
-              rawQr: item.rawQr,
-              deviceId: 'orga-mobile',
-              idempotencyKey: item.idempotencyKey,
-              scannedAt: item.scannedAt,
-            );
+        if (item.type == 'MANUAL') {
+          await ref.read(entryServiceProvider).manualIncrement(
+                eventId: item.eventId,
+                delta: item.delta.abs(),
+                reason: item.reason ?? 'file rush',
+                note: item.note,
+                idempotencyKey: item.idempotencyKey,
+              );
+        } else {
+          await ref.read(entryServiceProvider).checkin(
+                eventId: item.eventId,
+                rawQr: item.rawQr ?? '',
+                deviceId: 'orga-mobile',
+                idempotencyKey: item.idempotencyKey,
+                scannedAt: item.scannedAt,
+              );
+        }
         item.status = 'synced';
-        item.lastError = null;
         updated = true;
       } catch (e) {
         item.status = 'failed';
@@ -198,165 +201,117 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     }
   }
 
-  void _applyFeedback({required String status, required String reason}) {
-    Color color;
-    HapticFeedback.vibrate();
-    switch (status) {
-      case 'accepted':
-        color = const Color(0xFF166534);
-        HapticFeedback.heavyImpact();
-        SystemSound.play(SystemSoundType.click);
-        break;
-      case 'already_checked':
-        color = const Color(0xFFB45309);
-        HapticFeedback.lightImpact();
-        break;
-      case 'pending':
-        color = const Color(0xFF1D4ED8);
-        HapticFeedback.selectionClick();
-        break;
-      default:
-        color = const Color(0xFFB91C1C);
-        HapticFeedback.mediumImpact();
+  void _feedback(String status, String reason, {required String type}) {
+    HapticFeedback.selectionClick();
+    SystemSound.play(SystemSoundType.click);
+    _bannerColor = status == 'accepted' ? const Color(0xFF166534) : (status == 'pending' ? const Color(0xFF1D4ED8) : const Color(0xFFB91C1C));
+    _banner = reason;
+    ref.read(entryUiStateProvider.notifier).push(_ScanResult(status: status, reason: reason, at: DateTime.now(), type: type));
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason), duration: const Duration(milliseconds: 700)));
     }
-
-    ref.read(entryUiStateProvider.notifier).push(_ScanResult(status: status, reason: reason, at: DateTime.now()));
-    setState(() {
-      _bannerColor = color;
-      _banner = reason;
-    });
   }
 
   Future<void> _exportCsv() async {
     if (widget.eventId == null) return;
-    try {
-      final csv = await ref.read(entryServiceProvider).exportCsv(widget.eventId!);
-      await Clipboard.setData(ClipboardData(text: csv));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CSV copié dans le presse-papiers')));
-    } catch (_) {
-      final recent = ref.read(entryUiStateProvider).recent;
-      final rows = recent.map((r) => '${r.at.toIso8601String()},${r.status},${r.reason.replaceAll(',', ' ')}').join('\n');
-      final fallback = 'timestamp,status,reason\n$rows';
-      await Clipboard.setData(ClipboardData(text: fallback));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Export local copié')));
-    }
+    final csv = await ref.read(entryServiceProvider).exportCsv(widget.eventId!);
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CSV copié (inclut MANUAL)')));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.eventId == null) {
-      return const Scaffold(body: Center(child: Text('event_id manquant')));
-    }
+    if (widget.eventId == null) return const Scaffold(body: Center(child: Text('event_id manquant')));
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     final net = ref.watch(networkStatusProvider);
-    final pendingCount = _queue.where((q) => q.status == 'pending' && q.eventId == widget.eventId).length;
-    final totalDisplay = _total + pendingCount;
-    final entryUi = ref.watch(entryUiStateProvider);
+    final pending = _queue.where((q) => q.status == 'pending' && q.eventId == widget.eventId).toList();
+    final totalDisplay = _total + pending.fold<int>(0, (a, b) => a + (b.delta > 0 ? b.delta : 0));
+    final recents = ref.watch(entryUiStateProvider).recent;
 
     return Scaffold(
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(children: [
-                      Text('Event #${widget.eventId}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(width: 8),
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), color: const Color(0xFF15803D), child: const Text('LIVE')),
-                      const Spacer(),
-                      Text(TimeOfDay.now().format(context)),
-                      IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
-                    ]),
-                    Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _bannerColor, borderRadius: BorderRadius.circular(8)), child: Text(_banner)),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(children: [
+                Text('Event #${widget.eventId}'),
+                const Spacer(),
+                TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))), icon: const Icon(Icons.keyboard), label: const Text('Entrer un code')),
+                IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
+              ]),
+              SwitchListTile(value: _manualMode, onChanged: (v) => setState(() => _manualMode = v), title: const Text('Mode manuel'), secondary: const Icon(Icons.touch_app)),
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _bannerColor, borderRadius: BorderRadius.circular(8)), width: double.infinity, child: Text(_banner)),
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Text('ENTRÉES'),
+                  Text('${_pendingEstimate ? '~' : ''}$totalDisplay', style: const TextStyle(fontSize: 96, fontWeight: FontWeight.w900)),
+                  Text('Δ10m: $_delta10'),
+                  const SizedBox(height: 12),
+                  if (!_manualMode)
+                    ElevatedButton.icon(onPressed: _openScanner, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCAN', style: TextStyle(fontSize: 24)))
+                  else ...[
+                    Wrap(spacing: 8, children: _reasonChips.map((r) => ChoiceChip(label: Text(r), selected: _manualReason == r, onSelected: (_) => setState(() => _manualReason = r))).toList()),
+                    TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Note (optionnel)')),
                     const SizedBox(height: 8),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('ENTRÉES', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                          Text('${_pendingEstimate ? '~' : ''}$totalDisplay', style: const TextStyle(fontSize: 108, fontWeight: FontWeight.w900, height: 1)),
-                          Text('Δ10m: $_delta10', style: const TextStyle(fontSize: 20)),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: 260,
-                            height: 62,
-                            child: ElevatedButton.icon(onPressed: _openScanner, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCAN', style: TextStyle(fontSize: 26))),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Row(children: [
-                      Text('Status: ${net.name.toUpperCase()}'),
-                      const Spacer(),
-                      Text('Queue: $pendingCount'),
-                      const SizedBox(width: 8),
-                      TextButton(onPressed: _syncPending, child: const Text('Sync now')),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      FilledButton(onPressed: () => _manualIncrement(1), child: const Text('+1')),
+                      FilledButton(onPressed: () => _manualIncrement(5), child: const Text('+5')),
+                      FilledButton(onPressed: () => _manualIncrement(10), child: const Text('+10')),
+                      OutlinedButton(onPressed: () => _manualIncrement(-1), child: const Text('-1')),
                     ]),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      color: const Color(0xFF111827),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Derniers scans', style: TextStyle(fontWeight: FontWeight.w700)),
-                          SizedBox(
-                            height: 152,
-                            child: ListView.builder(
-                              key: const ValueKey('entry-recent-list'),
-                              itemCount: entryUi.recent.length,
-                              itemBuilder: (context, index) {
-                                final item = entryUi.recent[index];
-                                return Text('[${_fmt(item.at)}] ${item.status} • ${item.reason}');
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
-                ),
+                ]),
               ),
-            ),
+              Row(children: [Text('Status: ${net.name.toUpperCase()}'), const Spacer(), Text('Queue: ${pending.length}'), TextButton(onPressed: _syncPending, child: const Text('Sync now'))]),
+              Container(
+                color: const Color(0xFF111827),
+                padding: const EdgeInsets.all(8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Derniers événements (8)'),
+                  SizedBox(
+                    height: 150,
+                    child: ListView.builder(
+                      itemCount: recents.length,
+                      itemBuilder: (context, i) {
+                        final item = recents[i];
+                        return Text('[${_fmt(item.at)}] ${item.type} — ${item.reason}');
+                      },
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  String _fmt(DateTime ts) => '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
+  String _fmt(DateTime ts) => '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}';
 }
 
 class EntryUiState {
   const EntryUiState({this.recent = const []});
-
   final List<_ScanResult> recent;
-
   EntryUiState copyWith({List<_ScanResult>? recent}) => EntryUiState(recent: recent ?? this.recent);
 }
 
 class EntryUiStateNotifier extends StateNotifier<EntryUiState> {
   EntryUiStateNotifier() : super(const EntryUiState());
-
   static const int maxRecent = 8;
-
-  void seed(List<_ScanResult> items) {
-    state = state.copyWith(recent: items.take(maxRecent).toList(growable: false));
-  }
-
-  void push(_ScanResult result) {
-    final next = <_ScanResult>[result, ...state.recent];
-    state = state.copyWith(recent: next.take(maxRecent).toList(growable: false));
-  }
+  void push(_ScanResult result) => state = state.copyWith(recent: [result, ...state.recent].take(maxRecent).toList(growable: false));
 }
 
 final entryUiStateProvider = StateNotifierProvider<EntryUiStateNotifier, EntryUiState>((ref) => EntryUiStateNotifier());
 
 class _ScanResult {
-  _ScanResult({required this.status, required this.reason, required this.at});
-
+  _ScanResult({required this.status, required this.reason, required this.at, required this.type});
   final String status;
   final String reason;
   final DateTime at;
+  final String type;
 }

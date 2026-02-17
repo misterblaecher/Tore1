@@ -51,6 +51,25 @@ class EntryService {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> manualIncrement({
+    required int eventId,
+    required int delta,
+    required String reason,
+    String? note,
+    required String idempotencyKey,
+  }) async {
+    final res = await _dio.post(
+      '/events/$eventId/entry/manual_increment',
+      data: {
+        'delta': delta,
+        'reason': reason,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<String> exportCsv(int eventId) async {
     final res = await _dio.get<String>(
       '/events/$eventId/entry/export.csv',
