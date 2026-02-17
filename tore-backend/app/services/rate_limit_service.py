@@ -16,6 +16,10 @@ _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
         int(os.getenv("TORE_ORDERS_CREATE_RATE_LIMIT_MAX", "29")),
         int(os.getenv("TORE_ORDERS_CREATE_RATE_LIMIT_WINDOW_S", "60")),
     ),
+    "staff_backup_join": (
+        int(os.getenv("TORE_STAFF_BACKUP_JOIN_RATE_LIMIT_MAX", "10")),
+        int(os.getenv("TORE_STAFF_BACKUP_JOIN_RATE_LIMIT_WINDOW_S", "60")),
+    ),
 }
 
 _lock = threading.Lock()

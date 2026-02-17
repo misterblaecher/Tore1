@@ -227,3 +227,93 @@ def test_current_staff_invites_returns_one_active_per_role_and_audit() -> None:
         assert len(audits) >= 1
     finally:
         session.close()
+
+def test_staff_backup_generate_list_and_consume_idempotent() -> None:
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    owner_id, owner_token = _seed_user(client, f'staff-owner-{secrets.token_hex(2)}')
+    staff_id, staff_token = _seed_user(client, f'staff-user-{secrets.token_hex(2)}')
+    event_id = _create_event(client, owner_id, owner_token)
+
+    headers = {'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': 'backup-generate-idem-1'}
+    first = client.post(
+        f'/events/{event_id}/staff_backup_codes/generate',
+        json={'role': 'ENTRY', 'count': 3, 'expiresInHours': 4},
+        headers=headers,
+    )
+    assert first.status_code == 200
+    second = client.post(
+        f'/events/{event_id}/staff_backup_codes/generate',
+        json={'role': 'ENTRY', 'count': 3, 'expiresInHours': 4},
+        headers=headers,
+    )
+    assert second.status_code == 200
+    assert first.json() == second.json()
+
+    code = first.json()['codes'][0]['code']
+
+    listed = client.get(f'/events/{event_id}/staff_backup_codes', headers={'Authorization': f'Bearer {owner_token}'})
+    assert listed.status_code == 200
+    dump = str(listed.json())
+    assert code not in dump
+    assert 'suffix4' in dump
+
+    join_headers = {'Authorization': f'Bearer {staff_token}', 'Idempotency-Key': 'backup-consume-idem-1'}
+    join_a = client.post(f'/events/{event_id}/staff/join_by_backup_code', json={'code': code}, headers=join_headers)
+    assert join_a.status_code == 200
+    join_b = client.post(f'/events/{event_id}/staff/join_by_backup_code', json={'code': code}, headers=join_headers)
+    assert join_b.status_code == 200
+    assert join_a.json() == join_b.json()
+
+    blocked = client.post(
+        f'/events/{event_id}/staff/join_by_backup_code',
+        json={'code': code},
+        headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': f'backup-consume-once-{secrets.token_hex(2)}'},
+    )
+    assert blocked.status_code == 409
+
+    session = get_session()
+    try:
+        membership = session.query(EventStaff).filter(EventStaff.event_id == event_id, EventStaff.user_id == staff_id).all()
+        assert len(membership) == 1
+        audits = session.query(AuditLog).filter(AuditLog.event_id == event_id, AuditLog.action == 'staff_backup_consumed').all()
+        assert len(audits) >= 1
+    finally:
+        session.close()
+
+
+def test_staff_backup_rate_limit_and_open_does_not_validate() -> None:
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    owner_id, owner_token = _seed_user(client, f'staff-owner-{secrets.token_hex(2)}')
+    staff_id, staff_token = _seed_user(client, f'staff-user-{secrets.token_hex(2)}')
+    event_id = _create_event(client, owner_id, owner_token)
+
+    resolved = client.get(f'/open?type=staff_backup&eventId={event_id}&code=ABCDEFGH')
+    assert resolved.status_code == 200
+    payload = resolved.json()
+    assert payload['target']['event_id'] == event_id
+    assert payload['target']['code'] == 'ABCDEFGH'
+
+    from app.services import rate_limit_service
+    old_limit = rate_limit_service._SCOPE_LIMITS.get('staff_backup_join')
+    rate_limit_service._SCOPE_LIMITS['staff_backup_join'] = (2, 60)
+    try:
+        for i in range(2):
+            attempt = client.post(
+                f'/events/{event_id}/staff/join_by_backup_code',
+                json={'code': f'BADCODE{i}'},
+                headers={'Authorization': f'Bearer {staff_token}', 'Idempotency-Key': f'backup-rate-{i}'},
+            )
+            assert attempt.status_code in {400, 404}
+        limited = client.post(
+            f'/events/{event_id}/staff/join_by_backup_code',
+            json={'code': 'BADCODEZ'},
+            headers={'Authorization': f'Bearer {staff_token}', 'Idempotency-Key': 'backup-rate-3'},
+        )
+        assert limited.status_code == 429
+    finally:
+        if old_limit is None:
+            rate_limit_service._SCOPE_LIMITS.pop('staff_backup_join', None)
+        else:
+            rate_limit_service._SCOPE_LIMITS['staff_backup_join'] = old_limit

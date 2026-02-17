@@ -49,6 +49,7 @@ import AdminFlagsGlobal from './pages/AdminFlagsGlobal'
 import CreateOrga from './pages/CreateOrga'
 import OpenInApp from './pages/OpenInApp'
 import PrintSharePack from './pages/PrintSharePack'
+import StaffBackupPrint from './pages/StaffBackupPrint'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -313,6 +314,16 @@ export default function App() {
             <RequireOrga>
               <OrgaIncidents />
             </RequireOrga>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/orga/events/:eventId/staff-backup/print"
+        element={
+          <RequireAuth>
+            <RequireOrgaManager>
+              <StaffBackupPrint />
+            </RequireOrgaManager>
           </RequireAuth>
         }
       />

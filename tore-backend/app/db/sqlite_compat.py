@@ -649,6 +649,43 @@ def ensure_staff_management_tables(engine: Engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_invite_idem_event_id ON event_staff_invite_idempotency (event_id)"))
 
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_staff_backup_codes (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                role VARCHAR(24) NOT NULL,
+                code_hash VARCHAR(128) NOT NULL,
+                suffix4 VARCHAR(4) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                status VARCHAR(16) DEFAULT 'ACTIVE',
+                created_by VARCHAR NOT NULL,
+                created_at DATETIME,
+                used_at DATETIME,
+                used_by VARCHAR,
+                revoked_at DATETIME,
+                revoked_reason VARCHAR(280)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_backup_event_id ON event_staff_backup_codes (event_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_backup_role ON event_staff_backup_codes (role)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_backup_code_hash ON event_staff_backup_codes (code_hash)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_staff_backup_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                action VARCHAR(64) NOT NULL,
+                actor_user_id VARCHAR NOT NULL,
+                idempotency_key VARCHAR(120) NOT NULL,
+                code_id INTEGER,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_event_staff_backup_idem UNIQUE (event_id, action, actor_user_id, idempotency_key)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_staff_backup_idem_event_id ON event_staff_backup_idempotency (event_id)"))
+
     invite_cols = _table_columns(engine, "event_staff_invite_codes")
     with engine.begin() as conn:
         if "label" not in invite_cols:

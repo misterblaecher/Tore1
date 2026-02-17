@@ -74,6 +74,14 @@ export default function OpenInApp() {
         </section>
       )}
 
+
+      {payload?.type === 'staff_backup' && (
+        <section style={{ marginTop: 16, padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Backup code staff</h2>
+          <p style={{ margin: 0, opacity: 0.8 }}>Validation uniquement dans l'app TORÈ (auth requise).</p>
+        </section>
+      )}
+
       {showInstall && (
         <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
           <a href={PLAY_STORE_URL} target="_blank" rel="noreferrer" style={{ color: '#5f5cff' }}>

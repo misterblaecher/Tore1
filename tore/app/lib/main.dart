@@ -8,6 +8,7 @@ import 'features/auth/presentation/welcome_screen.dart';
 import 'features/community/presentation/orga_detail_screen.dart';
 import 'features/qr/presentation/join_event_screen.dart';
 import 'features/events/presentation/staff_invite_join_screen.dart';
+import 'features/events/presentation/staff_backup_join_screen.dart';
 import 'package:tore/theme/theme.dart';
 import 'state.dart';
 import 'core/network/providers.dart';
@@ -60,7 +61,7 @@ class ToreApp extends ConsumerWidget {
               (uri.scheme == 'https' && uri.host == 'app.tore.be' && uri.path == '/open');
           if (isOpen) {
             final type = (uri.queryParameters['type'] ?? '').toLowerCase();
-            final id = int.tryParse(uri.queryParameters['id'] ?? uri.queryParameters['event_id'] ?? uri.queryParameters['org_id'] ?? '');
+            final id = int.tryParse(uri.queryParameters['id'] ?? uri.queryParameters['eventId'] ?? uri.queryParameters['event_id'] ?? uri.queryParameters['org_id'] ?? '');
             final code = (uri.queryParameters['code'] ?? '').trim();
             if (type == 'event') {
               return MaterialPageRoute(
@@ -84,6 +85,12 @@ class ToreApp extends ConsumerWidget {
               return MaterialPageRoute(
                 settings: settings,
                 builder: (_) => StaffInviteJoinScreen(code: code),
+              );
+            }
+            if (type == 'staff_backup') {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => StaffBackupJoinScreen(prefillEventId: id, prefillCode: code),
               );
             }
           }

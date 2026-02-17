@@ -14,6 +14,7 @@ enum QrType {
   polymarket,
   orga,
   staffInvite,
+  staffBackup,
   unknown,
 }
 
@@ -178,6 +179,9 @@ class QrParser {
       case 'staff_invite':
       case 'event_staff_invite':
         return QrType.staffInvite;
+      case 'staff_backup':
+      case 'event_staff_backup':
+        return QrType.staffBackup;
       default:
         return QrType.unknown;
     }

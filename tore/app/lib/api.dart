@@ -1416,13 +1416,27 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+
+  Future<Map<String, dynamic>> joinStaffByBackupCodeV1({
+    required int eventId,
+    required String code,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/staff/join_by_backup_code',
+      data: {'code': code},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> getEventSharePackV1(int eventId) async {
     final res = await _client.dio.get('/events/$eventId/share_pack');
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> resolveOpenLink({required String type, String? code, int? id}) async {
-    final res = await _client.dio.get('/open', queryParameters: {'type': type, if (code != null) 'code': code, if (id != null) 'id': id});
+  Future<Map<String, dynamic>> resolveOpenLink({required String type, String? code, int? id, int? eventId}) async {
+    final res = await _client.dio.get('/open', queryParameters: {'type': type, if (code != null) 'code': code, if (id != null) 'id': id, if (eventId != null) 'eventId': eventId});
     return Map<String, dynamic>.from(res.data as Map);
   }
 

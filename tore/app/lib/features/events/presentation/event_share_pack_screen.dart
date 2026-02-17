@@ -94,6 +94,7 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
     final canManage = links.containsKey('staffInvites');
     final qr = Map<String, dynamic>.from((pack?['qr'] as Map?) ?? const <String, dynamic>{});
     final printUrl = canManage ? '$_publicWebBaseUrl/orga/events/${widget.eventId}/share-pack/print' : '$_publicWebBaseUrl/share/event/${widget.eventId}/print';
+    final backupPrintUrl = (links['staffBackupPrintUrl'] ?? '').toString();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Share pack')),
@@ -110,6 +111,12 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                       FilledButton.icon(onPressed: () => _openPrintableVersion(canManage: canManage), icon: const Icon(Icons.print), label: const Text('Version imprimable')),
                       OutlinedButton.icon(onPressed: () => _copy(printUrl, message: 'Lien print copié'), icon: const Icon(Icons.link), label: const Text('Copier lien print')),
                       OutlinedButton.icon(onPressed: () => _sharePrintableLink(canManage: canManage), icon: const Icon(Icons.share), label: const Text('Partager')),
+                      if (canManage && backupPrintUrl.isNotEmpty)
+                        OutlinedButton.icon(
+                          onPressed: () => launchUrl(Uri.parse(backupPrintUrl), mode: LaunchMode.externalApplication),
+                          icon: const Icon(Icons.security),
+                          label: const Text('Backup codes (print)'),
+                        ),
                     ]),
                   ),
                 ),

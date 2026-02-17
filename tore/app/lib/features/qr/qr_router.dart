@@ -10,6 +10,8 @@ import '../entry/presentation/entry_staff_screen.dart';
 import '../hunt/presentation/hunt_screen.dart';
 import '../menu_market/presentation/menu_screen.dart';
 import '../events/presentation/event_hub_screen.dart';
+import '../events/presentation/staff_invite_join_screen.dart';
+import '../events/presentation/staff_backup_join_screen.dart';
 import '../navigation/presentation/polymarket_tab_screen.dart';
 import '../community/presentation/orga_detail_screen.dart';
 import '../qr/presentation/join_event_screen.dart';
@@ -176,14 +178,19 @@ class QrRouterService {
         );
         return;
       case QrType.staffInvite:
-        onOutcome?.call(const QrRouteOutcome.denied('Staff invite'));
+        final code = (payload.tokenId ?? payload.fields['code'] ?? '').trim();
+        if (code.isEmpty) {
+          await _openUnknown(context: context, payload: payload, reason: 'code invite manquant');
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('Staff invite'));
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffInviteJoinScreen(code: code)));
+        return;
+      case QrType.staffBackup:
+        onOutcome?.call(const QrRouteOutcome.success('Staff backup'));
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => const ModuleUnavailableScreen(
-              title: 'Rejoindre le staff',
-              message: 'Le parcours staff invite est en cours de finalisation. Utilise la gestion staff de l’event.',
-              reasonCode: 'staff_invite_unavailable',
-            ),
+            builder: (_) => StaffBackupJoinScreen(prefillEventId: payload.eventId, prefillCode: payload.tokenId),
           ),
         );
         return;

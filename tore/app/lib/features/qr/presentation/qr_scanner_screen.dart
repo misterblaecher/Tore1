@@ -228,7 +228,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                     TextButton.icon(
                       onPressed: _openManualInput,
                       icon: const Icon(Icons.keyboard_alt_outlined),
-                      label: const Text('Input manuel'),
+                      label: const Text('Entrer un code'),
                     ),
                     if (_microLog.isNotEmpty)
                       Container(

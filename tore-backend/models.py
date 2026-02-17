@@ -178,6 +178,40 @@ class EventStaffInviteIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class EventStaffBackupCode(Base):
+    __tablename__ = "event_staff_backup_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    role: Mapped[str] = mapped_column(String(24), index=True)
+    code_hash: Mapped[str] = mapped_column(String(128), index=True)
+    suffix4: Mapped[str] = mapped_column(String(4), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    used_by: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    revoked_reason: Mapped[Optional[str]] = mapped_column(String(280), nullable=True)
+
+
+class EventStaffBackupIdempotency(Base):
+    __tablename__ = "event_staff_backup_idempotency"
+    __table_args__ = (
+        UniqueConstraint("event_id", "action", "actor_user_id", "idempotency_key", name="uq_event_staff_backup_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    code_id: Mapped[Optional[int]] = mapped_column(ForeignKey("event_staff_backup_codes.id"), nullable=True, index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventQrPackIdempotency(Base):
     __tablename__ = "event_qr_pack_idempotency"
     __table_args__ = (
