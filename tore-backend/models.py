@@ -1716,6 +1716,7 @@ class Organization(Base):
     website_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     instagram_handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     visibility: Mapped[str] = mapped_column(String(16), default="PUBLIC", index=True)
+    join_mode: Mapped[str] = mapped_column(String(24), default="OPEN_MEMBERSHIP", index=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 

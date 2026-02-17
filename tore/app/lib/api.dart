@@ -1513,15 +1513,39 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> followOrga({required int orgId, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/follow', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaJoin({required int orgId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/join', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> unfollowOrga({required int orgId, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/unfollow', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaLeave({required int orgId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/leave', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
+
+  Future<Map<String, dynamic>> orgaMyMembership({required int orgId}) async {
+    final res = await _client.dio.get('/orgas/$orgId/memberships/me');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaMembers({required int orgId}) async {
+    final res = await _client.dio.get('/orgas/$orgId/memberships');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaApproveMember({required int orgId, required String userId, required String idempotencyKey, String? reason}) async {
+    final res = await _client.dio.post('/orgas/$orgId/memberships/$userId/approve', data: {if (reason != null && reason.isNotEmpty) 'reason': reason}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> orgaRejectMember({required int orgId, required String userId, required String reason, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/memberships/$userId/reject', data: {'reason': reason}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> followOrga({required int orgId, required String idempotencyKey}) => orgaJoin(orgId: orgId, idempotencyKey: idempotencyKey);
+
+  Future<Map<String, dynamic>> unfollowOrga({required int orgId, required String idempotencyKey}) => orgaLeave(orgId: orgId, idempotencyKey: idempotencyKey);
 
   Future<Map<String, dynamic>> createOrgaPost({required int orgId, required String text, required String idempotencyKey}) async {
     final res = await _client.dio.post('/orgas/$orgId/posts', data: {'text': text}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
