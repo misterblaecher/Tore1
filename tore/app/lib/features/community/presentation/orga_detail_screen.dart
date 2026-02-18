@@ -14,8 +14,10 @@ import '../../../ui/components/tore_chip.dart';
 import '../../../ui/components/tore_cta.dart';
 import '../../../ui/components/tore_list_row.dart';
 import '../../events/presentation/create_event_wizard_screen.dart';
+import 'orga_invites_admin_screen.dart';
 import 'orga_members_admin_screen.dart';
 import 'orga_posts_screen.dart';
+import 'orga_settings_screen.dart';
 
 class OrgaDetailScreen extends ConsumerStatefulWidget {
   const OrgaDetailScreen({super.key, required this.orgId, this.myRole});
@@ -121,6 +123,9 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                         subtitle: '$pendingCount en attente',
                         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaMembersAdminScreen(orgId: widget.orgId))),
                       ),
+                    ToreListRow(title: 'Invitations', subtitle: 'Créer & révoquer', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaInvitesAdminScreen(orgId: widget.orgId)))),
+                    ToreListRow(title: 'Membres & rôles', subtitle: '${members.length} membre(s)', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaMembersAdminScreen(orgId: widget.orgId, myRole: widget.myRole ?? 'MANAGER')))),
+                    ToreListRow(title: 'Paramètres', subtitle: 'Visibilité, join mode, infos', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaSettingsScreen(orgId: widget.orgId)))),
                     ToreListRow(title: 'Posts', subtitle: '${posts.length} post(s)', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaPostsScreen(orgId: widget.orgId, canModerate: _isAdmin, canPost: true)))),
                   ]),
                 ),
