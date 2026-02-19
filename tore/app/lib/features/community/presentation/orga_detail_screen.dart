@@ -8,6 +8,7 @@ import '../../../shared/utils/write_gate.dart';
 import '../community_models.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../events/presentation/event_manage_landing_screen.dart';
+import '../../events/presentation/event_public_screen.dart';
 import '../../../state.dart';
 import '../../../ui/components/tore_card.dart';
 import '../../../ui/components/tore_chip.dart';
@@ -191,6 +192,11 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
         }
         if (event.canManage) {
           Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event)));
+          return;
+        }
+        final isPublic = event.visibility.toUpperCase() == 'PUBLIC';
+        if (isPublic) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventPublicScreen(eventId: event.id)));
           return;
         }
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: event.id, eventName: event.name)));

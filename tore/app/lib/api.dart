@@ -282,6 +282,35 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+
+  Future<EventPublicView> getEventPublic(int eventId) async {
+    final cacheKey = 'event_public_$eventId';
+    try {
+      final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/public')).data as Map);
+      await _cache.setJson(cacheKey, data, ttl: const Duration(hours: 24));
+      return EventPublicView.fromJson(data);
+    } on DioException {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached == null) rethrow;
+      return EventPublicView.fromJson(cached);
+    }
+  }
+
+  Future<Map<String, dynamic>> joinPublicEvent({
+    required int eventId,
+    required String idempotencyKey,
+    String? acceptedCharterVersion,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/join_public',
+      data: {
+        if (acceptedCharterVersion != null) 'accepted_charter_version': acceptedCharterVersion,
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> joinEvent({
     required int eventId,
     String? idempotencyKey,

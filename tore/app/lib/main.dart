@@ -8,6 +8,7 @@ import 'features/auth/presentation/welcome_screen.dart';
 import 'features/community/presentation/orga_detail_screen.dart';
 import 'features/community/presentation/orga_invite_join_screen.dart';
 import 'features/qr/presentation/join_event_screen.dart';
+import 'features/events/presentation/event_public_screen.dart';
 import 'features/events/presentation/staff_invite_join_screen.dart';
 import 'features/events/presentation/staff_backup_join_screen.dart';
 import 'package:tore/theme/theme.dart';
@@ -64,10 +65,10 @@ class ToreApp extends ConsumerWidget {
             final type = (uri.queryParameters['type'] ?? '').toLowerCase();
             final id = int.tryParse(uri.queryParameters['id'] ?? uri.queryParameters['eventId'] ?? uri.queryParameters['event_id'] ?? uri.queryParameters['org_id'] ?? '');
             final code = (uri.queryParameters['code'] ?? '').trim();
-            if (type == 'event') {
+            if (type == 'event' && id != null) {
               return MaterialPageRoute(
                 settings: settings,
-                builder: (_) => JoinEventScreen(prefillEventId: id),
+                builder: (_) => EventPublicScreen(eventId: id),
               );
             }
             if (type == 'join') {

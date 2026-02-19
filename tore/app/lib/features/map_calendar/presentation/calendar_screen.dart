@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import '../../events/presentation/event_hub_screen.dart';
-import '../../qr/presentation/join_event_screen.dart';
+import '../../events/presentation/event_public_screen.dart';
 import 'map_calendar_providers.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -95,7 +95,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                               // fallback in-app join below
                                             }
                                             if (!context.mounted) return;
-                                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => JoinEventScreen(prefillEventId: eventId)));
+                                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventPublicScreen(eventId: eventId)));
                                             return;
                                           }
                                           if (!context.mounted) return;
