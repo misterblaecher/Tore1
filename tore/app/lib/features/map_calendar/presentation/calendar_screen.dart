@@ -6,6 +6,7 @@ import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../events/presentation/event_public_screen.dart';
+import '../../qr/presentation/join_event_screen.dart';
 import 'map_calendar_providers.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -21,9 +22,23 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final asyncEvents = ref.watch(calendarEventsProvider(_range));
+    final hasPublicJoinable = asyncEvents.maybeWhen(
+      data: (result) => result.items.any((item) => (item['visibility'] ?? 'PUBLIC').toString().toUpperCase() == 'PUBLIC'),
+      orElse: () => true,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Calendrier guindaille')),
+      appBar: AppBar(
+        title: const Text('Calendrier guindaille'),
+        actions: [
+          if (!hasPublicJoinable)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
+              icon: const Icon(Icons.login_outlined),
+              label: const Text('Entrer un code'),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

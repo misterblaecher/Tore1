@@ -182,3 +182,30 @@ def test_join_public_is_idempotent_has_audit_and_blocks_closed_or_frozen():
 
     blocked = client.post(f'/events/{event_id}/join_public', json={}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'join-public-blocked'})
     assert blocked.status_code == 403
+
+
+def test_join_by_code_is_idempotent_and_requires_idempotency_key():
+    event_id, code = _seed_event()
+    client = TestClient(app)
+    token = _guest_token(client, 'join-by-code-idem')
+
+    missing = client.post('/events/join_by_code', json={'code': code}, headers={'Authorization': f'Bearer {token}'})
+    assert missing.status_code == 400
+    assert missing.json()['detail']['reason'] == 'IDEMPOTENCY_REQUIRED'
+
+    headers = {'Authorization': f'Bearer {token}', 'Idempotency-Key': 'join-by-code-idem-key'}
+    first = client.post('/events/join_by_code', json={'code': code}, headers=headers)
+    second = client.post('/events/join_by_code', json={'code': code}, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()['event']['id'] == event_id
+    assert second.json()['event']['id'] == event_id
+    assert second.json()['event']['event_code'] == first.json()['event']['event_code']
+
+    s = get_session()
+    try:
+        rows = s.query(EventJoin).filter(EventJoin.event_id == event_id).all()
+        assert len(rows) == 1
+    finally:
+        s.close()

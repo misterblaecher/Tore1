@@ -36,7 +36,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 2, vsync: this, initialIndex: 1);
     if (widget.prefillEventId != null) {
       _resolveEventById(widget.prefillEventId!);
       if (widget.autoJoinPublic) {
@@ -170,11 +170,17 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
 
   Future<void> _joinResolved() async {
     if (_resolved == null) return;
-    final readOnly = isReadOnly(ref);
-    final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-    if (readOnly || degradedBlocked) return;
-
     final event = Map<String, dynamic>.from(_resolved!['event'] as Map);
+    final blockReason = writeDisabledReason(
+      ref,
+      intent: WriteIntent.critical,
+      runtimeState: event['state']?.toString(),
+    );
+    if (blockReason != null) {
+      setState(() => _error = blockReason);
+      return;
+    }
+
     final eventId = int.tryParse(event['id'].toString());
     if (eventId == null) return;
     final flags = Map<String, dynamic>.from((_resolved!['flags'] as Map?) ?? const {});
@@ -245,7 +251,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
     final eventName = event?['name']?.toString() ?? 'Event';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Join event')),
+      appBar: AppBar(title: const Text('Entrer un code')), 
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -255,22 +261,28 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
                 padding: const EdgeInsets.only(bottom: 12),
                 child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked)),
               ),
-            TabBar(controller: _tabs, tabs: const [Tab(text: 'Scan QR'), Tab(text: 'Enter code')]),
+            TabBar(controller: _tabs, tabs: const [Tab(text: 'Entrer un code'), Tab(text: 'Scanner QR')]),
             const SizedBox(height: 12),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
-                  Center(
-                    child: FilledButton.icon(onPressed: _scanJoinQr, icon: const Icon(Icons.qr_code_scanner), label: const Text('Scanner un QR join_event')),
-                  ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(controller: _codeCtrl, decoration: const InputDecoration(labelText: 'eventCode', hintText: 'Ex: JOIN66')),
+                      TextField(
+                        controller: _codeCtrl,
+                        autofocus: true,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(labelText: 'Code event', hintText: 'Ex: JOIN66'),
+                        onSubmitted: (_) => _resolveByCode(),
+                      ),
                       const SizedBox(height: 10),
-                      FilledButton(onPressed: _joining ? null : _resolveByCode, child: const Text('Join with code')),
+                      FilledButton(onPressed: _joining ? null : _resolveByCode, child: const Text('Rejoindre')),
                     ],
+                  ),
+                  Center(
+                    child: FilledButton.icon(onPressed: _scanJoinQr, icon: const Icon(Icons.qr_code_scanner), label: const Text('Scanner un QR join_event')),
                   ),
                 ],
               ),
@@ -284,7 +296,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
               Text((event['venue'] ?? 'Lieu non précisé').toString()),
               Text('${event['starts_at'] ?? ''} → ${event['ends_at'] ?? ''}', style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 10),
-              FilledButton(onPressed: writesBlocked || _joining ? null : _joinResolved, child: const Text('Join event')),
+              FilledButton(onPressed: writesBlocked || _joining ? null : _joinResolved, child: const Text('Rejoindre')),
             ],
           ],
         ),
@@ -347,7 +359,8 @@ String _joinErrorMessage(Object error) {
         return 'Tu dois accepter la charte avant de rejoindre.';
       case 'closed':
       case 'frozen':
-        return 'Join refusé: event fermé.';
+      case 'runtime_blocked':
+        return 'Action indisponible temporairement pour cet event.';
       default:
         return 'Impossible de rejoindre cet event.';
     }

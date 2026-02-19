@@ -1376,6 +1376,15 @@ class OpenLinkOut(BaseModel):
     description: Optional[str] = None
 
 
+class JoinCodePreviewOut(BaseModel):
+    exists: bool
+    requiresAuth: bool
+    titleHint: Optional[str] = None
+    startAtHint: Optional[str] = None
+    hostHint: Optional[str] = None
+    public: Optional[dict[str, Any]] = None
+
+
 class CreateEventOut(BaseModel):
     event_id: int
     name: str
@@ -4347,6 +4356,22 @@ def _event_public_payload(db: Session, event: Event) -> dict[str, Any]:
     }
 
 
+def _join_code_private_preview(event: Event) -> dict[str, Any]:
+    start_hint = None
+    if event.starts_at is not None:
+        start_hint = event.starts_at.replace(minute=0, second=0, microsecond=0).isoformat()
+    host_hint = None
+    if (event.host_type or "").strip():
+        host_hint = f"Host {event.host_type.strip().lower()}"
+    return {
+        "exists": True,
+        "requiresAuth": True,
+        "titleHint": "Event privé TORÈ",
+        "startAtHint": start_hint,
+        "hostHint": host_hint,
+    }
+
+
 @app.get("/events/{event_id}/public")
 def get_event_public(event_id: int, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
@@ -4355,6 +4380,25 @@ def get_event_public(event_id: int, db: Session = Depends(get_db)):
     if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
         raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
     return _event_public_payload(db, event)
+
+
+@app.get("/events/join_code/preview", response_model=JoinCodePreviewOut)
+def preview_join_code(code: str, db: Session = Depends(get_db)):
+    normalized = (code or "").strip().upper()
+    if not normalized:
+        raise HTTPException(status_code=404, detail={"reason": "invalid_code"})
+    event = db.query(Event).filter(Event.event_code == normalized).first()
+    if event is None:
+        raise HTTPException(status_code=404, detail={"reason": "invalid_code"})
+    if (event.visibility or "PRIVATE").upper() == "PRIVATE":
+        return _join_code_private_preview(event)
+    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+        raise HTTPException(status_code=404, detail={"reason": "invalid_code"})
+    return {
+        "exists": True,
+        "requiresAuth": False,
+        "public": _event_public_payload(db, event),
+    }
 
 
 @app.get("/events/{event_id}/charter", response_model=EventCharterOut)
@@ -6798,6 +6842,10 @@ def resolve_open_link(
         deeplink = f"tore://open?type=join&code={normalized}"
         web_fallback = f"{_public_app_base_url()}/open?type=join&code={normalized}"
         target = {"code": normalized}
+        event = db.query(Event).filter(Event.event_code == normalized).first()
+        if event is not None:
+            target["event_id"] = event.id
+            target["visibility"] = (event.visibility or "PRIVATE").upper()
     elif type_normalized == "staff_invite":
         if not code:
             raise HTTPException(status_code=400, detail={"reason": "missing_code"})
@@ -6841,6 +6889,14 @@ def resolve_open_link(
     if type_normalized == "staff_invite":
         payload["title"] = "Invitation staff"
         payload["description"] = "Rejoins le staff dans TORÈ"
+    elif type_normalized == "join":
+        visibility = (payload["target"].get("visibility") or "PRIVATE").upper()
+        if visibility == "PRIVATE":
+            payload["title"] = "Rejoindre un event privé"
+            payload["description"] = "Connecte-toi dans TORÈ puis entre le code pour rejoindre l’event."
+        else:
+            payload["title"] = "Rejoindre un event"
+            payload["description"] = "Ouvre TORÈ pour rejoindre cet event avec ton code."
     elif type_normalized == "orga_invite":
         role = payload["target"].get("inviteType", "MEMBER")
         payload["title"] = f"Invitation Orga: {role.title()}"

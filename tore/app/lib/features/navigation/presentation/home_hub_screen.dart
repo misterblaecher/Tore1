@@ -118,12 +118,12 @@ class HomeHubScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Scanne un QR join_event pour activer ton event.'),
+                  const Text('Scanne un QR join_event ou entre un code pour activer ton event.'),
                   const SizedBox(height: 10),
                   FilledButton.icon(
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
                     icon: const Icon(Icons.login_outlined),
-                    label: const Text('Join event'),
+                    label: const Text('Entrer un code'),
                   ),
                 ],
               ),
