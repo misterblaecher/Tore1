@@ -7,6 +7,7 @@ import 'features/battles/battle_models.dart';
 import 'features/polymarket/polymarket_models.dart';
 import 'features/safety/safety_models.dart';
 import 'features/community/community_models.dart';
+import 'features/community/data/orga_events_cache.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
 
@@ -48,14 +49,17 @@ class CalendarEventsFetchResult {
 class Api {
   final ApiClient _client;
   final CacheStore _cache;
+  final OrgaEventsCache _orgaEventsCache;
 
-  Api.fromClient(this._client, {CacheStore? cacheStore})
-      : _cache = cacheStore ?? CacheStore();
+  Api.fromClient(this._client, {CacheStore? cacheStore, OrgaEventsCache? orgaEventsCache})
+      : _cache = cacheStore ?? CacheStore(),
+        _orgaEventsCache = orgaEventsCache ?? OrgaEventsCache();
 
   // Si tu veux garder l'ancien constructeur temporairement :
   Api(String baseUrl)
       : _client = ApiClient.create(baseUrl: baseUrl),
-        _cache = CacheStore();
+        _cache = CacheStore(),
+        _orgaEventsCache = OrgaEventsCache();
 
   Future<List<dynamic>> bars() async =>
       (await _client.dio.get('/bars')).data as List<dynamic>;
@@ -1468,9 +1472,38 @@ class Api {
     }
   }
 
-  Future<Map<String, List<MyEventSummary>>> orgaPrivateEvents(int orgId) async {
-    final res = await _client.dio.get('/orgas/$orgId/events/private');
-    return _decodeMyEventBuckets(Map<String, dynamic>.from(res.data as Map));
+  Future<OrgaEventsResult> listOrgaPrivateEvents(int orgId, {String? cursor}) async {
+    final cacheKey = _orgaEventsCache.privateKey(orgId);
+    try {
+      final res = await _client.dio.get('/orgas/$orgId/events/private', queryParameters: {if (cursor != null) 'cursor': cursor});
+      final payload = Map<String, dynamic>.from(res.data as Map);
+      await _orgaEventsCache.savePrivate(orgId, payload);
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      await _cache.setJson(cacheKey, {'payload': payload, 'lastSyncAt': nowIso}, ttl: const Duration(hours: 24));
+      return OrgaEventsResult(
+        buckets: _decodeMyEventBuckets(payload),
+        nextCursor: payload['nextCursor']?.toString(),
+        isCached: false,
+        lastSyncAt: DateTime.tryParse(nowIso),
+      );
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) {
+        final payload = Map<String, dynamic>.from((cached['payload'] as Map?) ?? const <String, dynamic>{});
+        return OrgaEventsResult(
+          buckets: _decodeMyEventBuckets(payload),
+          nextCursor: payload['nextCursor']?.toString(),
+          isCached: true,
+          lastSyncAt: DateTime.tryParse((cached['lastSyncAt'] ?? '').toString()),
+        );
+      }
+      throw const OfflineNoCacheException('orga_private_events');
+    }
+  }
+
+  Future<Map<String, List<MyEventSummary>>> orgaPrivateEvents(int orgId, {String? cursor}) async {
+    final result = await listOrgaPrivateEvents(orgId, cursor: cursor);
+    return result.buckets;
   }
 
   Future<ManageSnapshot> eventManageSnapshot(int eventId) async {
@@ -1488,9 +1521,42 @@ class Api {
     return out;
   }
 
-  Future<Map<String, dynamic>> listOrgaPublicEvents(int orgId) async {
-    final res = await _client.dio.get('/orgas/$orgId/events');
-    return Map<String, dynamic>.from(res.data as Map);
+  Future<OrgaEventsResult> listOrgaPublicEvents(int orgId) async {
+    final cacheKey = _orgaEventsCache.publicKey(orgId);
+    try {
+      final res = await _client.dio.get('/orgas/$orgId/events');
+      final payload = Map<String, dynamic>.from(res.data as Map);
+      await _orgaEventsCache.savePublic(orgId, payload);
+      final buckets = _decodeOrgaPublicBuckets(payload);
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      await _cache.setJson(cacheKey, {'payload': {'items': payload['items'] ?? const []}, 'lastSyncAt': nowIso}, ttl: const Duration(hours: 24));
+      return OrgaEventsResult(buckets: buckets, nextCursor: null, isCached: false, lastSyncAt: DateTime.tryParse(nowIso));
+    } catch (_) {
+      final cached = await _cache.getJson(cacheKey);
+      if (cached != null) {
+        final payload = Map<String, dynamic>.from((cached['payload'] as Map?) ?? const <String, dynamic>{});
+        return OrgaEventsResult(
+          buckets: _decodeOrgaPublicBuckets(payload),
+          nextCursor: null,
+          isCached: true,
+          lastSyncAt: DateTime.tryParse((cached['lastSyncAt'] ?? '').toString()),
+        );
+      }
+      throw const OfflineNoCacheException('orga_public_events');
+    }
+  }
+
+
+  Map<String, List<MyEventSummary>> _decodeOrgaPublicBuckets(Map<String, dynamic> payload) {
+    final out = <String, List<MyEventSummary>>{'LIVE': [], 'TODAY': [], 'UPCOMING': [], 'PAST': []};
+    final items = (payload['items'] as List?) ?? const [];
+    for (final raw in items.whereType<Map>()) {
+      final row = Map<String, dynamic>.from(raw);
+      final bucket = (row['bucket'] ?? 'UPCOMING').toString().toUpperCase();
+      out.putIfAbsent(bucket, () => []);
+      out[bucket]!.add(MyEventSummary.fromJson(row));
+    }
+    return out;
   }
 
   Future<Map<String, dynamic>> getOrga(int orgId) async {
