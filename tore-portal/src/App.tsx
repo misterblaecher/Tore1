@@ -50,6 +50,7 @@ import CreateOrga from './pages/CreateOrga'
 import OpenInApp from './pages/OpenInApp'
 import PrintSharePack from './pages/PrintSharePack'
 import StaffBackupPrint from './pages/StaffBackupPrint'
+import EventPublicLanding from './pages/EventPublicLanding'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -83,6 +84,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/open" element={<OpenInApp />} />
+      <Route path="/event/:eventId" element={<EventPublicLanding />} />
       <Route path="/share/event/:eventId/print" element={<PrintSharePack managed={false} />} />
 
       <Route

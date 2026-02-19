@@ -9,14 +9,16 @@ import '../../../shared/utils/write_gate.dart';
 import '../../../shared/widgets/service_limited_banner.dart';
 import '../../../state.dart';
 import '../../events/presentation/event_hub_screen.dart';
+import '../../events/presentation/event_public_screen.dart';
 import 'qr_scanner_screen.dart';
 
 class JoinEventScreen extends ConsumerStatefulWidget {
-  const JoinEventScreen({super.key, this.prefillEventId, this.prefillCode, this.autoJoinCode = false});
+  const JoinEventScreen({super.key, this.prefillEventId, this.prefillCode, this.autoJoinCode = false, this.autoJoinPublic = false});
 
   final int? prefillEventId;
   final String? prefillCode;
   final bool autoJoinCode;
+  final bool autoJoinPublic;
 
   @override
   ConsumerState<JoinEventScreen> createState() => _JoinEventScreenState();
@@ -37,6 +39,13 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
     _tabs = TabController(length: 2, vsync: this);
     if (widget.prefillEventId != null) {
       _resolveEventById(widget.prefillEventId!);
+      if (widget.autoJoinPublic) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => EventPublicScreen(eventId: widget.prefillEventId!, autoJoin: true)));
+          }
+        });
+      }
     }
     if ((widget.prefillCode ?? '').trim().isNotEmpty) {
       _tabs.index = 1;

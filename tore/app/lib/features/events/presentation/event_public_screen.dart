@@ -1,0 +1,147 @@
+import 'dart:math';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/app_context/app_context.dart';
+import '../../../shared/utils/write_gate.dart';
+import '../../../state.dart';
+import '../domain/event_public_view.dart';
+import 'event_hub_screen.dart';
+
+class EventPublicScreen extends ConsumerStatefulWidget {
+  const EventPublicScreen({super.key, required this.eventId, this.autoJoin = false});
+
+  final int eventId;
+  final bool autoJoin;
+
+  @override
+  ConsumerState<EventPublicScreen> createState() => _EventPublicScreenState();
+}
+
+class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
+  bool _loading = true;
+  bool _joining = false;
+  String? _error;
+  EventPublicView? _event;
+
+  String _idem() => 'join-public-${widget.eventId}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final event = await ref.read(apiProvider).getEventPublic(widget.eventId);
+      setState(() => _event = event);
+      if (widget.autoJoin && event.canJoin) {
+        await _join();
+      }
+    } catch (e) {
+      setState(() => _error = 'Event privé / lien invalide');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<bool> _ensureCharterAcceptance({required int eventId, required String version}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'charter_accepted_${eventId}_$version';
+    if (prefs.getBool(key) == true) return true;
+    final charter = await ref.read(apiProvider).eventCharter(eventId);
+    if (!mounted) return false;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Charte de l’event'),
+        content: SingleChildScrollView(child: Text((charter['text'] ?? '').toString())),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Refuser')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Accepter')),
+        ],
+      ),
+    );
+    if (accepted == true) {
+      await prefs.setBool(key, true);
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _join() async {
+    final readOnly = isReadOnly(ref);
+    final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
+    final runtimeBlocked = (_event?.canJoin == false);
+    if (isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeBlocked)) {
+      setState(() => _error = writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeBlocked));
+      return;
+    }
+    setState(() {
+      _joining = true;
+      _error = null;
+    });
+    try {
+      var payload = await ref.read(apiProvider).joinPublicEvent(eventId: widget.eventId, idempotencyKey: _idem());
+      if (payload['charter_required'] == true) {
+        final version = payload['charter_version']?.toString();
+        if (version != null && await _ensureCharterAcceptance(eventId: widget.eventId, version: version)) {
+          payload = await ref.read(apiProvider).joinPublicEvent(eventId: widget.eventId, idempotencyKey: _idem(), acceptedCharterVersion: version);
+        } else {
+          return;
+        }
+      }
+      final eventPayload = Map<String, dynamic>.from(payload['event'] as Map);
+      final modulesMapRaw = payload['modulesOn'];
+      final modules = modulesMapRaw is Map
+          ? Map<String, bool>.from(modulesMapRaw.map((k, v) => MapEntry(k.toString(), v == true)))
+          : <String, bool>{for (final key in (_event?.modulesOn ?? const <String>[])) key: true};
+      final eventName = (eventPayload['name'] ?? _event?.name ?? 'Event').toString();
+      ref.read(appContextProvider.notifier).enterEvent(eventId: widget.eventId, eventName: eventName, activeEventModules: modules);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: widget.eventId, eventName: eventName)));
+    } on DioException catch (e) {
+      setState(() => _error = e.response?.data.toString() ?? 'Join impossible');
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_error != null && _event == null) return Scaffold(appBar: AppBar(title: const Text('Event')), body: Center(child: Text(_error!)));
+    final event = _event;
+    if (event == null) return const SizedBox.shrink();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Event public')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(event.name, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text('Host: ${event.hostName ?? '-'}'),
+          Text('Lieu: ${event.venueName ?? '-'}'),
+          Text('State: ${event.eventState}'),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _joining ? null : _join,
+              child: Text(_joining ? 'Rejoindre…' : 'Rejoindre'),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}

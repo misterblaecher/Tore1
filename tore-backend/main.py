@@ -4292,6 +4292,71 @@ def get_event(event_id: int):
         s.close()
 
 
+def _event_public_host_summary(db: Session, event: Event) -> dict[str, Any]:
+    host_name = event.host_display_name
+    instagram: Optional[str] = None
+    host_type = (event.host_type or "user").lower()
+    host_id = (event.host_id or "").strip()
+    if host_type == "orga" and host_id.isdigit():
+        org = db.get(Organization, int(host_id))
+        if org is not None:
+            host_name = host_name or org.name
+            instagram = org.instagram_handle
+    elif host_type == "user" and host_id:
+        user = db.get(AppUser, host_id)
+        if user is not None:
+            host_name = host_name or user.display_name
+            instagram = user.instagram_handle
+    return {
+        "type": host_type,
+        "name": host_name,
+        "instagram": instagram,
+    }
+
+
+def _compact_public_modules(db: Session, event_id: int) -> list[str]:
+    modules = _event_modules_on(db, event_id)
+    return sorted([key for key, enabled in modules.items() if enabled])
+
+
+def _event_public_payload(db: Session, event: Event) -> dict[str, Any]:
+    runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event.id).first()
+    runtime_state = ((runtime.state if runtime else None) or "LIVE").upper()
+    public_base = _public_app_base_url()
+    bar = db.get(Bar, event.bar_id) if event.bar_id else None
+    return {
+        "id": event.id,
+        "name": event.name,
+        "startAt": event.starts_at.isoformat() if event.starts_at else None,
+        "endAt": event.ends_at.isoformat() if event.ends_at else None,
+        "venue": {
+            "name": event.venue,
+            "barName": (bar.name if bar else None),
+        },
+        "host": _event_public_host_summary(db, event),
+        "modulesOn": _compact_public_modules(db, event.id),
+        "eventState": runtime_state,
+        "links": {
+            "webUrl": f"{public_base}/event/{event.id}",
+            "openUrl": f"{public_base}/open?type=event&id={event.id}",
+            "deeplink": f"tore://open?type=event&id={event.id}",
+        },
+        "flags": {
+            "canJoin": runtime_state not in {"CLOSED", "FROZEN"},
+        },
+    }
+
+
+@app.get("/events/{event_id}/public")
+def get_event_public(event_id: int, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+        raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
+    return _event_public_payload(db, event)
+
+
 @app.get("/events/{event_id}/charter", response_model=EventCharterOut)
 def get_event_charter(
     event_id: int,
@@ -4321,6 +4386,37 @@ def join_event(
     if not event:
         raise HTTPException(404, "Event not found")
     key = ensure_idempotency_key(idempotency_key)
+    return _apply_event_join(
+        db,
+        event=event,
+        user=user,
+        idempotency_key=key,
+        accepted_charter_version=payload.accepted_charter_version,
+    )
+
+
+@app.post("/events/{event_id}/join_public")
+def join_event_public(
+    event_id: int,
+    payload: JoinEventIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+        raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
+    key = ensure_idempotency_key(idempotency_key)
+    if event.charter_enabled and payload.accepted_charter_version != event.charter_version:
+        return {
+            "charter_required": True,
+            "charter_version": event.charter_version,
+            "event_id": event.id,
+            "eventState": _event_public_payload(db, event)["eventState"],
+            "modulesOn": _compact_public_modules(db, event.id),
+        }
     return _apply_event_join(
         db,
         event=event,

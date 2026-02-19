@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tore/api.dart';
+import 'package:tore/features/events/presentation/event_public_screen.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
+import 'package:tore/state.dart';
+
+class _FakeApi extends Api {
+  _FakeApi() : super('http://localhost:8000');
+
+  @override
+  Future<Map<String, dynamic>> event(int eventId) async => {
+        'id': eventId,
+        'name': 'Event #$eventId',
+        'charter_enabled': false,
+      };
+}
 
 void main() {
   testWidgets('prefills join code from deep link routing', (tester) async {
@@ -15,5 +29,19 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.text('JOIN66'), findsOneWidget);
+  });
+
+  testWidgets('autoJoinPublic redirects to EventPublicScreen', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [apiProvider.overrideWithValue(_FakeApi())],
+        child: const MaterialApp(
+          home: JoinEventScreen(prefillEventId: 42, autoJoinPublic: true),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byType(EventPublicScreen), findsOneWidget);
   });
 }
