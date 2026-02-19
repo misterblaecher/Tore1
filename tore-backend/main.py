@@ -9488,8 +9488,10 @@ def _event_summary_payload(db: Session, *, row: Event, user_id: str, joined_ids:
         "startAt": row.starts_at.isoformat(),
         "endAt": row.ends_at.isoformat(),
         "venue": row.venue,
+        "publicationStatus": (row.publication_status or "DRAFT").upper(),
         "visibility": (row.visibility or "PRIVATE").upper(),
         "status": status,
+        "eventState": status,
         "modulesOn": row.modules_on or {},
         "host_type": (row.host_type or "user").lower(),
         "host_id": row.host_id,
@@ -9549,14 +9551,28 @@ def my_events(user: AppUser = Depends(get_current_user), db: Session = Depends(g
 
 
 @app.get("/orgas/{org_id}/events/private")
-def list_orga_private_events(org_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_orga_private_events(
+    org_id: int,
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=30, ge=1, le=50),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     _require_membership_role(db, org_id=org_id, user_id=user.id, min_role="MANAGER")
     now = now_utc()
-    rows = db.query(Event).filter(
+    q = db.query(Event).filter(
         Event.host_type == "orga",
         Event.host_id == str(org_id),
-    ).order_by(Event.starts_at.asc(), Event.id.asc()).all()
-    event_ids = [row.id for row in rows]
+    )
+    if cursor:
+        try:
+            q = q.filter(Event.id > int(cursor))
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_cursor"})
+    rows = q.order_by(Event.id.asc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    clipped = rows[:limit]
+    event_ids = [row.id for row in clipped]
     runtime_rows = db.query(EventRuntimeState).filter(EventRuntimeState.event_id.in_(event_ids)).all() if event_ids else []
     runtime_map = {row.event_id: row for row in runtime_rows}
     joined_ids = {
@@ -9564,9 +9580,10 @@ def list_orga_private_events(org_id: int, user: AppUser = Depends(get_current_us
         for row in db.query(EventJoin.event_id).filter(EventJoin.user_id == user.id, EventJoin.event_id.in_(event_ids)).all()
     } if event_ids else set()
     payload = {"LIVE": [], "TODAY": [], "UPCOMING": [], "PAST": []}
-    for row in rows:
+    for row in clipped:
         bucket = _event_bucket(row, now)
         payload[bucket].append(_event_summary_payload(db, row=row, user_id=user.id, joined_ids=joined_ids, runtime_map=runtime_map))
+    payload["nextCursor"] = str(clipped[-1].id) if has_more and clipped else None
     write_audit_log(
         db,
         actor_partner_id=None,
@@ -9577,7 +9594,7 @@ def list_orga_private_events(org_id: int, user: AppUser = Depends(get_current_us
         entity_id=str(org_id),
         event_id=None,
         bar_id=None,
-        payload={"total": len(rows)},
+        payload={"total": len(clipped), "cursor": cursor, "nextCursor": payload["nextCursor"]},
     )
     db.commit()
     return payload
@@ -9627,22 +9644,15 @@ def list_orga_public_events(org_id: int, db: Session = Depends(get_db)):
         Event.visibility == "PUBLIC",
         Event.publication_status == "PUBLISHED",
     ).order_by(Event.starts_at.asc()).all()
+    event_ids = [row.id for row in rows]
+    runtime_rows = db.query(EventRuntimeState).filter(EventRuntimeState.event_id.in_(event_ids)).all() if event_ids else []
+    runtime_map = {row.event_id: row for row in runtime_rows}
     items = []
     for row in rows:
-        if row.ends_at < now:
-            bucket = "PAST"
-        elif row.starts_at.date() == now.date():
-            bucket = "TODAY"
-        else:
-            bucket = "UPCOMING"
-        runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == row.id).first()
+        summary = _event_summary_payload(db, row=row, user_id="", joined_ids=set(), runtime_map=runtime_map)
         items.append({
-            "id": row.id,
-            "name": row.name,
-            "startAt": row.starts_at.isoformat(),
-            "endAt": row.ends_at.isoformat(),
-            "bucket": bucket,
-            "eventState": ((runtime.state if runtime else None) or row.event_state or "LIVE").upper(),
+            **summary,
+            "bucket": _event_bucket(row, now),
             "event_code": row.event_code,
         })
     return {"items": items}

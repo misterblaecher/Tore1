@@ -6,14 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/utils/write_gate.dart';
 import '../community_models.dart';
+import '../../events/presentation/event_hub_screen.dart';
 import '../../events/presentation/event_manage_landing_screen.dart';
-import '../../events/presentation/event_share_pack_screen.dart';
 import '../../../state.dart';
 import '../../../ui/components/tore_card.dart';
 import '../../../ui/components/tore_chip.dart';
 import '../../../ui/components/tore_cta.dart';
 import '../../../ui/components/tore_list_row.dart';
 import '../../events/presentation/create_event_wizard_screen.dart';
+import 'orga_events_list_screen.dart';
 import 'orga_invites_admin_screen.dart';
 import 'orga_members_admin_screen.dart';
 import 'orga_posts_screen.dart';
@@ -33,6 +34,7 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
   String _idem() => 'orga-detail-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   bool get _isAdmin => widget.myRole == 'OWNER' || widget.myRole == 'MANAGER';
+  bool _adminTab = false;
 
   @override
   Widget build(BuildContext context) {
@@ -48,18 +50,18 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
           api.listOrgaPublicEvents(widget.orgId),
           api.listOrgaPosts(widget.orgId),
           api.orgaMyMembership(orgId: widget.orgId),
-          if (_isAdmin) api.orgaPrivateEvents(widget.orgId),
+          if (_isAdmin) api.listOrgaPrivateEvents(widget.orgId),
           if (_isAdmin) api.orgaMembers(orgId: widget.orgId),
         ]),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snap.hasError || !snap.hasData) return const Center(child: Text('Erreur chargement orga'));
           final orga = Map<String, dynamic>.from(snap.data![0] as Map);
-          final events = ((Map<String, dynamic>.from(snap.data![1] as Map)['items'] as List?) ?? const []).cast<dynamic>();
+          final publicResult = snap.data![1] as OrgaEventsResult;
           final posts = ((Map<String, dynamic>.from(snap.data![2] as Map)['items'] as List?) ?? const []).cast<dynamic>();
           final myMembershipJson = (Map<String, dynamic>.from(snap.data![3] as Map)['membership'] as Map?)?.cast<String, dynamic>();
           final myMembership = myMembershipJson == null ? null : OrgaMembership.fromJson(myMembershipJson);
-          final privateBuckets = _isAdmin && snap.data!.length > 4 ? (snap.data![4] as Map<String, List<MyEventSummary>>) : <String, List<MyEventSummary>>{};
+          final privateResult = _isAdmin && snap.data!.length > 4 ? (snap.data![4] as OrgaEventsResult) : const OrgaEventsResult(buckets: {}, nextCursor: null, isCached: false, lastSyncAt: null);
           final members = _isAdmin && snap.data!.length > 5 ? ((Map<String, dynamic>.from(snap.data![5] as Map)['items'] as List?) ?? const []) : const [];
           final pendingCount = members.where((e) => (e as Map)['status'] == 'PENDING').length;
 
@@ -76,6 +78,9 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
             if (mounted) setState(() {});
           }
 
+          final showingAdmin = _isAdmin && _adminTab;
+          final current = showingAdmin ? privateResult : publicResult;
+
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
@@ -89,6 +94,7 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                     ToreChip(label: (orga['instagram_handle'] ?? '@').toString(), variant: ToreChipVariant.closed),
                     if (status == MembershipStatus.pending) const ToreChip(label: 'Demande envoyée', variant: ToreChipVariant.warning),
                     if (status == MembershipStatus.active) ToreChip(label: myMembership?.role == MembershipRole.follower ? 'Follower' : 'Membre', variant: ToreChipVariant.success),
+                    if (current.isCached) const ToreChip(label: 'CACHE / OFFLINE', variant: ToreChipVariant.warning),
                   ]),
                 ]),
               ),
@@ -116,7 +122,10 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                 ToreCard(
                   header: const Text('Admin'),
                   child: Column(children: [
-                    ToreListRow(title: 'Créer un event', subtitle: 'Host = orga', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreateEventWizardScreen(prefillOrga: orga)))),
+                    ToreListRow(title: 'Créer un event', subtitle: 'Host = orga', onTap: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreateEventWizardScreen(prefillHostOrgaId: widget.orgId)));
+                      if (mounted) setState(() {});
+                    }),
                     if (pendingCount > 0)
                       ToreListRow(
                         title: 'Demandes',
@@ -130,30 +139,68 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                   ]),
                 ),
               const SizedBox(height: 12),
-              ToreCard(header: const Text('Events publics'), child: Column(children: [for (final e in events) ToreListRow(title: (e['name'] ?? 'Event').toString(), subtitle: '${e['bucket'] ?? ''} • ${e['eventState'] ?? ''}')])),
-              if (_isAdmin) const SizedBox(height: 12),
-              if (_isAdmin)
-                ToreCard(
-                  header: const Text('Events (privés)'),
-                  child: Column(children: [
-                    for (final bucket in const ['LIVE', 'TODAY', 'UPCOMING', 'PAST'])
-                      ...[
-                        for (final event in (privateBuckets[bucket] ?? const <MyEventSummary>[]))
-                          ToreListRow(
-                            title: event.name,
-                            subtitle: '${event.visibility} • ${event.status} • ${event.roleForMe}',
-                            trailing: Wrap(spacing: 4, children: [
-                              TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event))), child: const Text('Reprendre')),
-                              if (event.canManage) TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventSharePackScreen(eventId: event.id))), child: const Text('Share pack')),
-                            ]),
-                          ),
-                      ]
-                  ]),
-                ),
+              ToreCard(
+                header: const Text('Events'),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (_isAdmin)
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment<bool>(value: false, label: Text('Public')),
+                        ButtonSegment<bool>(value: true, label: Text('Admin')),
+                      ],
+                      selected: {_adminTab},
+                      onSelectionChanged: (v) => setState(() => _adminTab = v.first),
+                    ),
+                  for (final bucket in const ['TODAY', 'UPCOMING', 'PAST']) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, bottom: 6),
+                      child: Text(bucket, style: Theme.of(context).textTheme.titleSmall),
+                    ),
+                    for (final event in (current.buckets[bucket] ?? const <MyEventSummary>[])) _eventRow(event),
+                  ],
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaEventsListScreen(orgId: widget.orgId, isAdmin: _isAdmin, startAdmin: showingAdmin))),
+                      child: const Text('Voir tout'),
+                    ),
+                  ),
+                ]),
+              ),
             ],
           );
         },
       ),
     );
+  }
+
+  Widget _eventRow(MyEventSummary event) {
+    return ToreListRow(
+      title: event.name,
+      subtitle: '${_dateRange(event)} • ${event.status}',
+      trailing: Wrap(spacing: 6, children: [
+        ToreChip(label: event.publicationStatus, variant: ToreChipVariant.info),
+        ToreChip(label: event.visibility, variant: ToreChipVariant.closed),
+        ToreChip(label: event.status, variant: ToreChipVariant.live),
+      ]),
+      onTap: () {
+        if (event.joined) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: event.id, eventName: event.name)));
+          return;
+        }
+        if (event.canManage) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event)));
+          return;
+        }
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: event.id, eventName: event.name)));
+      },
+    );
+  }
+
+  String _dateRange(MyEventSummary event) {
+    final s = event.startAt;
+    final e = event.endAt;
+    return '${s.day.toString().padLeft(2, '0')}/${s.month.toString().padLeft(2, '0')} ${s.hour.toString().padLeft(2, '0')}:${s.minute.toString().padLeft(2, '0')} - ${e.hour.toString().padLeft(2, '0')}:${e.minute.toString().padLeft(2, '0')}';
   }
 }

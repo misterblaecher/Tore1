@@ -10,10 +10,21 @@ import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import 'event_hub_screen.dart';
 
+
+(String hostType, String? hostId) resolveCreateEventHostPrefill({Map<String, dynamic>? prefillOrga, int? prefillHostOrgaId}) {
+  final prefillId = prefillHostOrgaId?.toString() ?? prefillOrga?['id']?.toString();
+  if (prefillId != null && prefillId.isNotEmpty) {
+    return ('orga', prefillId);
+  }
+  return ('user', null);
+}
+
+
 class CreateEventWizardScreen extends ConsumerStatefulWidget {
-  const CreateEventWizardScreen({super.key, this.prefillOrga});
+  const CreateEventWizardScreen({super.key, this.prefillOrga, this.prefillHostOrgaId});
 
   final Map<String, dynamic>? prefillOrga;
+  final int? prefillHostOrgaId;
 
   @override
   ConsumerState<CreateEventWizardScreen> createState() => _CreateEventWizardScreenState();
@@ -70,10 +81,9 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
     if (!mounted) return;
     setState(() {
       _myOrgas = orgs;
-      if (widget.prefillOrga != null) {
-        _hostType = 'orga';
-        _hostId = widget.prefillOrga!['id']?.toString();
-      }
+      final prefill = resolveCreateEventHostPrefill(prefillOrga: widget.prefillOrga, prefillHostOrgaId: widget.prefillHostOrgaId);
+      _hostType = prefill.$1;
+      _hostId = prefill.$2;
     });
   }
 

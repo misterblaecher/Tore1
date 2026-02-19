@@ -5,6 +5,7 @@ class MyEventSummary {
   final DateTime endAt;
   final String? venue;
   final String visibility;
+  final String publicationStatus;
   final String status;
   final Map<String, dynamic> modulesOn;
   final String hostType;
@@ -20,6 +21,7 @@ class MyEventSummary {
     required this.endAt,
     required this.venue,
     required this.visibility,
+    required this.publicationStatus,
     required this.status,
     required this.modulesOn,
     required this.hostType,
@@ -37,7 +39,8 @@ class MyEventSummary {
       endAt: DateTime.tryParse((json['endAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0),
       venue: json['venue']?.toString(),
       visibility: (json['visibility'] ?? 'PRIVATE').toString(),
-      status: (json['status'] ?? 'LIVE').toString(),
+      publicationStatus: (json['publicationStatus'] ?? 'DRAFT').toString(),
+      status: (json['eventState'] ?? json['status'] ?? 'LIVE').toString(),
       modulesOn: Map<String, dynamic>.from((json['modulesOn'] as Map?) ?? const <String, dynamic>{}),
       hostType: (json['host_type'] ?? 'user').toString(),
       hostId: json['host_id']?.toString(),
@@ -54,6 +57,7 @@ class MyEventSummary {
         'endAt': endAt.toIso8601String(),
         'venue': venue,
         'visibility': visibility,
+        'publicationStatus': publicationStatus,
         'status': status,
         'modulesOn': modulesOn,
         'host_type': hostType,
@@ -62,6 +66,22 @@ class MyEventSummary {
         'canManage': canManage,
         'joined': joined,
       };
+}
+
+typedef OrgaEventSummary = MyEventSummary;
+
+class OrgaEventsResult {
+  final Map<String, List<OrgaEventSummary>> buckets;
+  final String? nextCursor;
+  final bool isCached;
+  final DateTime? lastSyncAt;
+
+  const OrgaEventsResult({
+    required this.buckets,
+    required this.nextCursor,
+    required this.isCached,
+    required this.lastSyncAt,
+  });
 }
 
 enum OrgaJoinMode { followOnly, openMembership, requestToJoin }
