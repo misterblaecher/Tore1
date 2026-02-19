@@ -93,3 +93,67 @@ def test_orga_share_public_and_private_protection():
 
     private_resolve_owner = client.get(f'/open?type=orga&id={private_id}', headers={'Authorization': f'Bearer {owner_token}'})
     assert private_resolve_owner.status_code == 200
+
+
+def test_join_code_preview_private_safe_and_public_open():
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    user_id, token = _seed_user(client, f'open-join-{secrets.token_hex(2)}')
+
+    start = datetime.utcnow().replace(microsecond=0)
+    end = start + timedelta(hours=3)
+    private_event = client.post(
+        '/events',
+        json={
+            'name': 'Ultra Secret Event',
+            'startAt': start.isoformat() + 'Z',
+            'endAt': end.isoformat() + 'Z',
+            'host_type': 'user',
+            'host_id': user_id,
+            'visibility': 'PRIVATE',
+        },
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': f'event-private-{secrets.token_hex(2)}'},
+    )
+    assert private_event.status_code == 200
+
+    private_code = private_event.json()['event_code']
+    private_preview = client.get(f'/events/join_code/preview?code={private_code}')
+    assert private_preview.status_code == 200
+    private_payload = private_preview.json()
+    assert private_payload['exists'] is True
+    assert private_payload['requiresAuth'] is True
+    assert private_payload['titleHint'] == 'Event privé TORÈ'
+    assert private_payload.get('public') in (None, {})
+
+    private_open = client.get(f'/open?type=join&code={private_code}')
+    assert private_open.status_code == 200
+    private_open_payload = private_open.json()
+    assert private_open_payload['deeplink'] == f'tore://open?type=join&code={private_code}'
+    assert private_open_payload['webFallback'].endswith(f'/open?type=join&code={private_code}')
+    assert private_open_payload['title'] == 'Rejoindre un event privé'
+
+    public_event = client.post(
+        '/events',
+        json={
+            'name': 'Visible Event',
+            'startAt': start.isoformat() + 'Z',
+            'endAt': end.isoformat() + 'Z',
+            'host_type': 'user',
+            'host_id': user_id,
+            'visibility': 'PUBLIC',
+        },
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': f'event-public-{secrets.token_hex(2)}'},
+    )
+    assert public_event.status_code == 200
+    public_id = public_event.json()['event_id']
+    public_code = public_event.json()['event_code']
+
+    published = client.post(f'/events/{public_id}/publish', headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': f'publish-{secrets.token_hex(2)}'})
+    assert published.status_code == 200
+
+    public_preview = client.get(f'/events/join_code/preview?code={public_code}')
+    assert public_preview.status_code == 200
+    public_payload = public_preview.json()
+    assert public_payload['exists'] is True
+    assert public_payload['requiresAuth'] is False
+    assert public_payload['public']['id'] == public_id

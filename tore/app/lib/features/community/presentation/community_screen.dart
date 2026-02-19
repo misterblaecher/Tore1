@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/state.dart';
 import 'package:tore/features/events/presentation/create_event_wizard_screen.dart';
+import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'orga_detail_screen.dart';
 
 class CommunityScreen extends ConsumerStatefulWidget {
@@ -45,6 +46,13 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
       ),
       appBar: AppBar(
         title: const Text('Communauté'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
+            icon: const Icon(Icons.login_outlined),
+            label: const Text('Entrer un code'),
+          ),
+        ],
         bottom: TabBar(controller: _tabs, tabs: const [Tab(text: 'Explorer'), Tab(text: 'Mes Orgas')]),
       ),
       body: TabBarView(
