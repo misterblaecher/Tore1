@@ -36,6 +36,16 @@ def test_shortlinks_create_is_idempotent():
     assert first.json() == second.json()
 
 
+
+def test_shortlinks_create_returns_fallback_open_url():
+    token = _guest('owner-fallback')
+    event_id = _create_event(token)
+    created = client.post('/shortlinks', json={'kind': 'event_share', 'event_id': event_id}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'short-fallback'})
+    assert created.status_code == 200
+    body = created.json()
+    assert body['fallbackOpenUrl'] == body['openUrl']
+    assert body['fallbackOpenUrl'].startswith('http')
+
 def test_shortlinks_redirect_302_to_open():
     token = _guest('owner')
     event_id = _create_event(token)

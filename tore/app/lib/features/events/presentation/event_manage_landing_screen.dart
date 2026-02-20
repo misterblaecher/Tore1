@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../features/community/community_models.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/utils/share_text.dart';
+import '../../../shared/utils/share_intent.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../../state.dart';
 import 'event_share_pack_screen.dart';
@@ -56,9 +57,14 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
       } catch (_) {}
     }
     final eventCode = (share['event_code'] ?? '').toString();
-    final fallback = eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null;
-    final url = pickShareUrl(shortUrl: shortUrl, webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString());
-    await Share.share(shareText(url: url, fallbackSuffix: fallback), subject: widget.event.name);
+    final builder = ShareIntentBuilder(ShareIntentInput(
+      shortUrl: shortUrl,
+      openUrl: pickShareUrl(webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString()),
+      displaySuffix: eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null,
+      copyValue: eventCode,
+      copyHint: kShareFallbackHintOffline,
+    ));
+    await Share.share(builder.shareText, subject: widget.event.name);
   }
 
   Future<void> _sharePack() async {
@@ -117,7 +123,7 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
                             : () async {
                                 await Clipboard.setData(ClipboardData(text: eventCode));
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copié')));
                               },
                         icon: const Icon(Icons.copy_all_outlined),
                       ),

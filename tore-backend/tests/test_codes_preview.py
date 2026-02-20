@@ -81,6 +81,7 @@ def test_codes_preview_unknown_string_is_invalid_unknown():
     assert preview.status_code == 200
     assert preview.json()['kind'] == 'unknown'
     assert preview.json()['status'] == 'invalid'
+    assert preview.json()['openUrl'].endswith('/open?type=join')
 
 
 def test_codes_preview_private_join_no_title_leak_requires_auth():
@@ -93,6 +94,7 @@ def test_codes_preview_private_join_no_title_leak_requires_auth():
     assert preview.json()['requiresAuth'] is True
     assert preview.json()['eventHint'] is None
     assert preview.json()['titleHint'] == 'Event privé TORÈ'
+    assert '/open?type=join&code=' in preview.json()['openUrl']
 
 
 def test_codes_preview_returns_display_suffix_and_copy_value_for_join():
@@ -139,4 +141,5 @@ def test_codes_preview_staff_backup_has_no_copy_value():
     assert payload['kind'] == 'staff_backup'
     assert payload['displaySuffix']
     assert payload['copyValue'] is None
+    assert payload['openUrl'].endswith(f"/open?type=staff_backup&eventId={event['event_id']}")
     assert code not in str(payload)

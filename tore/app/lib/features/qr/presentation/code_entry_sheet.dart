@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/auth/providers.dart';
 import '../../../state.dart';
 import '../../../shared/utils/share_text.dart';
+import '../../../shared/utils/share_intent.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../auth/presentation/email_auth_screen.dart';
 import '../../events/presentation/event_public_screen.dart';
@@ -116,15 +117,13 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
   Future<void> _copyPreviewCode() async {
     final preview = _preview;
     if (preview == null) return;
-    final value = (preview['copyValue'] ?? '').toString();
-    if (value.isNotEmpty) {
-      await Clipboard.setData(ClipboardData(text: value));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
-      return;
-    }
+    final builder = ShareIntentBuilder(ShareIntentInput(
+      copyValue: (preview['copyValue'] ?? '').toString(),
+      copyHint: previewCopyHint(preview),
+    ));
+    final message = await builder.copyCodeOrHint();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(previewCopyHint(preview))));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _continue() async {
@@ -180,8 +179,9 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
         url = pickShareUrl(shortUrl: (short['shortUrl'] ?? '').toString(), webUrl: url);
       } catch (_) {}
     }
-    if (url.isEmpty) return;
-    await Share.share(shareText(url: url), subject: 'Lien TORÈ');
+    final builder = ShareIntentBuilder(ShareIntentInput(openUrl: url, copyHint: kShareFallbackHintOffline));
+    if (builder.primaryShareUrl.isEmpty) return;
+    await Share.share(builder.shareText, subject: 'Lien TORÈ');
   }
 
   @override
