@@ -74,3 +74,22 @@ def test_codes_preview_staff_invite_revoked_status():
     assert preview.status_code == 200
     assert preview.json()['kind'] == 'staff_invite'
     assert preview.json()['status'] == 'revoked'
+
+
+def test_codes_preview_unknown_string_is_invalid_unknown():
+    preview = client.get('/codes/preview?code=%40%40bad%0Acode###')
+    assert preview.status_code == 200
+    assert preview.json()['kind'] == 'unknown'
+    assert preview.json()['status'] == 'invalid'
+
+
+def test_codes_preview_private_join_no_title_leak_requires_auth():
+    owner = _guest('owner-private')
+    private_event = _create_event(owner, visibility='PRIVATE', publish=True)
+
+    preview = client.get(f"/codes/preview?code= {private_event['event_code'][:3]}-{private_event['event_code'][3:]} ")
+    assert preview.status_code == 200
+    assert preview.json()['kind'] == 'join'
+    assert preview.json()['requiresAuth'] is True
+    assert preview.json()['eventHint'] is None
+    assert preview.json()['titleHint'] == 'Event privé TORÈ'

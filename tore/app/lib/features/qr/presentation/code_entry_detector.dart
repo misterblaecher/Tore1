@@ -29,7 +29,7 @@ class CodeEntryDetector {
           (uri.scheme == 'https' && uri.host == 'app.tore.be' && uri.path == '/open');
       if (isOpen) {
         final type = (uri.queryParameters['type'] ?? '').toLowerCase();
-        final code = _normalizeCode(uri.queryParameters['code'] ?? '');
+        final code = normalizeManualCode(uri.queryParameters['code'] ?? '');
         final id = int.tryParse(uri.queryParameters['id'] ?? uri.queryParameters['eventId'] ?? '');
         return switch (type) {
           'join' => CodeEntryResolution(kind: CodeEntryKind.join, code: code, source: uri),
@@ -42,7 +42,7 @@ class CodeEntryDetector {
       }
     }
 
-    final compact = _normalizeCode(trimmed);
+    final compact = normalizeManualCode(trimmed);
     final splitBackup = compact.split(':');
     if (splitBackup.length == 2) {
       final eventId = int.tryParse(splitBackup.first);
@@ -56,9 +56,12 @@ class CodeEntryDetector {
     return const CodeEntryResolution(kind: CodeEntryKind.unknown);
   }
 
-  String _normalizeCode(String value) => value
-      .trim()
-      .toUpperCase()
-      .replaceAll(RegExp(r'[^A-Z0-9:]'), '');
 }
 
+String normalizeManualCode(String value) {
+  final compact = value
+      .trim()
+      .replaceAll(RegExp(r'[\s\n\r\t]+'), '')
+      .replaceAll('-', '');
+  return compact.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9:]'), '');
+}
