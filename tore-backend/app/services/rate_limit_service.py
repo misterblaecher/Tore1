@@ -28,6 +28,10 @@ _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
         int(os.getenv("TORE_CODES_PREVIEW_RATE_LIMIT_MAX", "40")),
         int(os.getenv("TORE_CODES_PREVIEW_RATE_LIMIT_WINDOW_S", "60")),
     ),
+    "shortlinks_create_user": (
+        int(os.getenv("TORE_SHORTLINKS_CREATE_USER_RATE_LIMIT_MAX", "30")),
+        int(os.getenv("TORE_SHORTLINKS_CREATE_USER_RATE_LIMIT_WINDOW_S", "600")),
+    ),
 }
 
 _lock = threading.Lock()

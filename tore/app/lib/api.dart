@@ -1506,6 +1506,32 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> createShortlink({
+    required String kind,
+    int? eventId,
+    int? orgaId,
+    String? openType,
+    int? openId,
+    String? openCode,
+    int? expiresInSeconds,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/shortlinks',
+      data: {
+        'kind': kind,
+        if (eventId != null) 'event_id': eventId,
+        if (orgaId != null) 'orga_id': orgaId,
+        if (openType != null) 'open_type': openType,
+        if (openId != null) 'open_id': openId,
+        if (openCode != null) 'open_code': openCode,
+        if (expiresInSeconds != null) 'expiresInSeconds': expiresInSeconds,
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> resolveOpenLink({required String type, String? code, int? id, int? eventId}) async {
     final res = await _client.dio.get('/open', queryParameters: {'type': type, if (code != null) 'code': code, if (id != null) 'id': id, if (eventId != null) 'eventId': eventId});
     return Map<String, dynamic>.from(res.data as Map);

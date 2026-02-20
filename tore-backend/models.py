@@ -227,6 +227,33 @@ class CodeConsumeIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class ShortLink(Base):
+    __tablename__ = "short_links"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    target_type: Mapped[str] = mapped_column(String(24), index=True)
+    target_payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+
+
+class ShortLinkIdempotency(Base):
+    __tablename__ = "short_link_idempotency"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", "actor_user_id", name="uq_short_link_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+    request_hash: Mapped[str] = mapped_column(String(128), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventQrPackIdempotency(Base):
     __tablename__ = "event_qr_pack_idempotency"
     __table_args__ = (

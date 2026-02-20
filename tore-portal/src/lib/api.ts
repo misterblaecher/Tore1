@@ -97,3 +97,29 @@ export async function apiText(path: string, init: RequestInit = {}): Promise<str
 
   return res.text()
 }
+
+
+type ShortlinkKind = 'event_share' | 'orga_share' | 'open_url'
+
+type ShortlinkParams = {
+  kind: ShortlinkKind
+  event_id?: number
+  orga_id?: number
+  open_type?: string
+  open_id?: number
+  open_code?: string
+  expiresInSeconds?: number
+}
+
+export async function createShortlink(params: ShortlinkParams): Promise<{ shortUrl: string; openUrl: string; expiresAt?: string; slug: string } | null> {
+  try {
+    const idem = `short-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    return await api('/shortlinks', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idem },
+      body: JSON.stringify(params),
+    })
+  } catch {
+    return null
+  }
+}

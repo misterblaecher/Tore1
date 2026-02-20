@@ -2,9 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../features/community/community_models.dart';
 import '../../../shared/utils/write_gate.dart';
+import '../../../shared/utils/share_text.dart';
+import '../../../core/network/network_state_provider.dart';
 import '../../../state.dart';
 import 'event_share_pack_screen.dart';
 
@@ -33,6 +36,22 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+
+  Future<void> _shareEvent() async {
+    final share = await ref.read(apiProvider).getEventShareV1(widget.event.id);
+    String? shortUrl;
+    if (ref.read(networkStatusProvider) == NetworkState.online) {
+      try {
+        final short = await ref.read(apiProvider).createShortlink(kind: 'event_share', eventId: widget.event.id, idempotencyKey: _idem('shortlink'));
+        shortUrl = (short['shortUrl'] ?? '').toString();
+      } catch (_) {}
+    }
+    final eventCode = (share['event_code'] ?? '').toString();
+    final fallback = eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null;
+    final url = pickShareUrl(shortUrl: shortUrl, webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString());
+    await Share.share(shareText(url: url, fallbackSuffix: fallback), subject: widget.event.name);
   }
 
   Future<void> _sharePack() async {
@@ -68,6 +87,12 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
                 onPressed: _loading ? null : _sharePack,
                 icon: const Icon(Icons.ios_share_outlined),
                 label: const Text('Share pack'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _loading ? null : _shareEvent,
+                icon: const Icon(Icons.share_outlined),
+                label: const Text('Partager'),
               ),
               if (snapshot != null) ...[
                 const SizedBox(height: 12),
