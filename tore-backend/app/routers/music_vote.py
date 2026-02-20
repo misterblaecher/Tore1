@@ -4,6 +4,7 @@ import hashlib
 import re
 from datetime import timedelta
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import jwt
@@ -31,23 +32,30 @@ from partner_auth import current_identity
 
 router = APIRouter(prefix="/events", tags=["music-vote"])
 
-_PROVIDER_SET = {"spotify", "apple", "ytmusic", "soundcloud"}
+_PROVIDER_SET = {"spotify", "apple", "youtube_music", "ytmusic", "soundcloud"}
 _ALLOWED_ROUND_DURATIONS = {60, 120, 180, 300}
 
 
 class TrackCandidateIn(BaseModel):
     provider: str
     externalUrl: str = Field(min_length=4)
-    title: str = Field(min_length=1, max_length=180)
-    artist: str = Field(min_length=1, max_length=180)
+    title: str = Field(default="", max_length=180)
+    artist: str = Field(default="", max_length=180)
     artworkUrl: Optional[str] = None
     durationSec: Optional[int] = None
     providerUri: Optional[str] = None
     searchHint: Optional[str] = None
+    titleHint: Optional[str] = Field(default=None, max_length=180)
 
 
 class VoteIn(BaseModel):
     candidate: TrackCandidateIn
+
+
+class CandidateAddIn(BaseModel):
+    provider: str
+    externalUrl: str = Field(min_length=8, max_length=512)
+    titleHint: Optional[str] = Field(default=None, max_length=180)
 
 
 class MusicSettingsIn(BaseModel):
@@ -89,13 +97,98 @@ def _module_on(event: Event) -> bool:
     return bool(m.get("music_vote") or m.get("music") or m.get("vote"))
 
 
+def _canonical_provider(value: str) -> str:
+    provider = (value or "").strip().lower()
+    if provider in {"youtube_music", "ytmusic"}:
+        return "youtube_music"
+    return provider
+
+
 def _normalize_url(url: str) -> str:
-    return re.sub(r"\s+", "", (url or "").strip()).rstrip("/").lower()
+    parsed = urlparse(re.sub(r"\s+", "", (url or "").strip()))
+    host = (parsed.hostname or "").lower()
+    path = re.sub(r"/{2,}", "/", (parsed.path or "/")).rstrip("/") or "/"
+    return f"https://{host}{path}" + (f"?{parsed.query}" if parsed.query else "")
 
 
 def _candidate_key(candidate: TrackCandidateIn) -> str:
-    provider = (candidate.provider or "").strip().lower()
+    provider = _canonical_provider(candidate.provider)
     return f"{provider}:{_normalize_url(candidate.externalUrl)}"
+
+
+def _reject_invalid_url(url: str) -> None:
+    if len(url) > 512:
+        raise HTTPException(status_code=400, detail={"reason": "link_invalid"})
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "https":
+        raise HTTPException(status_code=400, detail={"reason": "link_https_required"})
+    host = (parsed.hostname or "").lower()
+    if not host or host in {"localhost", "127.0.0.1", "::1"}:
+        raise HTTPException(status_code=400, detail={"reason": "link_invalid_host"})
+    if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):
+        raise HTTPException(status_code=400, detail={"reason": "link_invalid_host"})
+
+
+def _normalize_candidate_link(provider_raw: str, external_url: str) -> tuple[str, str, Optional[str]]:
+    provider = _canonical_provider(provider_raw)
+    if provider not in _PROVIDER_SET:
+        raise HTTPException(status_code=400, detail={"reason": "provider_invalid"})
+    _reject_invalid_url(external_url)
+    parsed = urlparse(external_url.strip())
+    host = (parsed.hostname or "").lower()
+    query = parse_qs(parsed.query)
+    path = (parsed.path or "").strip("/")
+    norm = _normalize_url(external_url)
+
+    if provider == "soundcloud":
+        if host != "soundcloud.com" or path.count("/") < 1:
+            raise HTTPException(status_code=400, detail={"reason": "LINK_NOT_SUPPORTED"})
+        parts = path.split("/")
+        if len(parts) != 2:
+            raise HTTPException(status_code=400, detail={"reason": "LINK_NOT_SUPPORTED"})
+        return provider, norm, f"{parts[0]}/{parts[1]}"
+
+    if provider == "youtube_music":
+        external_id = None
+        if host == "music.youtube.com":
+            if path in {"watch", "playlist"}:
+                external_id = (query.get("v") or query.get("list") or [None])[0]
+        elif host in {"youtu.be", "www.youtu.be"}:
+            external_id = path.split("/")[0] if path else None
+        elif host in {"youtube.com", "www.youtube.com"}:
+            if path == "watch":
+                external_id = (query.get("v") or [None])[0]
+            elif path == "playlist":
+                external_id = (query.get("list") or [None])[0]
+        if not external_id:
+            raise HTTPException(status_code=400, detail={"reason": "LINK_NOT_SUPPORTED"})
+        return provider, norm, external_id
+
+    return provider, norm, None
+
+
+def _candidate_out(candidate: EventMusicCandidate) -> dict:
+    return {
+        "provider": candidate.provider,
+        "urlOriginal": candidate.url_original or candidate.external_url,
+        "urlNormalized": candidate.url_normalized or candidate.external_url,
+        "externalId": candidate.external_id,
+        "titleHint": candidate.title_hint,
+        "externalUrl": candidate.external_url,
+        "title": candidate.title,
+        "artist": candidate.artist,
+    }
+
+
+def _list_candidates(db: Session, event_id: int, round_id: Optional[str]) -> list[dict]:
+    rows = (
+        db.query(EventMusicCandidate)
+        .filter(EventMusicCandidate.event_id == event_id, EventMusicCandidate.round_id == round_id)
+        .order_by(EventMusicCandidate.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [_candidate_out(row) for row in rows]
 
 
 def _runtime_write_guard(db: Session, event_id: int) -> None:
@@ -286,6 +379,8 @@ def music_get(event_id: int, db: Session = Depends(get_db)):
         "nowPlaying": settings.now_playing_candidate_json,
         "winner": _winner_payload(settings),
         "topCandidates": _top_candidates(db, event_id),
+        "candidates": _list_candidates(db, event_id, settings.round_id),
+        "providers": ["spotify", "apple", "youtube_music", "soundcloud"],
         "lastUpdatedAt": settings.last_updated_at.isoformat() if settings.last_updated_at else None,
         "runtimeState": (get_event_runtime_state(db, event_id) or "LIVE").upper(),
     }
@@ -334,16 +429,14 @@ def music_vote(
     if recent and recent.created_at and recent.created_at >= now_utc() - timedelta(seconds=10):
         raise HTTPException(status_code=429, detail={"reason": "vote_cooldown", "cooldownSec": 10})
 
-    provider = body.candidate.provider.strip().lower()
-    if provider not in _PROVIDER_SET:
-        raise HTTPException(status_code=400, detail={"reason": "provider_invalid"})
+    provider, normalized_url, external_id = _normalize_candidate_link(body.candidate.provider, body.candidate.externalUrl)
     key = _candidate_key(body.candidate)
     vote = EventMusicVote(
         event_id=event_id,
         user_id=user.id,
         candidate_key=key,
         provider=provider,
-        external_url=body.candidate.externalUrl,
+        external_url=normalized_url,
         title=body.candidate.title,
         artist=body.candidate.artist,
         artwork_url=body.candidate.artworkUrl,
@@ -352,9 +445,14 @@ def music_vote(
     db.add(
         EventMusicCandidate(
             event_id=event_id,
+            round_id=settings.round_id,
             candidate_key=key,
             provider=provider,
-            external_url=body.candidate.externalUrl,
+            url_original=body.candidate.externalUrl,
+            url_normalized=normalized_url,
+            external_id=external_id,
+            title_hint=body.candidate.titleHint,
+            external_url=normalized_url,
             title=body.candidate.title,
             artist=body.candidate.artist,
             artwork_url=body.candidate.artworkUrl,
@@ -386,6 +484,73 @@ def music_vote(
     )
     db.commit()
     return response
+
+
+@router.post("/{event_id}/music/candidates")
+def music_add_candidate(
+    event_id: int,
+    body: CandidateAddIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    _ensure_module_or_404(db, event_id)
+    settings = _get_or_create_settings(db, event_id)
+    _lazy_finalize_if_needed(db, event_id, settings)
+    if (settings.round_status or "IDLE").upper() != "OPEN":
+        raise HTTPException(status_code=409, detail={"reason": "VOTE_CLOSED"})
+    if not settings.enabled:
+        raise HTTPException(status_code=403, detail={"reason": "music_disabled"})
+    _runtime_write_guard(db, event_id)
+
+    provider, normalized_url, external_id = _normalize_candidate_link(body.provider, body.externalUrl)
+
+    q = db.query(EventMusicCandidate).filter(
+        EventMusicCandidate.event_id == event_id,
+        EventMusicCandidate.round_id == settings.round_id,
+        EventMusicCandidate.provider == provider,
+    )
+    if external_id:
+        q = q.filter((EventMusicCandidate.external_id == external_id) | (EventMusicCandidate.url_normalized == normalized_url))
+    else:
+        q = q.filter(EventMusicCandidate.url_normalized == normalized_url)
+    existing = q.first()
+    if existing:
+        return {"ok": True, "status": "already_exists", "candidate": _candidate_out(existing)}
+
+    row = EventMusicCandidate(
+        event_id=event_id,
+        round_id=settings.round_id,
+        candidate_key=f"{provider}:{external_id or normalized_url}",
+        provider=provider,
+        url_original=body.externalUrl,
+        url_normalized=normalized_url,
+        external_id=external_id,
+        title_hint=body.titleHint,
+        external_url=normalized_url,
+        title=body.titleHint or "",
+        artist="",
+    )
+    db.add(row)
+    settings.last_updated_at = now_utc()
+    settings.updated_at = now_utc()
+    db.add(settings)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_role="app_user",
+        action="music_vote.candidate_added",
+        entity_type="event_music",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=None,
+        payload={"provider": provider, "external_id": external_id, "url_normalized": normalized_url, "actor_user_id": user.id},
+    )
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "status": "added", "candidate": _candidate_out(row)}
 
 
 @router.post("/{event_id}/music/admin/settings")
@@ -432,7 +597,7 @@ def music_settings(
     if body.allowMixedProviders is not None:
         settings.allow_mixed = body.allowMixedProviders
     if body.providerDefault is not None:
-        provider = body.providerDefault.strip().lower()
+        provider = _canonical_provider(body.providerDefault)
         if provider not in _PROVIDER_SET:
             raise HTTPException(status_code=400, detail={"reason": "provider_invalid"})
         settings.provider_default = provider
@@ -606,10 +771,10 @@ def music_now_playing(
     if existing:
         return existing.response_json
 
-    provider = body.candidate.provider.strip().lower()
-    if provider not in _PROVIDER_SET:
-        raise HTTPException(status_code=400, detail={"reason": "provider_invalid"})
-    settings.now_playing_candidate_json = body.candidate.model_dump()
+    provider, normalized_url, external_id = _normalize_candidate_link(body.candidate.provider, body.candidate.externalUrl)
+    candidate_json = body.candidate.model_dump()
+    candidate_json.update({"provider": provider, "externalUrl": normalized_url, "externalId": external_id})
+    settings.now_playing_candidate_json = candidate_json
     settings.last_updated_at = now_utc()
     settings.updated_at = now_utc()
     db.add(settings)
@@ -701,11 +866,10 @@ def music_force(
     if existing:
         return existing.response_json
 
-    provider = body.candidate.provider.strip().lower()
-    if provider not in _PROVIDER_SET:
-        raise HTTPException(status_code=400, detail={"reason": "provider_invalid"})
+    provider, normalized_url, external_id = _normalize_candidate_link(body.candidate.provider, body.candidate.externalUrl)
     key = _candidate_key(body.candidate)
     candidate_json = body.candidate.model_dump()
+    candidate_json.update({"provider": provider, "externalUrl": normalized_url, "externalId": external_id})
     settings.winner_candidate_key = key
     settings.winner_candidate_json = candidate_json
     settings.winner_decided_at = now_utc()
