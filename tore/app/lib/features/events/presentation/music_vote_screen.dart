@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../state.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../../shared/utils/runtime_write_guard.dart';
 import '../../../shared/utils/write_gate.dart';
 import 'music_admin_panel_screen.dart';
+import 'music_vote_models.dart';
 
 class MusicVoteScreen extends ConsumerStatefulWidget {
   const MusicVoteScreen({super.key, required this.eventId});
@@ -20,10 +22,9 @@ class MusicVoteScreen extends ConsumerStatefulWidget {
 }
 
 class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
-  final _titleCtrl = TextEditingController();
-  final _artistCtrl = TextEditingController();
   final _urlCtrl = TextEditingController();
-  String _provider = 'spotify';
+  final _titleHintCtrl = TextEditingController();
+  MusicProvider _provider = MusicProvider.spotify;
   Map<String, dynamic>? _payload;
   Map<String, dynamic>? _context;
   bool _loading = true;
@@ -47,8 +48,7 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _clock?.cancel();
-    _titleCtrl.dispose();
-    _artistCtrl.dispose();
+    _titleHintCtrl.dispose();
     _urlCtrl.dispose();
     super.dispose();
   }
@@ -94,27 +94,33 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     }
   }
 
-  Map<String, dynamic> _composeCandidate() {
-    final url = _urlCtrl.text.trim().isNotEmpty ? _urlCtrl.text.trim() : _searchUrl(_provider, _titleCtrl.text.trim(), _artistCtrl.text.trim());
-    return {
-      'provider': _provider,
-      'externalUrl': url,
-      'title': _titleCtrl.text.trim().isEmpty ? 'Unknown title' : _titleCtrl.text.trim(),
-      'artist': _artistCtrl.text.trim().isEmpty ? 'Unknown artist' : _artistCtrl.text.trim(),
-    };
-  }
-
-  String _searchUrl(String provider, String title, String artist) {
-    final q = Uri.encodeComponent('$title $artist'.trim());
-    switch (provider) {
-      case 'apple':
-        return 'https://music.apple.com/search?term=$q';
-      case 'ytmusic':
-        return 'https://music.youtube.com/search?q=$q';
-      case 'soundcloud':
-        return 'https://soundcloud.com/search?q=$q';
-      default:
-        return 'https://open.spotify.com/search/$q';
+  Future<void> _addCandidate() async {
+    final raw = _urlCtrl.text.trim();
+    if (!isLocallyValidCandidateLink(raw, _provider)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lien invalide pour ce provider.')));
+      return;
+    }
+    if (_posting) return;
+    setState(() => _posting = true);
+    try {
+      final res = await ref.read(apiProvider).addMusicCandidate(
+        eventId: widget.eventId,
+        provider: musicProviderApiValue(_provider),
+        externalUrl: raw,
+        titleHint: _titleHintCtrl.text,
+        idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
+      );
+      final status = (res['status'] ?? '').toString();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(status == 'already_exists' ? 'Déjà dans la liste' : 'Candidat ajouté')),
+      );
+      await _load();
+    } on DioException catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ajout impossible')));
+    } finally {
+      if (mounted) setState(() => _posting = false);
     }
   }
 
@@ -196,35 +202,41 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                         ),
                       ),
                     const SizedBox(height: 16),
-                    DropdownButton<String>(
+                    DropdownButton<MusicProvider>(
                       value: _provider,
-                      items: const [
-                        DropdownMenuItem(value: 'spotify', child: Text('Spotify')),
-                        DropdownMenuItem(value: 'apple', child: Text('Apple Music')),
-                        DropdownMenuItem(value: 'ytmusic', child: Text('YouTube Music')),
-                        DropdownMenuItem(value: 'soundcloud', child: Text('SoundCloud')),
-                      ],
-                      onChanged: (v) => setState(() => _provider = v ?? 'spotify'),
+                      items: MusicProvider.values
+                          .map((provider) => DropdownMenuItem(value: provider, child: Text(musicProviderLabel(provider))))
+                          .toList(),
+                      onChanged: (v) => setState(() => _provider = v ?? MusicProvider.spotify),
                     ),
-                    TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
-                    TextField(controller: _artistCtrl, decoration: const InputDecoration(labelText: 'Artist')),
-                    TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Link (optional)')),
+                    TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Lien')),
+                    TextField(controller: _titleHintCtrl, decoration: const InputDecoration(labelText: 'Titre (optionnel)')),
                     const SizedBox(height: 8),
                     ElevatedButton(
-                      onPressed: canVote ? () => _vote(_composeCandidate()) : null,
-                      child: const Text('Vote'),
+                      onPressed: canVote ? _addCandidate : null,
+                      child: const Text('Ajouter'),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Top tracks', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Candidats', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    ...(((_payload!['topCandidates'] as List?) ?? const [])).map((row) {
-                      final m = Map<String, dynamic>.from(row as Map);
-                      final candidate = Map<String, dynamic>.from((m['candidate'] as Map?) ?? const {});
+                    ...(((_payload!['candidates'] as List?) ?? const [])).map((row) {
+                      final candidate = Map<String, dynamic>.from(row as Map);
+                      final provider = musicProviderFromApi('${candidate['provider'] ?? ''}');
+                      final url = (candidate['urlOriginal'] ?? candidate['externalUrl'] ?? '').toString();
                       return Card(
                         child: ListTile(
-                          title: Text('${candidate['title'] ?? ''} — ${candidate['artist'] ?? ''}'),
-                          subtitle: Text('${candidate['provider'] ?? ''} • ${m['votes'] ?? 0} votes'),
-                          trailing: TextButton(onPressed: canVote ? () => _vote(candidate) : null, child: const Text('Vote')),
+                          title: Text((candidate['titleHint'] ?? '').toString().isNotEmpty ? '${candidate['titleHint']}' : 'Lien'),
+                          subtitle: Text(candidateShortLink(url)),
+                          leading: Chip(label: Text(provider == null ? '${candidate['provider'] ?? ''}' : musicProviderLabel(provider))),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.open_in_new),
+                            onPressed: () async {
+                              final uri = Uri.tryParse(url);
+                              if (uri != null) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            },
+                          ),
                         ),
                       );
                     }),

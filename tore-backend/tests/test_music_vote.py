@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session, now_utc
 from main import app
-from models import AppUser, Bar, Event, EventRuntimeState, EventStaff, PartnerMembership, PartnerUser
+from models import AppUser, AuditLog, Bar, Event, EventMusicCandidate, EventRuntimeState, EventStaff, PartnerMembership, PartnerUser
 from partner_auth import _make_token
 
 
@@ -190,3 +190,113 @@ def test_runtime_blocked_states_return_403():
     )
     assert blocked.status_code == 403
     assert blocked.json()['detail']['reason'] == 'runtime_blocked'
+
+
+def test_candidate_add_normalizes_and_deduplicates_youtube_music_link():
+    seed = _seed(module_on=True)
+    client = TestClient(app)
+    token, _ = _guest_token(client, 'candidate-user')
+
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/settings",
+        json={"enabled": True},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'set-cand'},
+    )
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/round/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'round-cand'},
+    )
+
+    payload = {
+        'provider': 'youtube_music',
+        'externalUrl': 'https://music.youtube.com/watch?v=abc123',
+        'titleHint': 'Ma track',
+    }
+    added = client.post(
+        f"/events/{seed['event_id']}/music/candidates",
+        json=payload,
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'cand-1'},
+    )
+    assert added.status_code == 200
+    assert added.json()['status'] == 'added'
+
+    dup = client.post(
+        f"/events/{seed['event_id']}/music/candidates",
+        json=payload,
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'cand-2'},
+    )
+    assert dup.status_code == 200
+    assert dup.json()['status'] == 'already_exists'
+
+    s = get_session()
+    try:
+        rows = s.query(EventMusicCandidate).filter(EventMusicCandidate.event_id == seed['event_id']).all()
+        assert len(rows) == 1
+        assert rows[0].provider == 'youtube_music'
+        assert rows[0].url_normalized == 'https://music.youtube.com/watch?v=abc123'
+        assert rows[0].external_id == 'abc123'
+    finally:
+        s.close()
+
+
+def test_candidate_add_validates_links_for_soundcloud_and_youtube_music_intent():
+    seed = _seed(module_on=True)
+    client = TestClient(app)
+    token, _ = _guest_token(client, 'candidate-invalid')
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/settings",
+        json={"enabled": True},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'set-invalid'},
+    )
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/round/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'round-invalid'},
+    )
+
+    invalid_sc = client.post(
+        f"/events/{seed['event_id']}/music/candidates",
+        json={'provider': 'soundcloud', 'externalUrl': 'https://soundcloud.com/discover'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'cand-sc'},
+    )
+    assert invalid_sc.status_code == 400
+    assert invalid_sc.json()['detail']['reason'] == 'LINK_NOT_SUPPORTED'
+
+    invalid_yt = client.post(
+        f"/events/{seed['event_id']}/music/candidates",
+        json={'provider': 'youtube_music', 'externalUrl': 'https://youtube.com/channel/abc'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'cand-yt'},
+    )
+    assert invalid_yt.status_code == 400
+    assert invalid_yt.json()['detail']['reason'] == 'LINK_NOT_SUPPORTED'
+
+
+def test_candidate_add_writes_audit_log():
+    seed = _seed(module_on=True)
+    client = TestClient(app)
+    token, _ = _guest_token(client, 'candidate-audit')
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/settings",
+        json={"enabled": True},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'set-audit'},
+    )
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/round/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'round-audit'},
+    )
+
+    res = client.post(
+        f"/events/{seed['event_id']}/music/candidates",
+        json={'provider': 'soundcloud', 'externalUrl': 'https://soundcloud.com/artist/track'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'cand-audit'},
+    )
+    assert res.status_code == 200
+
+    s = get_session()
+    try:
+        row = s.query(AuditLog).filter(AuditLog.action == 'music_vote.candidate_added', AuditLog.event_id == seed['event_id']).first()
+        assert row is not None
+    finally:
+        s.close()

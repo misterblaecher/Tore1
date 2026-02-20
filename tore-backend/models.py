@@ -1921,8 +1921,13 @@ class EventMusicCandidate(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    round_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     candidate_key: Mapped[str] = mapped_column(String(420), index=True)
     provider: Mapped[str] = mapped_column(String(24), index=True)
+    url_original: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    url_normalized: Mapped[Optional[str]] = mapped_column(String(512), nullable=True, index=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(180), nullable=True, index=True)
+    title_hint: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
     external_url: Mapped[str] = mapped_column(String(512))
     title: Mapped[str] = mapped_column(String(180), default="")
     artist: Mapped[str] = mapped_column(String(180), default="")

@@ -191,6 +191,25 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> addMusicCandidate({
+    required int eventId,
+    required String provider,
+    required String externalUrl,
+    String? titleHint,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/candidates',
+      data: {
+        'provider': provider,
+        'externalUrl': externalUrl,
+        if (titleHint != null && titleHint.trim().isNotEmpty) 'titleHint': titleHint.trim(),
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> adminMusicSettings({
     required int eventId,
     required Map<String, dynamic> payload,
