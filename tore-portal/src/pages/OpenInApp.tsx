@@ -39,6 +39,7 @@ export default function OpenInApp() {
   const [joinPreview, setJoinPreview] = useState<JoinPreviewPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showInstall, setShowInstall] = useState(false)
+  const manualCode = String((payload?.target?.code as string | undefined) || joinCode || '').trim()
 
   useEffect(() => {
     document.title = 'Ouvrir dans TORÈ'
@@ -94,7 +95,7 @@ export default function OpenInApp() {
           {joinPreview?.requiresAuth ? (
             <>
               <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Event privé</h2>
-              <p style={{ margin: 0, opacity: 0.85 }}>Connecte-toi pour rejoindre cet event privé.</p>
+              <p style={{ margin: 0, opacity: 0.85 }}>Connecte-toi dans TORÈ puis entre le code.</p>
             </>
           ) : (
             <>
@@ -105,6 +106,17 @@ export default function OpenInApp() {
             </>
           )}
           <p style={{ margin: '8px 0 0', opacity: 0.7 }}>Code: <strong>{joinCode}</strong></p>
+        </section>
+      )}
+
+
+      {manualCode && (
+        <section style={{ marginBottom: 12, padding: 12, borderRadius: 8, border: '1px dashed rgba(255,255,255,0.25)' }}>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: 16 }}>Fallback manuel</h2>
+          <p style={{ margin: 0, opacity: 0.85 }}>Tu peux aussi entrer ce code dans l’app TORÈ.</p>
+          <code style={{ display: 'block', marginTop: 8, padding: 8, borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}>
+            {manualCode}
+          </code>
         </section>
       )}
 
@@ -141,7 +153,7 @@ export default function OpenInApp() {
       {payload?.type === 'staff_backup' && (
         <section style={{ marginTop: 16, padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
           <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Backup code staff</h2>
-          <p style={{ margin: 0, opacity: 0.8 }}>Validation uniquement dans l'app TORÈ (auth requise).</p>
+          <p style={{ margin: 0, opacity: 0.8 }}>Connecte-toi dans TORÈ puis entre le code backup manuellement.</p>
         </section>
       )}
 

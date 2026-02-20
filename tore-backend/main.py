@@ -14,10 +14,12 @@ import json
 import subprocess
 import threading
 import time
+import re
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
 from zoneinfo import ZoneInfo
+from urllib.parse import parse_qs, urlparse
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header, Request
@@ -1384,6 +1386,17 @@ class JoinCodePreviewOut(BaseModel):
     startAtHint: Optional[str] = None
     hostHint: Optional[str] = None
     public: Optional[dict[str, Any]] = None
+
+
+
+class CodesPreviewOut(BaseModel):
+    kind: str
+    requiresAuth: bool
+    status: str
+    titleHint: Optional[str] = None
+    orgHint: Optional[str] = None
+    eventHint: Optional[str] = None
+    openUrl: Optional[str] = None
 
 
 class CreateEventOut(BaseModel):
@@ -6445,6 +6458,15 @@ def _normalize_backup_code(raw: str | None) -> str:
     return "".join(ch for ch in (raw or "").strip().upper() if ch in _BACKUP_CODE_ALPHABET)
 
 
+def _normalize_manual_code(raw: str | None) -> str:
+    value = (raw or '').strip().upper()
+    compact = value.replace(' ', '').replace('-', '')
+    if compact and not re.fullmatch(r'[A-Z0-9:]+', compact):
+        return ''
+    return compact
+
+
+
 def _generate_backup_code(length: int = 8) -> str:
     return "".join(secrets.choice(_BACKUP_CODE_ALPHABET) for _ in range(length))
 
@@ -6903,6 +6925,82 @@ def resolve_open_link(
         payload["title"] = f"Invitation Orga: {role.title()}"
         payload["description"] = "Rejoins une organisation dans TORÈ"
     return payload
+
+
+
+@app.get("/codes/preview", response_model=CodesPreviewOut)
+def codes_preview(code: str, db: Session = Depends(get_db)):
+    raw = (code or '').strip()
+    uri = None
+    try:
+        uri = urlparse(raw)
+    except Exception:
+        uri = None
+
+    if uri and ((uri.scheme == 'tore' and uri.netloc == 'open') or (uri.scheme == 'https' and uri.netloc == 'app.tore.be' and uri.path == '/open')):
+        qp = parse_qs(uri.query)
+        t = (qp.get('type', [''])[0] or '').strip().lower()
+        linked_code = _normalize_manual_code((qp.get('code', [''])[0] or ''))
+        event_id = (qp.get('eventId', [''])[0] or qp.get('id', [''])[0] or '').strip()
+        if t == 'join' and linked_code:
+            return codes_preview(linked_code, db)
+        if t == 'staff_invite' and linked_code:
+            invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == linked_code).order_by(EventStaffInviteCode.created_at.desc()).first()
+            if invite is None:
+                return {'kind': 'staff_invite', 'requiresAuth': True, 'status': 'invalid'}
+            status = _staff_invite_status(invite).lower()
+            mapped = 'ok' if status == 'active' else ('expired' if status == 'expired' else 'revoked')
+            return {'kind': 'staff_invite', 'requiresAuth': True, 'status': mapped, 'titleHint': 'Invitation staff TORÈ', 'openUrl': f"{_public_app_base_url()}/open?type=staff_invite&code={linked_code}"}
+        if t == 'staff_backup' and linked_code and event_id.isdigit():
+            return {'kind': 'staff_backup', 'requiresAuth': True, 'status': 'ok', 'titleHint': 'Backup staff TORÈ', 'openUrl': f"{_public_app_base_url()}/open?type=staff_backup&eventId={event_id}&code={linked_code}"}
+        if t == 'orga_invite' and linked_code:
+            invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(linked_code)).first()
+            if invite is None:
+                return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'invalid'}
+            org = db.get(Organization, invite.org_id)
+            status = (invite.status or 'ACTIVE').upper()
+            if status == 'REVOKED':
+                return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'revoked'}
+            if invite.expires_at is not None and invite.expires_at <= now_utc():
+                return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'expired'}
+            public = org is not None and (org.visibility or 'PUBLIC').upper() == 'PUBLIC'
+            return {'kind': 'orga_invite', 'requiresAuth': not public, 'status': 'ok', 'orgHint': (org.name if public and org else None), 'openUrl': f"{_public_app_base_url()}/open?type=orga_invite&code={linked_code}"}
+
+    normalized = _normalize_manual_code(raw)
+    if not normalized:
+        return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid'}
+
+    event = db.query(Event).filter(Event.event_code == normalized).first()
+    if event is not None:
+        public = (event.visibility or 'PRIVATE').upper() == 'PUBLIC' and (event.publication_status or 'DRAFT').upper() == 'PUBLISHED'
+        return {
+            'kind': 'join',
+            'requiresAuth': not public,
+            'status': 'ok',
+            'titleHint': (event.name if public else 'Event privé TORÈ'),
+            'eventHint': (event.name if public else None),
+            'openUrl': f"{_public_app_base_url()}/open?type=join&code={normalized}",
+        }
+
+    invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == normalized).order_by(EventStaffInviteCode.created_at.desc()).first()
+    if invite is not None:
+        status = _staff_invite_status(invite).lower()
+        mapped = 'ok' if status == 'active' else ('expired' if status == 'expired' else 'revoked')
+        return {'kind': 'staff_invite', 'requiresAuth': True, 'status': mapped, 'titleHint': 'Invitation staff TORÈ', 'openUrl': f"{_public_app_base_url()}/open?type=staff_invite&code={normalized}"}
+
+    org_invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(normalized)).first()
+    if org_invite is not None:
+        org = db.get(Organization, org_invite.org_id)
+        status = (org_invite.status or 'ACTIVE').upper()
+        if status == 'REVOKED':
+            return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'revoked'}
+        if org_invite.expires_at is not None and org_invite.expires_at <= now_utc():
+            return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'expired'}
+        public = org is not None and (org.visibility or 'PUBLIC').upper() == 'PUBLIC'
+        return {'kind': 'orga_invite', 'requiresAuth': not public, 'status': 'ok', 'orgHint': (org.name if public and org else None), 'openUrl': f"{_public_app_base_url()}/open?type=orga_invite&code={normalized}"}
+
+    return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid'}
+
 
 @app.post("/events/{event_id}/staff_invite_code")
 def create_event_staff_invite_code(

@@ -6,7 +6,7 @@ import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../events/presentation/event_public_screen.dart';
-import '../../qr/presentation/join_event_screen.dart';
+import '../../qr/presentation/code_entry_sheet.dart';
 import 'map_calendar_providers.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -33,7 +33,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         actions: [
           if (!hasPublicJoinable)
             TextButton.icon(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
+              onPressed: () => showCodeEntrySheet(context),
               icon: const Icon(Icons.login_outlined),
               label: const Text('Entrer un code'),
             ),

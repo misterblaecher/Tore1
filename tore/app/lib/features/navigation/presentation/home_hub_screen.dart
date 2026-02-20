@@ -11,7 +11,7 @@ import 'package:tore/features/navigation/presentation/profile_screen.dart';
 import 'package:tore/features/committees/presentation/committees_screens.dart';
 import 'package:tore/features/glossary/glossary_screens.dart';
 import 'package:tore/features/navigation/presentation/ticker_screen.dart';
-import 'package:tore/features/qr/presentation/join_event_screen.dart';
+import 'package:tore/features/qr/presentation/code_entry_sheet.dart';
 import 'package:tore/features/community/presentation/community_screen.dart';
 import 'package:tore/features/qr/presentation/qr_scanner_screen.dart';
 import 'package:tore/features/ticker/ticker_providers.dart';
@@ -121,7 +121,7 @@ class HomeHubScreen extends ConsumerWidget {
                   const Text('Scanne un QR join_event ou entre un code pour activer ton event.'),
                   const SizedBox(height: 10),
                   FilledButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
+                    onPressed: () => showCodeEntrySheet(context),
                     icon: const Icon(Icons.login_outlined),
                     label: const Text('Entrer un code'),
                   ),

@@ -161,7 +161,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
         title: const Text('Communauté'),
         actions: [
           TextButton.icon(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinEventScreen())),
+            onPressed: () => showCodeEntrySheet(context),
             icon: const Icon(Icons.login_outlined),
             label: const Text('Entrer un code'),
           ),
