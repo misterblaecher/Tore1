@@ -1398,6 +1398,9 @@ class CodesPreviewOut(BaseModel):
     requiresAuth: bool
     status: str
     normalizedCode: Optional[str] = None
+    displaySuffix: Optional[str] = None
+    copyValue: Optional[str] = None
+    copyHint: Optional[str] = None
     deeplink: Optional[str] = None
     actionHint: Literal["OPEN_APP", "LOGIN_REQUIRED", "ENTER_CODE"] = "ENTER_CODE"
     expiresAt: Optional[str] = None
@@ -7215,13 +7218,29 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
     now = now_utc()
     public_base = _public_app_base_url()
 
-    def _build(kind: str, *, requires_auth: bool, status: str = 'ok', open_url: Optional[str] = None, deeplink: Optional[str] = None, expires_at: Optional[datetime] = None, **extra: Any) -> dict[str, Any]:
+    def _format_display_suffix(value: Optional[str]) -> Optional[str]:
+        token = (value or '').strip().upper()
+        if not token:
+            return None
+        compact = ''.join(ch for ch in token if ch.isalnum())
+        if not compact:
+            return None
+        if len(compact) <= 8:
+            return compact
+        return f"…{compact[-6:]}"
+
+    safe_suffix = _format_display_suffix(normalized)
+
+    def _build(kind: str, *, requires_auth: bool, status: str = 'ok', open_url: Optional[str] = None, deeplink: Optional[str] = None, expires_at: Optional[datetime] = None, copy_value: Optional[str] = None, copy_hint: Optional[str] = None, normalized_code: Optional[str] = None, display_suffix: Optional[str] = None, **extra: Any) -> dict[str, Any]:
         action_hint = 'LOGIN_REQUIRED' if requires_auth else 'OPEN_APP'
         return {
             'kind': kind,
             'requiresAuth': requires_auth,
             'status': status,
-            'normalizedCode': normalized,
+            'normalizedCode': normalized if normalized_code is None else normalized_code,
+            'displaySuffix': safe_suffix if display_suffix is None else display_suffix,
+            'copyValue': copy_value,
+            'copyHint': copy_hint,
             'openUrl': open_url,
             'deeplink': deeplink,
             'actionHint': action_hint,
@@ -7238,6 +7257,8 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
                 requires_auth=False,
                 open_url=f"{public_base}/open?type=event&id={event.id}",
                 deeplink=f"tore://open?type=event&id={event.id}",
+                copy_value=normalized,
+                copy_hint='Colle dans TORÈ → Entrer un code',
                 titleHint=event.name,
                 eventHint=event.name,
             )
@@ -7246,6 +7267,8 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
             requires_auth=True,
             open_url=f"{public_base}/open?type=join&code={normalized}",
             deeplink=f"tore://open?type=join&code={normalized}",
+            copy_value=normalized,
+            copy_hint='Connexion requise',
             titleHint='Event privé TORÈ',
         )
 
@@ -7260,6 +7283,8 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
             open_url=f"{public_base}/open?type=staff_invite&code={normalized}",
             deeplink=f"tore://open?type=staff_invite&code={normalized}",
             expires_at=invite.expires_at,
+            copy_value=normalized,
+            copy_hint='Colle dans TORÈ → Entrer un code',
             titleHint='Invitation staff TORÈ',
         )
 
@@ -7268,8 +7293,12 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
         return _build(
             'staff_backup',
             requires_auth=True,
-            open_url=f"{public_base}/open?type=staff_backup&eventId={backup_event_id}&code={backup_code}",
-            deeplink=f"tore://open?type=staff_backup&eventId={backup_event_id}&code={backup_code}",
+            open_url=f"{public_base}/open?type=staff_backup&eventId={backup_event_id}",
+            deeplink=f"tore://open?type=staff_backup&eventId={backup_event_id}",
+            copy_value=None,
+            copy_hint='Ouvre TORÈ → Entrer un code',
+            normalized_code=f"{backup_event_id}:REDACTED",
+            display_suffix=(f'…{backup_code[-4:]}' if backup_code else None),
             titleHint='Backup staff TORÈ',
             expiresAt=None if event_ref is None else None,
         )
@@ -7289,10 +7318,12 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
             open_url=f"{public_base}/open?type=orga_invite&code={normalized}",
             deeplink=f"tore://open?type=orga_invite&code={normalized}",
             expires_at=org_invite.expires_at,
+            copy_value=normalized,
+            copy_hint='Colle dans TORÈ → Entrer un code',
             orgHint=(org.name if public and org else None),
         )
 
-    return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid', 'normalizedCode': normalized, 'actionHint': 'ENTER_CODE'}
+    return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid', 'normalizedCode': normalized, 'displaySuffix': safe_suffix, 'copyValue': None, 'copyHint': 'Ouvre TORÈ → Entrer un code', 'actionHint': 'ENTER_CODE'}
 
 
 @app.post('/codes/consume')

@@ -23,6 +23,11 @@ class EventSharePackScreen extends ConsumerStatefulWidget {
 }
 
 class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
+  String _suffix(String code) {
+    final clean = code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    if (clean.isEmpty) return '—';
+    return clean.length <= 6 ? clean : '…${clean.substring(clean.length - 6)}';
+  }
   static const String _publicWebBaseUrl = 'https://app.tore.be';
   static const Duration _ttl = Duration(hours: 24);
   Map<String, dynamic>? _pack;
@@ -131,9 +136,9 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _LinkCard(title: 'Public link', link: links['publicShare'], onCopy: _copy),
+                _LinkCard(title: 'Public link', link: links['publicShare'], onCopy: _copy, suffix: _suffix(((links['joinPublic'] as Map?)?['code'] ?? '').toString())),
                 const SizedBox(height: 8),
-                _LinkCard(title: 'Join link', link: links['joinPublic'], onCopy: _copy),
+                _LinkCard(title: 'Join link', link: links['joinPublic'], onCopy: _copy, suffix: _suffix(((links['joinPublic'] as Map?)?['code'] ?? '').toString()), codeValue: ((links['joinPublic'] as Map?)?['code'] ?? '').toString()),
                 const SizedBox(height: 12),
                 Card(
                   child: Padding(
@@ -145,9 +150,10 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text('${invite['role']} · ${invite['code']}'),
-                          subtitle: Text('Expire: ${invite['expiresAt'] ?? '-'} · ${invite['status'] ?? '-'}\nSi QR ne marche pas: ouvre app.tore.be/open et entre le code: ${(((invite['code'] ?? '') as String).length > 6 ? ((invite['code'] ?? '') as String).substring(((invite['code'] ?? '') as String).length - 6) : (invite['code'] ?? '').toString())}'),
+                          subtitle: Text('Expire: ${invite['expiresAt'] ?? '-'} · ${invite['status'] ?? '-'}\nCode: ${_suffix((invite['code'] ?? '').toString())}'),
                           trailing: Wrap(spacing: 4, children: [
                             IconButton(onPressed: () => _copy((invite['webUrl'] ?? '').toString(), message: 'Lien staff copié'), icon: const Icon(Icons.copy), tooltip: 'Copier lien staff'),
+                            IconButton(onPressed: () => _copy((invite['code'] ?? '').toString(), message: 'Code copié'), icon: const Icon(Icons.copy_all_outlined), tooltip: 'Copier code'),
                             if ((invite['role'] ?? '').toString().toUpperCase() == 'MANAGER' && canManage)
                               IconButton(onPressed: () => _rotateStaffInvite('MANAGER'), icon: const Icon(Icons.autorenew), tooltip: 'Régénérer invite staff'),
                           ]),
@@ -176,11 +182,13 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
 }
 
 class _LinkCard extends StatelessWidget {
-  const _LinkCard({required this.title, required this.link, required this.onCopy});
+  const _LinkCard({required this.title, required this.link, required this.onCopy, this.suffix = '—', this.codeValue});
 
   final String title;
   final dynamic link;
   final Future<void> Function(String, {String message}) onCopy;
+  final String suffix;
+  final String? codeValue;
 
   @override
   Widget build(BuildContext context) {
@@ -190,9 +198,12 @@ class _LinkCard extends StatelessWidget {
     return Card(
       child: ListTile(
         title: Text(title),
-        subtitle: Text('$web\n$deep'),
+        subtitle: Text('$web\n$deep\nCode: $suffix'),
         isThreeLine: true,
-        trailing: IconButton(onPressed: web.isEmpty ? null : () => onCopy(web), icon: const Icon(Icons.copy)),
+        trailing: Wrap(spacing: 4, children: [
+          IconButton(onPressed: web.isEmpty ? null : () => onCopy(web), icon: const Icon(Icons.copy)),
+          IconButton(onPressed: (codeValue == null || codeValue!.isEmpty) ? null : () => onCopy(codeValue!, message: 'Code copié'), icon: const Icon(Icons.copy_all_outlined)),
+        ]),
       ),
     );
   }

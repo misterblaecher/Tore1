@@ -93,3 +93,50 @@ def test_codes_preview_private_join_no_title_leak_requires_auth():
     assert preview.json()['requiresAuth'] is True
     assert preview.json()['eventHint'] is None
     assert preview.json()['titleHint'] == 'Event privé TORÈ'
+
+
+def test_codes_preview_returns_display_suffix_and_copy_value_for_join():
+    owner = _guest('owner-suffix')
+    event = _create_event(owner, visibility='PUBLIC', publish=True)
+
+    preview = client.get(f"/codes/preview?code={event['event_code']}")
+    assert preview.status_code == 200
+    payload = preview.json()
+    assert payload['displaySuffix']
+    assert payload['copyValue'] == event['event_code']
+    assert payload['copyHint']
+
+
+def test_codes_preview_private_join_has_suffix_but_no_leak():
+    owner = _guest('owner-private-safe')
+    event = _create_event(owner, visibility='PRIVATE', publish=True)
+
+    preview = client.get(f"/codes/preview?code={event['event_code']}")
+    assert preview.status_code == 200
+    payload = preview.json()
+    assert payload['kind'] == 'join'
+    assert payload['displaySuffix']
+    assert payload['titleHint'] == 'Event privé TORÈ'
+    assert payload['eventHint'] is None
+    assert payload['orgHint'] is None
+
+
+def test_codes_preview_staff_backup_has_no_copy_value():
+    owner = _guest('owner-backup')
+    event = _create_event(owner, visibility='PUBLIC', publish=True)
+
+    generated = client.post(
+        f"/events/{event['event_id']}/staff_backup_codes/generate",
+        json={'role': 'ENTRY', 'count': 1},
+        headers={'Authorization': f'Bearer {owner}', 'Idempotency-Key': 'backup-generate'},
+    )
+    assert generated.status_code == 200
+    code = generated.json()['codes'][0]['code']
+
+    preview = client.get(f"/codes/preview?code={event['event_id']}:{code}")
+    assert preview.status_code == 200
+    payload = preview.json()
+    assert payload['kind'] == 'staff_backup'
+    assert payload['displaySuffix']
+    assert payload['copyValue'] is None
+    assert code not in str(payload)

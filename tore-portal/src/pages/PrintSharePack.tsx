@@ -77,7 +77,8 @@ async function exportNodeToPng(node: HTMLElement, fileName: string) {
 
 function shortCode(code?: string) {
   if (!code) return '—'
-  return code.slice(-6)
+  const clean = code.replace(/[^A-Z0-9]/gi, '').toUpperCase()
+  return clean.length <= 6 ? clean : `…${clean.slice(-6)}`
 }
 
 function QrBlock({ label, value, code }: { label: string; value?: string; code?: string }) {
@@ -87,8 +88,11 @@ function QrBlock({ label, value, code }: { label: string; value?: string; code?:
       <div className="print-pack__qr-meta">
         <strong>{label}</strong>
         <code>{value}</code>
-        <p className="print-pack__short">Code court: {shortCode(code)}</p>
-        <button className="tore-btn tore-btn--secondary no-print" onClick={() => navigator.clipboard.writeText(value)}>Copy payload</button>
+        <p className="print-pack__short">Code: {shortCode(code)}</p>
+        <div className="no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="tore-btn tore-btn--secondary" onClick={() => navigator.clipboard.writeText(value)}>Copy payload</button>
+          {code ? <button className="tore-btn tore-btn--secondary" onClick={() => navigator.clipboard.writeText(code)}>Copier code</button> : null}
+        </div>
       </div>
       <QrSvg value={value} className="print-pack__qr" />
     </div>
@@ -199,7 +203,7 @@ export default function PrintSharePack({ managed }: { managed: boolean }) {
             <p><strong>Open:</strong> {openUrl || '—'}</p>
           </section>
           <section className="print-pack__section"><h2>Ouvrir l’event</h2><QrBlock label="Open URL" value={openUrl} /></section>
-          <section className="print-pack__section"><h2>Rejoindre</h2><QrBlock label="Join URL" value={joinUrl} /></section>
+          <section className="print-pack__section"><h2>Rejoindre</h2><QrBlock label="Join URL" value={joinUrl} code={(pack?.event?.id && pack?.links?.joinPublic?.code ? String(pack?.links?.joinPublic?.code) : undefined) || undefined} /></section>
           {managed ? (
             <section className="print-pack__section">
               <h2>Staff invites</h2>
