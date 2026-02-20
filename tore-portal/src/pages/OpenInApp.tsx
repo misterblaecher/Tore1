@@ -94,8 +94,8 @@ export default function OpenInApp() {
         <section style={{ marginBottom: 12, padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
           {joinPreview?.requiresAuth ? (
             <>
-              <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Event privé</h2>
-              <p style={{ margin: 0, opacity: 0.85 }}>Connecte-toi dans TORÈ puis entre le code.</p>
+              <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Connexion requise</h2>
+              <p style={{ margin: 0, opacity: 0.85 }}>Connecte-toi dans TORÈ puis entre le code manuellement.</p>
             </>
           ) : (
             <>
@@ -112,11 +112,15 @@ export default function OpenInApp() {
 
       {manualCode && (
         <section style={{ marginBottom: 12, padding: 12, borderRadius: 8, border: '1px dashed rgba(255,255,255,0.25)' }}>
-          <h2 style={{ margin: '0 0 6px 0', fontSize: 16 }}>Fallback manuel</h2>
-          <p style={{ margin: 0, opacity: 0.85 }}>Tu peux aussi entrer ce code dans l’app TORÈ.</p>
-          <code style={{ display: 'block', marginTop: 8, padding: 8, borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}>
-            {manualCode}
-          </code>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: 16 }}>Code manuel</h2>
+          <p style={{ margin: 0, opacity: 0.85 }}>Copie ce code puis entre ce code dans l’app TORÈ.</p>
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard?.writeText(manualCode)}
+            style={{ marginTop: 8, width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff' }}
+          >
+            <code>{manualCode}</code>
+          </button>
         </section>
       )}
 

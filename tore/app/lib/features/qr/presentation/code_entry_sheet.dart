@@ -7,6 +7,7 @@ import '../../events/presentation/staff_backup_join_screen.dart';
 import '../../events/presentation/staff_invite_join_screen.dart';
 import 'code_entry_detector.dart';
 import 'join_event_screen.dart';
+import 'qr_scanner_screen.dart';
 
 Future<void> showCodeEntrySheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -26,7 +27,14 @@ class CodeEntrySheet extends StatefulWidget {
 class _CodeEntrySheetState extends State<CodeEntrySheet> {
   final TextEditingController _ctrl = TextEditingController();
   final CodeEntryDetector _detector = const CodeEntryDetector();
+  String? _clipboardSuggestion;
   CodeEntryResolution? _resolved;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadClipboardSuggestion();
+  }
 
   @override
   void dispose() {
@@ -35,7 +43,23 @@ class _CodeEntrySheetState extends State<CodeEntrySheet> {
   }
 
   void _analyze() {
+    _ctrl.text = normalizeManualCode(_ctrl.text);
     setState(() => _resolved = _detector.detect(_ctrl.text));
+  }
+
+  Future<void> _loadClipboardSuggestion() async {
+    final data = await Clipboard.getData('text/plain');
+    final normalized = normalizeManualCode(data?.text ?? '');
+    if (!mounted || normalized.isEmpty) return;
+    setState(() => _clipboardSuggestion = normalized);
+  }
+
+  Future<void> _pasteClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final normalized = normalizeManualCode(data?.text ?? '');
+    if (normalized.isEmpty) return;
+    _ctrl.text = normalized;
+    _analyze();
   }
 
   void _continue() {
@@ -84,18 +108,30 @@ class _CodeEntrySheetState extends State<CodeEntrySheet> {
           Row(
             children: [
               OutlinedButton.icon(
-                onPressed: () async {
-                  final data = await Clipboard.getData('text/plain');
-                  if (data?.text == null) return;
-                  _ctrl.text = data!.text!;
-                  _analyze();
-                },
+                onPressed: _pasteClipboard,
                 icon: const Icon(Icons.content_paste_outlined),
                 label: const Text('Coller'),
               ),
               const Spacer(),
               FilledButton(onPressed: _analyze, child: const Text('Analyser')),
             ],
+          ),
+          if (_clipboardSuggestion != null) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _pasteClipboard,
+              icon: const Icon(Icons.auto_awesome),
+              label: Text('Coller "$_clipboardSuggestion"'),
+            ),
+          ],
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen()));
+            },
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Scanner un QR'),
           ),
           if (resolved != null) ...[
             const SizedBox(height: 12),
@@ -113,4 +149,3 @@ class _CodeEntrySheetState extends State<CodeEntrySheet> {
     );
   }
 }
-

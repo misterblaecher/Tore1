@@ -24,6 +24,24 @@ class JoinEventScreen extends ConsumerStatefulWidget {
   ConsumerState<JoinEventScreen> createState() => _JoinEventScreenState();
 }
 
+
+enum _JoinUiErrorKind { expired, revoked, invalid, unknown }
+
+
+String mapJoinErrorReasonToUiState(String? reason) {
+  switch (reason) {
+    case 'invalid_code':
+    case 'invalid':
+      return 'invalid';
+    case 'expired':
+      return 'expired';
+    case 'revoked':
+      return 'revoked';
+    default:
+      return 'unknown';
+  }
+}
+
 class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   final TextEditingController _codeCtrl = TextEditingController();
@@ -31,6 +49,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
   bool _loadingPreview = false;
   bool _joining = false;
   String? _error;
+  _JoinUiErrorKind? _errorKind;
   Map<String, dynamic>? _resolved;
 
   @override
@@ -71,6 +90,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
     setState(() {
       _loadingPreview = true;
       _error = null;
+      _errorKind = null;
     });
     try {
       final event = await ref.read(apiProvider).event(eventId);
@@ -84,7 +104,11 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
         };
       });
     } catch (e) {
-      setState(() => _error = _joinErrorMessage(e));
+      final mapped = _joinErrorDisplay(e);
+      setState(() {
+        _error = mapped.message;
+        _errorKind = mapped.kind;
+      });
     } finally {
       if (mounted) setState(() => _loadingPreview = false);
     }
@@ -106,16 +130,19 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
   Future<void> _resolveByCode() async {
     final code = _codeCtrl.text.trim().toUpperCase();
     if (code.isEmpty) return;
-    final readOnly = isReadOnly(ref);
-    final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-    if (readOnly || degradedBlocked) {
-      setState(() => _error = writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked));
+    final blockedReason = writeDisabledReason(ref, intent: WriteIntent.critical);
+    if (blockedReason != null) {
+      setState(() {
+        _error = blockedReason;
+        _errorKind = _JoinUiErrorKind.unknown;
+      });
       return;
     }
 
     setState(() {
       _joining = true;
       _error = null;
+      _errorKind = null;
     });
     try {
       final payload = await ref.read(apiProvider).joinEventByCode(
@@ -160,9 +187,17 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
           }
         }
       }
-      setState(() => _error = _joinErrorMessage(e));
+      final mapped = _joinErrorDisplay(e);
+      setState(() {
+        _error = mapped.message;
+        _errorKind = mapped.kind;
+      });
     } catch (e) {
-      setState(() => _error = _joinErrorMessage(e));
+      final mapped = _joinErrorDisplay(e);
+      setState(() {
+        _error = mapped.message;
+        _errorKind = mapped.kind;
+      });
     } finally {
       if (mounted) setState(() => _joining = false);
     }
@@ -190,6 +225,7 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
     setState(() {
       _joining = true;
       _error = null;
+      _errorKind = null;
     });
     try {
       String? acceptedVersion;
@@ -216,7 +252,11 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
         (route) => route.isFirst,
       );
     } catch (e) {
-      setState(() => _error = _joinErrorMessage(e));
+      final mapped = _joinErrorDisplay(e);
+      setState(() {
+        _error = mapped.message;
+        _errorKind = mapped.kind;
+      });
     } finally {
       if (mounted) setState(() => _joining = false);
     }
@@ -288,7 +328,25 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen> with SingleTi
               ),
             ),
             if (_loadingPreview || _joining) const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator()),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: Colors.red))),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        OutlinedButton(onPressed: _scanJoinQr, child: const Text('Rescan')),
+                        OutlinedButton(onPressed: _resolveByCode, child: const Text('Réessayer')),
+                        OutlinedButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Retour')),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             if (event != null) ...[
               const Divider(height: 24),
               Text(eventName, style: Theme.of(context).textTheme.titleMedium),
@@ -349,21 +407,33 @@ class _CharterSheetState extends State<_CharterSheet> {
   }
 }
 
-String _joinErrorMessage(Object error) {
+
+class _JoinErrorDisplay {
+  const _JoinErrorDisplay({required this.message, required this.kind});
+
+  final String message;
+  final _JoinUiErrorKind kind;
+}
+
+_JoinErrorDisplay _joinErrorDisplay(Object error) {
   if (error is DioException) {
     final reason = error.response?.data is Map ? (error.response?.data['detail']?['reason']?.toString()) : null;
-    switch (reason) {
-      case 'invalid_code':
-        return 'Code invalide.';
-      case 'charter_acceptance_required':
-        return 'Tu dois accepter la charte avant de rejoindre.';
-      case 'closed':
-      case 'frozen':
-      case 'runtime_blocked':
-        return 'Action indisponible temporairement pour cet event.';
+    if (reason == 'charter_acceptance_required') {
+      return const _JoinErrorDisplay(message: 'Tu dois accepter la charte avant de rejoindre.', kind: _JoinUiErrorKind.unknown);
+    }
+    if (reason == 'closed' || reason == 'frozen' || reason == 'runtime_blocked') {
+      return const _JoinErrorDisplay(message: 'Action indisponible temporairement pour cet event.', kind: _JoinUiErrorKind.unknown);
+    }
+    switch (mapJoinErrorReasonToUiState(reason)) {
+      case 'invalid':
+        return const _JoinErrorDisplay(message: 'Code invalide.', kind: _JoinUiErrorKind.invalid);
+      case 'expired':
+        return const _JoinErrorDisplay(message: 'Code expiré.', kind: _JoinUiErrorKind.expired);
+      case 'revoked':
+        return const _JoinErrorDisplay(message: 'Code révoqué.', kind: _JoinUiErrorKind.revoked);
       default:
-        return 'Impossible de rejoindre cet event.';
+        return const _JoinErrorDisplay(message: 'Impossible de rejoindre cet event.', kind: _JoinUiErrorKind.unknown);
     }
   }
-  return 'Impossible de rejoindre cet event.';
+  return const _JoinErrorDisplay(message: 'Impossible de rejoindre cet event.', kind: _JoinUiErrorKind.unknown);
 }

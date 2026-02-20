@@ -14,6 +14,11 @@ void main() {
     expect(event.eventId, 42);
   });
 
+  test('normalizes manual codes (spaces/dashes/uppercase)', () {
+    expect(normalizeManualCode(' ab-12\n 34 '), 'AB1234');
+    expect(normalizeManualCode(' ev-nt\t99 '), 'EVNT99');
+  });
+
   test('detects manual code formats', () {
     expect(detector.detect('ABC123').kind, CodeEntryKind.join);
     expect(detector.detect('A1B2C3D4').kind, CodeEntryKind.staffInvite);

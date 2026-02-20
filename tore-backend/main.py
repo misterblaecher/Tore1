@@ -6460,7 +6460,7 @@ def _normalize_backup_code(raw: str | None) -> str:
 
 def _normalize_manual_code(raw: str | None) -> str:
     value = (raw or '').strip().upper()
-    compact = value.replace(' ', '').replace('-', '')
+    compact = re.sub(r'[\s-]+', '', value)
     if compact and not re.fullmatch(r'[A-Z0-9:]+', compact):
         return ''
     return compact
@@ -6929,7 +6929,9 @@ def resolve_open_link(
 
 
 @app.get("/codes/preview", response_model=CodesPreviewOut)
-def codes_preview(code: str, db: Session = Depends(get_db)):
+def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else 'anon'
+    enforce_rate_limit('codes_preview', f'ip:{client_ip}')
     raw = (code or '').strip()
     uri = None
     try:
@@ -6943,7 +6945,7 @@ def codes_preview(code: str, db: Session = Depends(get_db)):
         linked_code = _normalize_manual_code((qp.get('code', [''])[0] or ''))
         event_id = (qp.get('eventId', [''])[0] or qp.get('id', [''])[0] or '').strip()
         if t == 'join' and linked_code:
-            return codes_preview(linked_code, db)
+            return codes_preview(linked_code, request, db)
         if t == 'staff_invite' and linked_code:
             invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == linked_code).order_by(EventStaffInviteCode.created_at.desc()).first()
             if invite is None:

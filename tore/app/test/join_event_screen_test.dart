@@ -18,6 +18,12 @@ class _FakeApi extends Api {
 }
 
 void main() {
+  test('maps unknown backend reason to UI unknown state', () {
+    expect(mapJoinErrorReasonToUiState('invalid_code'), 'invalid');
+    expect(mapJoinErrorReasonToUiState('expired'), 'expired');
+    expect(mapJoinErrorReasonToUiState('some_new_reason'), 'unknown');
+  });
+
   testWidgets('prefills join code from deep link routing', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
