@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/utils/share_text.dart';
+import '../../../shared/utils/share_intent.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../community_models.dart';
 import '../../events/presentation/event_hub_screen.dart';
@@ -120,8 +121,12 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                       shortUrl = (short['shortUrl'] ?? '').toString();
                     } catch (_) {}
                   }
-                  final url = pickShareUrl(shortUrl: shortUrl, webUrl: (share['webUrl'] ?? '').toString());
-                  await Share.share(shareText(url: url), subject: 'Organisation TORÈ');
+                  final builder = ShareIntentBuilder(ShareIntentInput(
+                    shortUrl: shortUrl,
+                    openUrl: pickShareUrl(webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString()),
+                    copyHint: kShareFallbackHintOffline,
+                  ));
+                  await Share.share(builder.shareText, subject: 'Organisation TORÈ');
                 },
                 icon: const Icon(Icons.ios_share_outlined),
                 label: const Text('Partager le lien'),

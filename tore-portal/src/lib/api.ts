@@ -111,7 +111,7 @@ type ShortlinkParams = {
   expiresInSeconds?: number
 }
 
-export async function createShortlink(params: ShortlinkParams): Promise<{ shortUrl: string; openUrl: string; expiresAt?: string; slug: string } | null> {
+export async function createShortlink(params: ShortlinkParams): Promise<{ shortUrl: string; openUrl: string; fallbackOpenUrl?: string; expiresAt?: string; slug: string } | null> {
   try {
     const idem = `short-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     return await api('/shortlinks', {

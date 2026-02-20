@@ -90,7 +90,7 @@ function QrBlock({ label, value, code }: { label: string; value?: string; code?:
         <code>{value}</code>
         <p className="print-pack__short">Code: {shortCode(code)}</p>
         <div className="no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="tore-btn tore-btn--secondary" onClick={() => navigator.clipboard.writeText(value)}>Copy payload</button>
+          <button className="tore-btn tore-btn--secondary" onClick={() => navigator.clipboard.writeText(value)}>Copier lien</button>
           {code ? <button className="tore-btn tore-btn--secondary" onClick={() => navigator.clipboard.writeText(code)}>Copier code</button> : null}
         </div>
       </div>

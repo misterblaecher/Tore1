@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/utils/share_text.dart';
+import '../../../shared/utils/share_intent.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../qr/presentation/code_entry_sheet.dart';
 import '../../../state.dart';
@@ -137,9 +138,14 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
       } catch (_) {}
     }
     final eventCode = (share['event_code'] ?? '').toString();
-    final fallback = eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null;
-    final url = pickShareUrl(shortUrl: shortUrl, webUrl: (share['webUrl'] ?? '').toString());
-    await Share.share(shareText(url: url, fallbackSuffix: fallback), subject: _event?.name ?? 'Event TORÈ');
+    final builder = ShareIntentBuilder(ShareIntentInput(
+      shortUrl: shortUrl,
+      openUrl: pickShareUrl(webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString()),
+      displaySuffix: eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null,
+      copyValue: eventCode,
+      copyHint: kShareFallbackHintOffline,
+    ));
+    await Share.share(builder.shareText, subject: _event?.name ?? 'Event TORÈ');
   }
 
   @override
@@ -190,7 +196,7 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
                   onPressed: code.isEmpty ? null : () async {
                     await Clipboard.setData(ClipboardData(text: code));
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copié')));
                   },
                   icon: const Icon(Icons.copy_all_outlined),
                 ),

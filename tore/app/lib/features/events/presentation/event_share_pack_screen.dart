@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../state.dart';
 import '../../../shared/utils/write_gate.dart';
-import '../../../shared/utils/share_text.dart';
+import '../../../shared/utils/share_intent.dart';
 import '../../../core/network/network_state_provider.dart';
 
 class EventSharePackScreen extends ConsumerStatefulWidget {
@@ -84,8 +84,8 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
         shortUrl = (short['shortUrl'] ?? '').toString();
       } catch (_) {}
     }
-    final url = pickShareUrl(shortUrl: shortUrl, webUrl: '$_publicWebBaseUrl$path');
-    await Share.share(shareText(url: url), subject: 'Print pack TORÈ #${widget.eventId}');
+    final builder = ShareIntentBuilder(ShareIntentInput(shortUrl: shortUrl, openUrl: '$_publicWebBaseUrl$path', copyHint: kShareFallbackHintOffline));
+    await Share.share(builder.shareText, subject: 'Print pack TORÈ #${widget.eventId}');
   }
 
   Future<void> _rotateStaffInvite(String role) async {

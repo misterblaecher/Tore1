@@ -103,7 +103,7 @@ export default function StaffBackupPrint() {
           <h2>Codes bruts ({generated.role})</h2>
           <ul>
             {generated.codes.map((c) => (
-              <li key={c.code}><strong>{c.code}</strong> · {(backupShortUrl || c.webUrl)} · suffixe: …{c.suffix4} <button onClick={() => navigator.clipboard.writeText(c.code)}>Copier</button></li>
+              <li key={c.code}><strong>{c.code}</strong> · {(backupShortUrl || c.webUrl)} · suffixe: …{c.suffix4} <button onClick={() => navigator.clipboard.writeText(backupShortUrl || c.webUrl)}>Copier lien</button> <button onClick={() => navigator.clipboard.writeText(c.code)}>Copier code</button></li>
             ))}
           </ul>
         </section>

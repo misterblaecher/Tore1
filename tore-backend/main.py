@@ -1408,6 +1408,7 @@ class CodesPreviewOut(BaseModel):
     orgHint: Optional[str] = None
     eventHint: Optional[str] = None
     openUrl: Optional[str] = None
+    shareText: Optional[str] = None
 
 
 class ShortLinkCreateIn(BaseModel):
@@ -1423,6 +1424,7 @@ class ShortLinkCreateIn(BaseModel):
 class ShortLinkCreateOut(BaseModel):
     shortUrl: str
     openUrl: str
+    fallbackOpenUrl: str
     expiresAt: Optional[str] = None
     slug: str
 
@@ -6985,6 +6987,7 @@ def create_shortlink(
     response = {
         "shortUrl": f"{public_base}/s/{short}",
         "openUrl": open_url,
+        "fallbackOpenUrl": open_url,
         "expiresAt": _serialize_dt(expires_at),
         "slug": short,
     }
@@ -7212,11 +7215,17 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
         if left.isdigit() and right:
             backup_event_id = int(left)
             backup_code = _normalize_backup_code(right)
-    if not normalized:
-        return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid', 'actionHint': 'ENTER_CODE'}
-
     now = now_utc()
     public_base = _public_app_base_url()
+
+    if not normalized:
+        return {
+            'kind': 'unknown',
+            'requiresAuth': False,
+            'status': 'invalid',
+            'actionHint': 'ENTER_CODE',
+            'openUrl': f"{public_base}/open?type=join",
+        }
 
     def _format_display_suffix(value: Optional[str]) -> Optional[str]:
         token = (value or '').strip().upper()
@@ -7245,6 +7254,7 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
             'deeplink': deeplink,
             'actionHint': action_hint,
             'expiresAt': _serialize_dt(expires_at),
+            'shareText': extra.pop('shareText', None),
             **extra,
         }
 
@@ -7323,7 +7333,17 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
             orgHint=(org.name if public and org else None),
         )
 
-    return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid', 'normalizedCode': normalized, 'displaySuffix': safe_suffix, 'copyValue': None, 'copyHint': 'Ouvre TORÈ → Entrer un code', 'actionHint': 'ENTER_CODE'}
+    return {
+        'kind': 'unknown',
+        'requiresAuth': False,
+        'status': 'invalid',
+        'normalizedCode': normalized,
+        'displaySuffix': safe_suffix,
+        'copyValue': None,
+        'copyHint': 'Ouvre TORÈ → Entrer un code',
+        'actionHint': 'ENTER_CODE',
+        'openUrl': f"{public_base}/open?type=join",
+    }
 
 
 @app.post('/codes/consume')
