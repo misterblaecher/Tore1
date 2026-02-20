@@ -6,6 +6,7 @@ import os
 import logging
 import csv
 import io
+import base64
 import secrets
 import string
 import hashlib
@@ -9462,26 +9463,120 @@ def create_organization(
 @app.get("/orgas")
 def list_orgas(
     query: Optional[str] = None,
+    q: Optional[str] = None,
     city: Optional[str] = None,
     type: Optional[str] = Query(default=None, alias="type"),
-    cursor: Optional[int] = None,
-    limit: int = Query(default=20, ge=1, le=100),
+    join_mode: Optional[str] = None,
+    sort: str = Query(default="recent"),
+    cursor: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Organization)
-    if query:
-        q = f"%{query.strip().lower()}%"
-        stmt = stmt.where(func.lower(Organization.name).like(q))
+    normalized_search = (q or query or "").strip().lower()
+    followers_count = (
+        select(func.count(OrganizationMembership.id))
+        .where(
+            OrganizationMembership.organization_id == Organization.id,
+            OrganizationMembership.status == "ACTIVE",
+            OrganizationMembership.role.in_(["FOLLOWER", "MEMBER", "MANAGER", "OWNER"]),
+        )
+        .correlate(Organization)
+        .scalar_subquery()
+    )
+    last_post_at = (
+        select(func.max(OrgaPost.created_at))
+        .where(OrgaPost.organization_id == Organization.id, OrgaPost.deleted_at.is_(None))
+        .correlate(Organization)
+        .scalar_subquery()
+    )
+    last_member_at = (
+        select(func.max(OrganizationMembership.joined_at))
+        .where(OrganizationMembership.organization_id == Organization.id, OrganizationMembership.status == "ACTIVE")
+        .correlate(Organization)
+        .scalar_subquery()
+    )
+    last_active_at = case(
+        (last_post_at.is_(None), last_member_at),
+        (last_member_at.is_(None), last_post_at),
+        else_=func.max(last_post_at, last_member_at),
+    )
+
+    stmt = select(Organization, followers_count.label("followers_count"), last_active_at.label("last_active_at")).where(
+        func.upper(Organization.visibility) == "PUBLIC"
+    )
+    if normalized_search:
+        search_like = f"%{normalized_search}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Organization.name).like(search_like),
+                func.lower(func.coalesce(Organization.city, "")).like(search_like),
+                func.lower(func.coalesce(Organization.instagram_handle, "")).like(search_like),
+            )
+        )
     if city:
-        stmt = stmt.where(func.lower(Organization.city) == city.strip().lower())
+        city_norm = city.strip().lower()
+        stmt = stmt.where(or_(func.lower(Organization.city) == city_norm, func.lower(Organization.city).like(f"{city_norm}%")))
     if type:
         stmt = stmt.where(func.lower(Organization.org_type) == type.strip().lower())
+    if join_mode:
+        stmt = stmt.where(func.upper(Organization.join_mode) == join_mode.strip().upper())
+
+    sort_key = (sort or "recent").strip().lower()
+    if sort_key not in {"recent", "popular"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_sort"})
+
     if cursor:
-        stmt = stmt.where(Organization.id < cursor)
-    rows = db.scalars(stmt.order_by(Organization.id.desc()).limit(limit + 1)).all()
-    next_cursor = rows[-1].id if len(rows) > limit else None
+        try:
+            cursor_payload = json.loads(base64.urlsafe_b64decode(cursor.encode("utf-8")).decode("utf-8"))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_cursor"}) from exc
+        if sort_key == "popular":
+            c_followers = int(cursor_payload.get("followersCount", 0))
+            c_id = int(cursor_payload.get("id", 0))
+            stmt = stmt.where(or_(followers_count < c_followers, and_(followers_count == c_followers, Organization.id < c_id)))
+        else:
+            c_null_rank = int(cursor_payload.get("nullRank", 0))
+            c_id = int(cursor_payload.get("id", 0))
+            c_last_raw = cursor_payload.get("lastActiveAt")
+            c_last = datetime.fromisoformat(c_last_raw) if c_last_raw else None
+            recent_clause = and_(last_active_at.is_not(None), or_(last_active_at < c_last, and_(last_active_at == c_last, Organization.id < c_id))) if c_last else (last_active_at.is_not(None) & (Organization.id < c_id))
+            stmt = stmt.where(
+                or_(
+                    case((last_active_at.is_(None), 1), else_=0) > c_null_rank,
+                    and_(case((last_active_at.is_(None), 1), else_=0) == c_null_rank, recent_clause if c_null_rank == 0 else Organization.id < c_id),
+                )
+            )
+
+    if sort_key == "popular":
+        stmt = stmt.order_by(desc(followers_count), Organization.id.desc())
+    else:
+        stmt = stmt.order_by(case((last_active_at.is_(None), 1), else_=0).asc(), desc(last_active_at), Organization.id.desc())
+
+    rows = db.execute(stmt.limit(limit + 1)).all()
     items = rows[:limit]
-    return {"items": [_orga_to_out(row) for row in items], "next_cursor": next_cursor}
+    next_cursor = None
+    if len(rows) > limit:
+        org_row, followers_row, active_row = rows[limit - 1]
+        if sort_key == "popular":
+            payload = {"followersCount": int(followers_row or 0), "id": org_row.id}
+        else:
+            payload = {
+                "nullRank": 1 if active_row is None else 0,
+                "lastActiveAt": active_row.isoformat() if active_row is not None else None,
+                "id": org_row.id,
+            }
+        next_cursor = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
+
+    out_items = []
+    for row, followers, active_at in items:
+        out_items.append({
+            **_orga_to_out(row),
+            "type": row.org_type,
+            "joinMode": row.join_mode,
+            "followersCount": int(followers or 0),
+            "lastActiveAt": active_at.isoformat() if active_at is not None else None,
+        })
+    return {"items": out_items, "nextCursor": next_cursor, "next_cursor": next_cursor}
 
 
 @app.get("/me/orgas", response_model=list[OrgaMembershipOut])

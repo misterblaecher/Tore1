@@ -70,6 +70,40 @@ class MyEventSummary {
 
 typedef OrgaEventSummary = MyEventSummary;
 
+
+
+class OrgaSummary {
+  const OrgaSummary({
+    required this.id,
+    required this.name,
+    required this.city,
+    required this.type,
+    required this.joinMode,
+    required this.followersCount,
+    required this.lastActiveAt,
+  });
+
+  final int id;
+  final String name;
+  final String? city;
+  final String? type;
+  final String joinMode;
+  final int followersCount;
+  final DateTime? lastActiveAt;
+
+  factory OrgaSummary.fromJson(Map<String, dynamic> json) {
+    return OrgaSummary(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: (json['name'] ?? '').toString(),
+      city: json['city']?.toString(),
+      type: (json['type'] ?? json['org_type'])?.toString(),
+      joinMode: (json['joinMode'] ?? json['join_mode'] ?? 'OPEN_MEMBERSHIP').toString(),
+      followersCount: (json['followersCount'] as num?)?.toInt() ?? 0,
+      lastActiveAt: DateTime.tryParse((json['lastActiveAt'] ?? '').toString()),
+    );
+  }
+}
+
 class OrgaEventsResult {
   final Map<String, List<OrgaEventSummary>> buckets;
   final String? nextCursor;
