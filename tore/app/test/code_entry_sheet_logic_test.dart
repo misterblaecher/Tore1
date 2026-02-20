@@ -12,4 +12,15 @@ void main() {
     expect(id, 42);
     expect(previewPublicEventId({'kind': 'join'}), isNull);
   });
+
+  test('suffix rendering helper', () {
+    expect(formatSuffix('ABCDEFGH'), '…CDEFGH');
+    expect(formatSuffix('ABCD-EF'), 'ABCDEF');
+  });
+
+  test('copy value null fallback hint', () {
+    expect(previewCopyHint({'copyValue': null, 'copyHint': 'Connexion requise'}), 'Connexion requise');
+    expect(previewCopyHint({'copyValue': null}), 'Ouvre TORÈ → Entrer un code');
+  });
+
 }

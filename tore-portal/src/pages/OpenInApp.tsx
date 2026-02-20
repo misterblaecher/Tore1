@@ -16,6 +16,10 @@ type JoinPreviewPayload = {
   kind: string
   actionHint?: string
   normalizedCode?: string
+  displaySuffix?: string
+  copyValue?: string | null
+  copyHint?: string | null
+  requiresAuth?: boolean
 }
 
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=be.tore.app'
@@ -88,7 +92,15 @@ export default function OpenInApp() {
 
   const shareUrl = shortUrl || `${window.location.origin}/open?${passthrough}`
   const shareText = encodeURIComponent(`Ouvre TORÈ : ${shareUrl}`)
-  const visibleCode = (joinPreview?.normalizedCode || manualCode || '').slice(-4)
+  const visibleCode = joinPreview?.displaySuffix || `…${(joinPreview?.normalizedCode || manualCode || '').slice(-6)}`
+
+  const copyManualCode = async () => {
+    const value = joinPreview?.copyValue || payload?.webFallback || payload?.deeplink || manualCode
+    const hint = joinPreview?.copyValue ? (joinPreview?.copyHint || 'Copié') : (joinPreview?.copyHint || 'Ouvre TORÈ → Entrer un code')
+    if (!value) return
+    await navigator.clipboard?.writeText(value)
+    window.alert(hint)
+  }
 
   return (
     <main style={{ maxWidth: 480, margin: '48px auto', padding: 16, fontFamily: 'Inter, sans-serif' }}>
@@ -129,13 +141,14 @@ export default function OpenInApp() {
       {manualCode && (
         <section style={{ marginBottom: 12, padding: 12, borderRadius: 8, border: '1px dashed rgba(255,255,255,0.25)' }}>
           <h2 style={{ margin: '0 0 6px 0', fontSize: 16 }}>Code manuel</h2>
-          <p style={{ margin: 0, opacity: 0.85 }}>Copie ce code puis entre ce code dans l’app TORÈ.</p>
+          <p style={{ margin: 0, opacity: 0.85 }}>{joinPreview?.requiresAuth ? 'Connexion requise. Ouvre TORÈ puis entre le code.' : 'Copie ce code puis entre-le dans TORÈ.'}</p>
+          <p style={{ margin: '8px 0 0', opacity: 0.7 }}>Suffixe: <strong>{visibleCode}</strong></p>
           <button
             type="button"
-            onClick={() => void navigator.clipboard?.writeText(manualCode)}
+            onClick={() => void copyManualCode()}
             style={{ marginTop: 8, width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff' }}
           >
-            <code>••••{visibleCode}</code>
+            <code>Copier</code>
           </button>
         </section>
       )}

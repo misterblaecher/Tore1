@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,6 +27,12 @@ class EventPublicScreen extends ConsumerStatefulWidget {
 }
 
 class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
+  String _suffix(String code) {
+    final clean = code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    if (clean.isEmpty) return '—';
+    return clean.length <= 6 ? clean : '…${clean.substring(clean.length - 6)}';
+  }
+
   bool _loading = true;
   bool _joining = false;
   String? _error;
@@ -168,6 +175,27 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
               icon: const Icon(Icons.share_outlined),
               label: const Text('Copier / Partager lien'),
             ),
+          ),
+          const SizedBox(height: 8),
+
+          FutureBuilder<Map<String, dynamic>>(
+            future: ref.read(apiProvider).getEventShareV1(widget.eventId),
+            builder: (context, snap) {
+              final code = (snap.data?['event_code'] ?? '').toString();
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Code (${_suffix(code)})'),
+                subtitle: const Text('Fallback manuel si ouverture lien échoue'),
+                trailing: IconButton(
+                  onPressed: code.isEmpty ? null : () async {
+                    await Clipboard.setData(ClipboardData(text: code));
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
+                  },
+                  icon: const Icon(Icons.copy_all_outlined),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 8),
           SizedBox(

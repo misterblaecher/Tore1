@@ -27,6 +27,18 @@ bool previewNeedsLogin(Map<String, dynamic> preview, {required bool isAuthed}) {
   return (preview['actionHint'] ?? '') == 'LOGIN_REQUIRED' && !isAuthed;
 }
 
+
+String formatSuffix(String? code) {
+  final raw = (code ?? '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+  if (raw.isEmpty) return '—';
+  if (raw.length <= 6) return raw;
+  return '…${raw.substring(raw.length - 6)}';
+}
+
+String previewCopyHint(Map<String, dynamic> preview) {
+  return (preview['copyHint'] ?? 'Ouvre TORÈ → Entrer un code').toString();
+}
+
 int? previewPublicEventId(Map<String, dynamic> preview) {
   if ((preview['kind'] ?? '') != 'event_public') return null;
   final deep = (preview['deeplink'] ?? '').toString();
@@ -48,6 +60,7 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
   String? _clipboardSuggestion;
   CodeEntryResolution? _resolved;
   String? _status;
+  Map<String, dynamic>? _preview;
   bool _submitting = false;
   List<String> _history = const [];
 
@@ -99,6 +112,21 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
     _analyze();
   }
 
+
+  Future<void> _copyPreviewCode() async {
+    final preview = _preview;
+    if (preview == null) return;
+    final value = (preview['copyValue'] ?? '').toString();
+    if (value.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: value));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(previewCopyHint(preview))));
+  }
+
   Future<void> _continue() async {
     final code = normalizeManualCode(_ctrl.text);
     if (code.isEmpty || _submitting) return;
@@ -108,11 +136,13 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
     });
     try {
       var preview = await ref.read(apiProvider).previewManualCode(code);
+      if (mounted) setState(() => _preview = preview);
       final auth = ref.read(authSessionProvider);
       if (previewNeedsLogin(preview, isAuthed: auth.isAuthed)) {
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
         await ref.read(authSessionProvider.notifier).refreshSession();
         preview = await ref.read(apiProvider).previewManualCode(code);
+        if (mounted) setState(() => _preview = preview);
       }
 
       final id = previewPublicEventId(preview);
@@ -206,6 +236,16 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
           ),
           const SizedBox(height: 8),
           FilledButton(onPressed: _submitting ? null : _continue, child: Text(_submitting ? 'Traitement…' : 'Continuer')),
+
+          if (_preview != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(child: Text('Code: ${formatSuffix((_preview?['displaySuffix'] ?? _preview?['normalizedCode']).toString())}')),
+                IconButton(onPressed: _copyPreviewCode, icon: const Icon(Icons.copy_all_outlined), tooltip: 'Copier code'),
+              ],
+            ),
+          ],
           if (_status != null) ...[
             const SizedBox(height: 8),
             Text('Statut: $_status'),

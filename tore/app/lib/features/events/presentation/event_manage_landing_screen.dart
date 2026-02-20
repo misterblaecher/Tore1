@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -21,6 +22,12 @@ class EventManageLandingScreen extends ConsumerStatefulWidget {
 }
 
 class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScreen> {
+  String _suffix(String code) {
+    final clean = code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    if (clean.isEmpty) return '—';
+    return clean.length <= 6 ? clean : '…${clean.substring(clean.length - 6)}';
+  }
+
   bool _loading = false;
 
   String _idem(String action) => '$action-${widget.event.id}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
@@ -94,6 +101,31 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
                 icon: const Icon(Icons.share_outlined),
                 label: const Text('Partager'),
               ),
+
+              FutureBuilder<Map<String, dynamic>>(
+                future: ref.read(apiProvider).getEventShareV1(widget.event.id),
+                builder: (context, codeSnap) {
+                  final eventCode = (codeSnap.data?['event_code'] ?? '').toString();
+                  final suffix = _suffix(eventCode);
+                  return Card(
+                    child: ListTile(
+                      title: Text('Code ($suffix)'),
+                      subtitle: const Text('Fallback immédiat si le shortlink échoue'),
+                      trailing: IconButton(
+                        onPressed: eventCode.isEmpty
+                            ? null
+                            : () async {
+                                await Clipboard.setData(ClipboardData(text: eventCode));
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copié')));
+                              },
+                        icon: const Icon(Icons.copy_all_outlined),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
               if (snapshot != null) ...[
                 const SizedBox(height: 12),
                 Text('Staff invite actuel: ${snapshot.staffInviteCodeCurrent ?? '-'}'),

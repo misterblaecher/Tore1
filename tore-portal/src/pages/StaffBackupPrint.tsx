@@ -103,7 +103,7 @@ export default function StaffBackupPrint() {
           <h2>Codes bruts ({generated.role})</h2>
           <ul>
             {generated.codes.map((c) => (
-              <li key={c.code}><strong>{c.code}</strong> · {(backupShortUrl || c.webUrl)} · fallback code: ****{c.suffix4}</li>
+              <li key={c.code}><strong>{c.code}</strong> · {(backupShortUrl || c.webUrl)} · suffixe: …{c.suffix4} <button onClick={() => navigator.clipboard.writeText(c.code)}>Copier</button></li>
             ))}
           </ul>
         </section>
@@ -116,7 +116,7 @@ export default function StaffBackupPrint() {
             <h3>{r}</h3>
             <ul>
               {(list?.roles?.[r] ?? []).map((item) => (
-                <li key={item.id}>#{item.id} · ****{item.suffix4} · {item.status} · exp {item.expiresAt ?? '-'} </li>
+                <li key={item.id}>#{item.id} · …{item.suffix4} · {item.status} · exp {item.expiresAt ?? '-'} <button onClick={() => navigator.clipboard.writeText(`…${item.suffix4}`)}>Copier suffixe</button></li>
               ))}
             </ul>
           </div>
