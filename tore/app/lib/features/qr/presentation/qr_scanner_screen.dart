@@ -9,6 +9,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/perf/perf_tracer.dart';
 import '../../../core/perf/scan_suppression.dart';
 import '../../../core/qr/qr_parser.dart';
+import 'code_entry_sheet.dart';
 import '../qr_router.dart';
 
 enum QrScannerMode { route, pickRaw }
@@ -118,30 +119,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   }
 
   Future<void> _openManualInput() async {
-    final manual = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        final ctrl = TextEditingController();
-        return AlertDialog(
-          title: const Text('Saisie manuelle'),
-          content: TextField(
-            controller: ctrl,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'Code ou tore://...'),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Annuler')),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-              child: const Text('Valider'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted || manual == null || manual.isEmpty) return;
-    await _handleDetectedRaw(manual);
+    await showCodeEntrySheet(context);
   }
 
   @override

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/app_context/app_context.dart';
 import '../../../shared/utils/write_gate.dart';
+import '../../qr/presentation/code_entry_sheet.dart';
 import '../../../state.dart';
 import '../domain/event_public_view.dart';
 import 'event_hub_screen.dart';
@@ -138,6 +139,15 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
             child: FilledButton(
               onPressed: _joining ? null : _join,
               child: Text(_joining ? 'Rejoindre…' : 'Rejoindre'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => showCodeEntrySheet(context),
+              icon: const Icon(Icons.keyboard_alt_outlined),
+              label: const Text('Entrer un code'),
             ),
           ),
         ]),
