@@ -55,6 +55,62 @@ def test_explorer_filtering_basic():
     assert len(by_query.json()['items']) == 1
 
 
+def test_explorer_filters_private_ranking_and_sorting():
+    token = _guest('explorer-owner')
+    private_res = client.post('/orgas', json={'name': 'Private Club', 'city': 'Liege', 'org_type': 'asso', 'visibility': 'PRIVATE'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-private-1'})
+    assert private_res.status_code == 200
+
+    alpha = client.post('/orgas', json={'name': 'Comite Alpha', 'city': 'Liege', 'org_type': 'comite', 'instagram_handle': 'alphaoff', 'join_mode': 'FOLLOW_ONLY'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-public-a'})
+    beta = client.post('/orgas', json={'name': 'Bar Beta', 'city': 'Bruxelles', 'org_type': 'bar', 'join_mode': 'OPEN_MEMBERSHIP'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-public-b'})
+    gamma = client.post('/orgas', json={'name': 'Asso Gamma', 'city': 'Liege Centre', 'org_type': 'asso', 'join_mode': 'REQUEST_TO_JOIN'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-public-c'})
+    assert alpha.status_code == beta.status_code == gamma.status_code == 200
+
+    alpha_id = alpha.json()['orga']['id']
+    beta_id = beta.json()['orga']['id']
+
+    follower = _guest('follower-one')
+    client.post(f'/orgas/{alpha_id}/follow', headers={'Authorization': f'Bearer {follower}', 'Idempotency-Key': 'follow-1'})
+    member = _guest('member-one')
+    client.post(f'/orgas/{alpha_id}/join', headers={'Authorization': f'Bearer {member}', 'Idempotency-Key': 'join-1'})
+    follower2 = _guest('follower-two')
+    client.post(f'/orgas/{beta_id}/follow', headers={'Authorization': f'Bearer {follower2}', 'Idempotency-Key': 'follow-2'})
+
+    by_q = client.get('/orgas?q=alphaoff')
+    assert by_q.status_code == 200
+    assert len(by_q.json()['items']) == 1
+    assert by_q.json()['items'][0]['name'] == 'Comite Alpha'
+
+    by_type = client.get('/orgas?type=bar')
+    assert by_type.status_code == 200
+    assert [item['name'] for item in by_type.json()['items']] == ['Bar Beta']
+
+    by_city = client.get('/orgas?city=liege')
+    assert by_city.status_code == 200
+    names = [item['name'] for item in by_city.json()['items']]
+    assert 'Comite Alpha' in names
+    assert 'Asso Gamma' in names
+    assert 'Private Club' not in names
+
+    by_popular = client.get('/orgas?sort=popular&limit=2')
+    assert by_popular.status_code == 200
+    payload = by_popular.json()
+    assert payload['items'][0]['name'] == 'Comite Alpha'
+    assert payload['items'][0]['followersCount'] >= payload['items'][1]['followersCount']
+    assert payload['nextCursor'] is not None
+
+    next_page = client.get(f"/orgas?sort=popular&limit=2&cursor={payload['nextCursor']}")
+    assert next_page.status_code == 200
+    assert next_page.json()['items']
+
+    recent = client.get('/orgas?sort=recent')
+    assert recent.status_code == 200
+    recent_items = recent.json()['items']
+    recent_with_activity = [it for it in recent_items if it.get('lastActiveAt')]
+    assert recent_with_activity
+    parsed = [it['lastActiveAt'] for it in recent_with_activity]
+    assert parsed == sorted(parsed, reverse=True)
+
+
 def test_join_by_code_invalid_or_expired():
     owner_token = _guest('owner-1')
     member_token = _guest('member-1')
@@ -104,14 +160,14 @@ def test_audit_log_presence_for_writes():
     created = client.post('/orgas', json={'name': 'Audit Club'}, headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': 'orga-audit-1'})
     org_id = created.json()['orga']['id']
 
-    invite = client.get(f'/orgas/{org_id}/invite', headers={'Authorization': f'Bearer {owner_token}'})
+    invite = client.post(f'/orgas/{org_id}/invites', json={'inviteType': 'MEMBER', 'expiresInHours': 24}, headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': 'orga-audit-invite-1'})
     code = invite.json()['code']
-    join = client.post('/orgas/join_by_code', json={'code': code}, headers={'Authorization': f'Bearer {member_token}', 'Idempotency-Key': 'orga-audit-join-1'})
+    join = client.post('/orgas/join_by_invite', json={'code': code}, headers={'Authorization': f'Bearer {member_token}', 'Idempotency-Key': 'orga-audit-join-1'})
     assert join.status_code == 200
 
     with get_session() as s:
         create_log = s.query(AuditLog).filter(AuditLog.action == 'organization.create').first()
-        join_log = s.query(AuditLog).filter(AuditLog.action == 'organization.join_by_code').first()
+        join_log = s.query(AuditLog).filter(AuditLog.action == 'orga_join_by_invite').first()
         assert create_log is not None
         assert create_log.actor_user_id is not None
         assert create_log.idempotency_key == 'orga-audit-1'

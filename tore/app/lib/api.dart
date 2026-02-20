@@ -1342,8 +1342,27 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> listOrgas({String? query}) async {
-    final res = await _client.dio.get('/orgas', queryParameters: {if (query != null && query.trim().isNotEmpty) 'query': query.trim()});
+  Future<Map<String, dynamic>> listOrgas({
+    String? q,
+    String? type,
+    String? city,
+    String? sort,
+    String? joinMode,
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final res = await _client.dio.get(
+      '/orgas',
+      queryParameters: {
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
+        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
+        if (sort != null && sort.trim().isNotEmpty) 'sort': sort.trim(),
+        if (joinMode != null && joinMode.trim().isNotEmpty) 'join_mode': joinMode.trim(),
+        if (cursor != null && cursor.trim().isNotEmpty) 'cursor': cursor.trim(),
+        'limit': limit,
+      },
+    );
     return Map<String, dynamic>.from(res.data as Map);
   }
 
