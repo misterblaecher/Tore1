@@ -149,6 +149,43 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_event_safety_v1_tables(engine)
     ensure_organization_tables(engine)
     ensure_auth_tables(engine)
+    ensure_shortlink_tables(engine)
+
+
+def ensure_shortlink_tables(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS short_links (
+                id VARCHAR(36) NOT NULL PRIMARY KEY,
+                slug VARCHAR(16) NOT NULL,
+                target_type VARCHAR(24) NOT NULL,
+                target_payload_json JSON,
+                status VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+                expires_at DATETIME,
+                created_at DATETIME,
+                created_by_user_id VARCHAR(64)
+            )
+        """))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_short_links_slug ON short_links (slug)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_short_links_status ON short_links (status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_short_links_expires_at ON short_links (expires_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_short_links_created_by_user_id ON short_links (created_by_user_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS short_link_idempotency (
+                id INTEGER NOT NULL PRIMARY KEY,
+                idempotency_key VARCHAR(120) NOT NULL,
+                actor_user_id VARCHAR(64),
+                request_hash VARCHAR(128) NOT NULL,
+                response_json JSON,
+                created_at DATETIME,
+                CONSTRAINT uq_short_link_idempotency UNIQUE (idempotency_key, actor_user_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_short_link_idem_key ON short_link_idempotency (idempotency_key)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_short_link_idem_actor ON short_link_idempotency (actor_user_id)"))
 
 
 def ensure_auth_tables(engine: Engine) -> None:

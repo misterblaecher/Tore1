@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/auth/providers.dart';
 import '../../../state.dart';
+import '../../../shared/utils/share_text.dart';
+import '../../../core/network/network_state_provider.dart';
 import '../../auth/presentation/email_auth_screen.dart';
 import '../../events/presentation/event_public_screen.dart';
 import 'code_entry_detector.dart';
@@ -132,6 +135,25 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
     }
   }
 
+
+  Future<void> _shareResolvedLink() async {
+    final resolved = _resolved;
+    if (resolved == null) return;
+    String url = resolved.source?.toString() ?? '';
+    if (resolved.kind == CodeEntryKind.event && resolved.eventId != null && ref.read(networkStatusProvider) == NetworkState.online) {
+      try {
+        final short = await ref.read(apiProvider).createShortlink(
+          kind: 'event_share',
+          eventId: resolved.eventId,
+          idempotencyKey: _idem(),
+        );
+        url = pickShareUrl(shortUrl: (short['shortUrl'] ?? '').toString(), webUrl: url);
+      } catch (_) {}
+    }
+    if (url.isEmpty) return;
+    await Share.share(shareText(url: url), subject: 'Lien TORÈ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
@@ -159,6 +181,10 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
           if (_clipboardSuggestion != null) ...[
             const SizedBox(height: 8),
             TextButton.icon(onPressed: _pasteClipboard, icon: const Icon(Icons.auto_awesome), label: Text('Coller "$_clipboardSuggestion"')),
+          ],
+          if (_resolved?.isKnown == true && _resolved?.source != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(onPressed: _shareResolvedLink, icon: const Icon(Icons.share_outlined), label: const Text('Partager ce lien')),
           ],
           if (_history.isNotEmpty) ...[
             const SizedBox(height: 8),

@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../state.dart';
 import '../../../shared/utils/write_gate.dart';
+import '../../../shared/utils/share_text.dart';
+import '../../../core/network/network_state_provider.dart';
 
 class EventSharePackScreen extends ConsumerStatefulWidget {
   const EventSharePackScreen({super.key, required this.eventId});
@@ -70,7 +72,15 @@ class _EventSharePackScreenState extends ConsumerState<EventSharePackScreen> {
 
   Future<void> _sharePrintableLink({required bool canManage}) async {
     final path = canManage ? '/orga/events/${widget.eventId}/share-pack/print' : '/share/event/${widget.eventId}/print';
-    await Share.share('$_publicWebBaseUrl$path', subject: 'Print pack TORÈ #${widget.eventId}');
+    String shortUrl = '';
+    if (ref.read(networkStatusProvider) == NetworkState.online) {
+      try {
+        final short = await ref.read(apiProvider).createShortlink(kind: 'event_share', eventId: widget.eventId, idempotencyKey: _idem('short-share'));
+        shortUrl = (short['shortUrl'] ?? '').toString();
+      } catch (_) {}
+    }
+    final url = pickShareUrl(shortUrl: shortUrl, webUrl: '$_publicWebBaseUrl$path');
+    await Share.share(shareText(url: url), subject: 'Print pack TORÈ #${widget.eventId}');
   }
 
   Future<void> _rotateStaffInvite(String role) async {

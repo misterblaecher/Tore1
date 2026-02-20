@@ -1,10 +1,12 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../shared/utils/write_gate.dart';
+import '../../../shared/utils/share_text.dart';
+import '../../../core/network/network_state_provider.dart';
 import '../community_models.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../events/presentation/event_manage_landing_screen.dart';
@@ -110,10 +112,16 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
               OutlinedButton.icon(
                 onPressed: () async {
                   final share = await api.getOrgaShare(widget.orgId);
-                  final text = '${share['webUrl'] ?? ''}\n${share['deeplink'] ?? ''}';
-                  await Clipboard.setData(ClipboardData(text: text));
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lien orga copié')));
+                  String? shortUrl;
+                  final online = ref.read(networkStatusProvider) == NetworkState.online;
+                  if (online) {
+                    try {
+                      final short = await api.createShortlink(kind: 'orga_share', orgaId: widget.orgId, idempotencyKey: _idem());
+                      shortUrl = (short['shortUrl'] ?? '').toString();
+                    } catch (_) {}
+                  }
+                  final url = pickShareUrl(shortUrl: shortUrl, webUrl: (share['webUrl'] ?? '').toString());
+                  await Share.share(shareText(url: url), subject: 'Organisation TORÈ');
                 },
                 icon: const Icon(Icons.ios_share_outlined),
                 label: const Text('Partager le lien'),

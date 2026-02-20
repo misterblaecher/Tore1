@@ -2,11 +2,14 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/app_context/app_context.dart';
 import '../../../shared/utils/write_gate.dart';
+import '../../../shared/utils/share_text.dart';
+import '../../../core/network/network_state_provider.dart';
 import '../../qr/presentation/code_entry_sheet.dart';
 import '../../../state.dart';
 import '../domain/event_public_view.dart';
@@ -116,6 +119,22 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
     }
   }
 
+
+  Future<void> _shareEventLink() async {
+    final share = await ref.read(apiProvider).getEventShareV1(widget.eventId);
+    String? shortUrl;
+    if (ref.read(networkStatusProvider) == NetworkState.online) {
+      try {
+        final short = await ref.read(apiProvider).createShortlink(kind: 'event_share', eventId: widget.eventId, idempotencyKey: _idem());
+        shortUrl = (short['shortUrl'] ?? '').toString();
+      } catch (_) {}
+    }
+    final eventCode = (share['event_code'] ?? '').toString();
+    final fallback = eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null;
+    final url = pickShareUrl(shortUrl: shortUrl, webUrl: (share['webUrl'] ?? '').toString());
+    await Share.share(shareText(url: url, fallbackSuffix: fallback), subject: _event?.name ?? 'Event TORÈ');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -139,6 +158,15 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
             child: FilledButton(
               onPressed: _joining ? null : _join,
               child: Text(_joining ? 'Rejoindre…' : 'Rejoindre'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _shareEventLink,
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Copier / Partager lien'),
             ),
           ),
           const SizedBox(height: 8),

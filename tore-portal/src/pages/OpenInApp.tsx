@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { API_BASE } from '../lib/api'
+import { API_BASE, createShortlink } from '../lib/api'
 
 type OpenPayload = {
   ok: boolean
@@ -31,6 +31,7 @@ export default function OpenInApp() {
   const [joinPreview, setJoinPreview] = useState<JoinPreviewPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showInstall, setShowInstall] = useState(false)
+  const [shortUrl, setShortUrl] = useState<string>('')
   const manualCode = String((payload?.target?.code as string | undefined) || joinCode || '').trim()
 
   useEffect(() => {
@@ -61,6 +62,16 @@ export default function OpenInApp() {
     })()
   }, [type, joinCode])
 
+
+  useEffect(() => {
+    const id = Number(params.get('id') || '0')
+    if (!id || !['event', 'orga'].includes(type)) return
+    void (async () => {
+      const short = await createShortlink(type === 'event' ? { kind: 'event_share', event_id: id } : { kind: 'orga_share', orga_id: id })
+      if (short?.shortUrl) setShortUrl(short.shortUrl)
+    })()
+  }, [params, type])
+
   useEffect(() => {
     if (!payload?.deeplink) return
     const openTimer = window.setTimeout(() => {
@@ -75,6 +86,8 @@ export default function OpenInApp() {
     }
   }, [payload])
 
+  const shareUrl = shortUrl || `${window.location.origin}/open?${passthrough}`
+  const shareText = encodeURIComponent(`Ouvre TORÈ : ${shareUrl}`)
   const visibleCode = (joinPreview?.normalizedCode || manualCode || '').slice(-4)
 
   return (
@@ -83,6 +96,17 @@ export default function OpenInApp() {
       <p style={{ marginTop: 0, opacity: 0.8 }}>Si l’app n’est pas installée, utilise les liens ci-dessous.</p>
 
       {error && <p style={{ color: '#e25959' }}>{error}</p>}
+
+
+      {shortUrl && (
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard?.writeText(shortUrl)}
+          style={{ marginTop: 8, width: '100%', padding: '10px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff' }}
+        >
+          Copier lien court
+        </button>
+      )}
 
       {payload?.type === 'join' && (
         <section style={{ marginBottom: 12, padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
@@ -128,6 +152,21 @@ export default function OpenInApp() {
       >
         Ouvrir dans TORÈ
       </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <a href={`https://wa.me/?text=${shareText}`} style={{ flex: 1, textAlign: 'center', padding: '10px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.08)', color: '#fff', textDecoration: 'none' }}>WhatsApp</a>
+        <a href={`sms:?body=${shareText}`} style={{ flex: 1, textAlign: 'center', padding: '10px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.08)', color: '#fff', textDecoration: 'none' }}>SMS</a>
+      </div>
+
+
+      {shortUrl && (
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard?.writeText(shortUrl)}
+          style={{ marginTop: 8, width: '100%', padding: '10px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff' }}
+        >
+          Copier lien court
+        </button>
+      )}
 
       {payload?.type === 'join' && (
         <button

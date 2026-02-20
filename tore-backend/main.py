@@ -15,15 +15,16 @@ import subprocess
 import threading
 import time
 import re
+import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
 from zoneinfo import ZoneInfo
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -85,6 +86,8 @@ from models import (
     EventStaffBackupCode,
     EventStaffBackupIdempotency,
     CodeConsumeIdempotency,
+    ShortLink,
+    ShortLinkIdempotency,
     TicketTransfer,
     Committee,
     CommitteeYear,
@@ -1402,6 +1405,27 @@ class CodesPreviewOut(BaseModel):
     orgHint: Optional[str] = None
     eventHint: Optional[str] = None
     openUrl: Optional[str] = None
+
+
+class ShortLinkCreateIn(BaseModel):
+    kind: Literal["event_share", "orga_share", "open_url"]
+    event_id: Optional[int] = None
+    orga_id: Optional[int] = None
+    open_type: Optional[str] = None
+    open_id: Optional[int] = None
+    open_code: Optional[str] = None
+    expiresInSeconds: Optional[int] = None
+
+
+class ShortLinkCreateOut(BaseModel):
+    shortUrl: str
+    openUrl: str
+    expiresAt: Optional[str] = None
+    slug: str
+
+
+class ShortLinkRevokeIn(BaseModel):
+    reason: Optional[str] = None
 
 
 class CodesConsumeIn(BaseModel):
@@ -6834,6 +6858,216 @@ def _orga_share_payload(org: Organization, public_base_url: str | None = None) -
         "title": org.name,
         "description": f"Ouvrir {org.name} dans TORÈ",
     }
+
+
+_SHORTLINK_SLUG_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+
+
+def _shortlink_slug() -> str:
+    return "".join(secrets.choice(_SHORTLINK_SLUG_ALPHABET) for _ in range(9))
+
+
+def _safe_open_url(*, kind: str, event_id: int | None = None, orga_id: int | None = None, open_type: str | None = None, open_id: int | None = None, open_code: str | None = None) -> tuple[str, dict[str, Any], str]:
+    public_base = _public_app_base_url().rstrip("/")
+    if kind == "event_share":
+        if event_id is None:
+            raise HTTPException(status_code=400, detail={"reason": "event_id_required"})
+        params = {"type": "event", "id": event_id}
+        return f"{public_base}/open?{urlencode(params)}", {"event_id": event_id}, "event_share"
+    if kind == "orga_share":
+        if orga_id is None:
+            raise HTTPException(status_code=400, detail={"reason": "orga_id_required"})
+        params = {"type": "orga", "id": orga_id}
+        return f"{public_base}/open?{urlencode(params)}", {"orga_id": orga_id}, "orga_share"
+    if kind == "open_url":
+        type_normalized = (open_type or "").strip().lower()
+        if type_normalized not in {"event", "orga", "join", "staff_invite", "staff_backup", "orga_invite"}:
+            raise HTTPException(status_code=400, detail={"reason": "invalid_open_type"})
+        params: dict[str, Any] = {"type": type_normalized}
+        payload: dict[str, Any] = {"type": type_normalized}
+        if type_normalized in {"event", "orga"}:
+            if open_id is None:
+                raise HTTPException(status_code=400, detail={"reason": "open_id_required"})
+            params["id"] = open_id
+            payload["id"] = open_id
+        elif type_normalized == "staff_backup":
+            if open_id is None:
+                raise HTTPException(status_code=400, detail={"reason": "open_id_required"})
+            params["eventId"] = open_id
+            payload["eventId"] = open_id
+            # Never expose raw backup code in short links V1.
+        elif type_normalized in {"join", "staff_invite", "orga_invite"}:
+            normalized = canonicalize_manual_code(open_code)
+            if not normalized:
+                raise HTTPException(status_code=400, detail={"reason": "open_code_required"})
+            params["code"] = normalized
+            payload["code_suffix_hash"] = _manual_code_suffix_hash(normalized)
+        return f"{public_base}/open?{urlencode(params)}", payload, "open_url"
+    raise HTTPException(status_code=400, detail={"reason": "invalid_kind"})
+
+
+def _hash_request_payload(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+@app.post("/shortlinks", response_model=ShortLinkCreateOut)
+def create_shortlink(
+    payload: ShortLinkCreateIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    request: Request = None,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    enforce_rate_limit("shortlinks_create_user", str(user.id))
+    client_ip = (request.client.host if request and request.client else "anon")
+    enforce_rate_limit("shortlinks_create_user", f"ip:{client_ip}")
+
+    expires_in = payload.expiresInSeconds if payload.expiresInSeconds is not None else (24 * 60 * 60)
+    expires_in = max(3600, min(expires_in, 30 * 24 * 60 * 60))
+    expires_at = now_utc() + timedelta(seconds=expires_in)
+
+    open_url, target_payload, target_type = _safe_open_url(
+        kind=payload.kind,
+        event_id=payload.event_id,
+        orga_id=payload.orga_id,
+        open_type=payload.open_type,
+        open_id=payload.open_id,
+        open_code=payload.open_code,
+    )
+
+    if payload.kind == "event_share":
+        event = db.get(Event, payload.event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail={"reason": "event_not_found"})
+        _require_event_host_write_perms(db, event, user)
+    if payload.kind == "orga_share":
+        org = db.get(Organization, payload.orga_id)
+        if org is None:
+            raise HTTPException(status_code=404, detail={"reason": "orga_not_found"})
+        membership = _membership_for(db, org_id=org.id, user_id=user.id)
+        if membership is None or (membership.role or "").upper() not in {"OWNER", "MANAGER"}:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+
+    request_payload = {
+        "kind": payload.kind,
+        "event_id": payload.event_id,
+        "orga_id": payload.orga_id,
+        "open_type": payload.open_type,
+        "open_id": payload.open_id,
+        "open_code_suffix_hash": _manual_code_suffix_hash(canonicalize_manual_code(payload.open_code or "")) if payload.open_code else None,
+        "expires_in": expires_in,
+    }
+    request_hash = _hash_request_payload(request_payload)
+    idem = db.query(ShortLinkIdempotency).filter(
+        ShortLinkIdempotency.idempotency_key == key,
+        ShortLinkIdempotency.actor_user_id == user.id,
+    ).first()
+    if idem is not None:
+        if idem.request_hash != request_hash:
+            raise HTTPException(status_code=409, detail={"reason": "idempotency_conflict"})
+        return idem.response_json
+
+    short = None
+    for _ in range(8):
+        candidate = _shortlink_slug()
+        exists = db.query(ShortLink.id).filter(ShortLink.slug == candidate).first()
+        if exists is None:
+            short = candidate
+            break
+    if short is None:
+        raise HTTPException(status_code=503, detail={"reason": "slug_generation_failed"})
+
+    public_base = _public_app_base_url().rstrip("/")
+    response = {
+        "shortUrl": f"{public_base}/s/{short}",
+        "openUrl": open_url,
+        "expiresAt": _serialize_dt(expires_at),
+        "slug": short,
+    }
+    db.add(ShortLink(id=str(uuid.uuid4()), slug=short, target_type=target_type, target_payload_json=target_payload, status="ACTIVE", expires_at=expires_at, created_at=now_utc(), created_by_user_id=user.id))
+    db.add(ShortLinkIdempotency(idempotency_key=key, actor_user_id=user.id, request_hash=request_hash, response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="shortlink_created",
+        entity_type="short_link",
+        event_id=None,
+        bar_id=None,
+        entity_id=short,
+        idempotency_key=key,
+        payload={"kind": payload.kind, "slug": short, "target_type": target_type, "target_payload": target_payload},
+    )
+    db.commit()
+    return response
+
+
+@app.get("/s/{slug}")
+def resolve_shortlink(slug: str, db: Session = Depends(get_db)):
+    row = db.query(ShortLink).filter(ShortLink.slug == slug).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    if (row.status or "ACTIVE").upper() != "ACTIVE":
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    if row.expires_at is not None and row.expires_at <= now_utc():
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+
+    public_base = _public_app_base_url().rstrip("/")
+    payload = dict(row.target_payload_json or {})
+    params: dict[str, Any]
+    target_type = (row.target_type or "").lower()
+    if target_type == "event_share":
+        params = {"type": "event", "id": payload.get("event_id")}
+    elif target_type == "orga_share":
+        params = {"type": "orga", "id": payload.get("orga_id")}
+    elif target_type == "open_url":
+        params = {"type": payload.get("type")}
+        if payload.get("id") is not None:
+            params["id"] = payload.get("id")
+        if payload.get("eventId") is not None:
+            params["eventId"] = payload.get("eventId")
+    else:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    params = {k: v for k, v in params.items() if v is not None and str(v) != ""}
+    if "type" not in params:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    return RedirectResponse(url=f"{public_base}/open?{urlencode(params)}", status_code=302)
+
+
+@app.post("/shortlinks/{slug}/revoke")
+def revoke_shortlink(
+    slug: str,
+    payload: ShortLinkRevokeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    row = db.query(ShortLink).filter(ShortLink.slug == slug).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    actor_ok = row.created_by_user_id == user.id
+    if not actor_ok:
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+    if (row.status or "ACTIVE").upper() != "REVOKED":
+        row.status = "REVOKED"
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="shortlink_revoked",
+        entity_type="short_link",
+        event_id=None,
+        bar_id=None,
+        entity_id=slug,
+        idempotency_key=key,
+        payload={"reason": payload.reason or "", "slug": slug},
+    )
+    db.commit()
+    return {"ok": True, "slug": slug, "status": row.status}
 
 
 @app.get("/open", response_model=OpenLinkOut)

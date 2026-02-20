@@ -2,7 +2,7 @@ import './print-share-pack.css'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import QrSvg from '../components/QrSvg'
-import { ApiError, api } from '../lib/api'
+import { ApiError, api, createShortlink } from '../lib/api'
 
 type LinkValue = { webUrl?: string; deeplink?: string; expiresAt?: string; status?: string; role?: string; code?: string }
 
@@ -101,6 +101,7 @@ export default function PrintSharePack({ managed }: { managed: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [offlineBanner, setOfflineBanner] = useState(false)
   const [busyRole, setBusyRole] = useState<string | null>(null)
+  const [shortOpenUrl, setShortOpenUrl] = useState<string>('')
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -134,8 +135,19 @@ export default function PrintSharePack({ managed }: { managed: boolean }) {
     }
   }, [eventId, managed])
 
+
+  useEffect(() => {
+    if (!eventId) return
+    void (async () => {
+      const id = Number(eventId)
+      if (!id) return
+      const short = await createShortlink({ kind: 'event_share', event_id: id })
+      if (short?.shortUrl) setShortOpenUrl(short.shortUrl)
+    })()
+  }, [eventId])
+
   const staffInvites = useMemo(() => (Array.isArray(pack?.links?.staffInvites) ? pack?.links?.staffInvites ?? [] : []), [pack])
-  const openUrl = pack?.openUrl || pack?.links?.open?.webUrl || pack?.links?.publicShare?.webUrl
+  const openUrl = shortOpenUrl || pack?.openUrl || pack?.links?.open?.webUrl || pack?.links?.publicShare?.webUrl
   const joinUrl = pack?.links?.joinPublic?.webUrl
 
   async function rotate(role: string) {

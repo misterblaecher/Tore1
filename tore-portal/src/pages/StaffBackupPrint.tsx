@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ApiError, api } from '../lib/api'
+import { ApiError, api, createShortlink } from '../lib/api'
 import { useParams } from 'react-router-dom'
 
 type BackupItem = { id: number; status: string; expiresAt?: string; suffix4: string; usedAt?: string; revokedAt?: string }
@@ -25,6 +25,7 @@ export default function StaffBackupPrint() {
   const [generated, setGenerated] = useState<GeneratePayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fromCache, setFromCache] = useState(false)
+  const [backupShortUrl, setBackupShortUrl] = useState<string>('')
 
   const key = useMemo(() => cacheKey(eventId), [eventId])
 
@@ -59,6 +60,17 @@ export default function StaffBackupPrint() {
     void load()
   }, [eventId])
 
+  useEffect(() => {
+    if (!eventId) return
+    void (async () => {
+      const id = Number(eventId)
+      if (!id) return
+      const short = await createShortlink({ kind: 'open_url', open_type: 'staff_backup', open_id: id })
+      if (short?.shortUrl) setBackupShortUrl(short.shortUrl)
+    })()
+  }, [eventId])
+
+
   const generate = async () => {
     if (!eventId) return
     const idem = `backup-${eventId}-${role}-${Date.now()}`
@@ -91,7 +103,7 @@ export default function StaffBackupPrint() {
           <h2>Codes bruts ({generated.role})</h2>
           <ul>
             {generated.codes.map((c) => (
-              <li key={c.code}><strong>{c.code}</strong> · {c.webUrl} · {c.deeplink}</li>
+              <li key={c.code}><strong>{c.code}</strong> · {(backupShortUrl || c.webUrl)} · fallback code: ****{c.suffix4}</li>
             ))}
           </ul>
         </section>
