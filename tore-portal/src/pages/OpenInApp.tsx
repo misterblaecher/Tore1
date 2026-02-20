@@ -13,17 +13,9 @@ type OpenPayload = {
 }
 
 type JoinPreviewPayload = {
-  exists: boolean
-  requiresAuth: boolean
-  titleHint?: string
-  startAtHint?: string
-  hostHint?: string
-  public?: {
-    id?: number
-    name?: string
-    startAt?: string
-    venue?: { name?: string; barName?: string }
-  }
+  kind: string
+  actionHint?: string
+  normalizedCode?: string
 }
 
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=be.tore.app'
@@ -56,10 +48,10 @@ export default function OpenInApp() {
   }, [passthrough])
 
   useEffect(() => {
-    if (type !== 'join' || !joinCode) return
+    if (!joinCode) return
     void (async () => {
       try {
-        const response = await fetch(`${API_BASE}/events/join_code/preview?code=${encodeURIComponent(joinCode)}`)
+        const response = await fetch(`${API_BASE}/codes/preview?code=${encodeURIComponent(joinCode)}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = (await response.json()) as JoinPreviewPayload
         setJoinPreview(data)
@@ -83,6 +75,8 @@ export default function OpenInApp() {
     }
   }, [payload])
 
+  const visibleCode = (joinPreview?.normalizedCode || manualCode || '').slice(-4)
+
   return (
     <main style={{ maxWidth: 480, margin: '48px auto', padding: 16, fontFamily: 'Inter, sans-serif' }}>
       <h1 style={{ marginBottom: 8 }}>Ouvrir dans TORÈ</h1>
@@ -92,20 +86,18 @@ export default function OpenInApp() {
 
       {payload?.type === 'join' && (
         <section style={{ marginBottom: 12, padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
-          {joinPreview?.requiresAuth ? (
+          {joinPreview?.actionHint === 'LOGIN_REQUIRED' ? (
             <>
               <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Connexion requise</h2>
               <p style={{ margin: 0, opacity: 0.85 }}>Connecte-toi dans TORÈ puis entre le code manuellement.</p>
             </>
           ) : (
             <>
-              <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>{joinPreview?.public?.name || 'Event TORÈ'}</h2>
-              <p style={{ margin: 0, opacity: 0.85 }}>
-                {(joinPreview?.public?.venue?.name || joinPreview?.public?.venue?.barName || 'Lieu à confirmer')}
-              </p>
+              <h2 style={{ margin: '0 0 6px 0', fontSize: 18 }}>Code prêt</h2>
+              <p style={{ margin: 0, opacity: 0.85 }}>Ouvre TORÈ puis utilise “Entrer un code”.</p>
             </>
           )}
-          <p style={{ margin: '8px 0 0', opacity: 0.7 }}>Code: <strong>{joinCode}</strong></p>
+          <p style={{ margin: '8px 0 0', opacity: 0.7 }}>Code: <strong>••••{visibleCode}</strong></p>
         </section>
       )}
 
@@ -119,10 +111,14 @@ export default function OpenInApp() {
             onClick={() => void navigator.clipboard?.writeText(manualCode)}
             style={{ marginTop: 8, width: '100%', textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff' }}
           >
-            <code>{manualCode}</code>
+            <code>••••{visibleCode}</code>
           </button>
         </section>
       )}
+
+      <section style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px dashed rgba(255,255,255,0.2)' }}>
+        <p style={{ margin: 0, opacity: 0.8 }}>Si ça ne s’ouvre pas : ouvre TORÈ → Entrer un code.</p>
+      </section>
 
       <button
         type="button"

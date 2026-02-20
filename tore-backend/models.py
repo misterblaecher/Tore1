@@ -212,6 +212,21 @@ class EventStaffBackupIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class CodeConsumeIdempotency(Base):
+    __tablename__ = "code_consume_idempotency"
+    __table_args__ = (
+        UniqueConstraint("actor_user_id", "idempotency_key", name="uq_code_consume_idem"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    code_suffix_hash: Mapped[str] = mapped_column(String(64), index=True)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventQrPackIdempotency(Base):
     __tablename__ = "event_qr_pack_idempotency"
     __table_args__ = (

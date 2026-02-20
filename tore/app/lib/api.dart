@@ -1511,6 +1511,20 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> previewManualCode(String code) async {
+    final res = await _client.dio.get('/codes/preview', queryParameters: {'code': code});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> consumeManualCode({required String code, required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+      '/codes/consume',
+      data: {'code': code},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
 
   Future<MyEventsFetchResult> myEvents() async {
     const cacheKey = 'my_events_v1';

@@ -84,6 +84,7 @@ from models import (
     EventStaffInviteIdempotency,
     EventStaffBackupCode,
     EventStaffBackupIdempotency,
+    CodeConsumeIdempotency,
     TicketTransfer,
     Committee,
     CommitteeYear,
@@ -1390,13 +1391,21 @@ class JoinCodePreviewOut(BaseModel):
 
 
 class CodesPreviewOut(BaseModel):
-    kind: str
+    kind: Literal["join", "staff_invite", "staff_backup", "orga_invite", "event_public", "unknown"]
     requiresAuth: bool
     status: str
+    normalizedCode: Optional[str] = None
+    deeplink: Optional[str] = None
+    actionHint: Literal["OPEN_APP", "LOGIN_REQUIRED", "ENTER_CODE"] = "ENTER_CODE"
+    expiresAt: Optional[str] = None
     titleHint: Optional[str] = None
     orgHint: Optional[str] = None
     eventHint: Optional[str] = None
     openUrl: Optional[str] = None
+
+
+class CodesConsumeIn(BaseModel):
+    code: str
 
 
 class CreateEventOut(BaseModel):
@@ -4491,7 +4500,7 @@ def join_event_by_code(
     db: Session = Depends(get_db),
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    code = payload.code.strip().upper()
+    code = canonicalize_manual_code(payload.code)
     event = db.query(Event).filter(Event.event_code == code).first()
     if event is None:
         raise HTTPException(404, detail={"reason": "invalid_code"})
@@ -6466,6 +6475,15 @@ def _normalize_manual_code(raw: str | None) -> str:
     return compact
 
 
+def canonicalize_manual_code(raw: str | None) -> str:
+    return _normalize_manual_code(raw)
+
+
+def _manual_code_suffix_hash(code: str) -> str:
+    suffix = (code or "")[-4:]
+    return hashlib.sha256(suffix.encode("utf-8")).hexdigest()[:16]
+
+
 
 def _generate_backup_code(length: int = 8) -> str:
     return "".join(secrets.choice(_BACKUP_CODE_ALPHABET) for _ in range(length))
@@ -6861,7 +6879,7 @@ def resolve_open_link(
     elif type_normalized == "join":
         if not code:
             raise HTTPException(status_code=400, detail={"reason": "missing_code"})
-        normalized = code.strip().upper()
+        normalized = canonicalize_manual_code(code)
         deeplink = f"tore://open?type=join&code={normalized}"
         web_fallback = f"{_public_app_base_url()}/open?type=join&code={normalized}"
         target = {"code": normalized}
@@ -6872,7 +6890,7 @@ def resolve_open_link(
     elif type_normalized == "staff_invite":
         if not code:
             raise HTTPException(status_code=400, detail={"reason": "missing_code"})
-        normalized = code.strip().upper()
+        normalized = canonicalize_manual_code(code)
         invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == normalized).order_by(EventStaffInviteCode.created_at.desc()).first()
         if invite is None:
             raise HTTPException(status_code=404, detail={"reason": "invite_not_found"})
@@ -6892,7 +6910,7 @@ def resolve_open_link(
     elif type_normalized == "orga_invite":
         if not code:
             raise HTTPException(status_code=400, detail={"reason": "missing_code"})
-        normalized = code.strip().upper()
+        normalized = canonicalize_manual_code(code)
         deeplink = f"tore://open?type=orga_invite&code={normalized}"
         web_fallback = f"{_public_app_base_url()}/open?type=orga_invite&code={normalized}"
         target = {"code": normalized}
@@ -6939,69 +6957,238 @@ def codes_preview(code: str, request: Request, db: Session = Depends(get_db)):
     except Exception:
         uri = None
 
+    linked_type = ''
+    linked_code = ''
+    linked_event_id: Optional[int] = None
     if uri and ((uri.scheme == 'tore' and uri.netloc == 'open') or (uri.scheme == 'https' and uri.netloc == 'app.tore.be' and uri.path == '/open')):
         qp = parse_qs(uri.query)
-        t = (qp.get('type', [''])[0] or '').strip().lower()
-        linked_code = _normalize_manual_code((qp.get('code', [''])[0] or ''))
-        event_id = (qp.get('eventId', [''])[0] or qp.get('id', [''])[0] or '').strip()
-        if t == 'join' and linked_code:
-            return codes_preview(linked_code, request, db)
-        if t == 'staff_invite' and linked_code:
-            invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == linked_code).order_by(EventStaffInviteCode.created_at.desc()).first()
-            if invite is None:
-                return {'kind': 'staff_invite', 'requiresAuth': True, 'status': 'invalid'}
-            status = _staff_invite_status(invite).lower()
-            mapped = 'ok' if status == 'active' else ('expired' if status == 'expired' else 'revoked')
-            return {'kind': 'staff_invite', 'requiresAuth': True, 'status': mapped, 'titleHint': 'Invitation staff TORÈ', 'openUrl': f"{_public_app_base_url()}/open?type=staff_invite&code={linked_code}"}
-        if t == 'staff_backup' and linked_code and event_id.isdigit():
-            return {'kind': 'staff_backup', 'requiresAuth': True, 'status': 'ok', 'titleHint': 'Backup staff TORÈ', 'openUrl': f"{_public_app_base_url()}/open?type=staff_backup&eventId={event_id}&code={linked_code}"}
-        if t == 'orga_invite' and linked_code:
-            invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(linked_code)).first()
-            if invite is None:
-                return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'invalid'}
-            org = db.get(Organization, invite.org_id)
-            status = (invite.status or 'ACTIVE').upper()
-            if status == 'REVOKED':
-                return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'revoked'}
-            if invite.expires_at is not None and invite.expires_at <= now_utc():
-                return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'expired'}
-            public = org is not None and (org.visibility or 'PUBLIC').upper() == 'PUBLIC'
-            return {'kind': 'orga_invite', 'requiresAuth': not public, 'status': 'ok', 'orgHint': (org.name if public and org else None), 'openUrl': f"{_public_app_base_url()}/open?type=orga_invite&code={linked_code}"}
+        linked_type = (qp.get('type', [''])[0] or '').strip().lower()
+        linked_code = canonicalize_manual_code((qp.get('code', [''])[0] or ''))
+        raw_event_id = (qp.get('eventId', [''])[0] or qp.get('id', [''])[0] or '').strip()
+        linked_event_id = int(raw_event_id) if raw_event_id.isdigit() else None
 
-    normalized = _normalize_manual_code(raw)
+    normalized = linked_code if linked_code else canonicalize_manual_code(raw)
+    backup_event_id = linked_event_id
+    backup_code = normalized
+    if ':' in normalized:
+        left, right = normalized.split(':', 1)
+        if left.isdigit() and right:
+            backup_event_id = int(left)
+            backup_code = _normalize_backup_code(right)
     if not normalized:
-        return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid'}
+        return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid', 'actionHint': 'ENTER_CODE'}
 
-    event = db.query(Event).filter(Event.event_code == normalized).first()
-    if event is not None:
-        public = (event.visibility or 'PRIVATE').upper() == 'PUBLIC' and (event.publication_status or 'DRAFT').upper() == 'PUBLISHED'
+    now = now_utc()
+    public_base = _public_app_base_url()
+
+    def _build(kind: str, *, requires_auth: bool, status: str = 'ok', open_url: Optional[str] = None, deeplink: Optional[str] = None, expires_at: Optional[datetime] = None, **extra: Any) -> dict[str, Any]:
+        action_hint = 'LOGIN_REQUIRED' if requires_auth else 'OPEN_APP'
         return {
-            'kind': 'join',
-            'requiresAuth': not public,
-            'status': 'ok',
-            'titleHint': (event.name if public else 'Event privé TORÈ'),
-            'eventHint': (event.name if public else None),
-            'openUrl': f"{_public_app_base_url()}/open?type=join&code={normalized}",
+            'kind': kind,
+            'requiresAuth': requires_auth,
+            'status': status,
+            'normalizedCode': normalized,
+            'openUrl': open_url,
+            'deeplink': deeplink,
+            'actionHint': action_hint,
+            'expiresAt': _serialize_dt(expires_at),
+            **extra,
         }
 
+    event = db.query(Event).filter(Event.event_code == normalized).first()
+    if event is not None and linked_type in {'', 'join'}:
+        is_public = (event.visibility or 'PRIVATE').upper() == 'PUBLIC' and (event.publication_status or 'DRAFT').upper() == 'PUBLISHED'
+        if is_public:
+            return _build(
+                'event_public',
+                requires_auth=False,
+                open_url=f"{public_base}/open?type=event&id={event.id}",
+                deeplink=f"tore://open?type=event&id={event.id}",
+                titleHint=event.name,
+                eventHint=event.name,
+            )
+        return _build(
+            'join',
+            requires_auth=True,
+            open_url=f"{public_base}/open?type=join&code={normalized}",
+            deeplink=f"tore://open?type=join&code={normalized}",
+            titleHint='Event privé TORÈ',
+        )
+
     invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == normalized).order_by(EventStaffInviteCode.created_at.desc()).first()
-    if invite is not None:
+    if invite is not None and linked_type in {'', 'staff_invite'}:
         status = _staff_invite_status(invite).lower()
         mapped = 'ok' if status == 'active' else ('expired' if status == 'expired' else 'revoked')
-        return {'kind': 'staff_invite', 'requiresAuth': True, 'status': mapped, 'titleHint': 'Invitation staff TORÈ', 'openUrl': f"{_public_app_base_url()}/open?type=staff_invite&code={normalized}"}
+        return _build(
+            'staff_invite',
+            requires_auth=True,
+            status=mapped,
+            open_url=f"{public_base}/open?type=staff_invite&code={normalized}",
+            deeplink=f"tore://open?type=staff_invite&code={normalized}",
+            expires_at=invite.expires_at,
+            titleHint='Invitation staff TORÈ',
+        )
+
+    if backup_event_id is not None and backup_code:
+        event_ref = db.get(Event, backup_event_id)
+        return _build(
+            'staff_backup',
+            requires_auth=True,
+            open_url=f"{public_base}/open?type=staff_backup&eventId={backup_event_id}&code={backup_code}",
+            deeplink=f"tore://open?type=staff_backup&eventId={backup_event_id}&code={backup_code}",
+            titleHint='Backup staff TORÈ',
+            expiresAt=None if event_ref is None else None,
+        )
 
     org_invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(normalized)).first()
-    if org_invite is not None:
+    if org_invite is not None and linked_type in {'', 'orga_invite'}:
         org = db.get(Organization, org_invite.org_id)
         status = (org_invite.status or 'ACTIVE').upper()
         if status == 'REVOKED':
-            return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'revoked'}
-        if org_invite.expires_at is not None and org_invite.expires_at <= now_utc():
-            return {'kind': 'orga_invite', 'requiresAuth': True, 'status': 'expired'}
+            return _build('orga_invite', requires_auth=True, status='revoked')
+        if org_invite.expires_at is not None and org_invite.expires_at <= now:
+            return _build('orga_invite', requires_auth=True, status='expired', expires_at=org_invite.expires_at)
         public = org is not None and (org.visibility or 'PUBLIC').upper() == 'PUBLIC'
-        return {'kind': 'orga_invite', 'requiresAuth': not public, 'status': 'ok', 'orgHint': (org.name if public and org else None), 'openUrl': f"{_public_app_base_url()}/open?type=orga_invite&code={normalized}"}
+        return _build(
+            'orga_invite',
+            requires_auth=not public,
+            open_url=f"{public_base}/open?type=orga_invite&code={normalized}",
+            deeplink=f"tore://open?type=orga_invite&code={normalized}",
+            expires_at=org_invite.expires_at,
+            orgHint=(org.name if public and org else None),
+        )
 
-    return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid'}
+    return {'kind': 'unknown', 'requiresAuth': False, 'status': 'invalid', 'normalizedCode': normalized, 'actionHint': 'ENTER_CODE'}
+
+
+@app.post('/codes/consume')
+def consume_code(
+    payload: CodesConsumeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias='Idempotency-Key'),
+):
+    key = ensure_idempotency_key(idempotency_key)
+    existing = db.query(CodeConsumeIdempotency).filter(
+        CodeConsumeIdempotency.actor_user_id == user.id,
+        CodeConsumeIdempotency.idempotency_key == key,
+    ).first()
+    if existing is not None:
+        return existing.response_json
+
+    normalized = canonicalize_manual_code(payload.code)
+    if not normalized:
+        raise HTTPException(status_code=400, detail={'reason': 'invalid_code'})
+
+    backup_event_id: Optional[int] = None
+    backup_code = ''
+    if ':' in normalized:
+        left, right = normalized.split(':', 1)
+        if left.isdigit() and right:
+            backup_event_id = int(left)
+            backup_code = _normalize_backup_code(right)
+
+    public_base = _public_app_base_url()
+    response: dict[str, Any]
+    kind = 'unknown'
+    event_for_guard: Optional[int] = None
+
+    event = db.query(Event).filter(Event.event_code == normalized).first()
+    if event is not None:
+        kind = 'event_public' if ((event.visibility or 'PRIVATE').upper() == 'PUBLIC' and (event.publication_status or 'DRAFT').upper() == 'PUBLISHED') else 'join'
+        if kind == 'event_public':
+            event_for_guard = event.id
+        response = {
+            'ok': True,
+            'kind': kind,
+            'result': _apply_event_join(db, event=event, user=user, idempotency_key=key, accepted_charter_version=None),
+            'openUrl': f"{public_base}/open?type={'event&id='+str(event.id) if kind == 'event_public' else 'join&code='+normalized}",
+            'status': 'consumed',
+        }
+    elif backup_event_id is not None and backup_code:
+        kind = 'staff_backup'
+        event_for_guard = backup_event_id
+        event = db.get(Event, backup_event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail={'reason': 'event_not_found'})
+        _guard_event_write_runtime(db, backup_event_id, critical_write=True)
+        code_hash = _hash_staff_backup_code(backup_event_id, backup_code)
+        row = db.query(EventStaffBackupCode).filter(EventStaffBackupCode.event_id == backup_event_id, EventStaffBackupCode.code_hash == code_hash).order_by(EventStaffBackupCode.created_at.desc()).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail={'reason': 'backup_not_found'})
+        if _staff_backup_status(row) != 'ACTIVE':
+            response = {'ok': True, 'kind': kind, 'status': 'already-consumed'}
+        else:
+            role = (row.role or 'HELPER').lower()
+            staff = db.query(EventStaff).filter(EventStaff.event_id == backup_event_id, EventStaff.user_id == user.id).first()
+            if staff is None:
+                db.add(EventStaff(event_id=backup_event_id, user_id=user.id, role=role, is_active=True, created_at=now_utc(), created_by_user_id=row.created_by))
+            else:
+                staff.role = role
+                staff.is_active = True
+                staff.revoked_at = None
+                staff.revoked_by_user_id = None
+            row.used_at = now_utc()
+            row.used_by = user.id
+            row.status = 'USED'
+            response = {'ok': True, 'kind': kind, 'status': 'consumed', 'eventId': backup_event_id, 'role': (row.role or role).upper()}
+    else:
+        invite = db.query(EventStaffInviteCode).filter(EventStaffInviteCode.code == normalized).order_by(EventStaffInviteCode.created_at.desc()).first()
+        if invite is not None:
+            kind = 'staff_invite'
+            event_for_guard = invite.event_id
+            _guard_event_write_runtime(db, invite.event_id, critical_write=True)
+            if _staff_invite_status(invite) != 'ACTIVE':
+                response = {'ok': True, 'kind': kind, 'status': 'already-consumed'}
+            else:
+                role = (invite.role or 'HELPER').lower()
+                staff = db.query(EventStaff).filter(EventStaff.event_id == invite.event_id, EventStaff.user_id == user.id).first()
+                if staff is None:
+                    db.add(EventStaff(event_id=invite.event_id, user_id=user.id, role=role, is_active=True, created_at=now_utc(), created_by_user_id=invite.created_by))
+                else:
+                    staff.role = role
+                    staff.is_active = True
+                    staff.revoked_at = None
+                    staff.revoked_by_user_id = None
+                response = {'ok': True, 'kind': kind, 'status': 'consumed', 'eventId': invite.event_id, 'role': (invite.role or role).upper()}
+        else:
+            org_invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == _orga_invite_code_hash(normalized)).first()
+            if org_invite is not None:
+                kind = 'orga_invite'
+                now = now_utc()
+                if org_invite.status != 'ACTIVE' or (org_invite.expires_at and org_invite.expires_at < now):
+                    response = {'ok': True, 'kind': kind, 'status': 'already-consumed'}
+                else:
+                    target_role = _orga_invite_target_role(org_invite.invite_type)
+                    membership = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_invite.org_id, OrganizationMembership.user_id == user.id).first()
+                    already = membership is not None and membership.status == 'ACTIVE' and _ORGA_ROLE_RANK.get((membership.role or 'FOLLOWER').upper(), 0) >= _ORGA_ROLE_RANK.get(target_role, 0)
+                    if membership is None:
+                        membership = OrganizationMembership(organization_id=org_invite.org_id, user_id=user.id, role=target_role, status='ACTIVE', joined_at=now, updated_at=now, created_by_user_id=org_invite.created_by_user_id, created_at=now)
+                        db.add(membership)
+                    elif not already:
+                        membership.role = target_role
+                        membership.status = 'ACTIVE'
+                        membership.updated_at = now
+                    response = {'ok': True, 'kind': kind, 'status': ('already-consumed' if already else 'consumed'), 'organization_id': org_invite.org_id, 'role': membership.role}
+            else:
+                response = {'ok': True, 'kind': 'unknown', 'status': 'pending', 'normalizedCode': normalized}
+
+    db.add(CodeConsumeIdempotency(actor_user_id=user.id, idempotency_key=key, kind=kind, code_suffix_hash=_manual_code_suffix_hash(normalized), response_json=response))
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role='app_user',
+        action='code_consumed',
+        entity_type='manual_code',
+        entity_id=(kind or 'unknown'),
+        event_id=event_for_guard,
+        bar_id=None,
+        idempotency_key=key,
+        payload={'kind': kind, 'status': response.get('status'), 'suffixHash': _manual_code_suffix_hash(normalized)},
+    )
+    db.commit()
+    return response
 
 
 @app.post("/events/{event_id}/staff_invite_code")
@@ -10023,7 +10210,7 @@ def join_orga_by_code(
     if idem:
         return idem.response_json
 
-    code = payload.code.strip().upper()
+    code = canonicalize_manual_code(payload.code)
     invite = db.query(OrganizationInviteCode).filter(OrganizationInviteCode.code == code).first()
     now = now_utc()
     if not invite:
@@ -10253,7 +10440,7 @@ def join_orga_by_invite(
     client_ip = (request.client.host if request.client else "unknown")
     enforce_rate_limit("orga_invite_join", f"{user.id}:{client_ip}")
 
-    normalized = payload.code.strip().upper()
+    normalized = canonicalize_manual_code(payload.code)
     code_hash = _orga_invite_code_hash(normalized)
     invite = db.query(OrganizationInviteLink).filter(OrganizationInviteLink.code_hash == code_hash).first()
     now = now_utc()
