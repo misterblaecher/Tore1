@@ -41,7 +41,7 @@ def test_codes_preview_join_public_and_private_safe_hints():
 
     pub_preview = client.get(f"/codes/preview?code={pub['event_code']}")
     assert pub_preview.status_code == 200
-    assert pub_preview.json()['kind'] == 'join'
+    assert pub_preview.json()['kind'] == 'event_public'
     assert pub_preview.json()['requiresAuth'] is False
     assert pub_preview.json()['status'] == 'ok'
 
