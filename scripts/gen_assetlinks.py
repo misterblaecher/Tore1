@@ -96,7 +96,14 @@ def extract_sha256(keystore_path: Path, key_alias: str) -> str:
     if not match:
         raise RuntimeError("SHA256 fingerprint not found in keytool output")
 
-    return match.group(1).replace(":", "").upper()
+    return normalize_sha256_fingerprint(match.group(1))
+
+
+def normalize_sha256_fingerprint(fingerprint: str) -> str:
+    compact = re.sub(r"[^0-9A-Fa-f]", "", fingerprint)
+    if len(compact) != 64:
+        raise RuntimeError("Invalid SHA256 fingerprint format in keytool output")
+    return ":".join(compact[i : i + 2] for i in range(0, len(compact), 2)).upper()
 
 
 def main() -> int:
