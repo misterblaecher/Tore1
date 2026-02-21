@@ -32,7 +32,8 @@ class AuthRepository {
     try {
       return await getMe();
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) return null;
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) return null;
       rethrow;
     }
   }
