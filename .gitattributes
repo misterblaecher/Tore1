@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep JAR files binary to avoid line-ending/filter corruption.
+*.jar -text
+android/gradle/wrapper/gradle-wrapper.jar -text
+tore/app/android/gradle/wrapper/gradle-wrapper.jar -text

@@ -70,11 +70,19 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=
+set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
 
+if not exist "%CLASSPATH%" (
+  echo. 1>&2
+  echo ERROR: Missing Gradle wrapper JAR: %CLASSPATH% 1>&2
+  echo To restore it locally on Windows: 1>&2
+  echo   flutter create _tmp_wrapper 1>&2
+  echo   copy /Y _tmp_wrapper\android\gradle\wrapper\gradle-wrapper.jar android\gradle\wrapper\gradle-wrapper.jar 1>&2
+  goto fail
+)
 
 @rem Execute Gradle
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %*
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
 
 :end
 @rem End local scope for the variables with windows NT shell
