@@ -10,6 +10,11 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    if (options.extra['skipAuth'] == true) {
+      handler.next(options);
+      return;
+    }
+
     final token = await tokenStorage.readToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';

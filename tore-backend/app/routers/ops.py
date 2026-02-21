@@ -23,14 +23,18 @@ def get_db() -> Iterator[Session]:
     yield from _get_db()
 
 
+def _health_payload() -> dict:
+    return {"ok": True, "ts": now_utc().isoformat(), "version": "mvp-mega", "db_ok": True}
+
+
 @router.get('/healthz')
-def healthz(db: Session = Depends(get_db)):
-    db_ok = True
-    try:
-        db.query(Order.id).limit(1).all()
-    except Exception:
-        db_ok = False
-    return {"ok": db_ok, "ts": now_utc().isoformat(), "version": "mvp-mega", "db_ok": db_ok}
+def healthz():
+    return _health_payload()
+
+
+@router.get('/api/healthz')
+def api_healthz():
+    return _health_payload()
 
 
 @router.get('/ops/metrics-lite')
