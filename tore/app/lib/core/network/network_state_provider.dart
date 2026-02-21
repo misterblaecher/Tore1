@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/health/data/health_repository.dart';
 import '../../features/health/presentation/health_providers.dart';
 
 enum NetworkState { online, degraded, offline }
@@ -58,19 +59,21 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
   Future<void> refresh() async {
     final started = DateTime.now();
     try {
-      final dio = ref.read(healthRepositoryProvider).api.dio;
-      final response = await dio.get('/healthz', options: Options(receiveTimeout: const Duration(seconds: 6)));
+      final result = await ref.read(healthRepositoryProvider).pingWithPolicy(maxRetries: 1, receiveTimeout: const Duration(seconds: 30));
       final latency = DateTime.now().difference(started);
-      final code = response.statusCode ?? 0;
-      if (code < 200 || code >= 300) {
-        _registerFailure('health_http_$code');
+      if (result.reachability == HealthReachability.offlineConfirmed) {
+        _registerFailure('socket_offline');
         return;
       }
-      if (latency > const Duration(seconds: 3)) {
+      if (!result.isOnline) {
+        _registerFailure('health_unconfirmed');
+        return;
+      }
+      if (result.reachability == HealthReachability.slow || latency > const Duration(seconds: 3)) {
         state = state.copyWith(
           state: NetworkState.degraded,
           lastSuccessAt: DateTime.now(),
-          reason: 'high_latency',
+          reason: result.reachability == HealthReachability.slow ? 'api_slow' : 'high_latency',
           consecutiveFailures: 0,
         );
         return;
@@ -82,6 +85,9 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
         consecutiveFailures: 0,
       );
     } catch (_) {
+      if (kDebugMode) {
+        debugPrint('[network] health refresh failed');
+      }
       _registerFailure('health_error');
     }
   }

@@ -12,6 +12,7 @@ class ApiClient {
 
   final Dio dio;
   final TokenStorage tokenStorage;
+  bool hasSuccessfulRequest = false;
 
   ApiClient._internal(this.dio, this.tokenStorage);
 
@@ -62,6 +63,18 @@ class ApiClient {
       ),
     );
     dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: 1));
+
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onResponse: (response, handler) {
+          final code = response.statusCode ?? 0;
+          if (code >= 200 && code < 400) {
+            _instance?.hasSuccessfulRequest = true;
+          }
+          handler.next(response);
+        },
+      ),
+    );
 
     // Logs only in debug (and can be disabled with --dart-define=HTTP_LOGS=false)
     if (AppConfig.enableHttpLogs) {

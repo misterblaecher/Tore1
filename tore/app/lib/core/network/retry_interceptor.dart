@@ -16,6 +16,10 @@ class RetryInterceptor extends Interceptor {
   Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
     final req = err.requestOptions;
 
+    if (req.extra['skipRetry'] == true) {
+      return handler.next(err);
+    }
+
     final current = (req.extra['retry_count'] as int?) ?? 0;
     if (current >= maxRetries) {
       return handler.next(err);
