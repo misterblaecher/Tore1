@@ -51,6 +51,7 @@ import OpenInApp from './pages/OpenInApp'
 import PrintSharePack from './pages/PrintSharePack'
 import StaffBackupPrint from './pages/StaffBackupPrint'
 import EventPublicLanding from './pages/EventPublicLanding'
+import DevStatus from './pages/DevStatus'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -86,6 +87,7 @@ export default function App() {
       <Route path="/open" element={<OpenInApp />} />
       <Route path="/event/:eventId" element={<EventPublicLanding />} />
       <Route path="/share/event/:eventId/print" element={<PrintSharePack managed={false} />} />
+            <Route path="/dev/status" element={<DevStatus />} />
 
       <Route
         path="/admin/audit"

@@ -45,6 +45,7 @@ def test_shortlinks_create_returns_fallback_open_url():
     body = created.json()
     assert body['fallbackOpenUrl'] == body['openUrl']
     assert body['fallbackOpenUrl'].startswith('http')
+    assert '/open?' in body['fallbackOpenUrl']
 
 def test_shortlinks_redirect_302_to_open():
     token = _guest('owner')
@@ -53,7 +54,9 @@ def test_shortlinks_redirect_302_to_open():
     slug = created.json()['slug']
     resolved = client.get(f'/s/{slug}', follow_redirects=False)
     assert resolved.status_code == 302
-    assert '/open?type=event&id=' in (resolved.headers.get('location') or '')
+    location = resolved.headers.get('location') or ''
+    assert '/open?type=event&id=' in location
+    assert '/s/' not in location
 
 
 def test_shortlinks_expired_404():

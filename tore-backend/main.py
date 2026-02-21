@@ -16,6 +16,7 @@ import threading
 import time
 import re
 import uuid
+from dataclasses import asdict, dataclass
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
@@ -33,7 +34,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
-from app.services.rate_limit_service import record_status_code, enforce_rate_limit
+from app.services.rate_limit_service import metrics_lite, record_status_code, enforce_rate_limit
 from models import (
     Bar,
     Event,
@@ -174,6 +175,99 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 def _strict_dev_env_enabled() -> bool:
     return (os.getenv("ENV") or "").strip().upper() == "DEV"
+
+
+@dataclass
+class EnvReport:
+    env: str
+    missing: list[str]
+    warnings: list[str]
+
+
+def _resolved_env_name() -> str:
+    raw = (os.getenv("TORE_ENV") or os.getenv("ENV") or "DEV").strip().upper()
+    if raw in {"PRODUCTION", "PROD"}:
+        return "PROD"
+    if raw in {"DEVELOPMENT", "DEV", "TEST"}:
+        return "DEV"
+    return raw or "DEV"
+
+
+def validate_env_or_warn() -> EnvReport:
+    env_name = _resolved_env_name()
+    is_prod = env_name == "PROD"
+    missing: list[str] = []
+    warnings: list[str] = []
+
+    if env_name not in {"DEV", "PROD", "TEST"}:
+        warnings.append(f"ENV has unexpected value '{env_name}'")
+
+    db_url = (os.getenv("DATABASE_URL") or "").strip()
+    if not db_url:
+        if is_prod:
+            missing.append("DATABASE_URL")
+        else:
+            warnings.append("DATABASE_URL missing: sqlite dev fallback will be used")
+
+    public_url = (os.getenv("PUBLIC_URL") or "").strip()
+    base_url = (os.getenv("BASE_URL") or "").strip()
+    if not (public_url or base_url):
+        if is_prod:
+            missing.append("PUBLIC_URL/BASE_URL")
+        else:
+            warnings.append("PUBLIC_URL/BASE_URL missing: using TORE_PUBLIC_APP_URL/default")
+
+    qr_ring = (os.getenv("TORE_QR_SIGNING_KEYS") or "").strip()
+    if not qr_ring:
+        if is_prod:
+            missing.append("TORE_QR_SIGNING_KEYS")
+        else:
+            warnings.append("TORE_QR_SIGNING_KEYS missing: fallback secret strategy in use")
+    else:
+        ok, msg = _validate_qr_signing_keys_format()
+        if not ok:
+            missing.append(f"TORE_QR_SIGNING_KEYS ({msg})")
+        else:
+            parsed = [item.strip() for item in qr_ring.split(",") if item.strip()]
+            if len(parsed) < 2:
+                warnings.append("TORE_QR_SIGNING_KEYS rotation looks weak (<2 keys)")
+
+    cors_raw = (os.getenv("CORS_ORIGINS") or os.getenv("TORE_CORS_ORIGINS") or "").strip()
+    if is_prod:
+        if not cors_raw:
+            missing.append("CORS_ORIGINS/TORE_CORS_ORIGINS")
+        elif cors_raw == "*":
+            missing.append("CORS_ORIGINS cannot be '*' in PROD")
+    elif not cors_raw:
+        warnings.append("CORS_ORIGINS/TORE_CORS_ORIGINS missing: localhost defaults are enabled")
+
+    google_enabled = _env_bool("TORE_AUTH_GOOGLE_ENABLED") or _env_bool("GOOGLE_AUTH_ENABLED")
+    if google_enabled and not (os.getenv("GOOGLE_CLIENT_ID") or "").strip():
+        missing.append("GOOGLE_CLIENT_ID")
+
+    retention_raw = (os.getenv("RETENTION_DAYS") or os.getenv("TORE_PRIVACY_RETENTION_DAYS") or "").strip()
+    if not retention_raw:
+        warnings.append("RETENTION_DAYS/TORE_PRIVACY_RETENTION_DAYS missing: default retention=30")
+    else:
+        try:
+            if int(retention_raw) < 1:
+                missing.append("RETENTION_DAYS must be >= 1")
+        except ValueError:
+            missing.append("RETENTION_DAYS must be an integer")
+
+    report = EnvReport(env=env_name, missing=missing, warnings=warnings)
+
+    for warning in warnings:
+        logging.warning(f"startup.env.warning={warning}")
+
+    if is_prod and missing:
+        raise RuntimeError(f"Critical environment configuration is missing: {', '.join(missing)}")
+
+    if missing:
+        for item in missing:
+            logging.warning(f"startup.env.missing={item}")
+
+    return report
 
 
 def _debug_git_sha() -> Optional[str]:
@@ -1885,6 +1979,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
+    validate_env_or_warn()
     _startup_sanity_checks()
     if _should_bootstrap_on_startup():
         ensure_seed()
@@ -3355,6 +3450,42 @@ def debug_info(db: Session = Depends(get_db)):
         "gitSha": _debug_git_sha(),
         "signingKeyIds": _debug_signing_key_ids(),
         "modulesFlagsCount": modules_flags_count,
+    }
+
+
+@app.get("/debug/health-ui")
+def debug_health_ui(db: Session = Depends(get_db)):
+    if not _strict_dev_env_enabled():
+        raise HTTPException(404, "Not found")
+
+    env_report = validate_env_or_warn()
+    modules_flags = db.query(GlobalFeatureFlag).all()
+    flags_enabled = sorted([flag.key for flag in modules_flags if bool(flag.enabled)])
+
+    route_signatures = {(getattr(route, "path", None), tuple(sorted(getattr(route, "methods", set()) or set()))) for route in app.routes}
+
+    def _route_exists(path: str, method: str) -> bool:
+        return (path, tuple(sorted({method}))) in route_signatures or any(
+            route_path == path and method in methods for route_path, methods in route_signatures
+        )
+
+    return {
+        "serverTime": now_utc().isoformat(),
+        "gitSha": _debug_git_sha(),
+        "env": env_report.env,
+        "publicUrl": (os.getenv("PUBLIC_URL") or "").strip() or None,
+        "baseUrl": _public_app_base_url(),
+        "signingKeyIds": _debug_signing_key_ids(),
+        "modulesFlagsCount": len(modules_flags),
+        "flagsEnabled": flags_enabled,
+        "recentRateLimitHits": metrics_lite(),
+        "routesEnabled": {
+            "open": _route_exists("/open", "GET"),
+            "shortlinks": _route_exists("/shortlinks", "POST"),
+            "codes_preview": _route_exists("/codes/preview", "GET"),
+            "codes_consume": _route_exists("/codes/consume", "POST"),
+        },
+        "envReport": asdict(env_report),
     }
 
 

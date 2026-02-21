@@ -89,3 +89,11 @@ Puis relancer:
 1. `clean_hard.ps1`
 2. `flutter pub get`
 3. `flutter run ...`
+
+## Diagnostics DEV (PR55)
+
+Sans build Flutter dans cette PR, la sanity à conserver côté app est:
+
+- URL API visible au runtime via logs de boot (`TORE_API_BASE_URL` / `API_BASE_URL`).
+- Éléments diagnostics non sensibles uniquement (env, connectivité, états modules), jamais de token/secret.
+- Toute surface diagnostics doit rester DEV-only (équivalent `kDebugMode` / flavor dev), inaccessible en production.
