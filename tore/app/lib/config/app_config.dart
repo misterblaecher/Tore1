@@ -12,6 +12,7 @@ class AppConfig {
 
   static const String _apiBaseUrlDefine = 'TORE_API_BASE_URL';
   static const String _apiBaseUrlCompatDefine = 'API_BASE_URL';
+  static const String _flutterFlavorDefine = 'FLUTTER_APP_FLAVOR';
   static const String _environmentDefine = 'TORE_ENV';
   static const String _defaultEnvironment = 'dev';
 
@@ -20,10 +21,12 @@ class AppConfig {
   factory AppConfig.fromDartDefines() {
     const definedApiBaseUrl = String.fromEnvironment(_apiBaseUrlDefine, defaultValue: '');
     const definedApiBaseUrlCompat = String.fromEnvironment(_apiBaseUrlCompatDefine, defaultValue: '');
+    const definedFlavor = String.fromEnvironment(_flutterFlavorDefine, defaultValue: _defaultEnvironment);
     const definedEnv = String.fromEnvironment(_environmentDefine, defaultValue: _defaultEnvironment);
-    final normalizedEnv = (definedEnv.isEmpty ? _defaultEnvironment : definedEnv).toLowerCase();
+    final normalizedFlavor = (definedFlavor.isEmpty ? _defaultEnvironment : definedFlavor).toLowerCase();
+    final normalizedEnv = (definedEnv.isEmpty ? normalizedFlavor : definedEnv).toLowerCase();
 
-    final fallbackBaseUrl = _defaultBaseUrlForCurrentPlatform;
+    final fallbackBaseUrl = _defaultBaseUrlForFlavor(normalizedFlavor);
     final apiBaseUrl = _resolveApiBaseUrl(
       primary: definedApiBaseUrl,
       compat: definedApiBaseUrlCompat,
@@ -43,22 +46,34 @@ class AppConfig {
   }) {
     final normalizedPrimary = primary.trim();
     if (normalizedPrimary.isNotEmpty) {
-      return normalizedPrimary;
+      return _normalizeBaseUrl(normalizedPrimary);
     }
 
     final normalizedCompat = compat.trim();
     if (normalizedCompat.isNotEmpty) {
-      return normalizedCompat;
+      return _normalizeBaseUrl(normalizedCompat);
     }
 
-    return fallback;
+    return _normalizeBaseUrl(fallback);
   }
 
-  static String get _defaultBaseUrlForCurrentPlatform {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000';
+  static String _defaultBaseUrlForFlavor(String flavor) {
+    switch (flavor) {
+      case 'dev':
+        return 'https://tore-backend.onrender.com';
+      case 'prod':
+        // TODO: replace with dedicated production API base URL when available.
+        return 'https://tore-backend.onrender.com';
+      default:
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          return 'http://10.0.2.2:8000';
+        }
+        return 'http://localhost:8000';
     }
-    return 'http://localhost:8000';
+  }
+
+  static String _normalizeBaseUrl(String url) {
+    return url.replaceFirst(RegExp(r'/+$'), '');
   }
 
   /// Enable verbose HTTP logs (only in debug by default).
