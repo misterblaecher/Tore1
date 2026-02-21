@@ -25,6 +25,8 @@ function Run-Backend {
     Push-Location $rootDir
     try {
       python scripts/smoke_backend.py
+      Step "Release smoke: python scripts/smoke_release.py (BACKEND_URL=$($env:BACKEND_URL))"
+      python scripts/smoke_release.py
     }
     finally {
       Pop-Location
@@ -32,6 +34,7 @@ function Run-Backend {
   }
   else {
     Write-Host 'SKIP backend smoke (BACKEND_URL not set)'
+    Write-Host 'SKIP release smoke (BACKEND_URL not set)'
   }
 }
 

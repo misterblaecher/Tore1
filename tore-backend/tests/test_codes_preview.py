@@ -82,6 +82,7 @@ def test_codes_preview_unknown_string_is_invalid_unknown():
     assert preview.json()['kind'] == 'unknown'
     assert preview.json()['status'] == 'invalid'
     assert preview.json()['openUrl'].endswith('/open?type=join')
+    assert '/open?' in preview.json()['openUrl']
 
 
 def test_codes_preview_private_join_no_title_leak_requires_auth():

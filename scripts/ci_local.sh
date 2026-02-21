@@ -24,8 +24,15 @@ run_backend() {
       cd "$ROOT_DIR"
       BACKEND_URL="$BACKEND_URL" python scripts/smoke_backend.py
     )
+
+    step "Release smoke: python scripts/smoke_release.py (BACKEND_URL=$BACKEND_URL)"
+    (
+      cd "$ROOT_DIR"
+      BACKEND_URL="$BACKEND_URL" PUBLIC_URL="${PUBLIC_URL:-}" ADMIN_TOKEN="${ADMIN_TOKEN:-}" USER_TOKEN="${USER_TOKEN:-}" python scripts/smoke_release.py
+    )
   else
     echo "SKIP backend smoke (BACKEND_URL not set)"
+    echo "SKIP release smoke (BACKEND_URL not set)"
   fi
 }
 
