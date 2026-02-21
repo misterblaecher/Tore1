@@ -96,7 +96,7 @@ def extract_sha256(keystore_path: Path, key_alias: str) -> str:
     if not match:
         raise RuntimeError("SHA256 fingerprint not found in keytool output")
 
-    return match.group(1).replace(":", "").upper()
+    return match.group(1).upper()
 
 
 def main() -> int:
