@@ -29,9 +29,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc, case, text, or_, and_
+from sqlalchemy import select, func, desc, case, text, or_, and_, Integer, String, DateTime, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, Mapped, mapped_column
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
 from app.services.rate_limit_service import metrics_lite, record_status_code, enforce_rate_limit
@@ -86,7 +86,6 @@ from models import (
     EventStaffInviteIdempotency,
     EventStaffBackupCode,
     EventStaffBackupIdempotency,
-    CodeConsumeIdempotency,
     ShortLink,
     ShortLinkIdempotency,
     TicketTransfer,
@@ -122,6 +121,29 @@ from models import (
     UserSanction,
     GlobalFeatureFlag,
 )
+
+
+
+# Backward-compatible import guard for deployments where this model may be missing
+# from the models module (e.g. stale image or partial rollout).
+import models as _models_module
+
+CodeConsumeIdempotency = getattr(_models_module, "CodeConsumeIdempotency", None)
+if CodeConsumeIdempotency is None:
+    class CodeConsumeIdempotency(Base):
+        __tablename__ = "code_consume_idempotency"
+        __table_args__ = (
+            UniqueConstraint("actor_user_id", "idempotency_key", name="uq_code_consume_idem"),
+            {"extend_existing": True},
+        )
+
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+        idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+        kind: Mapped[str] = mapped_column(String(32), index=True)
+        code_suffix_hash: Mapped[str] = mapped_column(String(64), index=True)
+        response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+        created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 from partner_auth import router as partner_auth_router, current_identity as current_partner_identity
 from app.db.sqlite_compat import ensure_sqlite_compat
