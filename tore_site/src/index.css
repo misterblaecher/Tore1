@@ -1,0 +1,270 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TORÈ — Landing page */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    /* === PALETTE RITUELLE === */
+    --background: 0 0% 3%;          /* Noir abyssal */
+    --foreground: 40 20% 90%;       /* Ivoire chaud */
+
+    --card: 0 20% 6%;               /* Noir braisé */
+    --card-foreground: 40 20% 90%;
+
+    --popover: 0 15% 7%;
+    --popover-foreground: 40 20% 90%;
+
+    --primary: 8 80% 48%;           /* Rouge brasier */
+    --primary-foreground: 40 30% 95%;
+
+    --secondary: 0 10% 10%;         /* Noir cendré */
+    --secondary-foreground: 40 20% 85%;
+
+    --muted: 0 8% 12%;
+    --muted-foreground: 30 10% 55%;
+
+    --accent: 40 70% 50%;           /* Or sacré */
+    --accent-foreground: 0 0% 5%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 30 15% 15%;           /* Bordure braise */
+    --input: 0 10% 14%;
+    --ring: 40 70% 50%;             /* Ring doré */
+
+    --radius: 0.5rem;
+
+    /* === TOKENS TORÈ === */
+    --gold: 40 70% 50%;
+    --gold-light: 42 80% 65%;
+    --gold-dark: 38 60% 35%;
+    --ember: 8 80% 48%;
+    --ember-deep: 0 60% 18%;
+    --ember-glow: 10 90% 55%;
+    --crimson: 350 70% 35%;
+    --surface: 0 15% 7%;
+    --surface-hover: 0 20% 10%;
+  }
+
+  .dark {
+    --background: 0 0% 3%;
+    --foreground: 40 20% 90%;
+    --card: 0 20% 6%;
+    --card-foreground: 40 20% 90%;
+    --popover: 0 15% 7%;
+    --popover-foreground: 40 20% 90%;
+    --primary: 8 80% 48%;
+    --primary-foreground: 40 30% 95%;
+    --secondary: 0 10% 10%;
+    --secondary-foreground: 40 20% 85%;
+    --muted: 0 8% 12%;
+    --muted-foreground: 30 10% 55%;
+    --accent: 40 70% 50%;
+    --accent-foreground: 0 0% 5%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 15% 15%;
+    --input: 0 10% 14%;
+    --ring: 40 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply dark;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  /* === TYPOGRAPHIE RITUELLE === */
+  .font-ritual {
+    font-family: 'Cinzel', serif;
+  }
+
+  /* === GLOW DORÉ === */
+  .glow-gold {
+    box-shadow: 0 0 15px hsl(var(--gold) / 0.3),
+                0 0 30px hsl(var(--gold) / 0.15),
+                0 0 60px hsl(var(--gold) / 0.07);
+  }
+
+  .glow-gold-sm {
+    box-shadow: 0 0 8px hsl(var(--gold) / 0.25),
+                0 0 20px hsl(var(--gold) / 0.1);
+  }
+
+  .text-gold-glow {
+    text-shadow: 0 0 10px hsl(var(--gold) / 0.4),
+                 0 0 30px hsl(var(--gold) / 0.2);
+  }
+
+  /* === GLOW BRAISE === */
+  .glow-ember {
+    box-shadow: 0 0 20px hsl(var(--ember) / 0.35),
+                0 0 40px hsl(var(--ember) / 0.15),
+                0 0 80px hsl(var(--ember) / 0.08);
+  }
+
+  .glow-ember-sm {
+    box-shadow: 0 0 10px hsl(var(--ember) / 0.3),
+                0 0 25px hsl(var(--ember) / 0.12);
+  }
+
+  .text-ember-glow {
+    text-shadow: 0 0 8px hsl(var(--ember) / 0.5),
+                 0 0 25px hsl(var(--ember) / 0.25);
+  }
+
+  /* === GRADIENTS === */
+  .gradient-ember {
+    background: radial-gradient(ellipse at center, hsl(var(--ember) / 0.2) 0%, transparent 65%);
+  }
+
+  .gradient-ritual {
+    background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(0 15% 5%) 50%, hsl(var(--background)) 100%);
+  }
+
+  .gradient-hero-ritual {
+    background: radial-gradient(ellipse at 50% 40%, hsl(var(--ember) / 0.25) 0%, hsl(var(--ember-deep) / 0.1) 40%, transparent 70%);
+  }
+
+  .gradient-gold {
+    background: linear-gradient(135deg, hsl(var(--gold-dark)), hsl(var(--gold)), hsl(var(--gold-light)));
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(135deg, hsl(var(--gold-dark)), hsl(var(--gold)), hsl(var(--gold-light)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* === GLASS RITUEL === */
+  .glass-ritual {
+    background: hsl(var(--surface) / 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--gold) / 0.1);
+  }
+
+  .glass-card {
+    background: hsl(var(--card) / 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* === TEXTURE GRAIN === */
+  .texture-grain {
+    position: relative;
+  }
+  .texture-grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* === ANIMATIONS RITUELLES === */
+  .animate-fade-in {
+    animation: fadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .animate-blur-in {
+    animation: blurIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .animate-ember-breathe {
+    animation: emberBreathe 4s ease-in-out infinite;
+  }
+
+  .animate-float-slow {
+    animation: floatSlow 6s ease-in-out infinite;
+  }
+
+  .animate-glow-pulse {
+    animation: glowPulse 3s ease-in-out infinite;
+  }
+
+  /* Staggered delays */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+  .delay-600 { animation-delay: 600ms; }
+  .delay-700 { animation-delay: 700ms; }
+  .delay-800 { animation-delay: 800ms; }
+}
+
+/* === KEYFRAMES === */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes blurIn {
+  from { opacity: 0; filter: blur(10px); transform: translateY(10px); }
+  to { opacity: 1; filter: blur(0); transform: translateY(0); }
+}
+
+@keyframes emberBreathe {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.03); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.05); }
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  33% { transform: translateY(-8px) rotate(1deg); }
+  66% { transform: translateY(-4px) rotate(-1deg); }
+}
+
+@keyframes particleDrift {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  20% { opacity: 0.6; }
+  80% { opacity: 0.3; }
+  100% { transform: translateY(-120px) translateX(30px); opacity: 0; }
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: hsl(var(--background)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--ember-deep)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--ember)); }
