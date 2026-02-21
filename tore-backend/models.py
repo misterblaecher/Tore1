@@ -227,6 +227,37 @@ class CodeConsumeIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+# Backward compatibility for deployments expecting this exact symbol.
+if "CodeConsumeIdempotency" not in globals():
+    for _candidate_name in (
+        "CodeConsumeRequest",
+        "CodeConsumePayload",
+        "CodeConsumeIdempotencyKey",
+        "IdempotencyKey",
+        "CodeConsumeInput",
+    ):
+        _candidate = globals().get(_candidate_name)
+        if _candidate is not None:
+            CodeConsumeIdempotency = _candidate
+            break
+
+if "CodeConsumeIdempotency" not in globals():
+    class CodeConsumeIdempotency(Base):
+        __tablename__ = "code_consume_idempotency"
+        __table_args__ = (
+            UniqueConstraint("actor_user_id", "idempotency_key", name="uq_code_consume_idem"),
+            {"extend_existing": True},
+        )
+
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        actor_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+        idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
+        kind: Mapped[str] = mapped_column(String(32), index=True)
+        code_suffix_hash: Mapped[str] = mapped_column(String(64), index=True)
+        response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+        created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class ShortLink(Base):
     __tablename__ = "short_links"
 
