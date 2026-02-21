@@ -77,6 +77,22 @@ function Run-Flutter {
   }
 }
 
+function Run-ReleaseLinksVerify {
+  if (-not $env:ANDROID_KEYSTORE_PATH) {
+    Write-Host 'SKIP release links verify (ANDROID_KEYSTORE_PATH not set)'
+    return
+  }
+
+  Step 'Release links verify: powershell scripts/verify_release_links.ps1'
+  Push-Location $rootDir
+  try {
+    powershell -ExecutionPolicy Bypass -File scripts/verify_release_links.ps1
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 function Run-GrepGuards {
   Step 'Grep guards'
 
@@ -98,6 +114,7 @@ Run-Backend
 Run-Portal
 Run-Flutter
 Run-GrepGuards
+Run-ReleaseLinksVerify
 
 Write-Host ''
 Write-Host 'ci_local checks completed successfully'

@@ -64,6 +64,19 @@ run_flutter() {
   fi
 }
 
+
+run_release_links_verify() {
+  if [[ -n "${ANDROID_KEYSTORE_PATH:-}" ]]; then
+    step "Release links verify: bash scripts/verify_release_links.sh"
+    (
+      cd "$ROOT_DIR"
+      bash scripts/verify_release_links.sh
+    )
+  else
+    echo "SKIP release links verify (ANDROID_KEYSTORE_PATH not set)"
+  fi
+}
+
 run_grep_guards() {
   step "Grep guards"
 
@@ -85,6 +98,7 @@ run_backend
 run_portal
 run_flutter
 run_grep_guards
+run_release_links_verify
 
 echo
 echo "ci_local checks completed successfully"
