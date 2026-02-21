@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import appIcon from "@/assets/app-icon.png";
@@ -25,10 +24,9 @@ function EmberParticles() {
 
 export function HeroSection() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center pt-20 pb-32 overflow-hidden texture-grain">
-      {/* Deep red radial background */}
+    <section className="relative min-h-screen flex items-center justify-center pt-20 pb-28 overflow-hidden">
       <div className="absolute inset-0 bg-background" />
-      <div className="absolute inset-0 gradient-hero-ritual" />
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-background/95 to-background" />
       
       {/* Circular ember halo behind logo */}
       <div className="absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] md:w-[700px] md:h-[700px]">
@@ -60,44 +58,39 @@ export function HeroSection() {
           </div>
         </motion.div>
 
-        {/* Title — serif épique doré */}
+        {/* Title */}
         <motion.h1 
-          className="font-ritual text-5xl md:text-7xl lg:text-8xl font-bold mb-6 leading-tight tracking-wide"
+          className="text-5xl md:text-7xl lg:text-8xl font-bold mb-6 leading-tight"
           initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.8, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
         >
-          <span className="text-gradient-gold text-gold-glow">TORÈ</span>
+          <span className="text-foreground">TORÈ</span>
         </motion.h1>
 
         {/* Tagline */}
         <motion.p 
-          className="font-ritual text-lg md:text-2xl text-foreground/80 tracking-widest uppercase mb-4"
+          className="text-lg md:text-2xl text-foreground/80 mb-4"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.6 }}
         >
-          L'app des soirées étudiantes
+          L’app pour organiser et vivre les soirées étudiantes.
         </motion.p>
 
         {/* Séparateur doré */}
-        <motion.div 
-          className="w-24 h-[2px] mx-auto mb-8 gradient-gold rounded-full"
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.8, delay: 0.8 }}
-        />
+        <motion.div className="w-24 h-[2px] mx-auto mb-8 bg-foreground/20 rounded-full" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.8, delay: 0.8 }} />
 
         {/* Subtitle */}
         <motion.p 
-          className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed"
+          className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.9 }}
         >
-          Découvre les events, rejoins ta soirée et aide ton comité à gérer le terrain.
+          On construit TORÈ module par module, en testant sur de vraies soirées.
           <br className="hidden md:block" />
-          <span className="text-foreground font-medium">Scanner rapide. Dashboard live. Modules fun.</span>
+          <span className="text-foreground font-medium">Tu veux tester ? Inscris‑toi à la bêta.</span>
         </motion.p>
 
         {/* CTAs */}
@@ -107,19 +100,30 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 1.1 }}
         >
-          <Link to="/contact">
-            <Button size="lg" className="h-14 px-8 text-lg font-semibold font-ritual tracking-wide bg-transparent border-2 border-accent text-accent hover:bg-accent hover:text-accent-foreground glow-gold-sm hover:glow-gold transition-all duration-500">
-              Rejoindre la bêta
-            </Button>
-          </Link>
-          <Link to="/produit">
-            <Button size="lg" variant="ghost" className="h-14 px-8 text-lg font-medium text-muted-foreground hover:text-foreground transition-all duration-300">
-              Voir les modules →
-            </Button>
-          </Link>
+          <Button
+            size="lg"
+            className="h-14 px-8 text-lg font-semibold"
+            onClick={() => {
+              localStorage.setItem("tore_waitlist_role", "student");
+              document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Je suis étudiant
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            className="h-14 px-8 text-lg font-semibold"
+            onClick={() => {
+              localStorage.setItem("tore_waitlist_role", "committee");
+              document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Je suis comité
+          </Button>
         </motion.div>
 
-        {/* Stats rituels */}
+        {/* Quick points */}
         <motion.div 
           className="grid grid-cols-3 gap-4 md:gap-8 max-w-xl mx-auto mt-20"
           initial={{ opacity: 0 }}
@@ -127,12 +131,12 @@ export function HeroSection() {
           transition={{ duration: 0.6, delay: 1.4 }}
         >
           {[
-            { value: "<1s", label: "Scan → action" },
+            { value: "Tests", label: "Soirées pilotes" },
             { value: "Offline", label: "Réseau faible" },
-            { value: "All‑in", label: "Pensé terrain" },
+            { value: "Ops", label: "Pensé terrain" },
           ].map((stat) => (
             <div key={stat.label} className="text-center group">
-              <p className="text-2xl md:text-3xl font-bold text-accent font-ritual group-hover:text-gold-glow transition-all duration-300">
+              <p className="text-2xl md:text-3xl font-bold text-foreground transition-all duration-300">
                 {stat.value}
               </p>
               <p className="text-xs md:text-sm text-muted-foreground mt-1">{stat.label}</p>

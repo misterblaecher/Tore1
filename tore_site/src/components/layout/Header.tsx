@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button";
 import logoFull from "@/assets/logo-full.png";
 
 const navLinks = [
-  { label: "Modules", href: "/produit" },
-  { label: "Étudiants", href: "/bars" },
-  { label: "Comités", href: "/comites" },
-  { label: "Soirées test", href: "/roadmap" },
-  { label: "FAQ", href: "/trust" },
+  { label: "Modules", href: "/#modules" },
+  { label: "Soirées test", href: "/#tests" },
+  { label: "Bêta", href: "/#waitlist" },
 ];
 
 export function Header() {
@@ -23,7 +21,10 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const isActive = (href: string) => location.pathname === href;
+  const isActive = (href: string) => {
+    if (href.startsWith("/#")) return location.hash === href.replace("/", "");
+    return location.pathname === href;
+  };
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
@@ -54,13 +55,8 @@ export function Header() {
 
         {/* Desktop CTA */}
         <div className="hidden md:flex items-center gap-4">
-          <Link to="/contact">
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-accent">
-              Contact
-            </Button>
-          </Link>
-          <Link to="/contact">
-            <Button size="sm" className="bg-transparent border border-accent text-accent hover:bg-accent hover:text-accent-foreground glow-gold-sm transition-all duration-300 font-ritual tracking-wider text-xs">
+          <Link to="/#waitlist">
+            <Button size="sm" className="text-xs font-semibold">
               Rejoindre la bêta
             </Button>
           </Link>
@@ -93,15 +89,8 @@ export function Header() {
               </Link>
             ))}
             <div className="flex flex-col gap-3 pt-4 border-t border-border">
-              <Link to="/contact" onClick={() => setIsOpen(false)}>
-                <Button variant="outline" className="w-full border-accent/30 text-accent hover:bg-accent hover:text-accent-foreground">
-                  Contact
-                </Button>
-              </Link>
-              <Link to="/contact" onClick={() => setIsOpen(false)}>
-                <Button className="w-full bg-transparent border border-accent text-accent hover:bg-accent hover:text-accent-foreground glow-gold-sm font-ritual tracking-wider">
-                  Rejoindre la bêta
-                </Button>
+              <Link to="/#waitlist" onClick={() => setIsOpen(false)}>
+                <Button className="w-full font-semibold">Rejoindre la bêta</Button>
               </Link>
             </div>
           </nav>

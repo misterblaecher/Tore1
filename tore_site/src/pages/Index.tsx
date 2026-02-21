@@ -1,10 +1,7 @@
 import { Header, Footer, StickyCTA } from "@/components/layout";
 import {
   HeroSection,
-  ValueCards,
-  ForWhoSection,
   FeaturesSection,
-  TrustSection,
   TeaserSection,
   DemoForm,
 } from "@/components/home";
@@ -16,10 +13,7 @@ const Index = () => {
       
       <main>
         <HeroSection />
-        <ValueCards />
-        <ForWhoSection />
         <FeaturesSection />
-        <TrustSection />
         <TeaserSection />
         <DemoForm />
       </main>

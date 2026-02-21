@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -21,12 +22,34 @@ import Cookies from "./pages/legal/Cookies";
 
 const queryClient = new QueryClient();
 
+function ScrollToHash() {
+  const { hash, pathname } = useLocation();
+
+  // Scroll to top on route change (without hash)
+  // Scroll to element when hash is present
+  // This makes in-page anchors work with react-router.
+  useEffect(() => {
+    if (hash) {
+      const id = hash.replace("#", "");
+      // small timeout to allow page render
+      setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+      }, 50);
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [hash, pathname]);
+
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <ScrollToHash />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/produit" element={<Produit />} />
