@@ -156,7 +156,7 @@ final isReadOnlyProvider = Provider<bool>((ref) {
 final meProvider = FutureProvider<AppUser>((ref) async {
   final session = ref.watch(authSessionProvider);
   if (session.status == AuthStatus.unauthenticated) {
-    throw const ApiException('Connexion requise', statusCode: 401);
+    throw ApiException('Connexion requise', statusCode: 401);
   }
   if (session.isGuest) {
     final guestId = await ref.read(authRepositoryProvider).api.tokenStorage.readGuestDeviceId();
