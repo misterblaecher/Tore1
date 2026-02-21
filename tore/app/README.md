@@ -29,3 +29,21 @@ Then run:
 ```powershell
 .\android\gradlew.bat -v
 ```
+
+## Run dev (Render)
+
+```bash
+flutter run --flavor dev --dart-define=TORE_API_BASE_URL=https://tore-backend.onrender.com
+```
+
+## Run dev (local)
+
+```bash
+flutter run --flavor dev --dart-define=TORE_API_BASE_URL=http://10.0.2.2:8000
+```
+
+## Run on Windows (Render)
+
+```bash
+flutter run -d windows --dart-define=TORE_API_BASE_URL=https://tore-backend.onrender.com
+```
