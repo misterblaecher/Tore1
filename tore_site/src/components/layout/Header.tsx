@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import logoFull from "@/assets/logo-full.png";
 
 const navLinks = [
+  { label: "Problème", href: "/#probleme" },
+  { label: "Solution", href: "/#solution" },
   { label: "Modules", href: "/#modules" },
-  { label: "Soirées test", href: "/#tests" },
-  { label: "Bêta", href: "/#waitlist" },
+  { label: "Positionnement", href: "/#positionnement" },
 ];
 
 export function Header() {
@@ -27,18 +28,16 @@ export function Header() {
   };
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-      scrolled 
-        ? "bg-background/90 backdrop-blur-lg border-b border-border/50" 
-        : "bg-transparent"
-    }`}>
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+        scrolled ? "bg-background/90 backdrop-blur-lg border-b border-border/50" : "bg-transparent"
+      }`}
+    >
       <div className="container flex items-center justify-between h-16 md:h-20">
-        {/* Logo */}
         <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <img src={logoFull} alt="TORÈ" className="h-8 md:h-10 w-auto" />
         </Link>
 
-        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
           {navLinks.map((link) => (
             <Link
@@ -53,16 +52,14 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Desktop CTA */}
         <div className="hidden md:flex items-center gap-4">
-          <Link to="/#waitlist">
+          <Link to="/bars">
             <Button size="sm" className="text-xs font-semibold">
-              Rejoindre la bêta
+              Accès Bar / Comité
             </Button>
           </Link>
         </div>
 
-        {/* Mobile Menu Button */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="md:hidden p-2 text-foreground hover:text-accent transition-colors"
@@ -72,7 +69,6 @@ export function Header() {
         </button>
       </div>
 
-      {/* Mobile Menu */}
       {isOpen && (
         <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border animate-fade-in">
           <nav className="container py-6 flex flex-col gap-4">
@@ -89,8 +85,8 @@ export function Header() {
               </Link>
             ))}
             <div className="flex flex-col gap-3 pt-4 border-t border-border">
-              <Link to="/#waitlist" onClick={() => setIsOpen(false)}>
-                <Button className="w-full font-semibold">Rejoindre la bêta</Button>
+              <Link to="/bars" onClick={() => setIsOpen(false)}>
+                <Button className="w-full font-semibold">Accès Bar / Comité</Button>
               </Link>
             </div>
           </nav>
