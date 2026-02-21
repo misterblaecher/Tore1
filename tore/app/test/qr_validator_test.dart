@@ -10,7 +10,6 @@ void main() {
     test('expired if local expiry is passed', () async {
       final payload = parser.parse('tore://join_event?event_id=1&exp=1');
       final validator = QrValidator(
-        null,
         resolveRaw: (_) async => const QrResolveResult(
           valid: true,
           type: 'join_event',
@@ -32,7 +31,6 @@ void main() {
     test('ok when not expired and backend valid', () async {
       final payload = parser.parse('tore://join_event?event_id=1');
       final validator = QrValidator(
-        null,
         resolveRaw: (_) async => const QrResolveResult(
           valid: true,
           type: 'join_event',
