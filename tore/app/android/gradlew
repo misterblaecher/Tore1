@@ -114,7 +114,7 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
-CLASSPATH="\\\"\\\""
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
 
 # Determine the Java command to use to start the JVM.
@@ -210,10 +210,18 @@ DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 #   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
 #     treated as '${Hostname}' itself on the command line.
 
+if [ ! -f "$CLASSPATH" ] ; then
+    die "ERROR: Missing Gradle wrapper JAR: $CLASSPATH
+
+To restore it locally:
+  flutter create _tmp_wrapper
+  cp _tmp_wrapper/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar"
+fi
+
 set -- \
         "-Dorg.gradle.appname=$APP_BASE_NAME" \
         -classpath "$CLASSPATH" \
-        -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
+        org.gradle.wrapper.GradleWrapperMain \
         "$@"
 
 # Stop when "xargs" is not available.
