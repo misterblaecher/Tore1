@@ -45,8 +45,9 @@ class HomeHubScreen extends ConsumerWidget {
     if (hasEvent && ctx.activeEventId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         prefetchEventEssentials(
-          ref,
-          ctx.activeEventId!,
+          read: ref.read,
+          refresh: ref.refresh,
+          eventId: ctx.activeEventId!,
           modulesOn: {'menu': menuOn, 'wallet': walletOn, 'polymarket': polymarketOn},
         );
       });

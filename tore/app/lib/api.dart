@@ -8,6 +8,7 @@ import 'features/polymarket/polymarket_models.dart';
 import 'features/safety/safety_models.dart';
 import 'features/community/community_models.dart';
 import 'features/community/data/orga_events_cache.dart';
+import 'features/events/domain/event_public_view.dart';
 import 'shared/cache/cache_store.dart';
 import 'shared/cache/offline_no_cache_exception.dart';
 

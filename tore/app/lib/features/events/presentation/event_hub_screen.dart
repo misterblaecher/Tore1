@@ -35,7 +35,7 @@ class EventHubScreen extends ConsumerWidget {
     final modules = eventCtx?.modulesOn ?? const <String, bool>{};
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      prefetchEventEssentials(ref, eventId, modulesOn: modules);
+      prefetchEventEssentials(read: ref.read, refresh: ref.refresh, eventId: eventId, modulesOn: modules);
     });
 
     final readOnly = isReadOnly(ref);

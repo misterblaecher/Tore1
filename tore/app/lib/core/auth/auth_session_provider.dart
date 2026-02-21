@@ -75,6 +75,11 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     await _completeLogin(tokens);
   }
 
+
+  Future<void> refreshSession() async {
+    await bootstrap();
+  }
+
   Future<void> logout() async {
     final guestId = await _storage.readGuestDeviceId();
     await _storage.clear();

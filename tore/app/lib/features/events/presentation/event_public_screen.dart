@@ -94,7 +94,7 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
     final runtimeBlocked = (_event?.canJoin == false);
     if (isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeBlocked)) {
-      setState(() => _error = writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeBlocked));
+      setState(() => _error = writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: runtimeBlocked ? 'Inscriptions momentanément indisponibles.' : null));
       return;
     }
     setState(() {

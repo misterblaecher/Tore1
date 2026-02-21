@@ -19,7 +19,7 @@ class OrgaPostsCache {
     final raw = prefs.getString(_key(orgId));
     if (raw == null || raw.isEmpty) return (const [], true);
     final parsed = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-    final items = ((parsed['items'] as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final List<Map<String, dynamic>> items = ((parsed['items'] as List?) ?? const <dynamic>[]).map((e) => Map<String, dynamic>.from(e as Map)).toList();
     final savedAt = DateTime.tryParse(parsed['savedAt']?.toString() ?? '');
     if (savedAt == null) return (items, true);
     final isStale = DateTime.now().difference(savedAt) > ttl;

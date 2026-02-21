@@ -130,10 +130,10 @@ class OrgaInvitesAdminScreen extends ConsumerWidget {
                             ToreChip(
                               label: status,
                               variant: status == 'ACTIVE'
-                                  ? ToreChipVariant.success
+                                  ? ToreChipVariant.ok
                                   : status == 'REVOKED'
                                       ? ToreChipVariant.closed
-                                      : ToreChipVariant.warning,
+                                      : ToreChipVariant.warn,
                             ),
                             if (status == 'ACTIVE')
                               TextButton(
