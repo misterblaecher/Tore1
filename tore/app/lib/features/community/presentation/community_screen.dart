@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/features/community/community_models.dart';
 import 'package:tore/features/community/data/community_explorer_cache.dart';
 import 'package:tore/features/events/presentation/create_event_wizard_screen.dart';
+import 'package:tore/features/qr/presentation/code_entry_sheet.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/state.dart';
 
@@ -146,6 +147,14 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
     if (d.inDays > 0) return 'actif il y a ${d.inDays}j';
     if (d.inHours > 0) return 'actif il y a ${d.inHours}h';
     return 'actif il y a ${d.inMinutes.clamp(1, 59)}min';
+  }
+
+  void showCodeEntrySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const CodeEntrySheet(),
+    );
   }
 
   @override
