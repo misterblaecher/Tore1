@@ -13,9 +13,9 @@ void main() {
     expect(authed.isGuest, false);
   });
 
-  test('Provider boots in loading state', () {
+  test('Provider boots in unknown or loading state', () {
     final container = ProviderContainer();
     final state = container.read(authSessionProvider);
-    expect(state.status, AuthStatus.loading);
+    expect([AuthStatus.unknown, AuthStatus.loading], contains(state.status));
   });
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/providers.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../state.dart';
+import '../../../core/network/api_exception.dart';
 import '../../events/presentation/event_manage_landing_screen.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../community/community_models.dart';
@@ -102,12 +103,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final meAsync = ref.watch(meProvider);
     final session = ref.watch(authSessionProvider);
+    final meAsync = ref.watch(meProvider);
     final ctx = ref.watch(appContextProvider);
     final runtimeStateAsync = ctx.hasActiveEvent
         ? ref.watch(_profileEventProvider(ctx.activeEventId!))
         : const AsyncValue<String>.data('N/A');
+
+
+    if (session.status == AuthStatus.unauthenticated) {
+      return _LoginRequiredView(
+        title: 'Profil',
+        message: 'Connecte-toi pour voir ton profil.',
+      );
+    }
 
     if (session.isGuest) {
       return Scaffold(
@@ -138,7 +147,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: AppBar(title: const Text('Profil')),
       body: meAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erreur: $e')),
+        error: (e, _) {
+          final isUnauthorized = e is ApiException && (e.statusCode == 401 || e.statusCode == 403);
+          if (isUnauthorized) {
+            return const _LoginRequiredBody(message: 'Connecte-toi pour voir ton profil.');
+          }
+          return Center(child: Text('Erreur: $e'));
+        },
         data: (me) {
           final initials = _initials(me.displayName, me.id);
 
@@ -447,6 +462,48 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final a = parts.isNotEmpty ? parts[0][0].toUpperCase() : '?';
     final b = parts.length >= 2 ? parts[1][0].toUpperCase() : '';
     return (a + b).trim();
+  }
+}
+
+
+class _LoginRequiredView extends StatelessWidget {
+  const _LoginRequiredView({required this.title, required this.message});
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: _LoginRequiredBody(message: message),
+    );
+  }
+}
+
+class _LoginRequiredBody extends StatelessWidget {
+  const _LoginRequiredBody({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
+              child: const Text('Se connecter'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

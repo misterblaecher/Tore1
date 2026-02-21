@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../auth/auth_state_signal.dart';
 import '../../config/app_config.dart';
 import 'token_storage.dart';
 
 class AuthInterceptor extends Interceptor {
   final TokenStorage tokenStorage;
+  bool _clearingInvalidToken = false;
 
   AuthInterceptor(this.tokenStorage);
 
@@ -27,5 +29,32 @@ class AuthInterceptor extends Interceptor {
       }
     }
     handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) async {
+    await _handleUnauthorized(response.requestOptions, response.statusCode);
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    await _handleUnauthorized(err.requestOptions, err.response?.statusCode);
+    handler.next(err);
+  }
+
+  Future<void> _handleUnauthorized(RequestOptions requestOptions, int? statusCode) async {
+    if (requestOptions.extra['skipAuth'] == true) return;
+    if (statusCode != 401 && statusCode != 403) return;
+    if (_clearingInvalidToken) return;
+
+    _clearingInvalidToken = true;
+    try {
+      await tokenStorage.clearAuthToken();
+      debugPrint('[auth] token invalid -> cleared ($statusCode)');
+      AuthStateSignal.instance.notifyUnauthenticated();
+    } finally {
+      _clearingInvalidToken = false;
+    }
   }
 }

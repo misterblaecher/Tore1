@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'auth_state_signal.dart';
 import '../network/providers.dart';
 import '../network/token_storage.dart';
 import 'auth_models.dart';
 import 'auth_repository.dart';
 
-enum AuthStatus { loading, guest, authenticated, unauthenticated }
+enum AuthStatus { unknown, loading, guest, authenticated, unauthenticated }
 
 class AuthSessionState {
   final AuthStatus status;
@@ -16,6 +18,7 @@ class AuthSessionState {
 
   const AuthSessionState._(this.status, {this.user});
 
+  const AuthSessionState.unknown() : this._(AuthStatus.unknown);
   const AuthSessionState.loading() : this._(AuthStatus.loading);
   const AuthSessionState.guest() : this._(AuthStatus.guest);
   const AuthSessionState.unauthenticated() : this._(AuthStatus.unauthenticated);
@@ -26,11 +29,15 @@ class AuthSessionState {
 }
 
 class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
-  AuthSessionNotifier(this.ref) : super(const AuthSessionState.loading()) {
+  AuthSessionNotifier(this.ref) : super(const AuthSessionState.unknown()) {
+    _signalSub = AuthStateSignal.instance.onUnauthenticated.listen((_) {
+      markUnauthenticated();
+    });
     bootstrap();
   }
 
   final Ref ref;
+  late final StreamSubscription<void> _signalSub;
 
   AuthRepository get _repo => AuthRepository(ref.read(apiClientProvider));
   TokenStorage get _storage => _repo.api.tokenStorage;
@@ -42,7 +49,11 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
 
     if (token != null && token.isNotEmpty) {
       final me = await _repo.tryMe();
-      state = AuthSessionState.authenticated(me);
+      if (me == null) {
+        state = const AuthSessionState.unauthenticated();
+      } else {
+        state = AuthSessionState.authenticated(me);
+      }
       return;
     }
     state = guestMode ? const AuthSessionState.guest() : const AuthSessionState.unauthenticated();
@@ -89,6 +100,15 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     state = const AuthSessionState.unauthenticated();
   }
 
+  Future<void> markUnauthenticated() async {
+    final guestId = await _storage.readGuestDeviceId();
+    await _storage.clearAuthToken();
+    if (guestId != null && guestId.isNotEmpty) {
+      await _storage.writeGuestDeviceId(guestId);
+    }
+    state = const AuthSessionState.unauthenticated();
+  }
+
   Future<void> _completeLogin(AuthTokens tokens) async {
     await _storage.writeTokens(accessToken: tokens.accessToken, refreshToken: tokens.refreshToken);
     await _storage.writeGuestModeEnabled(false);
@@ -100,6 +120,12 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     final r = Random();
     final stamp = DateTime.now().millisecondsSinceEpoch;
     return 'guest-$stamp-${r.nextInt(1 << 32).toRadixString(16)}';
+  }
+
+  @override
+  void dispose() {
+    _signalSub.cancel();
+    super.dispose();
   }
 }
 
