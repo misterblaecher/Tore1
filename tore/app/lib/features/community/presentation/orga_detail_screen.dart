@@ -96,9 +96,9 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     ToreChip(label: (orga['city'] ?? '-').toString(), variant: ToreChipVariant.info),
                     ToreChip(label: (orga['instagram_handle'] ?? '@').toString(), variant: ToreChipVariant.closed),
-                    if (status == MembershipStatus.pending) const ToreChip(label: 'Demande envoyée', variant: ToreChipVariant.warning),
-                    if (status == MembershipStatus.active) ToreChip(label: myMembership?.role == MembershipRole.follower ? 'Follower' : 'Membre', variant: ToreChipVariant.success),
-                    if (current.isCached) const ToreChip(label: 'CACHE / OFFLINE', variant: ToreChipVariant.warning),
+                    if (status == MembershipStatus.pending) const ToreChip(label: 'Demande envoyée', variant: ToreChipVariant.warn),
+                    if (status == MembershipStatus.active) ToreChip(label: myMembership?.role == MembershipRole.follower ? 'Follower' : 'Membre', variant: ToreChipVariant.ok),
+                    if (current.isCached) const ToreChip(label: 'CACHE / OFFLINE', variant: ToreChipVariant.warn),
                   ]),
                 ]),
               ),

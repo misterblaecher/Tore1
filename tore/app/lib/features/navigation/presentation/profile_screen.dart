@@ -455,7 +455,7 @@ final _profileEventProvider = FutureProvider.family<String, int>((ref, eventId) 
   return (event['runtime_state'] ?? event['state'] ?? event['status'] ?? 'LIVE').toString().toUpperCase();
 });
 
-class _EditField extends StatefulWidget {
+class _EditField extends ConsumerStatefulWidget {
   final String label;
   final String initialValue;
   final Future<void> Function(String value) onSave;
@@ -467,10 +467,10 @@ class _EditField extends StatefulWidget {
   });
 
   @override
-  State<_EditField> createState() => _EditFieldState();
+  ConsumerState<_EditField> createState() => _EditFieldState();
 }
 
-class _EditFieldState extends State<_EditField> {
+class _EditFieldState extends ConsumerState<_EditField> {
   late final TextEditingController _ctrl;
   bool _saving = false;
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/providers.dart';
+import '../../../state.dart';
 
 class OrgaInviteJoinScreen extends ConsumerStatefulWidget {
   const OrgaInviteJoinScreen({super.key, required this.code});

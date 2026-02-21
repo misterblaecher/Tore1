@@ -89,6 +89,7 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
           endAt: now.add(const Duration(hours: 6)),
           venue: null,
           visibility: 'PRIVATE',
+          publicationStatus: 'PUBLISHED',
           status: 'LIVE',
           modulesOn: const <String, dynamic>{},
           hostType: 'user',

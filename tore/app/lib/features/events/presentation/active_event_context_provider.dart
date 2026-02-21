@@ -120,7 +120,7 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
           lastUpdatedAt: _readDateTime(payload['lastUpdatedAt'] ?? payload['lastStateUpdatedAt']),
         ),
       );
-      prefetchEventEssentials(ref, eventId, modulesOn: modules);
+      prefetchEventEssentials(read: ref.read, refresh: ref.refresh, eventId: eventId, modulesOn: modules);
     } catch (error, stackTrace) {
       final current = state.valueOrNull;
       if (current == null) {

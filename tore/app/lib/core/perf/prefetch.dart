@@ -23,19 +23,24 @@ class PrefetchGate {
 
 final prefetchGateProvider = Provider<PrefetchGate>((ref) => PrefetchGate());
 
-void prefetchEventEssentials(Ref ref, int eventId, {Map<String, bool>? modulesOn}) {
-  final gate = ref.read(prefetchGateProvider);
+void prefetchEventEssentials({
+  required T Function<T>(ProviderListenable<T> provider) read,
+  required T Function<T>(Refreshable<T> provider) refresh,
+  required int eventId,
+  Map<String, bool>? modulesOn,
+}) {
+  final gate = read(prefetchGateProvider);
   if (!gate.canRun(eventId, DateTime.now())) return;
 
   scheduleMicrotask(() {
-    unawaited(ref.read(apiProvider).eventContext(eventId));
-    unawaited(ref.read(tickerControllerProvider(eventId).notifier).refresh());
+    unawaited(read(apiProvider).eventContext(eventId));
+    unawaited(read(tickerControllerProvider(eventId).notifier).refresh());
 
     final menuEnabled = modulesOn?['menu'] == true;
     if (menuEnabled) {
-      unawaited(ref.refresh(marketMenuProvider(eventId).future));
+      unawaited(refresh(marketMenuProvider(eventId).future));
     }
 
-    unawaited(ref.refresh(eventConfigProvider(eventId).future));
+    unawaited(refresh(eventConfigProvider(eventId).future));
   });
 }
