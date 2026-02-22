@@ -184,7 +184,7 @@ class _BootEntryState extends ConsumerState<_BootEntry> {
       }
       return const AppShell();
     }
-    if (authSession.isGuest) return const AuthGateScreen();
+    if (authSession.isGuest) return const AppShell();
     return const AuthGateScreen();
   }
 }

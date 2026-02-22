@@ -78,6 +78,20 @@ class PrimaryButton extends StatelessWidget {
   }
 }
 
+class SolarPrimaryButton extends StatelessWidget {
+  const SolarPrimaryButton({super.key, required this.label, required this.onPressed, this.icon, this.loading = false});
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return PrimaryButton(label: label, onPressed: onPressed, icon: icon, loading: loading);
+  }
+}
+
 class SecondaryButton extends StatelessWidget {
   const SecondaryButton({super.key, required this.label, required this.onPressed, this.icon});
 
@@ -113,6 +127,21 @@ class AppCard extends StatelessWidget {
   }
 }
 
+class SolarCard extends StatelessWidget {
+  const SolarCard({super.key, required this.child, this.padding = const EdgeInsets.all(AppSpacing.md)});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: AppColors.solarCardDecoration,
+      child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
 class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key});
 
@@ -137,6 +166,36 @@ class AppChip extends StatelessWidget {
       label: Text(label),
       backgroundColor: color ?? AppColors.accentSoft,
       side: BorderSide.none,
+    );
+  }
+}
+
+class SolarChip extends StatelessWidget {
+  const SolarChip({super.key, required this.label, this.color});
+
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => AppChip(label: label, color: color);
+}
+
+class SolarSectionTitle extends StatelessWidget {
+  const SolarSectionTitle(this.text, {super.key, this.trailing});
+
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        children: [
+          Expanded(child: Text(text, style: AppTextStyles.sectionTitle.copyWith(fontSize: 20, fontWeight: FontWeight.w800))),
+          if (trailing != null) trailing!,
+        ],
+      ),
     );
   }
 }

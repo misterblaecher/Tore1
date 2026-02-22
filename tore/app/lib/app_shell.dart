@@ -32,12 +32,6 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Future<void> _openScan(bool isGuest) async {
-    if (isGuest) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Connecte-toi pour continuer.")),
-      );
-      return;
-    }
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen()));
   }
 

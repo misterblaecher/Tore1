@@ -39,80 +39,80 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
       ),
       body: SolarBackground(
         child: FutureBuilder<List<dynamic>>(
-        future: api.bars(),
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return const Center(child: Text('Impossible de charger les events.'));
-          }
+          future: api.bars(),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return const Center(child: Text('Impossible de charger les events.'));
+            }
 
-          final bars = (snap.data ?? []).cast<Map<String, dynamic>>();
-          final events = <Map<String, dynamic>>[];
-          for (final bar in bars) {
-            events.add({
-              'name': '${bar['name'] ?? 'Event'} — Tonight',
-              'when': 'Ce soir',
-            });
-            events.add({
-              'name': '${bar['name'] ?? 'Event'} — Weekly',
-              'when': 'Cette semaine',
-            });
-          }
+            final bars = (snap.data ?? []).cast<Map<String, dynamic>>();
+            final events = <Map<String, dynamic>>[];
+            for (final bar in bars) {
+              events.add({'name': '${bar['name'] ?? 'Event'} — Tonight', 'when': 'Ce soir'});
+              events.add({'name': '${bar['name'] ?? 'Event'} — Weekly', 'when': 'Cette semaine'});
+            }
 
-          final filtered = events.where((event) {
-            if (_filter == 'all') return true;
-            if (_filter == 'tonight') return event['when'] == 'Ce soir';
-            return event['when'] == 'Cette semaine';
-          }).toList();
+            final filtered = events.where((event) {
+              if (_filter == 'all') return true;
+              if (_filter == 'tonight') return event['when'] == 'Ce soir';
+              return event['when'] == 'Cette semaine';
+            }).toList();
 
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'all', label: Text('Tous')),
-                    ButtonSegment(value: 'tonight', label: Text('Ce soir')),
-                    ButtonSegment(value: 'week', label: Text('Cette semaine')),
-                  ],
-                  selected: {_filter},
-                  onSelectionChanged: (values) => setState(() => _filter = values.first),
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'all', label: Text('Tous')),
+                      ButtonSegment(value: 'tonight', label: Text('Ce soir')),
+                      ButtonSegment(value: 'week', label: Text('Cette semaine')),
+                    ],
+                    selected: {_filter},
+                    onSelectionChanged: (values) => setState(() => _filter = values.first),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (_, index) {
-                    final item = filtered[index];
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      padding: const EdgeInsets.all(14),
-                      decoration: AppColors.solarCardDecoration,
-                      child: Row(children: [
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(item['name']!.toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 4),
-                            Text(item['when']!.toString(), style: AppTextStyles.muted),
-                          ]),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (_, index) {
+                      final item = filtered[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: SolarCard(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['name']!.toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 4),
+                                    Text(item['when']!.toString(), style: AppTextStyles.muted),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right),
+                            ],
+                          ),
                         ),
-                        const Icon(Icons.chevron_right),
-                      ]),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              if (session.isGuest)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: AuthRequiredNotice(message: 'Créer un event et gérer le staff nécessitent une session connectée.'),
-                ),
-            ],
-          );
-        },
-      ),
+                if (session.isGuest)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: AuthRequiredNotice(message: 'Créer un event et gérer le staff nécessitent une session connectée.'),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
       floatingActionButton: organizer
           ? FloatingActionButton.extended(
