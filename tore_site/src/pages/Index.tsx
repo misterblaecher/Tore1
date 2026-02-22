@@ -172,12 +172,23 @@ const Index = () => {
   const apiReady = Boolean(API_URL && API_URL.startsWith("http"));
 
   const safeParse = async (res: Response) => {
-    const text = await res.text();
-    try {
-      return { json: JSON.parse(text), text };
-    } catch {
-      return { json: null, text };
+    const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+    const rawBody = await res.text();
+    if (!contentType.includes("application/json")) {
+      return { json: null, text: rawBody };
     }
+    try {
+      return { json: JSON.parse(rawBody), text: rawBody };
+    } catch {
+      return { json: null, text: rawBody };
+    }
+  };
+
+  const resetAccountRequest = () => {
+    setAccountSuccess(null);
+    setAccountError(null);
+    setSelectedRole("");
+    setSelectedAccountMode("user");
   };
 
   const scrollToWaitlist = () => {
@@ -554,8 +565,12 @@ const Index = () => {
 
               <form
                 className="grid gap-4 md:grid-cols-2"
+                aria-disabled={Boolean(accountSuccess)}
                 onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault();
+                  if (accountLoading || accountSuccess) {
+                    return;
+                  }
                   setAccountError(null);
                   setAccountSuccess(null);
                   setAccountLoading(true);
@@ -591,11 +606,12 @@ const Index = () => {
                       body: JSON.stringify(payload),
                     });
                     const { json, text } = await safeParse(res);
-                    console.debug("Account request response", res.status, json ?? text);
+                    console.debug("Account request response", { status: res.status, body: json ?? text });
 
                     if (res.ok && json?.ok === true) {
                       const successMessage = typeof json.id === "number" ? `Demande envoyée (ID ${json.id}).` : "Demande envoyée.";
                       setAccountSuccess(successMessage);
+                      setAccountError(null);
                       event.currentTarget.reset();
                       setSelectedRole("");
                       setSelectedAccountMode("user");
@@ -611,10 +627,23 @@ const Index = () => {
                       return;
                     }
 
+                    const retryAfterFromBody =
+                      json && typeof json === "object" && "retry_after_seconds" in json
+                        ? Number(json.retry_after_seconds)
+                        : null;
+                    const retryAfterFromHeader = Number(res.headers.get("retry-after") || "");
+                    const retryAfterSeconds = Number.isFinite(retryAfterFromBody)
+                      ? Math.max(1, Math.floor(retryAfterFromBody as number))
+                      : Number.isFinite(retryAfterFromHeader)
+                        ? Math.max(1, Math.floor(retryAfterFromHeader))
+                        : null;
+
                     const messageByStatus: Record<number, string> = {
                       400: "Vérifie les champs.",
                       422: "Vérifie les champs.",
-                      429: "Trop de tentatives. Réessaie plus tard.",
+                      429: retryAfterSeconds
+                        ? `Trop de tentatives. Réessaie dans ${retryAfterSeconds} secondes.`
+                        : "Trop de tentatives. Réessaie plus tard.",
                     };
                     const baseMessage = messageByStatus[res.status] || "Erreur serveur. Réessaie.";
                     const detail =
@@ -623,6 +652,9 @@ const Index = () => {
                     setAccountError(message);
                     toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
                   } catch (err) {
+                    if (accountSuccess) {
+                      return;
+                    }
                     const message = "Erreur réseau. Réessaie dans un instant.";
                     console.error("Account request failed", err);
                     setAccountError(message);
@@ -634,15 +666,15 @@ const Index = () => {
               >
                 <label className="space-y-2 text-sm">
                   <span className="text-foreground/90">Nom</span>
-                  <input name="name" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                  <input name="name" required disabled={Boolean(accountSuccess)} className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="text-foreground/90">Email</span>
-                  <input type="email" name="email" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                  <input type="email" name="email" required disabled={Boolean(accountSuccess)} className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="text-foreground/90">Téléphone</span>
-                  <input type="tel" name="phone" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                  <input type="tel" name="phone" required disabled={Boolean(accountSuccess)} className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="text-foreground/90">Rôle</span>
@@ -651,6 +683,7 @@ const Index = () => {
                     required
                     value={selectedRole}
                     onChange={(event) => setSelectedRole(event.target.value as AccountRole | "")}
+                    disabled={Boolean(accountSuccess)}
                     className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                   >
                     <option value="">Sélectionner un rôle</option>
@@ -674,6 +707,7 @@ const Index = () => {
                           type="button"
                           key={mode.value}
                           onClick={() => setSelectedAccountMode(mode.value as AccountMode)}
+                          disabled={Boolean(accountSuccess)}
                           className={`rounded-xl border px-3 py-3 text-left transition ${
                             active ? "border-accent bg-accent/10" : "border-border/60 bg-background/50 hover:border-accent/50"
                           }`}
@@ -688,20 +722,28 @@ const Index = () => {
                 {selectedRole === "committee" && (
                   <label className="md:col-span-2 space-y-2 text-sm">
                     <span className="text-foreground/90">Nom du comité</span>
-                    <input name="committee_name" required={selectedRole === "committee"} className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                    <input name="committee_name" required={selectedRole === "committee"} disabled={Boolean(accountSuccess)} className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
                   </label>
                 )}
                 <label className="md:col-span-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
-                  <input type="checkbox" name="is_whatsapp" className="h-4 w-4 rounded border-border bg-background/70 accent-[hsl(var(--accent))]" />
+                  <input type="checkbox" name="is_whatsapp" disabled={Boolean(accountSuccess)} className="h-4 w-4 rounded border-border bg-background/70 accent-[hsl(var(--accent))]" />
                   Ce numéro est WhatsApp
                 </label>
                 <div className="md:col-span-2 flex flex-col gap-2">
-                  <Button type="submit" disabled={!apiReady || accountLoading} size="lg" className="h-11 px-6 text-sm font-semibold w-full sm:w-auto">
+                  <Button type="submit" disabled={!apiReady || accountLoading || Boolean(accountSuccess)} size="lg" className="h-11 px-6 text-sm font-semibold w-full sm:w-auto">
                     {accountLoading ? "Création en cours..." : "Créer mon compte"}
                   </Button>
                   {!apiReady && <span className="text-sm text-muted-foreground">Backend non configuré.</span>}
                   {accountSuccess && <p className="text-sm text-emerald-400">{accountSuccess}</p>}
+                  {accountSuccess && (
+                    <p className="text-sm text-muted-foreground">Validation nécessaire: on te recontacte rapidement pour finaliser l'accès.</p>
+                  )}
                   {accountError && <p className="text-sm text-destructive">{accountError}</p>}
+                  {accountSuccess && (
+                    <Button type="button" variant="outline" onClick={resetAccountRequest} size="sm" className="w-full sm:w-auto">
+                      Nouvelle demande
+                    </Button>
+                  )}
                 </div>
               </form>
 
