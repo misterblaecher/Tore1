@@ -59,7 +59,18 @@ class HomeHubScreen extends ConsumerWidget {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Home Hub'),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/branding/logo_minimal.png',
+              width: 22,
+              height: 22,
+              errorBuilder: (_, __, ___) => const Text('TORÈ', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 8),
+            const Text('Home Hub'),
+          ],
+        ),
         actions: [
           if (hasEvent && tickerOn)
             IconButton(
