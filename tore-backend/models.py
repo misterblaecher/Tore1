@@ -1359,6 +1359,7 @@ class AppUser(Base):
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     instagram_handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     profile_visibility: Mapped[str] = mapped_column(String(16), default="PUBLIC", index=True)
+    account_mode: Mapped[str] = mapped_column(String(16), default="user", index=True)
 
     show_address: Mapped[bool] = mapped_column(Boolean, default=False)
     show_avatar: Mapped[bool] = mapped_column(Boolean, default=True)

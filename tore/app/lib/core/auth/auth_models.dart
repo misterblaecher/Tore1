@@ -1,3 +1,19 @@
+enum AccountMode { user, organizer, team }
+
+AccountMode accountModeFromJson(dynamic raw) {
+  final value = (raw ?? 'user').toString().toLowerCase();
+  switch (value) {
+    case 'organizer':
+      return AccountMode.organizer;
+    case 'team':
+      return AccountMode.team;
+    default:
+      return AccountMode.user;
+  }
+}
+
+String accountModeToJson(AccountMode mode) => mode.name;
+
 class AppUser {
   final String id;
   final String displayName;
@@ -9,6 +25,7 @@ class AppUser {
   final String bio;
   final String visibility;
   final bool showIdentityInBar;
+  final AccountMode accountMode;
 
   const AppUser({
     required this.id,
@@ -21,6 +38,7 @@ class AppUser {
     this.bio = '',
     required this.visibility,
     required this.showIdentityInBar,
+    this.accountMode = AccountMode.user,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -35,6 +53,7 @@ class AppUser {
       bio: (json['bio'] ?? '').toString(),
       visibility: (json['visibility'] ?? 'public').toString(),
       showIdentityInBar: (json['show_identity_in_bar'] as bool?) ?? false,
+      accountMode: accountModeFromJson(json['account_mode']),
     );
   }
 
@@ -49,6 +68,7 @@ class AppUser {
       'bio': bio,
       'visibility': visibility,
       'show_identity_in_bar': showIdentityInBar,
+      'account_mode': accountModeToJson(accountMode),
     };
   }
 
@@ -62,6 +82,7 @@ class AppUser {
     String? bio,
     String? visibility,
     bool? showIdentityInBar,
+    AccountMode? accountMode,
   }) {
     return AppUser(
       id: id,
@@ -74,6 +95,7 @@ class AppUser {
       bio: bio ?? this.bio,
       visibility: visibility ?? this.visibility,
       showIdentityInBar: showIdentityInBar ?? this.showIdentityInBar,
+      accountMode: accountMode ?? this.accountMode,
     );
   }
 }

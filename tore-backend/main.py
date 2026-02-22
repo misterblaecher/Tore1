@@ -138,6 +138,8 @@ from models import (
 # from the models module (e.g. stale image or partial rollout).
 import models as _models_module
 
+ALLOWED_ACCOUNT_MODES = {"user", "organizer", "team"}
+
 CodeConsumeIdempotency = getattr(_models_module, "CodeConsumeIdempotency", None)
 if CodeConsumeIdempotency is None:
     class CodeConsumeIdempotency(Base):
@@ -273,14 +275,14 @@ def validate_env_or_warn() -> EnvReport:
             if len(parsed) < 2:
                 warnings.append("TORE_QR_SIGNING_KEYS rotation looks weak (<2 keys)")
 
-    cors_raw = (os.getenv("CORS_ORIGINS") or os.getenv("TORE_CORS_ORIGINS") or "").strip()
+    cors_raw = (os.getenv("TORE_CORS_ORIGINS") or "").strip()
     if is_prod:
         if not cors_raw:
-            missing.append("CORS_ORIGINS/TORE_CORS_ORIGINS")
+            missing.append("TORE_CORS_ORIGINS")
         elif cors_raw == "*":
-            missing.append("CORS_ORIGINS cannot be '*' in PROD")
+            missing.append("TORE_CORS_ORIGINS cannot be '*' in PROD")
     elif not cors_raw:
-        warnings.append("CORS_ORIGINS/TORE_CORS_ORIGINS missing: localhost defaults are enabled")
+        warnings.append("TORE_CORS_ORIGINS missing: localhost defaults are enabled")
 
     google_enabled = _env_bool("TORE_AUTH_GOOGLE_ENABLED") or _env_bool("GOOGLE_AUTH_ENABLED")
     if google_enabled and not (os.getenv("GOOGLE_CLIENT_ID") or "").strip():
@@ -337,20 +339,29 @@ def _debug_signing_key_ids() -> list[str]:
 
 
 def _cors_origins() -> list[str]:
-    raw = (
-        os.getenv("CORS_ALLOWED_ORIGINS")
-        or os.getenv("TORE_CORS_ORIGINS")
-        or os.getenv("CORS_ORIGINS")
-        or ""
-    ).strip()
+    raw = (os.getenv("TORE_CORS_ORIGINS") or "").strip()
+
+    def _normalize(items: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in items:
+            value = item.strip().rstrip("/")
+            if not value or value == "*":
+                continue
+            if value not in seen:
+                seen.add(value)
+                normalized.append(value)
+        return normalized
+
     if raw:
         values = [v.strip() for v in raw.split(",") if v.strip()]
-        return [v for v in values if v != "*"]
+        return _normalize(values)
 
     site_url = (os.getenv("TORE_SITE_URL") or os.getenv("PUBLIC_URL") or "").strip()
     defaults = [
         "https://tore-site.onrender.com",
         "https://tore.onrender.com",
+        "https://tore1.onrender.com",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:4173",
@@ -358,7 +369,7 @@ def _cors_origins() -> list[str]:
     ]
     if site_url:
         defaults.append(site_url)
-    return defaults
+    return _normalize(defaults)
 
 
 def _validate_qr_signing_keys_format() -> tuple[bool, str]:
@@ -506,6 +517,10 @@ def _ensure_app_user_privacy_columns() -> None:
             s.execute(text("ALTER TABLE app_users ADD COLUMN deleted_at DATETIME"))
         if "anonymized_at" not in columns:
             s.execute(text("ALTER TABLE app_users ADD COLUMN anonymized_at DATETIME"))
+        if "account_mode" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN account_mode VARCHAR(16) DEFAULT 'user'"))
+        s.execute(text("UPDATE app_users SET account_mode='user' WHERE account_mode IS NULL OR account_mode = ''"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_account_mode ON app_users (account_mode)"))
         s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_deleted_at ON app_users (deleted_at)"))
         s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_anonymized_at ON app_users (anonymized_at)"))
         s.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_actor_user_ts ON audit_logs (actor_user_id, ts)"))
@@ -728,6 +743,7 @@ def _user_snapshot(db: Session, user: AppUser) -> Dict[str, Any]:
         "visibility": (settings.visibility if settings and settings.visibility else "public"),
         "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
         "email": user.email,
+        "account_mode": (user.account_mode if user.account_mode in ALLOWED_ACCOUNT_MODES else "user"),
     }
 
 
@@ -1235,6 +1251,7 @@ class PatchMeIn(BaseModel):
     bio: Optional[str] = None
     visibility: Optional[str] = None
     show_identity_in_bar: Optional[bool] = None
+    account_mode: Optional[Literal["user", "organizer", "team"]] = None
 
 
 class IdentityConsentBarPatchIn(BaseModel):
@@ -2042,6 +2059,33 @@ app = FastAPI(
 logging.basicConfig(level=logging.INFO)
 logging.info("BOOT commit=%s", os.getenv("RENDER_GIT_COMMIT"))
 
+
+
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    payload: dict[str, Any]
+    if isinstance(detail, dict):
+        payload = dict(detail)
+        if 'detail' not in payload:
+            payload = {'detail': payload.get('message') or payload.get('reason') or str(detail), **payload}
+    else:
+        payload = {'detail': str(detail)}
+
+    if exc.status_code == 429:
+        retry_after_raw = request.headers.get('retry-after')
+        retry_after_seconds = int(retry_after_raw) if (retry_after_raw and retry_after_raw.isdigit()) else None
+        body_retry = payload.get('retry_after_seconds')
+        if retry_after_seconds is None and isinstance(body_retry, int):
+            retry_after_seconds = body_retry
+        if retry_after_seconds is not None:
+            payload['retry_after_seconds'] = retry_after_seconds
+
+    if 'code' not in payload and isinstance(payload.get('reason'), str):
+        payload['code'] = payload['reason']
+
+    return JSONResponse(status_code=exc.status_code, content=payload)
 
 
 @app.middleware("http")
@@ -3866,6 +3910,7 @@ def me(
                 if active_sanction and active_sanction.type == "WARN"
                 else None
             ),
+            "account_mode": (user.account_mode if user.account_mode in ALLOWED_ACCOUNT_MODES else "user"),
         }
     finally:
         s.close()
@@ -3891,6 +3936,10 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             u.show_avatar = payload.show_avatar
         if payload.bio is not None:
             u.bio = payload.bio[:280]
+        if payload.account_mode is not None:
+            if payload.account_mode not in ALLOWED_ACCOUNT_MODES:
+                raise HTTPException(status_code=422, detail={"detail": "Invalid account_mode", "code": "invalid_account_mode"})
+            u.account_mode = payload.account_mode
         settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()
         if payload.show_identity_to_staff is not None or payload.visibility is not None or payload.show_identity_in_bar is not None:
             if not settings:
@@ -3940,6 +3989,7 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             "show_identity_to_staff": bool(refreshed_settings and refreshed_settings.show_identity_to_staff),
             "visibility": (refreshed_settings.visibility if refreshed_settings and refreshed_settings.visibility else "public"),
             "show_identity_in_bar": bool(refreshed_settings and (refreshed_settings.show_identity_in_bar or refreshed_settings.show_identity_to_staff)),
+            "account_mode": (u.account_mode if u.account_mode in ALLOWED_ACCOUNT_MODES else "user"),
         }
     finally:
         s.close()

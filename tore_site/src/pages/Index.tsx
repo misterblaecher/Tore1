@@ -148,6 +148,7 @@ const extensions = [
 const API_URL = import.meta.env.VITE_API_URL?.trim();
 
 type AccountRole = "student" | "committee" | "bar" | "dj";
+type AccountMode = "user" | "organizer" | "team";
 
 const readUtmParams = () => {
   if (typeof window === "undefined") return undefined;
@@ -167,6 +168,7 @@ const Index = () => {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountSuccess, setAccountSuccess] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AccountRole | "">("");
+  const [selectedAccountMode, setSelectedAccountMode] = useState<AccountMode>("user");
   const apiReady = Boolean(API_URL && API_URL.startsWith("http"));
 
   const safeParse = async (res: Response) => {
@@ -577,6 +579,7 @@ const Index = () => {
                     role,
                     committee_name: role === "committee" ? String(formData.get("committee_name") || "").trim() || null : null,
                     source: "tore_site",
+                    account_mode: selectedAccountMode,
                     utm: readUtmParams(),
                   };
                   console.debug("Account request payload", payload);
@@ -595,6 +598,7 @@ const Index = () => {
                       setAccountSuccess(successMessage);
                       event.currentTarget.reset();
                       setSelectedRole("");
+                      setSelectedAccountMode("user");
                       toast({ title: "Demande envoyée", description: "Ta demande a bien été enregistrée.", duration: 3200 });
                       return;
                     }
@@ -656,6 +660,31 @@ const Index = () => {
                     <option value="dj">DJ</option>
                   </select>
                 </label>
+                <div className="md:col-span-2 space-y-2 text-sm">
+                  <span className="text-foreground/90">Choisir ton mode</span>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {[
+                      { value: "user", label: "Mode Utilisateur", hint: "Découvrir et participer" },
+                      { value: "organizer", label: "Mode Organisateur", hint: "Créer et piloter un event" },
+                      { value: "team", label: "Mode Équipe", hint: "Scanner et check-in" },
+                    ].map((mode) => {
+                      const active = selectedAccountMode === mode.value;
+                      return (
+                        <button
+                          type="button"
+                          key={mode.value}
+                          onClick={() => setSelectedAccountMode(mode.value as AccountMode)}
+                          className={`rounded-xl border px-3 py-3 text-left transition ${
+                            active ? "border-accent bg-accent/10" : "border-border/60 bg-background/50 hover:border-accent/50"
+                          }`}
+                        >
+                          <p className="text-sm font-semibold">{mode.label}</p>
+                          <p className="text-xs text-muted-foreground">{mode.hint}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 {selectedRole === "committee" && (
                   <label className="md:col-span-2 space-y-2 text-sm">
                     <span className="text-foreground/90">Nom du comité</span>
