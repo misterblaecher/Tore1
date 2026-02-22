@@ -168,6 +168,7 @@ final meProvider = FutureProvider<AppUser>((ref) async {
       showAddress: false,
       showAvatar: true,
       showIdentityToStaff: false,
+      bio: '',
       visibility: 'public',
       showIdentityInBar: false,
     );
