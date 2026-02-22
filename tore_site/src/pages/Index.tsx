@@ -35,6 +35,110 @@ const modules = [
 const whatsappUrl = "https://wa.me/qr/RJBBQE34G3ALI1";
 const phoneNumber = "+3249560497";
 
+const roadmapPhases = [
+  {
+    phase: "Phase 0 — Fondations",
+    badge: "Now",
+    points: [
+      "Identité unifiée et QR universel",
+      "Modules activables ON/OFF",
+      "Mode réseau faible par défaut",
+      "Traçabilité opérationnelle minimale",
+    ],
+  },
+  {
+    phase: "Phase 1 — Console Comités",
+    badge: "Now",
+    points: [
+      "Création d'event et cadrage terrain",
+      "Entrée, comptage et flux live",
+      "Rentabilité live par zone",
+      "Canal urgence piloté",
+    ],
+  },
+  {
+    phase: "Phase 3 — Bar Kit",
+    badge: "Next",
+    points: ["Menu QR actionnable", "Zones QR par point de vente", "Tracking bar et continuité service"],
+  },
+  {
+    phase: "Phase 4 — Commandes",
+    badge: "Next",
+    points: ["Commande QR multi-zones", "Statuts live de préparation", "Coordination comptoir et retrait"],
+  },
+  {
+    phase: "Phase 5 — Tickets & Ledger",
+    badge: "Later",
+    points: ["Wallet opérationnel", "Top-up staff et gifts", "Ardoise optionnelle et ledger consolidé"],
+  },
+  {
+    phase: "Phase 6 — Bets",
+    badge: "Later",
+    points: ["Formats auto-résolus", "Polymarket encadré", "Paramétrage comité et garde-fous"],
+  },
+  {
+    phase: "Phase 7 — Hunts",
+    badge: "Later",
+    points: ["Mécaniques de hunts par zone", "Validation par checkpoints", "Exploitation des parcours terrain"],
+  },
+  {
+    phase: "Phase 9 — Comité OS",
+    badge: "Later",
+    points: ["Forum interne", "Archives et passation", "Rôles, finances et gouvernance"],
+  },
+];
+
+const deliverySteps = [
+  "Module flag ON/OFF par event, bar ou comité.",
+  "Déploiement en soirée test avec un seul module actif à la fois.",
+  "Gating strict: OFF = invisible, FROZEN et READ_ONLY bloquent les writes.",
+  "Logs et exports exploitables pour audit opérationnel minimal.",
+  "Post-mortem court puis itération cadrée avant généralisation.",
+];
+
+const doneChecklist = [
+  "Stable en réseau faible.",
+  "Pas de double action côté interface (idempotence).",
+  "UX claire avec bannières et raisons de blocage.",
+  "Export basique et logs disponibles.",
+  "Rollback possible via désactivation du module.",
+];
+
+const extensions = [
+  {
+    title: "Battles / Affonds",
+    description: "Room join QR, formats encadrés, arbitre, anti-triche et ranking.",
+  },
+  {
+    title: "Check-in boissons",
+    description: "Badges, stats de consommation et paramètres de confidentialité.",
+  },
+  {
+    title: "WiFi via QR",
+    description: "Token temporaire avec expiration, revoke et journaux d'usage.",
+  },
+  {
+    title: "Safe Kit",
+    description: "Buddy, départ assisté, contacts d'urgence et incident discret.",
+  },
+  {
+    title: "Carte & itinéraires",
+    description: "Safe points, eau, toilettes et bars partenaires sur un plan actionnable.",
+  },
+  {
+    title: "Calendrier guindailles",
+    description: "Calendrier consolidé des soirées avec états et capacité estimée.",
+  },
+  {
+    title: "Référentiel local / onboarding",
+    description: "Glossaire opérationnel pour aligner rapidement nouveaux membres et équipes.",
+  },
+  {
+    title: "Module organisation interne",
+    description: "Baptême et planning interne avec règles de visibilité par rôle.",
+  },
+];
+
 const Index = () => {
   const { toast } = useToast();
 
@@ -174,6 +278,100 @@ const Index = () => {
                   <module.icon className="text-accent mb-4" size={22} />
                   <h3 className="text-lg font-semibold mb-2">{module.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{module.description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="roadmap" className="py-16 md:py-24 border-b border-border/50 bg-card/20 section-ember-texture">
+          <div className="container">
+            <div className="max-w-3xl mb-10 space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Roadmap</p>
+              <h2 className="text-3xl md:text-5xl font-semibold tracking-tight">Déploiement phasé de l'OS territorial.</h2>
+              <p className="text-muted-foreground text-base md:text-lg leading-relaxed">
+                Déploiement par phases. Chaque module est activable (ON/OFF) et validé en conditions réelles.
+              </p>
+            </div>
+
+            <div className="relative grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <div className="absolute left-3 top-1 bottom-1 w-px bg-gradient-to-b from-accent/50 via-accent/20 to-transparent md:hidden" aria-hidden="true" />
+              {roadmapPhases.map((item) => (
+                <article key={item.phase} className="relative ml-8 md:ml-0 rounded-xl border border-border/60 bg-background/70 p-5 metal-edge-card">
+                  <div className="absolute -left-8 top-7 h-3 w-3 rounded-full border border-accent/60 bg-background md:hidden" aria-hidden="true" />
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-semibold leading-tight">{item.phase}</h3>
+                    <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                      {item.badge}
+                    </span>
+                  </div>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {item.points.map((point) => (
+                      <li key={point} className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 rounded-full bg-accent/80 shrink-0" aria-hidden="true" />
+                        <span>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+            <p className="mt-6 text-sm text-muted-foreground">Extension layer ensuite: music, safe kit, carte, itinéraires et modules complémentaires.</p>
+          </div>
+        </section>
+
+        <section id="delivery" className="py-16 md:py-24 border-b border-border/50 section-ember-texture">
+          <div className="container grid gap-8 lg:grid-cols-[1.3fr_1fr] lg:gap-10 items-start">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent mb-4">Méthode</p>
+              <h2 className="text-3xl md:text-5xl font-semibold tracking-tight mb-5">Méthode de livraison</h2>
+              <p className="text-muted-foreground text-base md:text-lg leading-relaxed mb-8">
+                Chaque feature est livrée module par module, testée en conditions terrain puis généralisée seulement après validation.
+              </p>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {deliverySteps.map((step, index) => (
+                  <article key={step} className="rounded-xl border border-border/60 bg-card/35 p-5 metal-edge-card">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent mb-3">Étape {index + 1}</p>
+                    <p className="text-sm text-foreground/90 leading-relaxed">{step}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <aside className="rounded-xl border border-accent/30 bg-[linear-gradient(145deg,rgba(255,179,71,0.06),rgba(11,11,11,0.86))] p-6 metal-edge-card">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent mb-4">Definition of Done</p>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                {doneChecklist.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-accent/80 shrink-0" aria-hidden="true" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          </div>
+        </section>
+
+        <section id="extensions" className="py-16 md:py-24 border-b border-border/50 bg-card/20 section-ember-texture">
+          <div className="container">
+            <div className="max-w-3xl mb-10 space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Extensions</p>
+              <h2 className="text-3xl md:text-5xl font-semibold tracking-tight">Extensions terrain</h2>
+              <p className="text-muted-foreground text-base md:text-lg leading-relaxed">
+                Modules additionnels activables. Priorisés après validation du socle.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
+              {extensions.map((item) => (
+                <article key={item.title} className="rounded-xl border border-border/60 bg-background/65 p-5 metal-edge-card">
+                  <div className="mb-3">
+                    <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                      Extension
+                    </span>
+                  </div>
+                  <h3 className="text-base font-semibold mb-2">{item.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
                 </article>
               ))}
             </div>
