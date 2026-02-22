@@ -4,6 +4,7 @@ import { Header, Footer } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
+  ACCOUNT_URL,
   ANDROID_BETA_URL,
   DISPLAY_PHONE_NUMBER,
   FEEDBACK_URL,
@@ -150,6 +151,10 @@ const Index = () => {
     document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const scrollToContact = () => {
+    document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   const copyPhoneNumber = async () => {
     try {
       await navigator.clipboard.writeText(DISPLAY_PHONE_NUMBER);
@@ -210,7 +215,7 @@ const Index = () => {
                   <Link to="/#solution">Découvrir la plateforme</Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="h-12 px-7 text-sm sm:text-base font-semibold border-accent/40 hover:bg-accent/10">
-                  <Link to="/bars">Accès Bar / Comité</Link>
+                  <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">Accès Bar / Comité</a>
                 </Button>
                 <Button asChild size="lg" variant="ghost" className="h-12 px-7 text-sm sm:text-base font-semibold text-muted-foreground hover:text-foreground hover:bg-card/30">
                   <Link to="/#beta">Télécharger (Bêta)</Link>
@@ -409,7 +414,7 @@ const Index = () => {
           </div>
         </section>
 
-        <section id="positionnement" className="py-16 md:py-24 border-b border-border/50 section-ember-texture">
+        <section id="positioning" className="py-16 md:py-24 border-b border-border/50 section-ember-texture">
           <div className="container">
             <div className="max-w-4xl rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,hsl(var(--card)/0.75),hsl(var(--background)))] p-8 md:p-12 metal-edge-card">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent mb-4">Positionnement stratégique</p>
@@ -436,6 +441,9 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">
                   Si un lien n'est pas encore disponible, rejoignez la waitlist pour recevoir votre accès d'installation.
                 </p>
+                <Link to="/#account" className="inline-flex text-sm text-accent hover:text-accent/90 transition-colors">
+                  Créer un compte TORÈ maintenant →
+                </Link>
               </div>
               <div className="rounded-2xl border border-border/60 bg-background/70 p-6 md:p-8 metal-edge-card space-y-4">
                 <Button
@@ -485,6 +493,9 @@ const Index = () => {
               <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Waitlist pilotes TORÈ</h2>
               <p className="text-muted-foreground">Profils ciblés : Étudiant, Bar, Comité, DJ. Décrivez votre rôle et votre besoin pilote.</p>
               <p className="text-sm text-muted-foreground">Ce qu'on mesure : intérêt module et demandes de tests terrain.</p>
+              <Link to="/#account" className="inline-flex text-sm text-accent hover:text-accent/90 transition-colors">
+                Créer un compte TORÈ maintenant →
+              </Link>
               {WAITLIST_URL ? (
                 <Button asChild size="lg" className="h-12 px-7 text-sm sm:text-base font-semibold w-full sm:w-auto">
                   <a href={WAITLIST_URL} target="_blank" rel="noreferrer">Rejoindre la waitlist</a>
@@ -494,6 +505,72 @@ const Index = () => {
                   <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">Contact WhatsApp</a>
                 </Button>
               )}
+            </div>
+          </div>
+        </section>
+
+        <section id="account" className="py-16 md:py-24 border-b border-border/50 bg-card/20 section-ember-texture">
+          <div className="container">
+            <div className="max-w-4xl rounded-2xl border border-accent/25 bg-[linear-gradient(145deg,rgba(255,179,71,0.06),rgba(11,11,11,0.92))] p-8 md:p-10 metal-edge-card space-y-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Créer un compte</p>
+              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Créer un compte TORÈ (accès bêta)</h2>
+              <p className="text-muted-foreground">
+                Pré-inscription pour onboarding ops bar/comité. L'accès est délivré sur invitation après validation du profil terrain.
+              </p>
+
+              <form
+                className="grid gap-4 md:grid-cols-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (ACCOUNT_URL) {
+                    window.open(ACCOUNT_URL, "_blank", "noopener,noreferrer");
+                    return;
+                  }
+                  scrollToContact();
+                  toast({
+                    title: "Contact WhatsApp",
+                    description: "Le formulaire externe n'est pas encore configuré.",
+                    duration: 2800,
+                  });
+                }}
+              >
+                <label className="space-y-2 text-sm">
+                  <span className="text-foreground/90">Nom</span>
+                  <input name="name" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="text-foreground/90">Email</span>
+                  <input type="email" name="email" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="text-foreground/90">Téléphone</span>
+                  <input type="tel" name="phone" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="text-foreground/90">Rôle</span>
+                  <select name="role" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
+                    <option value="">Sélectionner un rôle</option>
+                    <option>Étudiant</option>
+                    <option>Comité</option>
+                    <option>Bar</option>
+                    <option>DJ</option>
+                  </select>
+                </label>
+                <label className="md:col-span-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <input type="checkbox" name="isWhatsapp" className="h-4 w-4 rounded border-border bg-background/70 accent-[hsl(var(--accent))]" />
+                  Ce numéro est WhatsApp
+                </label>
+                <div className="md:col-span-2 flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <Button type="submit" size="lg" className="h-11 px-6 text-sm font-semibold w-full sm:w-auto">
+                    Ouvrir le formulaire de pré-inscription
+                  </Button>
+                  {!ACCOUNT_URL && (
+                    <span className="text-sm text-muted-foreground">Formulaire en cours de configuration. Contact WhatsApp actif.</span>
+                  )}
+                </div>
+              </form>
+
+              <p className="text-sm text-muted-foreground">Nous utilisons ces informations uniquement pour l'accès bêta. Email bientôt.</p>
             </div>
           </div>
         </section>

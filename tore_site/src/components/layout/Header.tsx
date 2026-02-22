@@ -1,20 +1,30 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FEEDBACK_URL, WAITLIST_URL } from "@/lib/external-links";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { WAITLIST_URL, WHATSAPP_URL } from "@/lib/external-links";
 import logoFull from "@/assets/logo-full.png";
 
-const navLinks = [
-  { label: "Problème", href: "/#probleme" },
-  { label: "Solution", href: "/#solution" },
+const mainNavLinks = [
+  { label: "Plateforme", href: "/#solution" },
   { label: "Modules", href: "/#modules" },
   { label: "Roadmap", href: "/#roadmap" },
+  { label: "Contact", href: "/#contact" },
+];
+
+const sectionLinks = [
   { label: "Méthode", href: "/#delivery" },
   { label: "Extensions", href: "/#extensions" },
-  { label: "Positionnement", href: "/#positionnement" },
+  { label: "Positionnement", href: "/#positioning" },
   { label: "Bêta", href: "/#beta" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Créer un compte", href: "/#account" },
+  { label: "Feedback", href: "/#feedback" },
 ];
 
 export function Header() {
@@ -44,8 +54,8 @@ export function Header() {
           <img src={logoFull} alt="TORÈ" className="h-8 md:h-10 w-auto" />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-8">
-          {navLinks.map((link) => (
+        <nav className="hidden md:flex items-center gap-6">
+          {mainNavLinks.map((link) => (
             <Link
               key={link.href}
               to={link.href}
@@ -56,29 +66,31 @@ export function Header() {
               {link.label}
             </Link>
           ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex items-center gap-1 text-sm font-medium tracking-wide text-muted-foreground transition-colors hover:text-accent outline-none">
+              Sections <ChevronDown size={16} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 border-border/80 bg-card/95 backdrop-blur-lg">
+              {sectionLinks.map((link) => (
+                <DropdownMenuItem key={link.href} asChild>
+                  <Link to={link.href}>{link.label}</Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </nav>
 
-        <div className="hidden md:flex items-center gap-4">
-          <Link to="/#beta">
-            <Button size="sm" variant="outline" className="text-xs font-semibold border-accent/40 hover:bg-accent/10">
-              Télécharger (Bêta)
+        <div className="hidden md:flex items-center gap-3">
+          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">
+            <Button size="sm" className="text-xs font-semibold">
+              Accès Bar / Comité
             </Button>
-          </Link>
-          <a href={WAITLIST_URL || "/#contact"} target={WAITLIST_URL ? "_blank" : undefined} rel={WAITLIST_URL ? "noreferrer" : undefined}>
+          </a>
+          <a href={WAITLIST_URL || "/#waitlist"} target={WAITLIST_URL ? "_blank" : undefined} rel={WAITLIST_URL ? "noreferrer" : undefined}>
             <Button size="sm" variant="outline" className="text-xs font-semibold border-accent/40 hover:bg-accent/10">
               Rejoindre la bêta
             </Button>
           </a>
-          <a href={FEEDBACK_URL || "/#contact"} target={FEEDBACK_URL ? "_blank" : undefined} rel={FEEDBACK_URL ? "noreferrer" : undefined}>
-            <Button size="sm" variant="outline" className="text-xs font-semibold border-accent/40 hover:bg-accent/10">
-              Feedback
-            </Button>
-          </a>
-          <Link to="/bars">
-            <Button size="sm" className="text-xs font-semibold">
-              Accès Bar / Comité
-            </Button>
-          </Link>
         </div>
 
         <button
@@ -93,7 +105,7 @@ export function Header() {
       {isOpen && (
         <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border animate-fade-in">
           <nav className="container py-6 flex flex-col gap-4">
-            {navLinks.map((link) => (
+            {[...mainNavLinks, ...sectionLinks].map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
@@ -105,25 +117,10 @@ export function Header() {
                 {link.label}
               </Link>
             ))}
-            <div className="flex flex-col gap-3 pt-4 border-t border-border">
-              <Link to="/#beta" onClick={() => setIsOpen(false)}>
-                <Button variant="outline" className="w-full font-semibold border-accent/40 hover:bg-accent/10">
-                  Télécharger (Bêta)
-                </Button>
-              </Link>
-              <a href={WAITLIST_URL || "/#contact"} target={WAITLIST_URL ? "_blank" : undefined} rel={WAITLIST_URL ? "noreferrer" : undefined} onClick={() => setIsOpen(false)}>
-                <Button variant="outline" className="w-full font-semibold border-accent/40 hover:bg-accent/10">
-                  Rejoindre la bêta
-                </Button>
-              </a>
-              <a href={FEEDBACK_URL || "/#contact"} target={FEEDBACK_URL ? "_blank" : undefined} rel={FEEDBACK_URL ? "noreferrer" : undefined} onClick={() => setIsOpen(false)}>
-                <Button variant="outline" className="w-full font-semibold border-accent/40 hover:bg-accent/10">
-                  Feedback
-                </Button>
-              </a>
-              <Link to="/bars" onClick={() => setIsOpen(false)}>
+            <div className="pt-4 border-t border-border">
+              <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)}>
                 <Button className="w-full font-semibold">Accès Bar / Comité</Button>
-              </Link>
+              </a>
             </div>
           </nav>
         </div>
