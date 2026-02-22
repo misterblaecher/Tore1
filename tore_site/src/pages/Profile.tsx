@@ -1,68 +1,66 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api';
+import { MeResponse, clearToken, setCachedMe } from '@/lib/auth';
+import { getMe } from '@/lib/session';
 
 type AccountMode = 'user' | 'organizer' | 'team';
 
-type MePayload = {
-  id: string;
-  display_name: string;
-  bio?: string | null;
-  account_mode?: AccountMode;
-  role_request_pending?: { requested_mode: AccountMode; status: string } | null;
-};
-
-const API_URL = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '').toString().replace(/\/+$/, '');
-const TOKEN_KEY = 'tore_site_token';
-
 export default function ProfilePage() {
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
-  const [me, setMe] = useState<MePayload | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [msg, setMsg] = useState<string>('');
   const [upgradeCode, setUpgradeCode] = useState('');
 
-  const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
-
-  async function requestOtp(e: FormEvent) {
-    e.preventDefault();
-    const res = await fetch(`${API_URL}/auth/email/request_otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-    setMsg(res.ok ? 'Code envoyé.' : 'Échec envoi OTP');
-  }
-
-  async function verifyOtp(e: FormEvent) {
-    e.preventDefault();
-    const res = await fetch(`${API_URL}/auth/email/verify_otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, code }) });
-    const data = await res.json();
-    if (!res.ok) return setMsg('OTP invalide');
-    const access = (data.access_token || data.accessToken || '').toString();
-    localStorage.setItem(TOKEN_KEY, access);
-    setToken(access);
-    setMsg('Connecté.');
-  }
+  useEffect(() => {
+    void refreshMe();
+  }, []);
 
   async function refreshMe() {
-    const res = await fetch(`${API_URL}/auth/me`, { headers: authHeaders });
-    const data = await res.json();
-    if (!res.ok) return setMsg('Erreur /auth/me');
-    setMe(data);
+    try {
+      const payload = await getMe(true);
+      setMe(payload);
+      setMsg('');
+    } catch {
+      setMsg('Session expirée, reconnectez-vous.');
+    }
   }
 
   async function saveProfile() {
     if (!me) return;
-    const res = await fetch(`${API_URL}/auth/me`, { method: 'PATCH', headers: authHeaders, body: JSON.stringify({ display_name: me.display_name, bio: me.bio || '' }) });
-    setMsg(res.ok ? 'Profil enregistré' : 'Erreur profil');
-    await refreshMe();
+    const updated = await apiFetch<MeResponse>('/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: me.display_name, bio: me.bio || '' }),
+    });
+    setMe(updated);
+    setCachedMe(updated);
+    setMsg('Profil enregistré');
   }
 
   async function setMode(mode: AccountMode) {
     if (mode === 'user') {
-      const res = await fetch(`${API_URL}/auth/me`, { method: 'PATCH', headers: authHeaders, body: JSON.stringify({ account_mode: 'user' }) });
-      setMsg(res.ok ? 'Mode utilisateur activé' : 'Erreur mode');
-      return refreshMe();
+      await apiFetch('/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_mode: 'user' }),
+      });
+      setMsg('Mode utilisateur activé');
+      await refreshMe();
+      return;
     }
-    const res = await fetch(`${API_URL}/auth/role/request-upgrade`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ requested_mode: mode, code: upgradeCode }) });
-    setMsg(res.ok ? 'Demande envoyée (en attente).' : 'Code invalide ou erreur.');
-    return refreshMe();
+
+    await apiFetch('/auth/role/request-upgrade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requested_mode: mode, code: upgradeCode }),
+    });
+    setMsg('Demande envoyée (en attente).');
+    await refreshMe();
+  }
+
+  function logout() {
+    clearToken();
+    setMe(null);
+    setMsg('Déconnecté.');
   }
 
   return (
@@ -71,15 +69,8 @@ export default function ProfilePage() {
       <p>Mode actuel: <strong>{me?.account_mode ?? '-'}</strong></p>
       {me?.role_request_pending ? <p>Demande en attente: {me.role_request_pending.requested_mode}</p> : null}
 
-      <form onSubmit={requestOtp} style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder='email' />
-        <button type='submit'>Envoyer OTP</button>
-      </form>
-      <form onSubmit={verifyOtp} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder='code OTP' />
-        <button type='submit'>Vérifier OTP</button>
-      </form>
       <button onClick={refreshMe} style={{ marginTop: 10 }}>Rafraîchir /auth/me</button>
+      <button onClick={logout} style={{ marginTop: 10, marginLeft: 8 }}>Se déconnecter</button>
 
       {me ? (
         <section style={{ marginTop: 24 }}>

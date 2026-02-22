@@ -60,6 +60,22 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+
+## Environment
+
+Set API base URL in `.env`:
+
+```sh
+VITE_API_BASE_URL=https://tore-backend.onrender.com
+```
+
+For backward compatibility, `VITE_API_URL` is still supported as fallback.
+
+## Auth routes
+
+- `/login`: requests email link/OTP via backend `/auth/email/request_link`
+- `/auth/callback`: verifies token via `/auth/email/verify_link`, stores token(s), then calls `/auth/me`
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.

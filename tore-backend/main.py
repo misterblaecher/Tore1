@@ -707,6 +707,27 @@ def _mask_email_target(email: str) -> str:
     return f"{local[:2]}***@{domain}"
 
 
+def _build_magic_redirect_url(redirect_url: Optional[str], email: str, code: str) -> Optional[str]:
+    candidate = (redirect_url or '').strip()
+    if not candidate:
+        return None
+
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        return None
+
+    allowed_origins = [item.strip().rstrip('/') for item in (os.getenv('TORE_CORS_ORIGINS') or '').split(',') if item.strip()]
+    origin = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
+    if allowed_origins and origin not in allowed_origins:
+        return None
+
+    q = parse_qs(parsed.query, keep_blank_values=True)
+    q['email'] = [email]
+    q['token'] = [code]
+    query = urlencode(q, doseq=True)
+    return parsed._replace(query=query).geturl()
+
+
 def _send_email(subject: str, body: str, to_email: str) -> None:
     host = (os.getenv("SMTP_HOST") or "").strip()
     if not host:
@@ -740,12 +761,14 @@ def _send_email(subject: str, body: str, to_email: str) -> None:
         raise
 
 
-def _send_otp_email(target_email: str, code: str) -> None:
+def _send_otp_email(target_email: str, code: str, magic_link: Optional[str] = None) -> None:
     body = (
         "Ton code TORÈ : "
         f"{code}\n\n"
         "Il expire dans 10 minutes."
     )
+    if magic_link:
+        body += f"\n\nLien de connexion : {magic_link}"
     _send_email(subject="Ton code TORÈ", body=body, to_email=target_email)
 
 
@@ -1258,6 +1281,7 @@ class GoogleAuthIn(BaseModel):
 class MagicLinkRequestIn(BaseModel):
     email: str
     device: Optional[str] = None
+    redirect_url: Optional[str] = None
 
 
 class MagicLinkVerifyIn(BaseModel):
@@ -1267,6 +1291,7 @@ class MagicLinkVerifyIn(BaseModel):
 
 class EmailOtpRequestIn(BaseModel):
     email: str
+    redirect_url: Optional[str] = None
 
 
 class EmailOtpVerifyIn(BaseModel):
@@ -3839,7 +3864,8 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
     )
     db.commit()
 
-    _send_otp_email(email, raw_code)
+    magic_link = _build_magic_redirect_url(payload.redirect_url, email, raw_code)
+    _send_otp_email(email, raw_code, magic_link=magic_link)
     out: Dict[str, Any] = {
         "ok": True,
         "expires_in_seconds": EMAIL_OTP_TTL_MIN * 60,
@@ -3902,7 +3928,7 @@ def auth_email_verify_otp(payload: EmailOtpVerifyIn, request: Request, db: Sessi
 
 @app.post("/auth/email/request_link")
 def auth_email_request_link(payload: MagicLinkRequestIn, request: Request, db: Session = Depends(get_db)):
-    return auth_email_request_otp(EmailOtpRequestIn(email=payload.email), request, db)
+    return auth_email_request_otp(EmailOtpRequestIn(email=payload.email, redirect_url=payload.redirect_url), request, db)
 
 
 @app.post("/auth/email/verify_link")

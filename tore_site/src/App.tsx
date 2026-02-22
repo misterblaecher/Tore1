@@ -17,6 +17,9 @@ import Privacy from "./pages/legal/Privacy";
 import Terms from "./pages/legal/Terms";
 import Cookies from "./pages/legal/Cookies";
 import ProfilePage from "./pages/Profile";
+import LoginPage from "./pages/Login";
+import AuthCallbackPage from "./pages/AuthCallback";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 
 const queryClient = new QueryClient();
@@ -58,7 +61,9 @@ const App = () => (
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/trust" element={<Trust />} />
           <Route path="/contact" element={<Contact />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/legal/privacy" element={<Privacy />} />
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/cookies" element={<Cookies />} />
