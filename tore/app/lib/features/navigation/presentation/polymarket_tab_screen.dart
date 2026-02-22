@@ -162,12 +162,12 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
         ) ?? true;
 
     if (hasEvent && !polymarketEnabled && _scope == 'event') {
-      return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: Text('Module Polymarket indisponible pour cet event.')));
+      return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: Text('Module Polymarket indisponible pour cet event.')));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.eventOnly ? 'Market EVENT' : 'Market'),
+        title: Text(widget.eventOnly ? 'Polymarket EVENT' : 'Polymarket'),
         actions: [
           if (widget.eventOnly && widget.canCreateBets)
             IconButton(

@@ -166,9 +166,9 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   Widget build(BuildContext context) {
     final readOnly = isReadOnly(ref);
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-    if (_loading) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: CircularProgressIndicator()));
+    if (_loading) return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: CircularProgressIndicator()));
     final m = _market;
-    if (m == null) return Scaffold(appBar: AppBar(title: const Text('Market')), body: const Center(child: Text('Introuvable')));
+    if (m == null) return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: Text('Introuvable')));
     final resolvedBlocked = m.status == 'resolved';
     final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: _writeBlocked) || resolvedBlocked;
     if (m.outcome != null && m.myPositionTotal > 0 && _resolutionFlash == null) {
@@ -179,7 +179,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       });
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Market Detail')),
+      appBar: AppBar(title: const Text('Polymarket Detail')),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -209,7 +209,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: ServiceLimitedBanner(
-                  message: resolvedBlocked ? 'Market résolu: achats désactivés.' : writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: _bannerReason),
+                  message: resolvedBlocked ? 'Polymarket résolu: achats désactivés.' : writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: _bannerReason),
                 ),
               ),
             const SizedBox(height: 12),

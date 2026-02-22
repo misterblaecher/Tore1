@@ -142,12 +142,20 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
             },
           ),
           Center(
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white70, width: 3),
-                borderRadius: BorderRadius.circular(20),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.4, end: 1),
+              duration: const Duration(milliseconds: 1600),
+              curve: Curves.easeInOut,
+              builder: (context, glow, child) => Container(
+                width: 264,
+                height: 264,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFF4B400), width: 3),
+                  boxShadow: [
+                    BoxShadow(color: const Color(0x66F4B400).withOpacity(glow), blurRadius: 22, spreadRadius: 2),
+                  ],
+                ),
               ),
             ),
           ),
@@ -200,7 +208,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(10)),
-                      child: const Text('Scanner QR universel TORÈ', textAlign: TextAlign.center),
+                      child: const Text("Scanne l'arène.", textAlign: TextAlign.center),
                     ),
                     const SizedBox(height: 10),
                     TextButton.icon(

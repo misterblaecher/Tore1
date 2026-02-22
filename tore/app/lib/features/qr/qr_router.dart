@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_context/app_context.dart';
+import '../../core/auth/providers.dart';
 import '../../core/network/network_state_provider.dart';
 import '../../core/qr/qr_parser.dart';
 import '../../core/qr/qr_validator.dart';
@@ -23,6 +24,7 @@ import '../qr/presentation/qr_revoked_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
 import '../qr/presentation/wifi_screen.dart';
 import '../staff/presentation/staff_providers.dart';
+import '../auth/presentation/email_auth_screen.dart';
 
 class QrRouterService {
   QrRouterService(this._ref);
@@ -104,6 +106,11 @@ class QrRouterService {
         );
         return;
       case QrType.staffEntry:
+        if (_requiresAuthenticatedUser()) {
+          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          await _showAuthRequired(context);
+          return;
+        }
         if (payload.eventId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Staff entry invalide'));
           await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
@@ -122,6 +129,11 @@ class QrRouterService {
         );
         return;
       case QrType.staffBar:
+        if (_requiresAuthenticatedUser()) {
+          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          await _showAuthRequired(context);
+          return;
+        }
         if (payload.eventId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Staff bar invalide'));
           await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
@@ -294,6 +306,39 @@ class QrRouterService {
         await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR non reconnu');
         return;
     }
+  }
+
+  bool _requiresAuthenticatedUser() {
+    final session = _ref.read(authSessionProvider);
+    return !session.isAuthed;
+  }
+
+  Future<void> _showAuthRequired(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Connecte-toi pour continuer', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text('Cette action de scan demande un compte authentifié.'),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
+                },
+                child: const Text('Créer un compte / Se connecter'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _routeValidationError(

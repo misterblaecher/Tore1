@@ -17,7 +17,7 @@ class MarketScreen extends ConsumerWidget {
     final menuAsync = ref.watch(marketMenuProvider(eventId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Market')),
+      appBar: AppBar(title: const Text('Polymarket')),
       body: menuAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur: $e')),

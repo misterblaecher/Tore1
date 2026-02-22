@@ -106,7 +106,7 @@ class EventHubScreen extends ConsumerWidget {
         key: 'polymarket_event',
         aliases: const ['polymarket'],
         title: 'Polymarket EVENT',
-        subtitle: 'Markets de cet event',
+        subtitle: 'Polymarkets de cet event',
         icon: Icons.casino_outlined,
         builder: (_) => const EventPolymarketScreen(),
       ),
