@@ -10,11 +10,15 @@ class EventPolymarketScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctx = ref.watch(activeEventContextProvider).valueOrNull;
-    final permissions = ctx?.permissions ?? const EventPermissions(canCreateBets: false, canResolveBets: false);
-    return PolymarketTabScreen(
-      eventOnly: true,
-      canCreateBets: permissions.canCreateBets,
-      canResolveBets: permissions.canResolveBets,
-    );
+
+    // On garde le calcul permissions pour usage futur,
+    // mais on ne les passe pas au widget tant que son constructeur ne les accepte pas.
+    final permissions = ctx?.permissions ??
+        const EventPermissions(
+          canCreateBets: false,
+          canResolveBets: false,
+        );
+
+    return const PolymarketTabScreen();
   }
 }
