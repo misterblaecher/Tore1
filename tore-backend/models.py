@@ -1372,6 +1372,19 @@ class AppUser(Base):
     tokens: Mapped[List["AppToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
+class RoleUpgradeRequest(Base):
+    __tablename__ = "role_upgrade_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    requested_mode: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class Wallet(Base):
     __tablename__ = "wallets"
     user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), primary_key=True)

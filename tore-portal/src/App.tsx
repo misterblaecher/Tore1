@@ -54,6 +54,7 @@ import EventPublicLanding from './pages/EventPublicLanding'
 import DevStatus from './pages/DevStatus'
 import StaffAccountRequests from './pages/StaffAccountRequests'
 import QrDebug from './pages/QrDebug'
+import RoleUpgradeRequests from './pages/RoleUpgradeRequests'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -130,6 +131,14 @@ export default function App() {
         }
       />
 
+      <Route
+        path="/admin/role-requests"
+        element={
+          <RequireAuth>
+            <RoleUpgradeRequests />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/staff/account-requests"
         element={

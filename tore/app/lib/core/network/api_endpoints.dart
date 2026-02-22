@@ -14,6 +14,7 @@ class ApiEndpoints {
   static const authEmailVerifyOtp = '/auth/email/verify_otp';
   static const authRefresh = '/auth/refresh';
   static const authUpgradeGuest = '/auth/upgrade_guest';
+  static const authRoleRequestUpgrade = '/auth/role/request-upgrade';
 
   // ✅ Market
   static String eventMenu(int eventId) => '/events/$eventId/menu';
