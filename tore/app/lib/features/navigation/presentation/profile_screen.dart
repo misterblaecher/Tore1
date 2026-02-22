@@ -533,7 +533,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           );
         },
       ),
-    );
+    ),
+  );
   }
 
   static String _fmt(DateTime? dt) {
