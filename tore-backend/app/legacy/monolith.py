@@ -2152,27 +2152,33 @@ logging.info("BOOT commit=%s", os.getenv("RENDER_GIT_COMMIT"))
 @app.exception_handler(HTTPException)
 async def _http_exception_handler(request: Request, exc: HTTPException):
     detail = exc.detail
-    payload: dict[str, Any]
+    payload_detail: Any
     if isinstance(detail, dict):
-        payload = dict(detail)
-        if 'detail' not in payload:
-            payload = {'detail': payload.get('message') or payload.get('reason') or str(detail), **payload}
+        payload_detail = dict(detail)
     else:
-        payload = {'detail': str(detail)}
+        payload_detail = str(detail)
 
-    if exc.status_code == 429:
-        retry_after_raw = request.headers.get('retry-after')
+    if exc.status_code == 429 and isinstance(payload_detail, dict):
+        retry_after_raw = None
+        if exc.headers:
+            retry_after_raw = exc.headers.get('Retry-After') or exc.headers.get('retry-after')
+        if retry_after_raw is None:
+            retry_after_raw = request.headers.get('retry-after')
         retry_after_seconds = int(retry_after_raw) if (retry_after_raw and retry_after_raw.isdigit()) else None
-        body_retry = payload.get('retry_after_seconds')
+        body_retry = payload_detail.get('retry_after_seconds')
         if retry_after_seconds is None and isinstance(body_retry, int):
             retry_after_seconds = body_retry
         if retry_after_seconds is not None:
-            payload['retry_after_seconds'] = retry_after_seconds
+            payload_detail['retry_after_seconds'] = retry_after_seconds
 
-    if 'code' not in payload and isinstance(payload.get('reason'), str):
-        payload['code'] = payload['reason']
+    if isinstance(payload_detail, dict) and 'code' not in payload_detail and isinstance(payload_detail.get('reason'), str):
+        payload_detail['code'] = payload_detail['reason']
 
-    return JSONResponse(status_code=exc.status_code, content=payload)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={'detail': payload_detail},
+        headers=exc.headers,
+    )
 
 
 def _request_id_from_request(request: Request) -> Optional[str]:
@@ -2181,6 +2187,15 @@ def _request_id_from_request(request: Request) -> Optional[str]:
         or request.headers.get("x-render-request-id")
         or request.headers.get("x-correlation-id")
     )
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_exception_handler(request: Request, exc: RateLimitExceeded):
+    http_exc = standard_rate_limit_http_exception(
+        scope=exc.scope,
+        retry_after_seconds=exc.retry_after_seconds,
+    )
+    return await _http_exception_handler(request, http_exc)
 
 
 @app.exception_handler(Exception)

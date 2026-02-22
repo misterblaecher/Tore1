@@ -90,6 +90,8 @@ def standard_rate_limit_http_exception(scope: str, retry_after_seconds: int) -> 
         status_code=429,
         detail={
             "detail": "Too many requests",
+            "reason": "rate_limited",
+            "code": "rate_limited",
             "retry_after_seconds": int(retry_after_seconds),
             "scope": scope,
         },
