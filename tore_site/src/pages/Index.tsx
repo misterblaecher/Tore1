@@ -1,10 +1,10 @@
+import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { Copy, ShieldCheck, ScanLine, Network, BookOpenText, Ticket, Building2, Lock } from "lucide-react";
 import { Header, Footer } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ACCOUNT_URL,
   ANDROID_BETA_URL,
   DISPLAY_PHONE_NUMBER,
   FEEDBACK_URL,
@@ -145,8 +145,30 @@ const extensions = [
   },
 ];
 
+
+const API_URL = import.meta.env.VITE_API_URL?.trim();
+
+type AccountRole = "student" | "committee" | "bar" | "dj";
+
+const readUtmParams = () => {
+  if (typeof window === "undefined") return undefined;
+  const params = new URLSearchParams(window.location.search);
+  const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const utm = keys.reduce<Record<string, string>>((acc, key) => {
+    const value = params.get(key);
+    if (value) acc[key] = value;
+    return acc;
+  }, {});
+  return Object.keys(utm).length ? utm : undefined;
+};
+
 const Index = () => {
   const { toast } = useToast();
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<AccountRole | "">("");
+  const apiReady = Boolean(API_URL);
+
   const scrollToWaitlist = () => {
     document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
   };
@@ -513,25 +535,58 @@ const Index = () => {
           <div className="container">
             <div className="max-w-4xl rounded-2xl border border-accent/25 bg-[linear-gradient(145deg,rgba(255,179,71,0.06),rgba(11,11,11,0.92))] p-8 md:p-10 metal-edge-card space-y-5">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Créer un compte</p>
-              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Créer un compte TORÈ (accès bêta)</h2>
+              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Créer un compte TORÈ</h2>
               <p className="text-muted-foreground">
-                Pré-inscription pour onboarding ops bar/comité. L'accès est délivré sur invitation après validation du profil terrain.
+                Onboarding opérationnel pour les profils étudiant, bar, DJ et comité. Chaque demande est revue sérieusement avant
+                activation de l'accès.
               </p>
 
               <form
                 className="grid gap-4 md:grid-cols-2"
-                onSubmit={(event) => {
+                onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault();
-                  if (ACCOUNT_URL) {
-                    window.open(ACCOUNT_URL, "_blank", "noopener,noreferrer");
+                  if (!API_URL) {
+                    setAccountError("Backend non configuré.");
                     return;
                   }
-                  scrollToContact();
-                  toast({
-                    title: "Contact WhatsApp",
-                    description: "Le formulaire externe n'est pas encore configuré.",
-                    duration: 2800,
-                  });
+                  setAccountError(null);
+                  setAccountLoading(true);
+                  const formData = new FormData(event.currentTarget);
+                  const role = String(formData.get("role") || "") as AccountRole;
+                  const payload = {
+                    name: String(formData.get("name") || "").trim(),
+                    email: String(formData.get("email") || "").trim(),
+                    phone: String(formData.get("phone") || "").trim(),
+                    is_whatsapp: formData.get("is_whatsapp") === "on",
+                    role,
+                    committee_name: role === "committee" ? String(formData.get("committee_name") || "").trim() || null : null,
+                    source: "tore_site",
+                    utm: readUtmParams(),
+                  };
+
+                  try {
+                    const response = await fetch(`${API_URL}/public/account-request`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(payload),
+                    });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                      const message = result?.detail?.message || result?.message || "Impossible d'enregistrer la demande.";
+                      setAccountError(message);
+                      toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
+                      return;
+                    }
+                    event.currentTarget.reset();
+                    setSelectedRole("");
+                    toast({ title: "Compte enregistré", description: "Compte enregistré — on te contacte pour l’accès.", duration: 3200 });
+                  } catch {
+                    const message = "Erreur réseau. Réessaie dans un instant.";
+                    setAccountError(message);
+                    toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
+                  } finally {
+                    setAccountLoading(false);
+                  }
                 }}
               >
                 <label className="space-y-2 text-sm">
@@ -548,29 +603,42 @@ const Index = () => {
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="text-foreground/90">Rôle</span>
-                  <select name="role" required className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
+                  <select
+                    name="role"
+                    required
+                    value={selectedRole}
+                    onChange={(event) => setSelectedRole(event.target.value as AccountRole | "")}
+                    className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                  >
                     <option value="">Sélectionner un rôle</option>
-                    <option>Étudiant</option>
-                    <option>Comité</option>
-                    <option>Bar</option>
-                    <option>DJ</option>
+                    <option value="student">Étudiant</option>
+                    <option value="committee">Comité</option>
+                    <option value="bar">Bar</option>
+                    <option value="dj">DJ</option>
                   </select>
                 </label>
+                {selectedRole === "committee" && (
+                  <label className="md:col-span-2 space-y-2 text-sm">
+                    <span className="text-foreground/90">Nom du comité</span>
+                    <input name="committee_name" required={selectedRole === "committee"} className="w-full rounded-md border border-border/70 bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70" />
+                  </label>
+                )}
                 <label className="md:col-span-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
-                  <input type="checkbox" name="isWhatsapp" className="h-4 w-4 rounded border-border bg-background/70 accent-[hsl(var(--accent))]" />
+                  <input type="checkbox" name="is_whatsapp" className="h-4 w-4 rounded border-border bg-background/70 accent-[hsl(var(--accent))]" />
                   Ce numéro est WhatsApp
                 </label>
-                <div className="md:col-span-2 flex flex-col sm:flex-row gap-3 sm:items-center">
-                  <Button type="submit" size="lg" className="h-11 px-6 text-sm font-semibold w-full sm:w-auto">
-                    Ouvrir le formulaire de pré-inscription
+                <div className="md:col-span-2 flex flex-col gap-2">
+                  <Button type="submit" disabled={!apiReady || accountLoading} size="lg" className="h-11 px-6 text-sm font-semibold w-full sm:w-auto">
+                    {accountLoading ? "Création en cours..." : "Créer mon compte"}
                   </Button>
-                  {!ACCOUNT_URL && (
-                    <span className="text-sm text-muted-foreground">Formulaire en cours de configuration. Contact WhatsApp actif.</span>
-                  )}
+                  {!apiReady && <span className="text-sm text-muted-foreground">Backend non configuré.</span>}
+                  {accountError && <p className="text-sm text-destructive">{accountError}</p>}
                 </div>
               </form>
 
-              <p className="text-sm text-muted-foreground">Nous utilisons ces informations uniquement pour l'accès bêta. Email bientôt.</p>
+              <p className="text-sm text-muted-foreground">
+                Données utilisées uniquement pour l'onboarding compte TORÈ, conservation limitée et suppression sur demande.
+              </p>
             </div>
           </div>
         </section>

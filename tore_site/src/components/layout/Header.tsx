@@ -23,7 +23,7 @@ const sectionLinks = [
   { label: "Extensions", href: "/#extensions" },
   { label: "Positionnement", href: "/#positioning" },
   { label: "Bêta", href: "/#beta" },
-  { label: "Créer un compte", href: "/#account" },
+  { label: "Compte", href: "/#account" },
   { label: "Feedback", href: "/#feedback" },
 ];
 

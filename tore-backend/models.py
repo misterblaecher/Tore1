@@ -2330,3 +2330,21 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class AccountRequest(Base):
+    __tablename__ = "account_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(40), nullable=False)
+    is_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False)
+    role: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    committee_name: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="new", nullable=False)
+    ip_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
