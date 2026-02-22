@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc, case, text, or_, and_, Integer, String, DateTime, JSON, ForeignKey, UniqueConstraint
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, Mapped, mapped_column
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
@@ -2150,6 +2150,26 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content=payload)
 
 
+def _request_id_from_request(request: Request) -> Optional[str]:
+    return (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-render-request-id")
+        or request.headers.get("x-correlation-id")
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = _request_id_from_request(request)
+    logging.exception("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
+    payload: Dict[str, Any] = {
+        "detail": "Internal Server Error",
+        "code": "internal_error",
+        "request_id": request_id,
+    }
+    return JSONResponse(status_code=500, content=payload)
+
+
 @app.middleware("http")
 async def _metrics_lite_middleware(request, call_next):
     response = await call_next(request)
@@ -3938,6 +3958,7 @@ def auth_upgrade_guest(payload: UpgradeGuestIn, user: AppUser = Depends(get_curr
 
 @app.get("/auth/me")
 def me(
+    request: Request,
     bar_id: Optional[int] = Query(default=None),
     user: AppUser = Depends(get_current_user),
 ):
@@ -3950,12 +3971,16 @@ def me(
             else None
         )
         active_sanction = _active_sanction_for_user(s, user.id)
-        pending_role_request = (
-            s.query(RoleUpgradeRequest)
-            .filter(RoleUpgradeRequest.user_id == user.id, RoleUpgradeRequest.status == "pending")
-            .order_by(RoleUpgradeRequest.created_at.desc())
-            .first()
-        )
+        pending_role_request = None
+        try:
+            pending_role_request = (
+                s.query(RoleUpgradeRequest)
+                .filter(RoleUpgradeRequest.user_id == user.id, RoleUpgradeRequest.status == "pending")
+                .order_by(RoleUpgradeRequest.created_at.desc())
+                .first()
+            )
+        except (OperationalError, ProgrammingError):
+            logging.warning("role_upgrade_requests table missing or incompatible; fallback role_request_pending=null")
         return {
             "id": user.id,
             "display_name": user.display_name,
@@ -3981,6 +4006,17 @@ def me(
             "account_mode": (user.account_mode if user.account_mode in ALLOWED_ACCOUNT_MODES else "user"),
             "role_request_pending": (_serialize_role_upgrade_request(pending_role_request) if pending_role_request else None),
         }
+    except Exception as exc:
+        req_id = _request_id_from_request(request) if request else None
+        logging.exception("Unhandled /auth/me failure for user_id=%s", getattr(user, "id", None), exc_info=exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "detail": "Internal Server Error",
+                "code": "internal_error",
+                "request_id": req_id,
+            },
+        )
     finally:
         s.close()
 
