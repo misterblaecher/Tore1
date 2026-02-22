@@ -8,8 +8,8 @@
 @layer base {
   :root {
     /* === PALETTE RITUELLE === */
-    --background: 0 0% 3%;          /* Noir abyssal */
-    --foreground: 40 20% 90%;       /* Ivoire chaud */
+    --background: 0 0% 4.3%;        /* #0B0B0B noir profond */
+    --foreground: 0 0% 94.9%;       /* #F2F2F2 blanc cassé */
 
     --card: 0 20% 6%;               /* Noir braisé */
     --card-foreground: 40 20% 90%;
@@ -17,7 +17,7 @@
     --popover: 0 15% 7%;
     --popover-foreground: 40 20% 90%;
 
-    --primary: 8 80% 48%;           /* Rouge brasier */
+    --primary: 16 100% 56%;         /* #FF5A1F orange braise */
     --primary-foreground: 40 30% 95%;
 
     --secondary: 0 10% 10%;         /* Noir cendré */
@@ -26,7 +26,7 @@
     --muted: 0 8% 12%;
     --muted-foreground: 30 10% 55%;
 
-    --accent: 40 70% 50%;           /* Or sacré */
+    --accent: 35 100% 64%;          /* #FFB347 or chaud */
     --accent-foreground: 0 0% 5%;
 
     --destructive: 0 62% 30%;
@@ -48,22 +48,27 @@
     --crimson: 350 70% 35%;
     --surface: 0 15% 7%;
     --surface-hover: 0 20% 10%;
+
+    --tore-black: #0B0B0B;
+    --tore-ember: #FF5A1F;
+    --tore-gold: #FFB347;
+    --tore-offwhite: #F2F2F2;
   }
 
   .dark {
-    --background: 0 0% 3%;
-    --foreground: 40 20% 90%;
+    --background: 0 0% 4.3%;
+    --foreground: 0 0% 94.9%;
     --card: 0 20% 6%;
     --card-foreground: 40 20% 90%;
     --popover: 0 15% 7%;
     --popover-foreground: 40 20% 90%;
-    --primary: 8 80% 48%;
+    --primary: 16 100% 56%;
     --primary-foreground: 40 30% 95%;
     --secondary: 0 10% 10%;
     --secondary-foreground: 40 20% 85%;
     --muted: 0 8% 12%;
     --muted-foreground: 30 10% 55%;
-    --accent: 40 70% 50%;
+    --accent: 35 100% 64%;
     --accent-foreground: 0 0% 5%;
     --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 98%;
@@ -86,6 +91,21 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0.1;
+    mix-blend-mode: soft-light;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(255, 179, 71, 0.08), transparent 25%),
+      radial-gradient(circle at 80% 30%, rgba(255, 90, 31, 0.06), transparent 30%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.26'/%3E%3C/svg%3E");
   }
 }
 
@@ -268,3 +288,52 @@
 ::-webkit-scrollbar-track { background: hsl(var(--background)); }
 ::-webkit-scrollbar-thumb { background: hsl(var(--ember-deep)); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(var(--ember)); }
+
+
+.hero-heat-halo {
+  background:
+    radial-gradient(circle at 50% 26%, rgba(255, 179, 71, 0.26) 0%, rgba(255, 90, 31, 0.18) 28%, rgba(11, 11, 11, 0) 62%),
+    repeating-radial-gradient(circle at 50% 24%, rgba(255, 90, 31, 0.035) 0 2px, rgba(11, 11, 11, 0) 3px 9px);
+}
+
+.section-ember-texture {
+  position: relative;
+  isolation: isolate;
+}
+
+.section-ember-texture::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(255, 90, 31, 0.02) 0%, rgba(11, 11, 11, 0) 35%),
+    radial-gradient(circle at 75% 20%, rgba(255, 179, 71, 0.05), transparent 28%),
+    repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 5px);
+}
+
+.metal-edge-card {
+  position: relative;
+  box-shadow: 0 24px 38px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 179, 71, 0.1);
+}
+
+.metal-edge-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: linear-gradient(140deg, rgba(255, 179, 71, 0.34), rgba(255, 90, 31, 0.24), rgba(255, 179, 71, 0.08)) border-box;
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.animate-halo-breathe {
+  animation: haloBreathe 10s ease-in-out infinite;
+}
+
+@keyframes haloBreathe {
+  0%, 100% { opacity: 0.72; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
