@@ -68,6 +68,29 @@ class Api {
   Future<List<dynamic>> events(int barId) async =>
       (await _client.dio.get('/bars/$barId/events')).data as List<dynamic>;
 
+  Future<Map<String, dynamic>> myEvents() async =>
+      Map<String, dynamic>.from((await _client.dio.get('/me/events')).data as Map);
+
+  Future<Map<String, dynamic>> createSimpleEvent({
+    required String name,
+    required DateTime startsAt,
+    required String venue,
+  }) async {
+    final end = startsAt.add(const Duration(hours: 6));
+    final res = await _client.dio.post('/events', data: {
+      'name': name,
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': end.toIso8601String(),
+      if (venue.trim().isNotEmpty) 'venue': venue.trim(),
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> teamEventCheckin({required int eventId}) async {
+    final res = await _client.dio.post('/events/$eventId/checkin');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> event(int eventId) async =>
       Map<String, dynamic>.from(
         (await _client.dio.get('/events/$eventId')).data as Map,

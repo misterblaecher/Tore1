@@ -13,6 +13,7 @@ import '../../events/presentation/event_manage_landing_screen.dart';
 import '../../events/presentation/event_hub_screen.dart';
 import '../../community/community_models.dart';
 import '../../auth/presentation/email_auth_screen.dart';
+import '../../../ui/app_design_system.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -645,9 +646,10 @@ class _LoginRequiredBody extends StatelessWidget {
           children: [
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton(
+            PrimaryButton(
+              label: 'Se connecter',
+              icon: Icons.login,
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
-              child: const Text('Se connecter'),
             ),
           ],
         ),
