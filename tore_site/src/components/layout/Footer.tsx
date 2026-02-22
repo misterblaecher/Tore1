@@ -17,7 +17,7 @@ export function Footer() {
           >
             GitHub
           </a>
-          <Link to="/contact" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link to="/#contact" className="text-muted-foreground hover:text-foreground transition-colors">
             Contact
           </Link>
         </nav>
