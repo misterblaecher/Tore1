@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from db import Base, engine, get_session, now_utc
 from main import app, ensure_seed
@@ -131,6 +132,57 @@ def test_upgrade_guest_endpoint_acknowledges_device_id():
     assert up.status_code == 200
     assert up.json()["ok"] is True
 
+
+
+
+def test_auth_me_guest_returns_json_and_200():
+    client = TestClient(app)
+    guest = client.post("/auth/guest", json={"display_name": "Guest Me"})
+    assert guest.status_code == 200
+    token = guest.json()["token"]
+
+    me = client.get('/auth/me', headers={'Authorization': f'Bearer {token}'})
+    assert me.status_code == 200
+    assert me.headers.get('content-type', '').startswith('application/json')
+    body = me.json()
+    assert body['id']
+    assert 'account_mode' in body
+
+
+def test_auth_me_fallbacks_when_role_upgrade_requests_table_missing():
+    client = TestClient(app)
+    guest = client.post('/auth/guest', json={'display_name': 'Guest Missing Table'})
+    assert guest.status_code == 200
+    token = guest.json()['token']
+
+    s = get_session()
+    try:
+        s.execute(text('DROP TABLE IF EXISTS role_upgrade_requests'))
+        s.commit()
+    finally:
+        s.close()
+
+    me = client.get('/auth/me', headers={'Authorization': f'Bearer {token}'})
+    assert me.status_code == 200
+    assert me.headers.get('content-type', '').startswith('application/json')
+    assert me.json()['role_request_pending'] is None
+
+
+def test_internal_server_error_uses_json_handler(monkeypatch):
+    client = TestClient(app, raise_server_exceptions=False)
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr('main._issue_auth_tokens', explode)
+
+    res = client.post('/auth/guest', json={'display_name': 'Guest Error'})
+    assert res.status_code == 500
+    assert res.headers.get('content-type', '').startswith('application/json')
+    payload = res.json()
+    assert payload['detail'] == 'Internal Server Error'
+    assert payload['code'] == 'internal_error'
+    assert 'request_id' in payload
 
 def test_refresh_rejects_deleted_user(monkeypatch):
     monkeypatch.setenv("ENV", "DEV")
