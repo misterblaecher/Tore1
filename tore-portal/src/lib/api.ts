@@ -123,3 +123,11 @@ export async function createShortlink(params: ShortlinkParams): Promise<{ shortU
     return null
   }
 }
+
+
+export async function adminApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const adminKey = (import.meta.env.VITE_ADMIN_API_KEY ?? '').toString().trim()
+  const headers = new Headers(init.headers)
+  if (adminKey) headers.set('X-Admin-Api-Key', adminKey)
+  return api<T>(path, { ...init, headers })
+}

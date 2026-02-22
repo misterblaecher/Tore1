@@ -72,6 +72,25 @@ class QrParser {
       return _fromMap(trimmed, jsonPayload, now);
     }
 
+
+    final colonMatch = RegExp(r'^([a-zA-Z_]+):(.*)$').firstMatch(trimmed);
+    if (colonMatch != null) {
+      final prefix = (colonMatch.group(1) ?? '').toLowerCase();
+      final payload = (colonMatch.group(2) ?? '').trim();
+      final type = _mapType(prefix, prefix);
+      if (type != QrType.unknown) {
+        return QrPayload(
+          type: type,
+          raw: trimmed,
+          parsedAt: now,
+          eventId: prefix == 'event_checkin' ? _toInt(payload) : null,
+          barId: prefix == 'bar' ? _toInt(payload) : null,
+          tokenId: payload.isEmpty ? null : payload,
+          fields: {'payload': payload},
+        );
+      }
+    }
+
     final uri = Uri.tryParse(trimmed);
     if (uri != null && uri.hasScheme) {
       return _fromUri(trimmed, uri, now);
@@ -144,6 +163,7 @@ class QrParser {
       case 'join':
       case 'join_event':
       case 'event':
+      case 'event_checkin':
         return QrType.joinEvent;
       case 'menu':
       case 'market':
@@ -155,6 +175,7 @@ class QrParser {
       case 'bar_staff':
       case 'staff_bar':
       case 'staff':
+      case 'bar':
         return QrType.staffBar;
       case 'wifi':
       case 'wifi_token':
@@ -184,6 +205,7 @@ class QrParser {
       case 'event_staff_backup':
         return QrType.staffBackup;
       case 'orga_invite':
+      case 'profile':
         return QrType.orgaInvite;
       default:
         return QrType.unknown;

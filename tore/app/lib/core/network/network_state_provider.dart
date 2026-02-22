@@ -44,7 +44,7 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
   NetworkStateController(this.ref)
       : super(const NetworkSnapshot(state: NetworkState.online)) {
     unawaited(refresh());
-    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) => unawaited(refresh()));
+    _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) => unawaited(refresh()));
   }
 
   final Ref ref;

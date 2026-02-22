@@ -16,7 +16,7 @@ class ToreNetworkBanner extends ConsumerWidget {
     final bg = isOffline ? Colors.red.shade100 : Colors.orange.shade100;
     final border = isOffline ? Colors.red.shade300 : Colors.orange.shade300;
     final text = isOffline
-        ? 'Hors-ligne — mode lecture.'
+        ? 'Serveur indisponible — mode lecture.'
         : 'Réseau instable — certaines actions sont bloquées.';
 
     return Material(
