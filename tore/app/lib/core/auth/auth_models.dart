@@ -6,6 +6,7 @@ class AppUser {
   final bool showAddress;
   final bool showAvatar;
   final bool showIdentityToStaff;
+  final String? bio;
   final String visibility;
   final bool showIdentityInBar;
 
@@ -17,6 +18,7 @@ class AppUser {
     required this.showAddress,
     required this.showAvatar,
     required this.showIdentityToStaff,
+    required this.bio,
     required this.visibility,
     required this.showIdentityInBar,
   });
@@ -30,6 +32,7 @@ class AppUser {
       showAddress: (json['show_address'] as bool?) ?? false,
       showAvatar: (json['show_avatar'] as bool?) ?? true,
       showIdentityToStaff: (json['show_identity_to_staff'] as bool?) ?? false,
+      bio: json['bio']?.toString(),
       visibility: (json['visibility'] ?? 'public').toString(),
       showIdentityInBar: (json['show_identity_in_bar'] as bool?) ?? false,
     );
@@ -43,6 +46,7 @@ class AppUser {
       'show_address': showAddress,
       'show_avatar': showAvatar,
       'show_identity_to_staff': showIdentityToStaff,
+      'bio': bio,
       'visibility': visibility,
       'show_identity_in_bar': showIdentityInBar,
     };
@@ -55,6 +59,7 @@ class AppUser {
     bool? showAddress,
     bool? showAvatar,
     bool? showIdentityToStaff,
+    String? bio,
     String? visibility,
     bool? showIdentityInBar,
   }) {
@@ -66,6 +71,7 @@ class AppUser {
       showAddress: showAddress ?? this.showAddress,
       showAvatar: showAvatar ?? this.showAvatar,
       showIdentityToStaff: showIdentityToStaff ?? this.showIdentityToStaff,
+      bio: bio ?? this.bio,
       visibility: visibility ?? this.visibility,
       showIdentityInBar: showIdentityInBar ?? this.showIdentityInBar,
     );

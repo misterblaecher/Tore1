@@ -7,6 +7,7 @@ import logging
 import csv
 import io
 import base64
+import smtplib
 import secrets
 import string
 import hashlib
@@ -22,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Literal
 from zoneinfo import ZoneInfo
 from urllib.parse import parse_qs, urlencode, urlparse
+from email.message import EmailMessage
 
 import jwt
 from fastapi import FastAPI, HTTPException, Query, Depends, Header, Request
@@ -60,6 +62,7 @@ from models import (
     AppToken,
     RefreshToken,
     AuthMagicLink,
+    AuthOtpCode,
     PartnerMembership,
     Wallet,
     WalletTx,
@@ -163,8 +166,14 @@ ACCESS_TOKEN_TTL_MIN = int(os.getenv("TORE_AUTH_ACCESS_TTL_MIN", "60"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("TORE_AUTH_REFRESH_TTL_DAYS", "30"))
 MAGIC_LINK_TTL_MIN = int(os.getenv("TORE_AUTH_MAGIC_LINK_TTL_MIN", "10"))
 MAGIC_LINK_RATE_SCOPE = "auth_email_request_link"
+EMAIL_OTP_TTL_MIN = int(os.getenv("TORE_AUTH_EMAIL_OTP_TTL_MIN", "10"))
+EMAIL_OTP_SCOPE_EMAIL = "auth_email_request_otp_email"
+EMAIL_OTP_SCOPE_IP = "auth_email_request_otp_ip"
+EMAIL_OTP_VERIFY_SCOPE = "auth_email_verify_otp"
 GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+ENABLE_SMS_OTP = (os.getenv("ENABLE_SMS_OTP") or "false").strip().lower() in {"1", "true", "yes", "on"}
+ENABLE_WHATSAPP_OTP = (os.getenv("ENABLE_WHATSAPP_OTP") or "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # Price engine knobs (simple but fun)
 MIN_MULT = 0.50
@@ -634,6 +643,61 @@ def _hash_token(raw: str) -> str:
 
 def _normalize_email(email: str) -> str:
     return (email or "").strip().lower()
+
+
+def _mask_email_target(email: str) -> str:
+    if "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        return f"{local[:1]}***@{domain}"
+    return f"{local[:2]}***@{domain}"
+
+
+def _send_email(subject: str, body: str, to_email: str) -> None:
+    host = (os.getenv("SMTP_HOST") or "").strip()
+    if not host:
+        logging.info("email.skip.no_smtp subject=%s to=%s", subject, to_email)
+        return
+
+    port = int((os.getenv("SMTP_PORT") or "587").strip())
+    username = (os.getenv("SMTP_USERNAME") or "").strip()
+    password = (os.getenv("SMTP_PASSWORD") or "").strip()
+    sender = (os.getenv("SMTP_FROM") or "toreguindaille@gmail.com").strip()
+    override_to = (os.getenv("MAIL_OVERRIDE_TO") or "").strip()
+    target = override_to or to_email
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = target
+    msg.set_content(body)
+
+    with smtplib.SMTP(host, port, timeout=10) as smtp:
+        smtp.starttls()
+        if username:
+            smtp.login(username, password)
+        smtp.send_message(msg)
+
+
+def _send_otp_email(target_email: str, code: str) -> None:
+    body = (
+        "Ton code TORÈ : "
+        f"{code}\n\n"
+        "Il expire dans 10 minutes."
+    )
+    _send_email(subject="Ton code TORÈ", body=body, to_email=target_email)
+
+
+def _send_welcome_email(target_email: str) -> None:
+    body = (
+        "Bienvenue dans TORÈ.\n"
+        "Ton compte est actif.\n"
+        "Tu peux maintenant rejoindre des events, scanner des QR et compléter ton profil.\n"
+        "🐂 À bientôt sous le Toré.\n"
+        "L’équipe TORÈ"
+    )
+    _send_email(subject="Bienvenue dans TORÈ 🐂", body=body, to_email=target_email)
 
 
 def _user_snapshot(db: Session, user: AppUser) -> Dict[str, Any]:
@@ -1118,6 +1182,15 @@ class MagicLinkVerifyIn(BaseModel):
     token: str
 
 
+class EmailOtpRequestIn(BaseModel):
+    email: str
+
+
+class EmailOtpVerifyIn(BaseModel):
+    email: str
+    code: str = Field(min_length=6, max_length=6)
+
+
 class RefreshIn(BaseModel):
     refreshToken: str
 
@@ -1127,6 +1200,16 @@ class UpgradeGuestIn(BaseModel):
     merge_policy: str = "keep"
 
 
+class SmsOtpProvider:
+    def request_otp(self, phone: str) -> None:
+        raise NotImplementedError("SMS OTP provider not enabled")
+
+
+class WhatsAppOtpProvider:
+    def request_otp(self, phone: str) -> None:
+        raise NotImplementedError("WhatsApp OTP provider not enabled")
+
+
 class PatchMeIn(BaseModel):
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -1134,6 +1217,7 @@ class PatchMeIn(BaseModel):
     show_address: Optional[bool] = None
     show_avatar: Optional[bool] = None
     show_identity_to_staff: Optional[bool] = None
+    bio: Optional[str] = None
     visibility: Optional[str] = None
     show_identity_in_bar: Optional[bool] = None
 
@@ -3574,64 +3658,109 @@ def auth_google(payload: GoogleAuthIn, db: Session = Depends(get_db)):
     return {**tokens, "user": _user_snapshot(db, user)}
 
 
-@app.post("/auth/email/request_link")
-def auth_email_request_link(payload: MagicLinkRequestIn, request: Request, db: Session = Depends(get_db)):
+@app.get("/auth/providers")
+def auth_providers_status():
+    return {
+        "email_otp": True,
+        "sms_otp": ENABLE_SMS_OTP,
+        "whatsapp_otp": ENABLE_WHATSAPP_OTP,
+    }
+
+
+@app.post("/auth/email/request_otp")
+def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Session = Depends(get_db)):
     email = _normalize_email(payload.email)
     if "@" not in email:
         raise HTTPException(status_code=400, detail={"reason": "invalid_email"})
 
-    actor = request.client.host if request.client else "unknown"
-    enforce_rate_limit(MAGIC_LINK_RATE_SCOPE, actor)
+    actor_ip = request.client.host if request.client else "unknown"
+    enforce_rate_limit(EMAIL_OTP_SCOPE_EMAIL, email)
+    enforce_rate_limit(EMAIL_OTP_SCOPE_IP, actor_ip)
 
-    raw_token = secrets.token_urlsafe(24)
+    raw_code = f"{secrets.randbelow(1000000):06d}"
     db.add(
-        AuthMagicLink(
+        AuthOtpCode(
             email=email,
-            token_hash=_hash_token(raw_token),
-            expires_at=now_utc() + timedelta(minutes=MAGIC_LINK_TTL_MIN),
-            request_ip=actor,
-            request_device=(payload.device or "")[:180] or None,
+            code_hash=_hash_token(raw_code),
+            expires_at=now_utc() + timedelta(minutes=EMAIL_OTP_TTL_MIN),
+            request_ip=actor_ip,
+            max_attempts=5,
         )
     )
     db.commit()
 
-    print(f"[auth][magic-link] email={email} token={raw_token}")
-    out: Dict[str, Any] = {"ok": True}
+    _send_otp_email(email, raw_code)
+    out: Dict[str, Any] = {
+        "ok": True,
+        "expires_in_seconds": EMAIL_OTP_TTL_MIN * 60,
+        "resend_cooldown_seconds": 30,
+        "masked_email": _mask_email_target(email),
+    }
     if _strict_dev_env_enabled() and _env_bool("TORE_DEV_EXPOSE_MAGIC_TOKEN", True):
-        out["token"] = raw_token
+        out["code"] = raw_code
     return out
 
 
-@app.post("/auth/email/verify_link")
-def auth_email_verify_link(payload: MagicLinkVerifyIn, db: Session = Depends(get_db)):
+@app.post("/auth/email/verify_otp")
+def auth_email_verify_otp(payload: EmailOtpVerifyIn, request: Request, db: Session = Depends(get_db)):
     email = _normalize_email(payload.email)
-    token_hash = _hash_token((payload.token or "").strip())
+    code_hash = _hash_token((payload.code or "").strip())
     now = now_utc()
+    actor_ip = request.client.host if request.client else "unknown"
+    enforce_rate_limit(EMAIL_OTP_VERIFY_SCOPE, f"{actor_ip}:{email}")
 
     row = (
-        db.query(AuthMagicLink)
+        db.query(AuthOtpCode)
         .filter(
-            AuthMagicLink.email == email,
-            AuthMagicLink.token_hash == token_hash,
-            AuthMagicLink.used_at.is_(None),
-            AuthMagicLink.expires_at > now,
+            AuthOtpCode.email == email,
+            AuthOtpCode.used_at.is_(None),
+            AuthOtpCode.expires_at > now,
         )
-        .order_by(AuthMagicLink.created_at.desc())
+        .order_by(AuthOtpCode.created_at.desc())
         .first()
     )
     if not row:
-        raise HTTPException(status_code=401, detail={"reason": "invalid_or_expired_token"})
+        raise HTTPException(status_code=401, detail={"reason": "invalid_or_expired_code"})
+
+    if row.attempts >= row.max_attempts:
+        raise HTTPException(status_code=429, detail={"reason": "too_many_attempts"})
+
+    if row.code_hash != code_hash:
+        row.attempts += 1
+        db.add(row)
+        db.commit()
+        raise HTTPException(status_code=401, detail={"reason": "invalid_or_expired_code"})
 
     row.used_at = now
+    created = False
     user = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
     if not user:
+        created = True
         user = AppUser(id=secrets.token_hex(16), display_name=email.split("@")[0], email=email)
         db.add(user)
         db.flush()
 
     tokens = _issue_auth_tokens(db, user)
+    db.add(row)
     db.commit()
-    return {**tokens, "user": _user_snapshot(db, user)}
+
+    if created:
+        _send_welcome_email(email)
+
+    return {**tokens, "user": _user_snapshot(db, user), "created": created}
+
+
+@app.post("/auth/email/request_link")
+def auth_email_request_link(payload: MagicLinkRequestIn, request: Request, db: Session = Depends(get_db)):
+    return auth_email_request_otp(EmailOtpRequestIn(email=payload.email), request, db)
+
+
+@app.post("/auth/email/verify_link")
+def auth_email_verify_link(payload: MagicLinkVerifyIn, request: Request, db: Session = Depends(get_db)):
+    token = (payload.token or "").strip()
+    if len(token) != 6 or not token.isdigit():
+        raise HTTPException(status_code=400, detail={"reason": "otp_required"})
+    return auth_email_verify_otp(EmailOtpVerifyIn(email=payload.email, code=token), request, db)
 
 
 @app.post("/auth/refresh")
@@ -3699,6 +3828,7 @@ def me(
             "show_address": user.show_address,
             "show_avatar": user.show_avatar,
             "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
+            "bio": user.bio,
             "visibility": (settings.visibility if settings and settings.visibility else "public"),
             "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
             "bar_show_identity_to_staff": (
@@ -3735,6 +3865,8 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             u.show_address = payload.show_address
         if payload.show_avatar is not None:
             u.show_avatar = payload.show_avatar
+        if payload.bio is not None:
+            u.bio = payload.bio[:280]
         settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()
         if payload.show_identity_to_staff is not None or payload.visibility is not None or payload.show_identity_in_bar is not None:
             if not settings:

@@ -22,22 +22,34 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
   bool _requested = false;
   String? _devToken;
   String? _error;
+  int _cooldown = 0;
 
-  Future<void> _requestLink() async {
+  Future<void> _requestCode() async {
+    if (_cooldown > 0) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final out = await ref.read(authRepositoryProvider).requestEmailLink(_emailCtrl.text.trim());
+      final out = await ref.read(authRepositoryProvider).requestEmailOtp(_emailCtrl.text.trim());
       setState(() {
         _requested = true;
         _devToken = out.devToken;
+        _cooldown = out.resendCooldownSeconds;
       });
+      _tickCooldown();
     } catch (_) {
-      setState(() => _error = 'Impossible d\'envoyer le lien pour le moment.');
+      setState(() => _error = 'Impossible d\'envoyer le code.');
     } finally {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _tickCooldown() async {
+    while (mounted && _cooldown > 0) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+      setState(() => _cooldown = (_cooldown - 1).clamp(0, 999));
     }
   }
 
@@ -70,7 +82,7 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Connexion Email')),
+      appBar: AppBar(title: const Text('Créer compte / Se connecter')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -81,15 +93,31 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
           ),
           const SizedBox(height: 12),
           FilledButton(
-            onPressed: _loading ? null : _requestLink,
-            child: Text(_requested ? 'Renvoyer un lien' : 'Recevoir un lien magique'),
+            onPressed: _loading || _cooldown > 0 ? null : _requestCode,
+            child: Text(_requested ? (_cooldown > 0 ? 'Renvoyer (${_cooldown}s)' : 'Renvoyer un code') : 'Recevoir un code'),
+          ),
+          const SizedBox(height: 8),
+          const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text('Continuer avec téléphone (bientôt)'),
+            subtitle: Text('Disponible prochainement'),
+          ),
+          const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text('WhatsApp (bientôt)'),
+            subtitle: Text('Disponible prochainement'),
           ),
           if (_requested) ...[
             const SizedBox(height: 16),
             TextField(
               controller: _tokenCtrl,
-              decoration: const InputDecoration(labelText: 'Code / token'),
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(labelText: 'Code 6 chiffres'),
             ),
+            const Text('Le code expire en 10 minutes.'),
             if (kDebugMode)
               Align(
                 alignment: Alignment.centerLeft,
@@ -99,11 +127,11 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                 ),
               ),
             if (kDebugMode && _devToken != null)
-              SelectableText('DEV token: $_devToken', style: const TextStyle(color: Colors.orangeAccent)),
+              SelectableText('DEV code: $_devToken', style: const TextStyle(color: Colors.orangeAccent)),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: _loading ? null : _verify,
-              child: const Text('Vérifier'),
+              child: const Text('Vérifier code'),
             ),
           ],
           if (_error != null) ...[

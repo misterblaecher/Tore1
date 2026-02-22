@@ -13,8 +13,10 @@ class AuthTokens {
 
 class EmailRequestResult {
   final String? devToken;
+  final int expiresInSeconds;
+  final int resendCooldownSeconds;
 
-  const EmailRequestResult({this.devToken});
+  const EmailRequestResult({this.devToken, this.expiresInSeconds = 600, this.resendCooldownSeconds = 30});
 }
 
 class AuthRepository {
@@ -43,16 +45,20 @@ class AuthRepository {
     return _parseTokens(r.data);
   }
 
-  Future<EmailRequestResult> requestEmailLink(String email) async {
-    final r = await api.dio.post(ApiEndpoints.authEmailRequestLink, data: {'email': email});
+  Future<EmailRequestResult> requestEmailOtp(String email) async {
+    final r = await api.dio.post(ApiEndpoints.authEmailRequestOtp, data: {'email': email});
     final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
-    return EmailRequestResult(devToken: (data['token'] ?? data['dev_token'])?.toString());
+    return EmailRequestResult(
+      devToken: (data['code'] ?? data['token'] ?? data['dev_token'])?.toString(),
+      expiresInSeconds: (data['expires_in_seconds'] as num?)?.toInt() ?? 600,
+      resendCooldownSeconds: (data['resend_cooldown_seconds'] as num?)?.toInt() ?? 30,
+    );
   }
 
-  Future<AuthTokens> verifyEmailLink({required String email, required String token}) async {
+  Future<AuthTokens> verifyEmailOtp({required String email, required String code}) async {
     final r = await api.dio.post(
-      ApiEndpoints.authEmailVerifyLink,
-      data: {'email': email, 'token': token},
+      ApiEndpoints.authEmailVerifyOtp,
+      data: {'email': email, 'code': code},
     );
     return _parseTokens(r.data);
   }
@@ -68,6 +74,9 @@ class AuthRepository {
     bool? showAddress,
     bool? showAvatar,
     bool? showIdentityToStaff,
+    String? bio,
+    String? visibility,
+    bool? showIdentityInBar,
   }) async {
     final payload = <String, dynamic>{
       if (displayName != null) 'display_name': displayName,
@@ -76,6 +85,9 @@ class AuthRepository {
       if (showAddress != null) 'show_address': showAddress,
       if (showAvatar != null) 'show_avatar': showAvatar,
       if (showIdentityToStaff != null) 'show_identity_to_staff': showIdentityToStaff,
+      if (bio != null) 'bio': bio,
+      if (visibility != null) 'visibility': visibility,
+      if (showIdentityInBar != null) 'show_identity_in_bar': showIdentityInBar,
     };
 
     final r = await api.dio.patch(ApiEndpoints.authMe, data: payload);

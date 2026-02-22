@@ -221,6 +221,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           'Consentement enregistré',
                         ),
                       ),
+                      SwitchListTile.adaptive(
+                        value: me.showIdentityInBar,
+                        title: const Text('Visible dans ce bar'),
+                        onChanged: (v) => _patchPreference(
+                          () => ref.read(authRepositoryProvider).patchMe(showIdentityInBar: v),
+                          'Visibilité bar mise à jour',
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Public'),
+                            selected: me.visibility == 'public',
+                            onSelected: (_) => _patchPreference(
+                              () => ref.read(authRepositoryProvider).patchMe(visibility: 'public'),
+                              'Profil public',
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Privé'),
+                            selected: me.visibility == 'private',
+                            onSelected: (_) => _patchPreference(
+                              () => ref.read(authRepositoryProvider).patchMe(visibility: 'private'),
+                              'Profil privé',
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -297,6 +327,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       const SizedBox(height: 10),
                       _EditField(
+                        label: 'Bio courte',
+                        initialValue: me.bio ?? '',
+                        onSave: (v) async {
+                          final repo = ref.read(authRepositoryProvider);
+                          await repo.patchMe(bio: v);
+                          ref.invalidate(meProvider);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _EditField(
                         label: 'Adresse',
                         initialValue: me.addressText ?? '',
                         onSave: (v) async {
@@ -310,6 +350,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
 
+
+              const SizedBox(height: 12),
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Historique', style: TextStyle(fontWeight: FontWeight.w700)),
+                      SizedBox(height: 6),
+                      Text('Events / Gains bets / Hunts: bientôt (module OFF par défaut).'),
+                    ],
+                  ),
+                ),
+              ),
 
               const SizedBox(height: 12),
               FutureBuilder<MyEventsFetchResult>(

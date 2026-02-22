@@ -2321,6 +2321,20 @@ class AuthMagicLink(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class AuthOtpCode(Base):
+    __tablename__ = "auth_otp_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5)
+    request_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
@@ -2347,4 +2361,3 @@ class AccountRequest(Base):
     status: Mapped[str] = mapped_column(String(24), default="new", nullable=False)
     ip_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
