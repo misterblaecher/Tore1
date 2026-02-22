@@ -30,7 +30,8 @@ class EventHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final contextAsync = ref.watch(activeEventContextProvider);
     final eventCtx = contextAsync.valueOrNull;
-    final state = (eventCtx?.eventState ?? 'LIVE').toUpperCase();
+    final rawState = (eventCtx?.eventState ?? 'RUNNING').toUpperCase();
+    final state = rawState == 'LIVE' ? 'RUNNING' : rawState == 'PAUSE' ? 'PAUSED' : rawState == 'CLOSED' ? 'ENDED' : rawState;
     final title = eventCtx?.eventName ?? eventName;
     final modules = eventCtx?.modulesOn ?? const <String, bool>{};
 
@@ -209,13 +210,17 @@ class EventHubScreen extends ConsumerWidget {
   String? _stateBanner(String state) {
     switch (state.toUpperCase()) {
       case 'PAUSE':
-        return 'Pause — commandes bloquées';
+      case 'PAUSED':
+        return 'PAUSED — commandes bloquées';
       case 'MENU_ONLY':
         return 'Menu only — commandes bloquées';
       case 'DEGRADED':
         return 'Réseau instable — actions sensibles bloquées';
       case 'FROZEN':
         return 'FROZEN — aucune action';
+      case 'ENDED':
+      case 'CLOSED':
+        return 'ENDED — event terminé';
       default:
         return null;
     }
@@ -230,8 +235,8 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = state == 'LIVE' ? 'LIVE' : state;
-    final blocked = state != 'LIVE';
+    final label = state == 'RUNNING' || state == 'LIVE' ? 'RUNNING' : state;
+    final blocked = !(state == 'RUNNING' || state == 'LIVE');
     return Row(
       children: [
         Chip(

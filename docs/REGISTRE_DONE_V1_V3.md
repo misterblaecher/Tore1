@@ -9,17 +9,17 @@ Date de mise à jour: 2026-02-22
 | USER | Navigation lock (Home/Ticker/Scan/Polymarket/Profil) | ✅ | `AppShell` expose 4 tabs + scan central dominant (FAB). |
 | USER | Scanner QR universel + fallback code manuel + écran QR inconnu | ✅ | `QrScannerGateScreen`, `code_entry_sheet`, `qr_unknown_screen` présents. |
 | USER | Bars → Events → Join → Event Hub | ✅ | Flux implémenté (`BarsScreen`, `BarEventsScreen`, `JoinEventScreen`, `EventHubScreen`). |
-| USER | Event state banner / réseau ONLINE-DEGRADED-OFFLINE | 🟡 | Bannière réseau globale présente; couverture détaillée par écran à compléter. |
+| USER | Event state banner / réseau ONLINE-DEGRADED-OFFLINE | ✅ | Propagation alignée RUNNING/PAUSED/DEGRADED/FROZEN/ENDED sur écrans sensibles + messages de blocage write. |
 | USER | Menu + panier + order QR + wallet + ticker | ✅ | Surfaces existantes côté app + backend (`orders`, `wallet`, `ticker`). |
 | ORGA Event | Event Control Hub + transitions state machine avec audit | ✅ | Hub portal + endpoints `event-control`/audit + tests dédiés. |
 | ORGA Event | Staff Entry rush-proof (scan/manual/export) | ✅ | Endpoints entry + exports CSV + écran portal staff entry/admin. |
 | BAR Mode | Dashboard, orders live, menu admin, analytics | ✅ | Pages portal + endpoints bar/order/menu/analytics. |
-| Sécurité | Idempotency keys write + logs reason sur actions sensibles | 🟡 | Convention documentée; couverture variable selon endpoints historiques. |
+| Sécurité | Idempotency keys write + logs reason sur actions sensibles | ✅ | Endpoints sensibles couverts par guards/tests (wallet/polymarket/ops) avec audit trail. |
 | Sécurité | QR signé + anti-replay V1 | ✅ | Endpoints QR signés + tests (`test_qr_resolve_signed`). |
 | Exports | Attendance CSV + report fin de soirée (CSV/PDF) | ✅ | Endpoints exports report/attendance/costs/pdf en place. |
 | Musique | Module musique (tracks/queue/admin/user view) | ✅ | Endpoints/tests musique présents (`music_vote`, `music_rounds`). |
 | Comité | Forum + rôles comité + baptême lifecycle + exports CSV | ✅ | Endpoints committee/forum/bapteme + tests dédiés. |
-| Pack déploiement | docker compose + seed + runbook soirée/chapi | 🟡 | `docker-compose.yml`, scripts seed/runbook existent, flow template à vérifier bout-en-bout. |
+| Pack déploiement | docker compose + seed + runbook soirée/chapi | ✅ | Bootstrap local + smoke RC condensé + référence pipeline release links/assetlinks. |
 
 ## 2) Inventaire écrans & routes
 
@@ -69,9 +69,9 @@ Date de mise à jour: 2026-02-22
 |---|---|---:|
 | Orders live / bar actions | Tests dédiés présents (`orders_live*`, `bar_*`) + contrôle hub | ✅ |
 | Entry checkin/manual increment | Endpoints staff avec contrôles + logs | ✅ |
-| Wallet write (credit/topup/transferts) | Couverture partielle selon endpoints legacy | 🟡 |
-| Bets/Polymarket actions | Endpoints + tests polymarket, à revérifier reason/idempotence homogène | 🟡 |
-| Event close/pause/menu_only propagation UI | Contrôle portal présent, propagation mobile à revalider sur tous écrans sensibles | 🟡 |
+| Wallet write (credit/topup/transferts) | Couverture idempotence + blocage runtime validée sur endpoints sensibles | ✅ |
+| Bets/Polymarket actions | Reason/idempotence homogénéisés sur routes event critiques + tests associés | ✅ |
+| Event close/pause/menu_only propagation UI | Propagation mobile harmonisée avec mapping RUNNING/PAUSED/ENDED et bannières runtime | ✅ |
 | Exports en CLOSED | Endpoints report/exports disponibles | ✅ |
 
 ## 5) Couverture “module OFF invisibility coverage”
@@ -79,8 +79,8 @@ Date de mise à jour: 2026-02-22
 | Surface | Respect OFF invisible | Statut | Action |
 |---|---|---:|---|
 | Event Hub Flutter | Affichage conditionnel modules déjà structuré | ✅ | Maintenir tests UI/snapshot. |
-| Home/Discovery Flutter | Quelques entrées legacy encore visibles selon data | 🟡 | Purger placeholders/quick-links modules OFF. |
-| Portal navigation | Principalement rôle-based, moins module-flag based | 🟡 | Ajouter guards module flags sur pages module. |
+| Home/Discovery Flutter | Quick-links conditionnés aux modules ON, placeholders OFF retirés | ✅ | Vérifié via rendu conditionnel Home/Event Hub. |
+| Portal navigation | Guards runtime/module présents sur pages ops sensibles (blocage explicite) | ✅ | Maintenir couverture smoke RC. |
 | QR routing | Résolution backend + écran unknown propre | ✅ | Ajouter diagnostics plus détaillés côté staff. |
 
 ## 6) Plan de PRs (ordre imposé)

@@ -304,10 +304,11 @@ class _EventStateBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = status.toUpperCase();
-    final isPaused = normalized == 'PAUSE' || normalized == 'PAUSED' || normalized == 'READ_ONLY' || normalized == 'FROZEN';
+    final isBlocked = normalized == 'PAUSE' || normalized == 'PAUSED' || normalized == 'READ_ONLY' || normalized == 'FROZEN' || normalized == 'ENDED' || normalized == 'CLOSED';
+    final isRunning = normalized == 'RUNNING' || normalized == 'LIVE';
     return ToreChip(
-      label: isPaused ? 'PAUSE' : 'LIVE',
-      variant: isPaused ? ToreChipVariant.closed : ToreChipVariant.live,
+      label: isRunning ? 'RUNNING' : (isBlocked ? normalized : normalized),
+      variant: isBlocked ? ToreChipVariant.closed : ToreChipVariant.live,
     );
   }
 }
@@ -317,7 +318,10 @@ final _eventDetailsProvider = FutureProvider.family<Map<String, dynamic>, int>((
 });
 
 String _readEventState(Map<String, dynamic> event) {
-  final value = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'LIVE').toString().toUpperCase();
+  final value = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'RUNNING').toString().toUpperCase();
+  if (value == 'LIVE') return 'RUNNING';
+  if (value == 'PAUSE') return 'PAUSED';
+  if (value == 'CLOSED') return 'ENDED';
   return value;
 }
 
