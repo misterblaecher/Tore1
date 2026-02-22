@@ -157,14 +157,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     if (session.isGuest) {
-      final guestId = session.user?.id ?? 'guest';
-      return Scaffold(
-        backgroundColor: AppColors.backgroundPrimary,
-        appBar: AppBar(title: const Text('Profil')),
-        body: SolarBackground(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+      return _buildGuestScaffold(session);
+    }
+
+    return _buildAuthedScaffold(
+      context: context,
+      meAsync: meAsync,
+      ctx: ctx,
+      runtimeStateAsync: runtimeStateAsync,
+    );
+  }
+
+  Widget _buildGuestScaffold(AuthSession session) {
+    final guestId = session.user?.id ?? 'guest';
+    return Scaffold(
+      backgroundColor: AppColors.backgroundPrimary,
+      appBar: AppBar(title: const Text('Profil')),
+      body: SolarBackground(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -189,12 +201,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               icon: const Icon(Icons.logout),
               label: const Text('Quitter le mode invité'),
             ),
-            ],
-          ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
+  Widget _buildAuthedScaffold({
+    required BuildContext context,
+    required AsyncValue<AppUser> meAsync,
+    required AppContext ctx,
+    required AsyncValue<String> runtimeStateAsync,
+  }) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(title: const Text('Profil')),
@@ -533,8 +551,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           );
         },
       ),
-    ),
-  );
+    );
   }
 
   static String _fmt(DateTime? dt) {
