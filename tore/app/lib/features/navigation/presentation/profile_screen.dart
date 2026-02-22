@@ -159,10 +159,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (session.isGuest) {
       final guestId = session.user?.id ?? 'guest';
       return Scaffold(
+        backgroundColor: AppColors.backgroundPrimary,
         appBar: AppBar(title: const Text('Profil')),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
+        body: SolarBackground(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -187,14 +189,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               icon: const Icon(Icons.logout),
               label: const Text('Quitter le mode invité'),
             ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(title: const Text('Profil')),
-      body: meAsync.when(
+      body: SolarBackground(
+        child: meAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) {
           final isUnauthorized = e is ApiException && (e.statusCode == 401 || e.statusCode == 403);
@@ -248,7 +253,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       if (me.roleRequestPending != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: Text('Demande en attente: ${me.roleRequestPending!.requestedMode.name}'),
+                          child: Text('Demande en attente de validation admin: ${me.roleRequestPending!.requestedMode.name}'),
                         ),
                       Wrap(
                         spacing: 8,
@@ -587,6 +592,7 @@ class _LoginRequiredBody extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -1,28 +1,42 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const accent = Color(0xFFD4AF37);
-  static const accentSoft = Color(0x33D4AF37);
-  static const surface = Color(0xFF141418);
-  static const cardBorder = Color(0x33D4AF37);
+  static const accent = Color(0xFFF4B400);
+  static const accentSoft = Color(0x33F4B400);
+  static const surface = Color(0xFF14141C);
+  static const cardBorder = Color(0x40F4B400);
   static const success = Color(0xFF5ED8A6);
   static const warning = Color(0xFFF1B34A);
 
   // Solar Brutalism
-  static const backgroundPrimary = Color(0xFF0B0B0D);
-  static const accentGold = Color(0xFFD4AF37);
-  static const accentRed = Color(0xFFB11226);
+  static const backgroundPrimary = Color(0xFF08080C);
+  static const accentGold = Color(0xFFF4B400);
+  static const accentRed = Color(0xFFD72638);
+  static const accentAmber = Color(0xFFFF6A00);
   static const solarBackground = backgroundPrimary;
   static const solarGold = accentGold;
   static const solarRed = accentRed;
   static const solarRedSoft = Color(0x33E0442F);
   static BoxDecoration get solarCardDecoration => BoxDecoration(
-        color: const Color(0xFF141418),
+        color: surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentGold.withOpacity(0.20), width: 1),
+        border: Border.all(color: accentGold.withOpacity(0.22), width: 1),
         boxShadow: [
-          BoxShadow(color: accentRed.withOpacity(0.12), blurRadius: 10, spreadRadius: 0.2),
+          BoxShadow(color: accentGold.withOpacity(0.12), blurRadius: 20, spreadRadius: 0.3),
         ],
+      );
+
+  static BoxDecoration get solarHaloBackground => const BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0, -0.8),
+          radius: 1.2,
+          colors: [
+            Color(0x2AF4B400),
+            Color(0x14FF6A00),
+            backgroundPrimary,
+            backgroundPrimary,
+          ],
+        ),
       );
 }
 
@@ -35,7 +49,7 @@ class AppSpacing {
 
 class AppTextStyles {
   static const sectionTitle = TextStyle(fontSize: 18, fontWeight: FontWeight.w700);
-  static const massiveTitle = TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.3);
+  static const massiveTitle = TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 0.4);
   static const muted = TextStyle(fontSize: 13, color: Colors.white70);
 }
 
@@ -123,6 +137,47 @@ class AppChip extends StatelessWidget {
       label: Text(label),
       backgroundColor: color ?? AppColors.accentSoft,
       side: BorderSide.none,
+    );
+  }
+}
+
+class SolarBackground extends StatelessWidget {
+  const SolarBackground({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: AppColors.solarHaloBackground,
+      child: child,
+    );
+  }
+}
+
+class AuthRequiredNotice extends StatelessWidget {
+  const AuthRequiredNotice({super.key, required this.message, this.onLogin});
+
+  final String message;
+  final VoidCallback? onLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: AppColors.solarCardDecoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Connecte-toi pour continuer", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 6),
+          Text(message, style: AppTextStyles.muted),
+          if (onLogin != null) ...[
+            const SizedBox(height: 10),
+            PrimaryButton(label: "Créer un compte / Se connecter", onPressed: onLogin, icon: Icons.lock_open),
+          ],
+        ],
+      ),
     );
   }
 }

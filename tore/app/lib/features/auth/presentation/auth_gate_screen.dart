@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
 import '../../../ui/app_design_system.dart';
+import '../../../app_shell.dart';
 import 'email_auth_screen.dart';
 
 class AuthGateScreen extends ConsumerStatefulWidget {
@@ -23,6 +24,10 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
     });
     try {
       await ref.read(authSessionProvider.notifier).continueAsGuest();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AppShell()),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Impossible de continuer en invité pour le moment.');
@@ -35,16 +40,19 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF08080C),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+      body: SolarBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
+              Image.asset('assets/branding/logo_minimal.png', height: 70, errorBuilder: (_, __, ___) => const Icon(Icons.bolt, size: 52, color: AppColors.accentGold)),
+              const SizedBox(height: 18),
               const Text('TORÈ', textAlign: TextAlign.center, style: AppTextStyles.massiveTitle),
               const SizedBox(height: 8),
-              const Text('Entre dans l\'arène', textAlign: TextAlign.center),
+              const Text('Territorial OS', textAlign: TextAlign.center, style: AppTextStyles.muted),
               const SizedBox(height: 28),
               if (_error != null) ...[
                 Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
@@ -73,6 +81,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

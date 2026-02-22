@@ -121,7 +121,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Resolve market'),
+        title: const Text('Résoudre ce Polymarket'),
         content: StatefulBuilder(
           builder: (context, setLocal) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -179,7 +179,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       });
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Polymarket Detail')),
+      appBar: AppBar(title: const Text('Détail Polymarket')),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
