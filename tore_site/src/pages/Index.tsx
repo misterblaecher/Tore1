@@ -41,9 +41,25 @@ const Index = () => {
   const copyPhoneNumber = async () => {
     try {
       await navigator.clipboard.writeText(phoneNumber);
-      toast({ title: "Copié", description: `Numéro ${phoneNumber} copié.` });
+      toast({ title: "Copié", description: `Numéro ${phoneNumber} copié.`, duration: 2400 });
     } catch {
-      toast({ title: "Copie indisponible", description: "Copiez manuellement le numéro affiché.", variant: "destructive" });
+      const textArea = document.createElement("textarea");
+      textArea.value = phoneNumber;
+      textArea.setAttribute("readonly", "");
+      textArea.style.position = "absolute";
+      textArea.style.left = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textArea);
+
+      toast({
+        title: copied ? "Copié" : "Copie indisponible",
+        description: copied ? `Numéro ${phoneNumber} copié.` : "Copiez manuellement le numéro affiché.",
+        variant: copied ? "default" : "destructive",
+        duration: 2400,
+      });
     }
   };
 
@@ -85,6 +101,9 @@ const Index = () => {
                   <Link to="/bars">Accès Bar / Comité</Link>
                 </Button>
               </div>
+              <Link to="/#contact" className="inline-flex text-sm text-muted-foreground hover:text-accent transition-colors">
+                Contact ops →
+              </Link>
             </div>
           </div>
         </section>
