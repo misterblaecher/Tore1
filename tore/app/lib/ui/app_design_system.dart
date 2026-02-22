@@ -1,12 +1,29 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const accent = Color(0xFFE83D84);
-  static const accentSoft = Color(0x33E83D84);
-  static const surface = Color(0xFF161622);
-  static const cardBorder = Color(0xFF2A2B3A);
+  static const accent = Color(0xFFD4AF37);
+  static const accentSoft = Color(0x33D4AF37);
+  static const surface = Color(0xFF141418);
+  static const cardBorder = Color(0x33D4AF37);
   static const success = Color(0xFF5ED8A6);
   static const warning = Color(0xFFF1B34A);
+
+  // Solar Brutalism
+  static const backgroundPrimary = Color(0xFF0B0B0D);
+  static const accentGold = Color(0xFFD4AF37);
+  static const accentRed = Color(0xFFB11226);
+  static const solarBackground = backgroundPrimary;
+  static const solarGold = accentGold;
+  static const solarRed = accentRed;
+  static const solarRedSoft = Color(0x33E0442F);
+  static BoxDecoration get solarCardDecoration => BoxDecoration(
+        color: const Color(0xFF141418),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentGold.withOpacity(0.20), width: 1),
+        boxShadow: [
+          BoxShadow(color: accentRed.withOpacity(0.12), blurRadius: 10, spreadRadius: 0.2),
+        ],
+      );
 }
 
 class AppSpacing {
@@ -18,6 +35,7 @@ class AppSpacing {
 
 class AppTextStyles {
   static const sectionTitle = TextStyle(fontSize: 18, fontWeight: FontWeight.w700);
+  static const massiveTitle = TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.3);
   static const muted = TextStyle(fontSize: 13, color: Colors.white70);
 }
 
@@ -37,7 +55,11 @@ class PrimaryButton extends StatelessWidget {
           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
           : Icon(icon ?? Icons.arrow_forward),
       label: Text(label),
-      style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.accentGold,
+        foregroundColor: Colors.black,
+        minimumSize: const Size.fromHeight(52),
+      ),
     );
   }
 }
