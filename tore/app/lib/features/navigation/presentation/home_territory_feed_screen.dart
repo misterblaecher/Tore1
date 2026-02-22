@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../state.dart';
 import '../../../ui/app_design_system.dart';
+import '../../qr/presentation/qr_scanner_screen.dart';
 
 const _territoryFeedCacheKey = 'territory_feed_cache_v1';
 const bool kTrendingEnabled = true;
@@ -170,7 +171,13 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                     ],
                   ),
                 ),
-                IconButton(onPressed: _loadFeed, icon: const Icon(Icons.refresh)),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                  ),
+                  icon: const Icon(Icons.qr_code_scanner_outlined),
+                  label: const Text('Scan'),
+                ),
               ],
             ),
             if (_fromCache || _error != null)
@@ -179,7 +186,7 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 child: Text(_error ?? 'Affichage depuis le cache local.', style: const TextStyle(color: AppColors.warning)),
               ),
             const SizedBox(height: 16),
-            const Text('Events Near Me', style: AppTextStyles.sectionTitle),
+            const Text('Événements actifs', style: AppTextStyles.sectionTitle),
             const SizedBox(height: 8),
             SizedBox(
               height: 172,
@@ -196,20 +203,20 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                           padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: AppColors.solarCardDecoration,
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(event.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text(event.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                             const SizedBox(height: 6),
                             Text(event.distanceLabel, style: AppTextStyles.muted),
                             const Spacer(),
                             Wrap(spacing: 6, children: [for (final icon in event.modules) Icon(icon, size: 16, color: AppColors.solarGold)]),
                             const SizedBox(height: 8),
-                            Text('${event.participants} participants', style: AppTextStyles.muted),
+                            Text('${event.participants} présents', style: AppTextStyles.muted),
                           ]),
                         );
                       },
                     ),
             ),
             const SizedBox(height: 16),
-            const Text('Bars actifs', style: AppTextStyles.sectionTitle),
+            const Text('Bars vivants', style: AppTextStyles.sectionTitle),
             const SizedBox(height: 8),
             for (final bar in _bars)
               Container(
@@ -223,12 +230,12 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
               ),
             if (kTrendingEnabled) ...[
               const SizedBox(height: 12),
-              const Text('Trending', style: AppTextStyles.sectionTitle),
+              const Text('Arènes actives', style: AppTextStyles.sectionTitle),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: const [
-                AppChip(label: 'Hunt en cours'),
-                AppChip(label: 'Battle populaire'),
-                AppChip(label: 'Market chaud'),
+                AppChip(label: 'Battle en cours'),
+                AppChip(label: 'Hunt en feu'),
+                AppChip(label: 'Polymarket chaud'),
               ]),
             ],
           ],

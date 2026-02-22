@@ -48,7 +48,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       _ShellTab(
           key: _polymarketNavKey,
           icon: Icons.candlestick_chart_outlined,
-          label: 'Market',
+          label: 'Polymarket',
           root: const PolymarketTabScreen(),
         ),
       _ShellTab(
@@ -80,12 +80,20 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton.large(
-        backgroundColor: AppColors.accentGold,
+        backgroundColor: const Color(0xFFF4B400),
         foregroundColor: Colors.black,
         elevation: 10,
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
         tooltip: 'Scanner QR',
-        child: const Icon(Icons.qr_code_scanner_outlined, size: 32),
+        child: Container(
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: Color(0x66F4B400), blurRadius: 18, spreadRadius: 1),
+            ],
+          ),
+          child: const Icon(Icons.qr_code_scanner_outlined, size: 32),
+        ),
       ),
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),

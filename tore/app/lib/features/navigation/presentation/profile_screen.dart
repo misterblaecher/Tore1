@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
@@ -23,20 +22,11 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  String? _sessionToken;
   Timer? _pendingPoll;
-  String _idem() => "profile-v2-${DateTime.now().millisecondsSinceEpoch}";
 
   @override
   void initState() {
     super.initState();
-    _loadSessionToken();
-  }
-
-  Future<void> _loadSessionToken() async {
-    final token = await ref.read(authRepositoryProvider).api.tokenStorage.readToken();
-    if (!mounted) return;
-    setState(() => _sessionToken = token);
   }
 
   void _syncPendingPoll(AppUser? me) {
@@ -167,24 +157,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     if (session.isGuest) {
+      final guestId = session.user?.id ?? 'guest';
       return Scaffold(
         appBar: AppBar(title: const Text('Profil')),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             Card(
-              color: Colors.orange.withOpacity(0.15),
-              child: ListTile(
-                title: const Text('Tu es en invité — sauvegarde ton compte'),
-                subtitle: const Text('Pour conserver ton profil et tes actions.'),
-                trailing: FilledButton(onPressed: _upgradeGuestAccount, child: const Text('Sauvegarder')),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Invité', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+                    const SizedBox(height: 4),
+                    Text('ID: ${guestId.length > 12 ? guestId.substring(0, 12) : guestId}'),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: _upgradeGuestAccount,
+                      child: const Text('Créer un compte / Se connecter'),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () async => ref.read(authSessionProvider.notifier).logout(),
               icon: const Icon(Icons.logout),
-              label: const Text('Se déconnecter'),
+              label: const Text('Quitter le mode invité'),
             ),
           ],
         ),
@@ -523,73 +524,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 },
               ),
 
-              const SizedBox(height: 12),
-              FutureBuilder<Map<String, dynamic>>(
-                future: ref.read(apiProvider).myProfileV2(),
-                builder: (context, snap) {
-                  final profile = snap.data ?? const <String, dynamic>{};
-                  final orgas = ((profile['orgas'] as List?) ?? const []).cast<dynamic>();
-                  final events = ((profile['events'] as List?) ?? const []).cast<dynamic>();
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Profil V2', style: TextStyle(fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
-                          _EditField(
-                            label: 'Pseudo (obligatoire)',
-                            initialValue: (profile['display_name'] ?? me.displayName).toString(),
-                            onSave: (v) async {
-                              await ref.read(apiProvider).updateMyProfileV2(displayName: v, bio: profile['bio']?.toString(), instagramHandle: profile['instagram_handle']?.toString(), photoUrl: profile['photo_url']?.toString(), visibility: (profile['visibility'] ?? 'PUBLIC').toString(), idempotencyKey: _idem());
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _EditField(
-                            label: 'Bio',
-                            initialValue: (profile['bio'] ?? '').toString(),
-                            onSave: (v) async {
-                              await ref.read(apiProvider).updateMyProfileV2(displayName: (profile['display_name'] ?? me.displayName).toString(), bio: v, instagramHandle: profile['instagram_handle']?.toString(), photoUrl: profile['photo_url']?.toString(), visibility: (profile['visibility'] ?? 'PUBLIC').toString(), idempotencyKey: _idem());
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          Text('Mes orgas (${orgas.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          for (final o in orgas.take(3)) Text('• ${(o as Map)['name']} (${o['role']})'),
-                          const SizedBox(height: 8),
-                          Text('Mes events (${events.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          for (final e in events.take(3)) Text('• ${(e as Map)['name']}'),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Diagnostics', style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final value = (_sessionToken != null && _sessionToken!.isNotEmpty) ? _sessionToken! : me.id;
-                          await Clipboard.setData(ClipboardData(text: value));
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(value == me.id ? 'User ID copié' : 'Token session copié')),
-                          );
-                        },
-                        icon: const Icon(Icons.copy_all_outlined),
-                        label: Text((_sessionToken != null && _sessionToken!.isNotEmpty) ? 'Copier mon token session' : 'Copier mon user id'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             ],
           );
         },
