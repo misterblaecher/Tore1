@@ -85,7 +85,17 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     const SizedBox(height: 10),
                     OutlinedButton(
                       onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
-                      child: const Text('Continuer par Email'),
+                      child: const Text('Continuer par Email (OTP)'),
+                    ),
+                    const SizedBox(height: 10),
+                    const OutlinedButton(
+                      onPressed: null,
+                      child: Text('Continuer avec téléphone (bientôt)'),
+                    ),
+                    const SizedBox(height: 10),
+                    const OutlinedButton(
+                      onPressed: null,
+                      child: Text('WhatsApp (bientôt)'),
                     ),
                   ],
                 ),

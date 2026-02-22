@@ -32,6 +32,18 @@ _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
         int(os.getenv("TORE_SHORTLINKS_CREATE_USER_RATE_LIMIT_MAX", "30")),
         int(os.getenv("TORE_SHORTLINKS_CREATE_USER_RATE_LIMIT_WINDOW_S", "600")),
     ),
+    "auth_email_request_otp_email": (
+        int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_MAX", "4")),
+        int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_WINDOW_S", "600")),
+    ),
+    "auth_email_request_otp_ip": (
+        int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_IP_MAX", "15")),
+        int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_IP_WINDOW_S", "600")),
+    ),
+    "auth_email_verify_otp": (
+        int(os.getenv("TORE_AUTH_EMAIL_OTP_VERIFY_MAX", "10")),
+        int(os.getenv("TORE_AUTH_EMAIL_OTP_VERIFY_WINDOW_S", "600")),
+    ),
 }
 
 _lock = threading.Lock()

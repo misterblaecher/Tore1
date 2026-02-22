@@ -67,7 +67,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
   }
 
   Future<void> loginWithEmail({required String email, required String token}) async {
-    final tokens = await _repo.verifyEmailLink(email: email, token: token);
+    final tokens = await _repo.verifyEmailOtp(email: email, code: token);
     await _completeLogin(tokens);
   }
 

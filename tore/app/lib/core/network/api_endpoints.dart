@@ -10,8 +10,8 @@ class ApiEndpoints {
   static const authGuest = '/auth/guest';
   static const authMe = '/auth/me';
   static const authGoogle = '/auth/google';
-  static const authEmailRequestLink = '/auth/email/request_link';
-  static const authEmailVerifyLink = '/auth/email/verify_link';
+  static const authEmailRequestOtp = '/auth/email/request_otp';
+  static const authEmailVerifyOtp = '/auth/email/verify_otp';
   static const authRefresh = '/auth/refresh';
   static const authUpgradeGuest = '/auth/upgrade_guest';
 
