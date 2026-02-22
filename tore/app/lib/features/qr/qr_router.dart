@@ -279,7 +279,7 @@ class QrRouterService {
           MaterialPageRoute(
             builder: (_) => const ModuleUnavailableScreen(
               title: 'Module indisponible',
-              message: 'Ce module n'est pas accessible pour le moment.',
+              message: "Ce module n'est pas accessible pour le moment.",
               reasonCode: 'module_unavailable',
             ),
           ),
