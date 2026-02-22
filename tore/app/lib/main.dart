@@ -5,7 +5,7 @@ import 'package:tore/features/bars/presentation/bars_screen.dart';
 
 import 'app_shell.dart';
 import 'features/auth/presentation/complete_profile_screen.dart';
-import 'features/auth/presentation/welcome_screen.dart';
+import 'features/auth/presentation/auth_gate_screen.dart';
 import 'features/community/presentation/orga_detail_screen.dart';
 import 'features/community/presentation/orga_invite_join_screen.dart';
 import 'features/qr/presentation/join_event_screen.dart';
@@ -187,7 +187,7 @@ class _BootEntryState extends ConsumerState<_BootEntry> {
     if (authSession.isGuest) {
       return const AppShell();
     }
-    return const WelcomeScreen();
+    return const AuthGateScreen();
   }
 }
 
@@ -211,7 +211,7 @@ class _BootSplash extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0D),
+      backgroundColor: const Color(0xFF08080C),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -231,16 +231,31 @@ class _BootSplash extends ConsumerWidget {
                   curve: Curves.easeOut,
                   builder: (context, value, child) => Opacity(opacity: value, child: child),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        boxShadow: [
-                          BoxShadow(color: const Color(0xFFB11226).withOpacity(0.18), blurRadius: 20, spreadRadius: 1),
-                        ],
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.4, end: 1),
+                      duration: const Duration(milliseconds: 1800),
+                      curve: Curves.easeInOut,
+                      builder: (context, glow, child) => Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0x33F4B400),
+                              const Color(0x11FF6A00),
+                              Colors.transparent,
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(color: const Color(0x44F4B400).withOpacity(glow), blurRadius: 36, spreadRadius: 2),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(14),
+                        child: Image.asset('assets/branding/logo_full_fire.png', width: 72, height: 72, errorBuilder: (_, __, ___) => const Icon(Icons.local_fire_department_outlined, size: 48)),
                       ),
-                      child: Image.asset('assets/branding/logo_full_fire.png', width: 72, height: 72, errorBuilder: (_, __, ___) => const Icon(Icons.local_fire_department_outlined, size: 48)),
                     ),
                     const SizedBox(height: 10),
                     Text(title, style: Theme.of(context).textTheme.headlineMedium),
+                    const Text('Territorial OS'),
                   ]),
                 ),
               ),
