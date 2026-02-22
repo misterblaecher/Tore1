@@ -174,14 +174,14 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                     ],
                   ),
                 ),
-                FilledButton.icon(
+                SolarPrimaryButton(
                   onPressed: session.isGuest
                       ? null
                       : () => Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const QrScannerScreen()),
                           ),
-                  icon: const Icon(Icons.qr_code_scanner_outlined),
-                  label: const Text('Scan'),
+                  icon: Icons.qr_code_scanner_outlined,
+                  label: "Scan",
                 ),
               ],
             ),
@@ -191,7 +191,7 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 child: Text(_error ?? 'Affichage depuis le cache local.', style: const TextStyle(color: AppColors.warning)),
               ),
             const SizedBox(height: 16),
-            const Text('Événements actifs', style: AppTextStyles.sectionTitle),
+            const SolarSectionTitle("Événements actifs"),
             const SizedBox(height: 8),
             SizedBox(
               height: 172,
@@ -221,7 +221,7 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                     ),
             ),
             const SizedBox(height: 16),
-            const Text('Bars vivants', style: AppTextStyles.sectionTitle),
+            const SolarSectionTitle("Bars vivants"),
             const SizedBox(height: 8),
             for (final bar in _bars)
               Container(
@@ -230,17 +230,17 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 decoration: AppColors.solarCardDecoration,
                 child: Row(children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(bar.name), Text(bar.distanceLabel, style: AppTextStyles.muted)])),
-                  const AppChip(label: 'actif', color: AppColors.solarRedSoft),
+                  const SolarChip(label: "Actif", color: AppColors.solarRedSoft),
                 ]),
               ),
             if (kTrendingEnabled) ...[
               const SizedBox(height: 12),
-              const Text('Arènes actives', style: AppTextStyles.sectionTitle),
+              const SolarSectionTitle("Arènes actives"),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: const [
-                AppChip(label: 'Battle en cours'),
-                AppChip(label: 'Hunt en feu'),
-                AppChip(label: 'Polymarket chaud'),
+                SolarChip(label: "Battle en cours"),
+                SolarChip(label: "Hunt en feu"),
+                SolarChip(label: "Polymarket chaud"),
               ]),
             ],
             if (session.isGuest) ...[

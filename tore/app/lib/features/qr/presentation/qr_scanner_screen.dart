@@ -31,6 +31,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
   bool _handling = false;
   bool _torchOn = false;
+  bool _detectedFlash = false;
   int _failedScans = 0;
   final ScanSuppression _suppression = ScanSuppression();
   QrRouteOutcome? _lastOutcome;
@@ -58,7 +59,14 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
     HapticFeedback.selectionClick();
     SystemSound.play(SystemSoundType.click);
-    setState(() => _lastOutcome = const QrRouteOutcome.success('Scan détecté…'));
+    setState(() {
+      _lastOutcome = const QrRouteOutcome.success("Scan détecté…");
+      _detectedFlash = true;
+    });
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      setState(() => _detectedFlash = false);
+    });
     ref.read(perfTracerProvider).mark('scan_detected');
 
     if (widget.mode == QrScannerMode.pickRaw) {
@@ -159,6 +167,10 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               ),
             ),
           ),
+          if (_detectedFlash)
+            IgnorePointer(
+              child: Container(color: const Color(0x33F4B400)),
+            ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
