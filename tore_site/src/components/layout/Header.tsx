@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FEEDBACK_URL, WAITLIST_URL } from "@/lib/external-links";
 import logoFull from "@/assets/logo-full.png";
 
 const navLinks = [
@@ -12,6 +13,7 @@ const navLinks = [
   { label: "Méthode", href: "/#delivery" },
   { label: "Extensions", href: "/#extensions" },
   { label: "Positionnement", href: "/#positionnement" },
+  { label: "Bêta", href: "/#beta" },
   { label: "Contact", href: "/#contact" },
 ];
 
@@ -57,6 +59,21 @@ export function Header() {
         </nav>
 
         <div className="hidden md:flex items-center gap-4">
+          <Link to="/#beta">
+            <Button size="sm" variant="outline" className="text-xs font-semibold border-accent/40 hover:bg-accent/10">
+              Télécharger (Bêta)
+            </Button>
+          </Link>
+          <a href={WAITLIST_URL || "/#contact"} target={WAITLIST_URL ? "_blank" : undefined} rel={WAITLIST_URL ? "noreferrer" : undefined}>
+            <Button size="sm" variant="outline" className="text-xs font-semibold border-accent/40 hover:bg-accent/10">
+              Rejoindre la bêta
+            </Button>
+          </a>
+          <a href={FEEDBACK_URL || "/#contact"} target={FEEDBACK_URL ? "_blank" : undefined} rel={FEEDBACK_URL ? "noreferrer" : undefined}>
+            <Button size="sm" variant="outline" className="text-xs font-semibold border-accent/40 hover:bg-accent/10">
+              Feedback
+            </Button>
+          </a>
           <Link to="/bars">
             <Button size="sm" className="text-xs font-semibold">
               Accès Bar / Comité
@@ -89,6 +106,21 @@ export function Header() {
               </Link>
             ))}
             <div className="flex flex-col gap-3 pt-4 border-t border-border">
+              <Link to="/#beta" onClick={() => setIsOpen(false)}>
+                <Button variant="outline" className="w-full font-semibold border-accent/40 hover:bg-accent/10">
+                  Télécharger (Bêta)
+                </Button>
+              </Link>
+              <a href={WAITLIST_URL || "/#contact"} target={WAITLIST_URL ? "_blank" : undefined} rel={WAITLIST_URL ? "noreferrer" : undefined} onClick={() => setIsOpen(false)}>
+                <Button variant="outline" className="w-full font-semibold border-accent/40 hover:bg-accent/10">
+                  Rejoindre la bêta
+                </Button>
+              </a>
+              <a href={FEEDBACK_URL || "/#contact"} target={FEEDBACK_URL ? "_blank" : undefined} rel={FEEDBACK_URL ? "noreferrer" : undefined} onClick={() => setIsOpen(false)}>
+                <Button variant="outline" className="w-full font-semibold border-accent/40 hover:bg-accent/10">
+                  Feedback
+                </Button>
+              </a>
               <Link to="/bars" onClick={() => setIsOpen(false)}>
                 <Button className="w-full font-semibold">Accès Bar / Comité</Button>
               </Link>
