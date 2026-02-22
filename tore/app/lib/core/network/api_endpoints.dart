@@ -16,7 +16,7 @@ class ApiEndpoints {
   static const authUpgradeGuest = '/auth/upgrade_guest';
   static const authRoleRequestUpgrade = '/auth/role/request-upgrade';
 
-  // ✅ Market
+  // ✅ Polymarket
   static String eventMenu(int eventId) => '/events/$eventId/menu';
 
   // ✅ Orders

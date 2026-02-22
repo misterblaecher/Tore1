@@ -9,6 +9,8 @@ import 'features/navigation/presentation/profile_screen.dart';
 import 'features/qr/presentation/qr_scanner_screen.dart';
 import 'shared/widgets/network_banner.dart';
 import 'ui/app_design_system.dart';
+import 'core/auth/providers.dart';
+import 'features/auth/presentation/email_auth_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -29,9 +31,21 @@ class _AppShellState extends ConsumerState<AppShell> {
     return Navigator(key: key, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root));
   }
 
+  Future<void> _openScan(bool isGuest) async {
+    if (isGuest) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Connecte-toi pour continuer.")),
+      );
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(appContextInitProvider);
+    final session = ref.watch(authSessionProvider);
+    final isGuest = session.isGuest;
     final tabs = <_ShellTab>[
       _ShellTab(
         key: _homeNavKey,
@@ -61,8 +75,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     if (_index >= tabs.length) _index = 0;
 
-    final leftTabs = tabs.take((tabs.length / 2).ceil()).toList();
-    final rightTabs = tabs.skip(leftTabs.length).toList();
+    final leftTabs = tabs.take(2).toList();
+    final rightTabs = tabs.skip(2).toList();
 
     return Scaffold(
       body: SafeArea(
@@ -78,24 +92,25 @@ class _AppShellState extends ConsumerState<AppShell> {
           ],
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.large(
-        backgroundColor: const Color(0xFFF4B400),
+        backgroundColor: AppColors.accentGold,
         foregroundColor: Colors.black,
-        elevation: 10,
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
-        tooltip: 'Scanner QR',
+        elevation: 16,
+        onPressed: () => _openScan(isGuest),
+        tooltip: 'Scan',
         child: Container(
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: Color(0x66F4B400), blurRadius: 18, spreadRadius: 1),
+              BoxShadow(color: Color(0x88F4B400), blurRadius: 24, spreadRadius: 1),
             ],
           ),
           child: const Icon(Icons.qr_code_scanner_outlined, size: 32),
         ),
       ),
       bottomNavigationBar: BottomAppBar(
+        color: AppColors.surface,
         shape: const CircularNotchedRectangle(),
         child: SizedBox(
           height: 64,
@@ -109,7 +124,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                   active: _index == tabs.indexOf(tab),
                   onTap: () => setState(() => _index = tabs.indexOf(tab)),
                 ),
-              const SizedBox(width: 56),
+              const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(height: 30),
+                  Text('Scan', style: TextStyle(fontSize: 12, color: AppColors.accentGold)),
+                ],
+              ),
               for (final tab in rightTabs)
                 _TabButton(
                   icon: tab.icon,
@@ -121,6 +142,15 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ),
       ),
+      persistentFooterButtons: isGuest
+          ? [
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
+                icon: const Icon(Icons.lock_open_outlined),
+                label: const Text("Connecte-toi pour l'accès complet"),
+              ),
+            ]
+          : null,
     );
   }
 }

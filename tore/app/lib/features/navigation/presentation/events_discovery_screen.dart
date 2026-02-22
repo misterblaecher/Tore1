@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_models.dart';
+import '../../../core/auth/providers.dart';
 import '../../../state.dart';
+import '../../../ui/app_design_system.dart';
 import '../../events/presentation/create_event_wizard_screen.dart';
 
 class EventsDiscoveryScreen extends ConsumerStatefulWidget {
@@ -18,10 +20,12 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(meProvider).valueOrNull;
+    final session = ref.watch(authSessionProvider);
     final organizer = me?.accountMode == AccountMode.organizer;
     final api = ref.read(apiProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
         title: const Text('Events'),
         actions: [
@@ -33,7 +37,8 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
             ),
         ],
       ),
-      body: FutureBuilder<List<dynamic>>(
+      body: SolarBackground(
+        child: FutureBuilder<List<dynamic>>(
         future: api.bars(),
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
@@ -81,17 +86,33 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
                   itemCount: filtered.length,
                   itemBuilder: (_, index) {
                     final item = filtered[index];
-                    return ListTile(
-                      title: Text(item['name']!.toString()),
-                      subtitle: Text(item['when']!.toString()),
-                      trailing: const Icon(Icons.chevron_right),
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.all(14),
+                      decoration: AppColors.solarCardDecoration,
+                      child: Row(children: [
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(item['name']!.toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 4),
+                            Text(item['when']!.toString(), style: AppTextStyles.muted),
+                          ]),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ]),
                     );
                   },
                 ),
               ),
+              if (session.isGuest)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: AuthRequiredNotice(message: 'Créer un event et gérer le staff nécessitent une session connectée.'),
+                ),
             ],
           );
         },
+      ),
       ),
       floatingActionButton: organizer
           ? FloatingActionButton.extended(

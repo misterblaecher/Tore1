@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_context/app_context.dart';
+import '../../../core/auth/providers.dart';
 import '../../../core/network/error_mapper.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../../shared/cache/cache_providers.dart';
 import '../../../state.dart';
+import '../../../ui/app_design_system.dart';
 import '../../events/presentation/event_config_providers.dart';
 import '../../polymarket/market_detail_screen.dart';
 import '../../polymarket/my_positions_screen.dart';
@@ -165,7 +167,9 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: Text('Module Polymarket indisponible pour cet event.')));
     }
 
+    final session = ref.watch(authSessionProvider);
     return Scaffold(
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
         title: Text(widget.eventOnly ? 'Polymarket EVENT' : 'Polymarket'),
         actions: [
@@ -184,7 +188,8 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: SolarBackground(
+        child: Column(
         children: [
           if (hasEvent && !widget.eventOnly)
             Padding(
@@ -219,10 +224,16 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
-          child: _buildList(),
+              child: _buildList(),
             ),
           ),
+          if (session.isGuest)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(12, 8, 12, 14),
+              child: AuthRequiredNotice(message: 'Placer des positions et résoudre des marchés demandent un compte connecté.'),
+            ),
         ],
+      ),
       ),
     );
   }
@@ -277,7 +288,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
       return ListView(children: [const SizedBox(height: 180), Center(child: Text(_error ?? 'Erreur')), const SizedBox(height: 12), Center(child: OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')))]);
     }
     if (_items.isEmpty) {
-      return ListView(children: const [SizedBox(height: 200), Center(child: Text('Aucun market disponible pour ce filtre.'))]);
+      return ListView(children: const [SizedBox(height: 200), Center(child: Text('Aucun Polymarket disponible pour ce filtre.'))]);
     }
 
     final network = ref.watch(networkStatusProvider);

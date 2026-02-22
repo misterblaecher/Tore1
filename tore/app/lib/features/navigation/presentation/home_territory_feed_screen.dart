@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../state.dart';
 import '../../../ui/app_design_system.dart';
+import '../../../core/auth/providers.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
 
 const _territoryFeedCacheKey = 'territory_feed_cache_v1';
@@ -151,9 +152,11 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(authSessionProvider);
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      body: RefreshIndicator(
+      body: SolarBackground(
+        child: RefreshIndicator(
         onRefresh: _loadFeed,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
@@ -172,9 +175,11 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-                  ),
+                  onPressed: session.isGuest
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                          ),
                   icon: const Icon(Icons.qr_code_scanner_outlined),
                   label: const Text('Scan'),
                 ),
@@ -238,8 +243,13 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 AppChip(label: 'Polymarket chaud'),
               ]),
             ],
+            if (session.isGuest) ...[
+              const SizedBox(height: 12),
+              const AuthRequiredNotice(message: 'Le check-in, la création d\'event et les outils staff demandent un compte.'),
+            ],
           ],
         ),
+      ),
       ),
     );
   }
