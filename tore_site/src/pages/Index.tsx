@@ -165,8 +165,18 @@ const Index = () => {
   const { toast } = useToast();
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [accountSuccess, setAccountSuccess] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AccountRole | "">("");
   const apiReady = Boolean(API_URL && API_URL.startsWith("http"));
+
+  const safeParse = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return { json: JSON.parse(text), text };
+    } catch {
+      return { json: null, text };
+    }
+  };
 
   const scrollToWaitlist = () => {
     document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
@@ -544,15 +554,19 @@ const Index = () => {
                 className="grid gap-4 md:grid-cols-2"
                 onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault();
+                  setAccountError(null);
+                  setAccountSuccess(null);
+                  setAccountLoading(true);
+
                   if (!API_URL || !API_URL.startsWith("http")) {
-                    setAccountError("Backend non configuré.");
+                    const message = "Backend non configuré.";
+                    setAccountError(message);
                     toast({ title: "Erreur", description: "Backend non configuré.", variant: "destructive", duration: 3200 });
+                    setAccountLoading(false);
                     return;
                   }
 
                   const accountRequestUrl = `${API_URL.replace(/\/+$/, "")}/public/account-request`;
-                  setAccountError(null);
-                  setAccountLoading(true);
                   const formData = new FormData(event.currentTarget);
                   const role = String(formData.get("role") || "") as AccountRole;
                   const payload = {
@@ -565,46 +579,48 @@ const Index = () => {
                     source: "tore_site",
                     utm: readUtmParams(),
                   };
+                  console.debug("Account request payload", payload);
 
                   try {
-                    console.debug(`Account request POST to: ${accountRequestUrl}`);
-                    const response = await fetch(accountRequestUrl, {
+                    const res = await fetch(accountRequestUrl, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(payload),
                     });
+                    const { json, text } = await safeParse(res);
+                    console.debug("Account request response", res.status, json ?? text);
 
-                    if (!response.ok) {
-                      const contentType = response.headers.get("content-type") || "";
-                      const responseBody = contentType.includes("application/json")
-                        ? await response.json().catch(() => null)
-                        : await response.text().catch(() => "");
-                      const backendMessage =
-                        (typeof responseBody === "object" && responseBody
-                          ? (responseBody as { detail?: { message?: string } | string; message?: string }).detail &&
-                            typeof (responseBody as { detail?: { message?: string } | string }).detail === "object"
-                            ? ((responseBody as { detail?: { message?: string } }).detail?.message ?? "")
-                            : typeof (responseBody as { detail?: string }).detail === "string"
-                              ? (responseBody as { detail?: string }).detail ?? ""
-                              : (responseBody as { message?: string }).message ?? ""
-                          : typeof responseBody === "string"
-                            ? responseBody
-                            : "") || "";
-                      const messageByStatus: Record<number, string> = {
-                        400: "Demande invalide. Vérifie les informations envoyées.",
-                        422: "Certains champs sont invalides. Vérifie le formulaire.",
-                        429: "Trop de tentatives. Réessaie un peu plus tard.",
-                      };
-                      const message = backendMessage || messageByStatus[response.status] || "Impossible d'enregistrer la demande.";
+                    if (res.ok && json?.ok === true) {
+                      const successMessage = typeof json.id === "number" ? `Demande envoyée (ID ${json.id}).` : "Demande envoyée.";
+                      setAccountSuccess(successMessage);
+                      event.currentTarget.reset();
+                      setSelectedRole("");
+                      toast({ title: "Demande envoyée", description: "Ta demande a bien été enregistrée.", duration: 3200 });
+                      return;
+                    }
+
+                    if (res.ok) {
+                      const message = "Réponse inattendue du serveur.";
                       setAccountError(message);
+                      console.error("Unexpected account request response", { json, text });
                       toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
                       return;
                     }
-                    event.currentTarget.reset();
-                    setSelectedRole("");
-                    toast({ title: "Compte enregistré", description: "Compte enregistré — on te contacte pour l’accès.", duration: 3200 });
-                  } catch {
+
+                    const messageByStatus: Record<number, string> = {
+                      400: "Vérifie les champs.",
+                      422: "Vérifie les champs.",
+                      429: "Trop de tentatives. Réessaie plus tard.",
+                    };
+                    const baseMessage = messageByStatus[res.status] || "Erreur serveur. Réessaie.";
+                    const detail =
+                      json && typeof json === "object" && "detail" in json && typeof json.detail === "string" ? json.detail : "";
+                    const message = detail ? `${baseMessage} ${detail}` : baseMessage;
+                    setAccountError(message);
+                    toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
+                  } catch (err) {
                     const message = "Erreur réseau. Réessaie dans un instant.";
+                    console.error("Account request failed", err);
                     setAccountError(message);
                     toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
                   } finally {
@@ -655,6 +671,7 @@ const Index = () => {
                     {accountLoading ? "Création en cours..." : "Créer mon compte"}
                   </Button>
                   {!apiReady && <span className="text-sm text-muted-foreground">Backend non configuré.</span>}
+                  {accountSuccess && <p className="text-sm text-emerald-400">{accountSuccess}</p>}
                   {accountError && <p className="text-sm text-destructive">{accountError}</p>}
                 </div>
               </form>
