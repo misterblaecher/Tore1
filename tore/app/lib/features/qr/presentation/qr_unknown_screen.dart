@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:tore/ui/components/components.dart';
 
-class QrUnknownScreen extends StatefulWidget {
-  const QrUnknownScreen({
+import '../../../ui/app_design_system.dart';
+
+class UnknownQrScreen extends StatefulWidget {
+  const UnknownQrScreen({
     super.key,
     required this.raw,
     required this.reason,
@@ -15,16 +17,18 @@ class QrUnknownScreen extends StatefulWidget {
   final String reasonCode;
 
   @override
-  State<QrUnknownScreen> createState() => _QrUnknownScreenState();
+  State<UnknownQrScreen> createState() => _UnknownQrScreenState();
 }
 
-class _QrUnknownScreenState extends State<QrUnknownScreen> {
+class _UnknownQrScreenState extends State<UnknownQrScreen> {
   late final TextEditingController _manualController;
+  late final DateTime _now;
 
   @override
   void initState() {
     super.initState();
     _manualController = TextEditingController(text: widget.raw);
+    _now = DateTime.now();
   }
 
   @override
@@ -33,74 +37,63 @@ class _QrUnknownScreenState extends State<QrUnknownScreen> {
     super.dispose();
   }
 
-  String _maskedRaw(String raw) {
-    if (raw.length <= 10) return raw;
-    return '${raw.substring(0, 6)}…${raw.substring(raw.length - 4)}';
-  }
+  String get _diagnostic =>
+      'qr_length=${widget.raw.length} | timestamp=${_now.toIso8601String()} | env=${kReleaseMode ? 'release' : 'debug'}';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('QR inconnu')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ToreCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.reason, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text('Code: ${widget.reasonCode}', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 12),
-              Text('Raw (masqué): ${_maskedRaw(widget.raw)}'),
-              const SizedBox(height: 12),
-              const Text('Suggestions:'),
-              const Text('• Vérifie que le QR commence par tore://'),
-              const Text('• Vérifie si le QR appartient au bon module/event'),
-              const Text('• Demande un nouveau QR si nécessaire'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _manualController,
-                decoration: const InputDecoration(
-                  labelText: 'Code manuel',
-                  hintText: 'Ex: tore://join_event?event_id=12',
-                ),
+      appBar: AppBar(title: const Text('QR non reconnu')),
+      backgroundColor: AppColors.backgroundPrimary,
+      body: SolarBackground(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: [
+            ToreCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ToreSectionHeader('QR non reconnu'),
+                  Text(widget.reason),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('Code ${widget.reasonCode}', style: AppTextStyles.muted),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _manualController,
+                    decoration: const InputDecoration(labelText: 'Entrer un code', hintText: 'Code alphanumérique ou URL'),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  SelectableText(_diagnostic, style: AppTextStyles.muted),
+                  const SizedBox(height: AppSpacing.md),
+                  ToreButton.primary(
+                    label: 'Réessayer',
+                    icon: Icons.qr_code_scanner,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ToreButton.secondary(
+                    label: 'Entrer un code',
+                    icon: Icons.keyboard,
+                    onPressed: () => Navigator.of(context).pop(_manualController.text.trim()),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ToreButton.secondary(
+                    label: 'Copier le diagnostic',
+                    icon: Icons.copy,
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: _diagnostic));
+                    },
+                  ),
+                ],
               ),
-              const Spacer(),
-              ToreCTA(
-                label: 'Copier raw',
-                style: ToreCTAStyle.secondary,
-                onPressed: widget.raw.isEmpty
-                    ? null
-                    : () async {
-                        await Clipboard.setData(ClipboardData(text: widget.raw));
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('QR copié.')),
-                        );
-                      },
-              ),
-              const SizedBox(height: 10),
-              ToreCTA(
-                label: 'Rescan',
-                style: ToreCTAStyle.secondary,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              const SizedBox(height: 10),
-              ToreCTA(
-                label: 'Valider saisie manuelle',
-                onPressed: () => Navigator.of(context).pop(_manualController.text.trim()),
-              ),
-              const SizedBox(height: 10),
-              ToreCTA(
-                label: 'Home',
-                style: ToreCTAStyle.secondary,
-                onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class QrUnknownScreen extends UnknownQrScreen {
+  const QrUnknownScreen({super.key, required super.raw, required super.reason, super.reasonCode});
 }

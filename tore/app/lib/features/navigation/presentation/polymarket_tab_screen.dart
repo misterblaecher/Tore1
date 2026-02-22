@@ -1,356 +1,137 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/app_context/app_context.dart';
 import '../../../core/auth/providers.dart';
 import '../../../core/network/error_mapper.dart';
-import '../../../core/network/network_state_provider.dart';
-import '../../../shared/cache/cache_providers.dart';
-import '../../../state.dart';
+import '../../../shared/widgets/require_auth_sheet.dart';
+import '../../../shared/widgets/ui_fallbacks.dart';
 import '../../../ui/app_design_system.dart';
-import '../../events/presentation/event_config_providers.dart';
-import '../../polymarket/market_detail_screen.dart';
-import '../../polymarket/my_positions_screen.dart';
 import '../../polymarket/polymarket_models.dart';
+import '../../../state.dart';
 
 class PolymarketTabScreen extends ConsumerStatefulWidget {
-  const PolymarketTabScreen({super.key, this.initialScope = 'global', this.eventOnly = false, this.canCreateBets = false, this.canResolveBets = false});
-
-  final String initialScope;
-  final bool eventOnly;
-  final bool canCreateBets;
-  final bool canResolveBets;
+  const PolymarketTabScreen({super.key});
 
   @override
   ConsumerState<PolymarketTabScreen> createState() => _PolymarketTabScreenState();
 }
 
 class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
-  final _scrollController = ScrollController();
-  List<MarketLite> _items = [];
-  String? _nextCursor;
-  bool _loading = false;
-  bool _initialLoading = true;
+  bool _loading = true;
   bool _hasError = false;
   String? _error;
-  String _scope = 'global';
-  String _filter = 'all';
-  final Set<int> _seenIds = <int>{};
-  final Set<String> _seenCursors = <String>{};
-  bool _fromCache = false;
+  List<MarketLite> _markets = const [];
 
   @override
   void initState() {
     super.initState();
-    _scope = widget.initialScope;
-    _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  String get _cacheKey => 'polymarket_global_$_filter';
-
-  ({String status, String type}) get _queryFilters {
-    switch (_filter) {
-      case 'live':
-        return (status: 'live', type: 'all');
-      case 'objective':
-        return (status: 'all', type: 'objective');
-      case 'subjective':
-        return (status: 'all', type: 'subjective');
-      case 'resolved':
-        return (status: 'resolved', type: 'all');
-      default:
-        return (status: 'all', type: 'all');
-    }
-  }
-
-  Future<void> _refresh() async {
+  Future<void> _load() async {
     setState(() {
-      _initialLoading = true;
+      _loading = true;
       _hasError = false;
       _error = null;
-      _nextCursor = null;
-      _items = [];
-      _fromCache = false;
-      _seenIds.clear();
-      _seenCursors.clear();
     });
-    await _loadMore();
-  }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels > _scrollController.position.maxScrollExtent - 280) {
-      _loadMore();
-    }
-  }
-
-  Future<void> _hydrateCache() async {
-    final cached = await ref.read(cacheStoreProvider).getJson(_cacheKey);
-    if (cached == null) return;
-    final raw = (cached['items'] as List<dynamic>? ?? const []);
-    final items = raw.map((e) => MarketLite.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-    if (!mounted || items.isEmpty) return;
-    setState(() {
-      _items = items;
-      _seenIds
-        ..clear()
-        ..addAll(items.map((e) => e.id));
-      _nextCursor = null;
-      _hasError = false;
-      _fromCache = true;
-      _initialLoading = false;
-    });
-  }
-
-  Future<void> _loadMore() async {
-    if (_loading) return;
-    if (!_initialLoading && (_nextCursor == null)) return;
-    if (_nextCursor != null && _seenCursors.contains(_nextCursor)) return;
-    if (_nextCursor != null) _seenCursors.add(_nextCursor!);
-    _loading = true;
-    final ctx = ref.read(appContextProvider);
-    final q = _queryFilters;
     try {
-      final page = await ref.read(apiProvider).fetchPolymarketMarkets(
-            scope: _scope,
-            eventId: _scope == 'event' ? ctx.activeEventId : null,
-            status: q.status,
-            type: q.type,
-            cursor: _nextCursor,
-          );
-      if (!mounted) return;
+      final response = await ref.read(apiProvider).fetchPolymarketMarkets(scope: 'global', status: 'all', type: 'all');
       setState(() {
-        final fresh = page.items.where((e) => _seenIds.add(e.id)).toList();
-        _items = [..._items, ...fresh];
-        _nextCursor = page.nextCursor;
-        _initialLoading = false;
-        _fromCache = false;
+        _markets = response.items;
+        _loading = false;
       });
-      if (_scope == 'global' && _nextCursor == null) {
-        await ref.read(cacheStoreProvider).setJson(
-          _cacheKey,
-          {'items': _items.map((e) => {'id': e.id, 'question': e.question, 'status': e.status, 'scope': e.scope, 'type': e.type, 'yesPrice': e.yesPrice, 'noPrice': e.noPrice, 'yesPct': e.yesPct, 'noPct': e.noPct, 'poolTickets': e.poolTickets, 'volumeTickets': e.volume}).toList()},
-          ttl: const Duration(minutes: 30),
-        );
-      }
     } catch (e) {
-      if (!mounted) return;
-      await _hydrateCache();
-      if (_items.isNotEmpty) return;
       setState(() {
         _hasError = true;
         _error = ErrorMapper.message(e);
-        _initialLoading = false;
+        _loading = false;
       });
-    } finally {
-      _loading = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final ctx = ref.watch(appContextProvider);
-    final hasEvent = ctx.hasActiveEvent;
-    final eventConfig = hasEvent ? ref.watch(eventConfigProvider(ctx.activeEventId!)) : null;
-    final polymarketEnabled = eventConfig?.maybeWhen(
-          data: (cfg) => cfg.polymarketEnabled,
-          orElse: () => true,
-        ) ?? true;
-
-    if (hasEvent && !polymarketEnabled && _scope == 'event') {
-      return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: Text('Module Polymarket indisponible pour cet event.')));
-    }
-
     final session = ref.watch(authSessionProvider);
+
     return Scaffold(
+      appBar: AppBar(title: const Text('Polymarket')),
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: Text(widget.eventOnly ? 'Polymarket EVENT' : 'Polymarket'),
-        actions: [
-          if (widget.eventOnly && widget.canCreateBets)
-            IconButton(
-              tooltip: 'Créer',
-              onPressed: () => _openCreateMarket(ctx.activeEventId),
-              icon: const Icon(Icons.add_circle_outline),
-            ),
-          IconButton(
-            tooltip: 'My Positions',
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyPositionsScreen(scope: _scope, eventId: _scope == 'event' ? ctx.activeEventId : null)));
-            },
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-          ),
-        ],
-      ),
       body: SolarBackground(
-        child: Column(
-        children: [
-          if (hasEvent && !widget.eventOnly)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'global', label: Text('GLOBAL')),
-                  ButtonSegment(value: 'event', label: Text('EVENT')),
-                ],
-                selected: {_scope},
-                onSelectionChanged: (s) {
-                  setState(() => _scope = s.first);
-                  _refresh();
-                },
-              ),
-            ),
-          SizedBox(
-            height: 40,
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              children: [
-                _chip('all', 'Tous'),
-                _chip('live', 'Live'),
-                _chip('objective', 'Objectifs'),
-                _chip('subjective', 'Subjectifs'),
-                _chip('resolved', 'Résolus'),
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            children: [
+              if (_loading) ...[
+                const ToreSectionHeader('Chargement des marchés'),
+                const ToreLoadingSkeleton(lines: 8),
+              ] else if (_hasError)
+                ToreErrorState(message: _error ?? 'Impossible de charger les marchés.', onRetry: _load)
+              else if (_markets.isEmpty)
+                const ToreEmptyState(
+                  title: 'Aucun marché actif',
+                  message: 'Les marchés seront affichés ici dès leur ouverture.',
+                )
+              else ...[
+                _section('En feu', _markets.where((m) => m.volume > 1000 || m.poolTickets > 1000).toList(), session.isGuest),
+                _section('Live', _markets.where((m) => m.status.toLowerCase() == 'live').toList(), session.isGuest),
+                _section('Résolus', _markets.where((m) => m.status.toLowerCase() == 'resolved').toList(), session.isGuest),
               ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: _buildList(),
-            ),
-          ),
-          if (session.isGuest)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(12, 8, 12, 14),
-              child: AuthRequiredNotice(message: 'Placer des positions et résoudre des marchés demandent un compte connecté.'),
-            ),
-        ],
-      ),
-      ),
-    );
-  }
-
-  Future<void> _openCreateMarket(int? eventId) async {
-    if (eventId == null) return;
-    final questionCtrl = TextEditingController();
-    String type = 'objective';
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 16, left: 16, right: 16, top: 16),
-        child: StatefulBuilder(
-          builder: (context, setLocal) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: questionCtrl, decoration: const InputDecoration(labelText: 'Question')),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [ButtonSegment(value: 'objective', label: Text('Objective')), ButtonSegment(value: 'subjective', label: Text('Subjective'))],
-                selected: {type},
-                onSelectionChanged: (s) => setLocal(() => type = s.first),
-              ),
-              const SizedBox(height: 10),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Créer')),
             ],
           ),
         ),
       ),
     );
-    if (ok != true) return;
-    await ref.read(apiProvider).createEventPolymarketMarket(eventId: eventId, question: questionCtrl.text.trim(), type: type);
-    if (mounted) _refresh();
   }
 
-  Widget _chip(String value, String label) => Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: ChoiceChip(
-          selected: _filter == value,
-          label: Text(label),
-          onSelected: (_) {
-            setState(() => _filter = value);
-            _refresh();
-          },
-        ),
-      );
-
-  Widget _buildList() {
-    if (_initialLoading) return const Center(child: CircularProgressIndicator());
-    if (_hasError) {
-      return ListView(children: [const SizedBox(height: 180), Center(child: Text(_error ?? 'Erreur')), const SizedBox(height: 12), Center(child: OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')))]);
-    }
-    if (_items.isEmpty) {
-      return ListView(children: const [SizedBox(height: 200), Center(child: Text('Aucun Polymarket disponible pour ce filtre.'))]);
-    }
-
-    final network = ref.watch(networkStatusProvider);
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _items.length + 2,
-      itemBuilder: (context, i) {
-        if (i == 0 && (network == NetworkState.offline || _fromCache)) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text('Offline • affichage du cache local', style: TextStyle(color: Colors.orange)),
-          );
-        }
-        final index = i - 1;
-        if (index == _items.length) {
-          if (_nextCursor == null) return const SizedBox(height: 32);
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: OutlinedButton.icon(onPressed: _loadMore, icon: const Icon(Icons.expand_more), label: const Text('Charger plus'))),
-          );
-        }
-        if (index < 0) return const SizedBox.shrink();
-        final m = _items[index];
-        return _CompactCard(
-          market: m,
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: m.id, eventId: _scope == 'event' ? ref.read(appContextProvider).activeEventId : null, canResolve: widget.canResolveBets))),
-        );
-      },
-    );
-  }
-}
-
-class _CompactCard extends StatelessWidget {
-  const _CompactCard({required this.market, required this.onTap});
-
-  final MarketLite market;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final yesPct = (market.yesPct * 100).toStringAsFixed(0);
-    final noPct = (market.noPct * 100).toStringAsFixed(0);
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [Expanded(child: Text(market.question, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))), Chip(label: Text(market.status.toUpperCase()))]),
-              LinearProgressIndicator(value: market.yesPct, minHeight: 8),
-              const SizedBox(height: 4),
-              Row(children: [Text('YES $yesPct%'), const Spacer(), Text('NO $noPct%')]),
-              const SizedBox(height: 4),
-              Text('Pool: ${market.poolTickets} • Volume: ${market.volume}'),
-            ],
-          ),
-        ),
-      ),
+  Widget _section(String title, List<MarketLite> items, bool isGuest) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ToreSectionHeader(title),
+        if (items.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
+            child: Text('Aucun élément dans cette section.', style: AppTextStyles.muted),
+          )
+        else
+          ...items.map((market) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: ToreCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(market.question, style: const TextStyle(fontWeight: FontWeight.w700))),
+                          if (market.volume > 1200) const AppChip(label: 'CHAUD', color: AppColors.accentAmber),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Oui ${(market.yesPct * 100).toStringAsFixed(0)}% • Non ${(market.noPct * 100).toStringAsFixed(0)}%'),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Participants ${market.poolTickets} • Volume ${market.volume}', style: AppTextStyles.muted),
+                      const SizedBox(height: AppSpacing.sm),
+                      ToreButton.primary(
+                        label: isGuest ? 'Connecte-toi pour continuer' : 'Voir le marché',
+                        icon: isGuest ? Icons.lock_outline : Icons.arrow_forward,
+                        onPressed: () {
+                          if (isGuest) {
+                            RequireAuthSheet.show(context, message: 'La prise de position nécessite une connexion.');
+                            return;
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Lecture ouverte: marché consultable depuis cet écran.')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+        const SizedBox(height: AppSpacing.md),
+      ],
     );
   }
 }
