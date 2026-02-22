@@ -20,6 +20,12 @@ class EmailRequestResult {
   const EmailRequestResult({this.devToken, this.expiresInSeconds = 600, this.resendCooldownSeconds = 30});
 }
 
+class EmailRateLimitException implements Exception {
+  final int retryAfterSeconds;
+
+  const EmailRateLimitException(this.retryAfterSeconds);
+}
+
 class AuthRepository {
   final ApiClient api;
 
@@ -61,6 +67,12 @@ class AuthRepository {
     } on DioException catch (e) {
       if (kDebugMode) {
         debugPrint('[auth][otp] response status=${e.response?.statusCode} body=${e.response?.data}');
+      }
+      if (e.response?.statusCode == 429) {
+        final data = (e.response?.data is Map) ? (e.response!.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+        final retryAfterFromBody = (data['retry_after_seconds'] as num?)?.toInt();
+        final retryAfterFromHeader = int.tryParse((e.response?.headers.value('retry-after') ?? '').trim());
+        throw EmailRateLimitException((retryAfterFromBody ?? retryAfterFromHeader ?? 30).clamp(1, 600));
       }
       rethrow;
     }

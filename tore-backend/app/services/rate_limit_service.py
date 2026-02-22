@@ -3,10 +3,18 @@ from __future__ import annotations
 import os
 import threading
 import time
+import math
 from collections import defaultdict, deque
 from typing import Deque
 
 from fastapi import HTTPException
+
+
+class RateLimitExceeded(Exception):
+    def __init__(self, scope: str, retry_after_seconds: int):
+        self.scope = scope
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(f"Rate limit exceeded for scope={scope} retry_after={retry_after_seconds}s")
 
 _RATE_LIMIT_MAX = int(os.getenv("TORE_RATE_LIMIT_MAX", "25"))
 _RATE_LIMIT_WINDOW_S = int(os.getenv("TORE_RATE_LIMIT_WINDOW_S", "5"))
@@ -72,8 +80,21 @@ def enforce_rate_limit(scope: str, actor_key: str) -> None:
         _prune(q, now, window_s)
         if len(q) >= max_requests:
             _metrics["rate_limited_total"] += 1
-            raise HTTPException(status_code=429, detail={"reason": "rate_limited", "message": "Too many requests"})
+            retry_after_seconds = max(1, int(math.ceil(window_s - (now - q[0])))) if q else window_s
+            raise RateLimitExceeded(scope=scope, retry_after_seconds=retry_after_seconds)
         q.append(now)
+
+
+def standard_rate_limit_http_exception(scope: str, retry_after_seconds: int) -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail={
+            "detail": "Too many requests",
+            "retry_after_seconds": int(retry_after_seconds),
+            "scope": scope,
+        },
+        headers={"Retry-After": str(int(retry_after_seconds))},
+    )
 
 
 def record_status_code(code: int) -> None:

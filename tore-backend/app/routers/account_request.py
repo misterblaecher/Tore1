@@ -7,6 +7,8 @@ from datetime import timedelta
 from typing import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+
+from app.services.rate_limit_service import standard_rate_limit_http_exception
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -112,13 +114,16 @@ def create_account_request(
 
     now = now_utc()
     window_start = now - timedelta(minutes=window_minutes)
-    attempts = (
+    recent_attempts = (
         db.query(AccountRequest)
         .filter(AccountRequest.ip_hash == ip_hash, AccountRequest.user_agent == user_agent, AccountRequest.created_at >= window_start)
-        .count()
+        .order_by(AccountRequest.created_at.asc())
+        .all()
     )
-    if attempts >= max_attempts:
-        raise HTTPException(status_code=429, detail={"message": "Trop de requêtes, réessayez dans quelques minutes."})
+    if len(recent_attempts) >= max_attempts:
+        oldest = recent_attempts[0]
+        retry_after_seconds = max(1, int((oldest.created_at + timedelta(minutes=window_minutes) - now).total_seconds()))
+        raise standard_rate_limit_http_exception(scope="public_account_request", retry_after_seconds=retry_after_seconds)
 
     email_cutoff = now - timedelta(minutes=email_cooldown_minutes)
     duplicate = (
@@ -131,7 +136,8 @@ def create_account_request(
         .first()
     )
     if duplicate:
-        raise HTTPException(status_code=429, detail={"message": "Une demande récente existe déjà pour cet email."})
+        retry_after_seconds = max(1, int((duplicate.created_at + timedelta(minutes=email_cooldown_minutes) - now).total_seconds()))
+        raise standard_rate_limit_http_exception(scope="public_account_request_email", retry_after_seconds=retry_after_seconds)
 
     row = AccountRequest(
         name=payload.name,
