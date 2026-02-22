@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Layout, { inputStyle } from '../ui/Layout'
 import { api } from '../lib/api'
@@ -10,6 +10,11 @@ type ScanResolve = { userId: string | null; raw: string; reason?: string }
 type TopupResult = {
   kind: 'success' | 'duplicate' | 'denied'
   message: string
+}
+
+type Snapshot = {
+  event_state?: string
+  modules?: Record<string, { effective_state?: 'ON' | 'OFF' | 'READ_ONLY'; reason?: string | null }>
 }
 
 const reasonToLabel: Record<string, string> = {
@@ -59,6 +64,20 @@ export default function WalletAdmin() {
   const eventId = params.get('event_id') || ''
   const filterUserId = params.get('user_id') || ''
 
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
+  const moduleState = snapshot?.modules?.wallet_enabled?.effective_state || 'ON'
+  const eventState = (snapshot?.event_state || 'LIVE').toUpperCase()
+  const writesDisabledReason = useMemo(() => {
+    if (moduleState === 'OFF') return 'Module désactivé'
+    if (moduleState === 'READ_ONLY') return `Événement ${eventState}: write désactivé (read-only)`
+    return null
+  }, [eventState, moduleState])
+
+  useEffect(() => {
+    if (!eventId) return
+    api<Snapshot>(`/partner/portal/event/${Number(eventId)}/state-snapshot`).then(setSnapshot).catch(() => setSnapshot(null))
+  }, [eventId])
+
   const loadLogs = async (next?: string | null) => {
     setLoading(true)
     setError(null)
@@ -79,12 +98,16 @@ export default function WalletAdmin() {
   }
 
   const topup = async () => {
+    if (writesDisabledReason) {
+      setError(writesDisabledReason)
+      return
+    }
     setError(null)
     try {
       await api('/partner/portal/wallet/topup', {
         method: 'POST',
         headers: { 'Idempotency-Key': `portal-${Date.now()}` },
-        body: JSON.stringify({ event_id: Number(eventId), target_user_id: userId, amount_cents: Number(amount), note: reason, client_key: `portal-${Date.now()}` }),
+        body: JSON.stringify({ event_id: Number(eventId), target_user_id: userId, amount_cents: Number(amount), reason_code: 'manual_topup', reason_text: reason }),
       })
       await loadLogs()
     } catch (e: any) {
@@ -94,6 +117,10 @@ export default function WalletAdmin() {
   }
 
   const topupByScan = async () => {
+    if (writesDisabledReason) {
+      setScanResult({ kind: 'denied', message: writesDisabledReason })
+      return
+    }
     setScanResult(null)
     const parsed = parseTopupTarget(scanInput)
     if (!parsed.userId) {
@@ -109,8 +136,8 @@ export default function WalletAdmin() {
           event_id: Number(eventId),
           target_user_id: parsed.userId,
           amount_cents: Number(scanAmount),
-          note: `scan:${parsed.raw}`,
-          client_key: key,
+          reason_code: 'scan_topup',
+          reason_text: `scan:${parsed.raw}`,
         }),
       })
       setScanResult({ kind: payload?.idempotent ? 'duplicate' : 'success', message: payload?.idempotent ? 'duplicate' : 'success' })
@@ -132,11 +159,13 @@ export default function WalletAdmin() {
 
   return (
     <Layout title="Wallet Admin">
+      <InlineAlert tone="warning">Event state: {eventState}</InlineAlert>
+      {writesDisabledReason ? <InlineAlert tone="warning">{writesDisabledReason}</InlineAlert> : null}
       <input style={inputStyle()} placeholder="Event ID" value={eventId} onChange={(e) => setParams({ event_id: e.target.value, user_id: filterUserId })} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="User ID" value={userId} onChange={(e) => setUserId(e.target.value)} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-      <button onClick={topup} style={{ marginTop: 8 }}>Topup</button>
+      <button onClick={topup} style={{ marginTop: 8 }} disabled={!!writesDisabledReason}>Topup</button>
       <hr />
       <h3>Topup by scan</h3>
       <input
@@ -151,7 +180,7 @@ export default function WalletAdmin() {
         value={scanAmount}
         onChange={(e) => setScanAmount(e.target.value)}
       />
-      <button onClick={topupByScan} style={{ marginTop: 8 }}>Run scan topup</button>
+      <button onClick={topupByScan} style={{ marginTop: 8 }} disabled={!!writesDisabledReason}>Run scan topup</button>
       {scanResult ? <InlineAlert tone={scanResult.kind === 'denied' ? 'error' : 'success'}>{scanResult.message}</InlineAlert> : null}
       <hr />
       <input style={inputStyle()} placeholder="Filter user_id" value={filterUserId} onChange={(e) => setParams({ event_id: eventId, user_id: e.target.value })} />

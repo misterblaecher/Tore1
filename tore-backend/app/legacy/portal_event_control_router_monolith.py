@@ -816,10 +816,13 @@ def wallet_admin_topup(
     amount = payload.amount_cents if payload.amount_cents is not None else payload.amount_tickets
     if amount is None or amount < 1:
         raise HTTPException(status_code=400, detail={"reason": "invalid_amount", "message": "amount must be >= 1"})
-    reason = payload.note or payload.reason or "admin_topup"
-    idempotency_key = (idempotency_header or payload.client_key or payload.idempotency_key or "").strip()
+    reason_code = (payload.reason_code or "wallet_topup").strip()
+    reason = (payload.reason_text or payload.note or payload.reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail={"reason": "missing_reason", "message": "reason_text required"})
+    idempotency_key = (idempotency_header or "").strip()
     if len(idempotency_key) < 1:
-        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency key required"})
+        raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key header required"})
     enforce_rate_limit("wallet_topup", f"{identity['user_id']}:{idempotency_key}")
     ledger, idempotent = admin_topup(
         db,
@@ -840,7 +843,7 @@ def wallet_admin_topup(
             entity_id=str(ledger.id),
             event_id=payload.event_id,
             bar_id=event.bar_id,
-            payload={"user_id": target_user_id, "amount_tickets": amount, "reason": reason},
+            payload={"user_id": target_user_id, "amount_tickets": amount, "reason_code": reason_code, "reason_text": reason},
         )
         write_audit_log(
             db,
@@ -851,7 +854,7 @@ def wallet_admin_topup(
             entity_id=str(ledger.id),
             event_id=payload.event_id,
             bar_id=event.bar_id,
-            payload={"user_id": target_user_id, "amount_tickets": amount, "reason": reason},
+            payload={"user_id": target_user_id, "amount_tickets": amount, "reason_code": reason_code, "reason_text": reason},
         )
     db.commit()
     wallet = get_or_create_wallet(db, target_user_id)

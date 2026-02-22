@@ -14,6 +14,8 @@ class WalletAdminTopupIn(BaseModel):
     amount_tickets: Optional[int] = Field(default=None, ge=1, le=1000000)
     note: Optional[str] = Field(default=None, min_length=2, max_length=255)
     reason: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    reason_code: Optional[str] = Field(default=None, min_length=2, max_length=64)
+    reason_text: Optional[str] = Field(default=None, min_length=2, max_length=255)
     client_key: Optional[str] = Field(default=None, min_length=1, max_length=128)
     idempotency_key: Optional[str] = Field(default=None, min_length=1, max_length=128)
 

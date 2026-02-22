@@ -94,6 +94,8 @@ class WalletTransferIn(BaseModel):
     amount: int = Field(ge=1, le=1000000)
     event_id: Optional[int] = None
     reason: Optional[str] = Field(default=None, max_length=255)
+    reason_code: Optional[str] = Field(default=None, min_length=2, max_length=64)
+    reason_text: Optional[str] = Field(default=None, min_length=2, max_length=255)
 
 
 class WalletTransferOut(BaseModel):
