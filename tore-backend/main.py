@@ -247,6 +247,8 @@ def validate_env_or_warn() -> EnvReport:
             missing.append("DATABASE_URL")
         else:
             warnings.append("DATABASE_URL missing: sqlite dev fallback will be used")
+    elif is_prod and db_url.lower().startswith("sqlite"):
+        missing.append("DATABASE_URL must target Postgres in PROD")
 
     public_url = (os.getenv("PUBLIC_URL") or "").strip()
     base_url = (os.getenv("BASE_URL") or "").strip()
@@ -3694,6 +3696,12 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
         raise standard_rate_limit_http_exception(scope=exc.scope, retry_after_seconds=exc.retry_after_seconds)
 
     raw_code = f"{secrets.randbelow(1000000):06d}"
+    now = now_utc()
+    db.query(AuthOtpCode).filter(
+        AuthOtpCode.email == email,
+        AuthOtpCode.used_at.is_(None),
+        AuthOtpCode.expires_at > now,
+    ).update({AuthOtpCode.used_at: now}, synchronize_session=False)
     db.add(
         AuthOtpCode(
             email=email,

@@ -6,7 +6,7 @@ import re
 from datetime import timedelta
 from typing import Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from app.services.rate_limit_service import standard_rate_limit_http_exception
 from pydantic import BaseModel, field_validator
@@ -91,6 +91,42 @@ class AccountRequestOut(BaseModel):
     message: str
 
 
+class AccountRequestAdminRow(BaseModel):
+    id: int
+    created_at: str
+    name: str
+    email: str
+    phone: str
+    is_whatsapp: bool
+    source: str | None
+    status: str
+
+
+class AccountRequestAdminListOut(BaseModel):
+    items: list[AccountRequestAdminRow]
+    next_cursor: int | None = None
+
+
+class AccountRequestAdminPatchIn(BaseModel):
+    status: str = "processed"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if cleaned not in {"pending", "processed"}:
+            raise ValueError("status invalide")
+        return cleaned
+
+
+def _require_admin_api_key(x_admin_api_key: str | None = Header(default=None, alias="X-Admin-Api-Key")) -> None:
+    expected = (os.getenv("ADMIN_API_KEY") or "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail={"reason": "admin_api_disabled", "message": "ADMIN_API_KEY non configurée"})
+    if (x_admin_api_key or "").strip() != expected:
+        raise HTTPException(status_code=401, detail={"reason": "invalid_admin_key", "message": "Clé admin invalide"})
+
+
 @router.post("/public/account-request", response_model=AccountRequestOut)
 def create_account_request(
     payload: AccountRequestIn,
@@ -147,7 +183,7 @@ def create_account_request(
         role=payload.role,
         committee_name=payload.committee_name,
         source=(payload.source or "tore_site")[:120],
-        status="new",
+        status="pending",
         ip_hash=ip_hash,
         user_agent=user_agent or None,
     )
@@ -156,3 +192,71 @@ def create_account_request(
     db.refresh(row)
 
     return AccountRequestOut(ok=True, id=row.id, message="Account request created")
+
+
+@router.get("/admin/account-requests", response_model=AccountRequestAdminListOut, tags=["admin-account"])
+def list_account_requests(
+    status: str = "pending",
+    limit: int = 50,
+    cursor: int | None = None,
+    _: None = Depends(_require_admin_api_key),
+    db: Session = Depends(get_db),
+):
+    status_value = status.strip().lower()
+    if status_value == "new":
+        status_value = "pending"
+    if status_value not in {"pending", "processed"}:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_status"})
+
+    safe_limit = max(1, min(limit, 200))
+    query = db.query(AccountRequest).filter(AccountRequest.status == status_value)
+    if cursor is not None:
+        query = query.filter(AccountRequest.id < cursor)
+    rows = query.order_by(AccountRequest.id.desc()).limit(safe_limit + 1).all()
+
+    has_more = len(rows) > safe_limit
+    page = rows[:safe_limit]
+    next_cursor = page[-1].id if has_more and page else None
+
+    return AccountRequestAdminListOut(
+        items=[
+            AccountRequestAdminRow(
+                id=row.id,
+                created_at=row.created_at.isoformat(),
+                name=row.name,
+                email=row.email,
+                phone=row.phone,
+                is_whatsapp=bool(row.is_whatsapp),
+                source=row.source,
+                status="pending" if (row.status or "").lower() == "new" else row.status,
+            )
+            for row in page
+        ],
+        next_cursor=next_cursor,
+    )
+
+
+@router.patch("/admin/account-requests/{request_id}", response_model=AccountRequestAdminRow, tags=["admin-account"])
+def patch_account_request(
+    request_id: int,
+    payload: AccountRequestAdminPatchIn,
+    _: None = Depends(_require_admin_api_key),
+    db: Session = Depends(get_db),
+):
+    row = db.get(AccountRequest, request_id)
+    if not row:
+        raise HTTPException(status_code=404, detail={"reason": "not_found"})
+    row.status = payload.status
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return AccountRequestAdminRow(
+        id=row.id,
+        created_at=row.created_at.isoformat(),
+        name=row.name,
+        email=row.email,
+        phone=row.phone,
+        is_whatsapp=bool(row.is_whatsapp),
+        source=row.source,
+        status=row.status,
+    )

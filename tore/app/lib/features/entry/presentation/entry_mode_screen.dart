@@ -79,12 +79,15 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   }
 
   Future<void> _openScanner() async {
+    if (ref.read(networkStatusProvider) != NetworkState.online) {
+      return _feedback('invalid', 'Serveur indisponible', type: 'QR');
+    }
     final raw = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const QrScannerScreen(mode: QrScannerMode.pickRaw)));
     if (raw == null || raw.trim().isEmpty || widget.eventId == null) return;
     if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now())) return;
     final payload = ref.read(qrParserProvider).parse(raw);
     final validation = await ref.read(qrValidatorProvider).validate(payload);
-    if (!validation.isOk) return _feedback('invalid', validation.reason ?? 'INVALID', type: 'QR');
+    if (!validation.isOk) return _feedback('invalid', validation.reason ?? 'QR non reconnu', type: 'QR');
     await _performCheckin(raw);
   }
 
@@ -252,7 +255,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                   Text('Δ10m: $_delta10'),
                   const SizedBox(height: 12),
                   if (!_manualMode)
-                    ElevatedButton.icon(onPressed: _openScanner, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCAN', style: TextStyle(fontSize: 24)))
+                    ElevatedButton.icon(onPressed: net == NetworkState.online ? _openScanner : null, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCAN', style: TextStyle(fontSize: 24)))
                   else ...[
                     Wrap(spacing: 8, children: _reasonChips.map((r) => ChoiceChip(label: Text(r), selected: _manualReason == r, onSelected: (_) => setState(() => _manualReason = r))).toList()),
                     TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Note (optionnel)')),

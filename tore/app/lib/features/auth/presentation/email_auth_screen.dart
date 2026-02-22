@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import '../../../state.dart';
 import '../../../core/auth/email_token.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/providers.dart';
+import '../../../core/network/network_state_provider.dart';
 
 class EmailAuthScreen extends ConsumerStatefulWidget {
   const EmailAuthScreen({super.key});
@@ -27,6 +29,10 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
 
   Future<void> _requestCode() async {
     if (_cooldown > 0) return;
+    if (ref.read(networkStatusProvider) != NetworkState.online) {
+      setState(() => _error = 'Hors-ligne. Vérifie ta connexion.');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -79,6 +85,8 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
             token: EmailToken.normalize(_tokenCtrl.text),
           );
       if (mounted) Navigator.of(context).pop();
+    } on DioException {
+      setState(() => _error = 'Hors-ligne. Vérifie ta connexion.');
     } catch (_) {
       setState(() => _error = 'Code invalide ou expiré.');
     } finally {
@@ -108,7 +116,7 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
           ),
           const SizedBox(height: 12),
           FilledButton(
-            onPressed: _loading || _cooldown > 0 ? null : _requestCode,
+            onPressed: _loading || _cooldown > 0 || ref.watch(networkStatusProvider) != NetworkState.online ? null : _requestCode,
             child: Text(_requested ? (_cooldown > 0 ? 'Renvoyer (${_cooldown}s)' : 'Renvoyer un code') : 'Recevoir un code'),
           ),
           const SizedBox(height: 8),
