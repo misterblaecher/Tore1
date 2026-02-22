@@ -1,75 +1,88 @@
-# SOIREE RUNBOOK — TORÈ
+# SOIREE RUNBOOK — TORÈ / PartyOut
 
-## 1) Checklist pré-soirée
-- [ ] `APP_ENV=prod` (ou `ENV=PROD`) configuré côté backend.
-- [ ] `DATABASE_URL` pointe vers **Postgres** (pas SQLite) en production.
-- [ ] `RUN_MIGRATIONS=1` et `MIGRATIONS_FATAL=1` activés.
-- [ ] `ADMIN_API_KEY` défini pour la page staff account-requests.
-- [ ] SMTP configuré (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`).
-- [ ] CORS prod configuré sur **une seule variable**: `TORE_CORS_ORIGINS` (sans `*`, sans slash final).
-- [ ] `TORE_CORS_ORIGINS` contient au minimum:
-  - `https://tore-site.onrender.com`
-  - `https://tore1.onrender.com`
-- [ ] QR signing keys présentes (`TORE_QR_SIGNING_KEYS`).
+## 1) Variables d'environnement obligatoires
 
-## 2) Vérifier la santé backend
+### Backend (Render)
+- `APP_ENV=prod`
+- `DATABASE_URL`
+- `TORE_CORS_ORIGINS`
+- `ORGA_CODE`
+- `TEAM_CODE`
+- `ADMIN_API_KEY`
+- `RUN_MIGRATIONS=1`
+- `MIGRATIONS_FATAL=1`
+
+### Portal admin (Render)
+- `API_BASE_URL` (URL du backend)
+- `ADMIN_API_KEY` (uniquement côté serveur portal, jamais côté frontend public)
+- `ADMIN_BASIC_USER`
+- `ADMIN_BASIC_PASS`
+
+## 2) Santé backend
 ```bash
 curl -sS https://<backend>/healthz
 curl -sS https://<backend>/api/healthz
 ```
-Résultat attendu: HTTP 200 + payload JSON OK.
+Attendu: HTTP 200.
 
-## 3) Forcer / vérifier un mode de compte
+## 3) Procédure PartyOut (3 modes)
 Modes supportés: `user` | `organizer` | `team`.
 
+### 3.1 Demande de montée de rôle (utilisateur)
+```bash
+curl -X POST https://<backend>/auth/role/request-upgrade \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"requested_mode":"organizer","code":"<ORGA_CODE>"}'
+```
+Attendu: status `pending`.
+
+### 3.2 Vérification côté profil
+```bash
+curl -sS https://<backend>/auth/me \
+  -H "Authorization: Bearer <access_token>"
+```
+Attendu: présence de `account_mode` et `role_request_pending` si une demande est en attente.
+
+### 3.3 Retour direct en mode user
 ```bash
 curl -X PATCH https://<backend>/auth/me \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"account_mode":"organizer"}'
+  -d '{"account_mode":"user"}'
 ```
+Attendu: autorisé. Les passages directs vers `organizer`/`team` sont refusés.
 
-Validation:
+## 4) Validation admin des demandes
+
+### 4.1 Lister les demandes pending
 ```bash
-curl -sS https://<backend>/auth/me -H "Authorization: Bearer <access_token>"
+curl -sS "https://<backend>/admin/role-requests?status=pending&limit=50" \
+  -H "X-Admin-Api-Key: <ADMIN_API_KEY>"
 ```
-Le JSON doit contenir `account_mode`.
 
-## 4) Test création event (app-first)
-1. Dans l'app, passer en mode **Organisateur**.
-2. Ouvrir Home → bloc Organisateur → créer un event (nom/date/lieu).
-3. Vérifier l'event dans les listes/events déjà existantes.
+### 4.2 Approuver / rejeter
+```bash
+curl -X PATCH https://<backend>/admin/role-requests/<id> \
+  -H "X-Admin-Api-Key: <ADMIN_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"approve","note":"Validation soirée"}'
+```
+Ou:
+```bash
+-d '{"action":"reject","note":"Code invalide"}'
+```
 
-## 5) Test scan / check-in (mode Équipe)
-1. Dans l'app, passer en mode **Équipe**.
-2. Ouvrir scanner QR.
-3. Scanner un QR valide event/check-in.
-4. Vérifier la réponse serveur (accepté / déjà scanné).
+## 5) Sécurité portal admin (Basic Auth)
+- Toutes les routes du service proxy admin sont protégées par Basic Auth (`ADMIN_BASIC_USER`/`ADMIN_BASIC_PASS`).
+- Ne jamais exposer `ADMIN_API_KEY` via une variable `VITE_*`.
+- Le frontend portal consomme `/admin-api/*`; c'est le serveur portal qui injecte `X-Admin-Api-Key`.
 
-## 6) Account requests (staff)
-- Portal: `/staff/account-requests`
-- Pré-requis: token portal + variable `VITE_ADMIN_API_KEY` (même valeur que `ADMIN_API_KEY` backend).
-
-## 7) Procédure incident
-1. Vérifier `/healthz`.
-2. Si KO backend:
-   - activer maintenance sur frontend (bannière déjà affichée en app si health down)
-   - basculer en mode offline app (cache local profil/events)
-3. Rollback Render:
-   - Backend: redeploy last known good commit
-   - Site/App: rollback vers dernier deploy stable
-4. Après rollback:
-   - re-check `/healthz`
-   - test OTP email
-   - test `/auth/me` GET/PATCH (incluant `account_mode`)
-
-## 8) Variables d'env prod indispensables
-- `DATABASE_URL`
-- `APP_ENV=prod` (ou `ENV=PROD`)
-- `PUBLIC_URL` / `BASE_URL`
-- `TORE_CORS_ORIGINS`
-- `TORE_QR_SIGNING_KEYS`
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
-- `ADMIN_API_KEY`
-- `RUN_MIGRATIONS=1`
-- `MIGRATIONS_FATAL=1`
+## 6) Tests manuels (Go/No-Go)
+- [ ] Login OTP OK sur app + site.
+- [ ] `/profile` (site) affiche mode actuel + état pending.
+- [ ] Demande organizer avec code valide => pending visible.
+- [ ] Admin voit la demande en pending dans le portal.
+- [ ] Admin approve => `account_mode` mis à jour après refresh `/auth/me`.
+- [ ] Passage manuel en mode `user` fonctionne via profil.
+- [ ] Aucune clé admin visible côté frontend public.

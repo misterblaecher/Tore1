@@ -125,7 +125,7 @@ class HomeHubScreen extends ConsumerWidget {
                 Text('Mode actif: ${accountMode.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 if (accountMode == AccountMode.user) const Text('Découvrir et participer aux events.'),
-                if (accountMode == AccountMode.organizer) const Text('Créer et gérer des events depuis l'app.'),
+                if (accountMode == AccountMode.organizer) const Text("Créer et gérer des events depuis l'app."),
                 if (accountMode == AccountMode.team) const Text('Scanner QR et gérer les check-ins.'),
               ],
             ),
