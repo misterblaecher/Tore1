@@ -56,7 +56,7 @@ class AuthRepository {
     try {
       final r = await api.dio.post(ApiEndpoints.authEmailRequestOtp, data: {'email': email});
       if (kDebugMode) {
-        debugPrint('[auth][otp] response status=${r.statusCode} body=${r.data}');
+        debugPrint('[auth][otp] response status=${r.statusCode}');
       }
       final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
       return EmailRequestResult(
@@ -66,7 +66,7 @@ class AuthRepository {
       );
     } on DioException catch (e) {
       if (kDebugMode) {
-        debugPrint('[auth][otp] response status=${e.response?.statusCode} body=${e.response?.data}');
+        debugPrint('[auth][otp] response status=${e.response?.statusCode}');
       }
       if (e.response?.statusCode == 429) {
         final data = (e.response?.data is Map) ? (e.response!.data as Map).cast<String, dynamic>() : const <String, dynamic>{};

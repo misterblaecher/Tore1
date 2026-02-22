@@ -4,6 +4,7 @@ import 'package:tore/features/bars/presentation/bar_events_screen.dart';
 import 'package:tore/features/bars/presentation/bars_screen.dart';
 
 import 'app_shell.dart';
+import 'features/auth/presentation/complete_profile_screen.dart';
 import 'features/auth/presentation/welcome_screen.dart';
 import 'features/community/presentation/orga_detail_screen.dart';
 import 'features/community/presentation/orga_invite_join_screen.dart';
@@ -176,7 +177,17 @@ class _BootEntryState extends ConsumerState<_BootEntry> {
         onContinueGuest: () => ref.read(authSessionProvider.notifier).continueAsGuest(),
       );
     }
-    return authSession.isAuthed || authSession.isGuest ? const AppShell() : const WelcomeScreen();
+    if (authSession.isAuthed) {
+      final me = ref.watch(meProvider).valueOrNull;
+      if (me != null && me.displayName.trim().isEmpty) {
+        return const CompleteProfileScreen();
+      }
+      return const AppShell();
+    }
+    if (authSession.isGuest) {
+      return const AppShell();
+    }
+    return const WelcomeScreen();
   }
 }
 

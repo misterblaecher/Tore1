@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../config/app_config.dart';
+import '../auth/auth_state_signal.dart';
 import 'api_endpoints.dart';
 import 'api_exception.dart';
 import 'auth_interceptor.dart';
@@ -13,6 +14,7 @@ class ApiClient {
   final Dio dio;
   final TokenStorage tokenStorage;
   bool hasSuccessfulRequest = false;
+  bool _isClearingSession = false;
 
   ApiClient._internal(this.dio, this.tokenStorage);
 
@@ -39,14 +41,25 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onError: (e, handler) async {
-          final canRetry = e.response?.statusCode == 401 && e.requestOptions.extra['retried401'] != true;
+          final is401 = e.response?.statusCode == 401;
+          final canRetry = is401 && e.requestOptions.extra['retried401'] != true;
           if (!canRetry) {
+            handler.next(e);
+            return;
+          }
+
+          final hasToken = await tokenStorage.readToken().then((value) => (value ?? '').isNotEmpty);
+          if (!hasToken) {
+            if (kDebugMode) {
+              debugPrint('[auth][401] no token in storage -> keep session, propagate unauthenticated error');
+            }
             handler.next(e);
             return;
           }
 
           final refreshed = await _instance?.tryRefreshSession() ?? false;
           if (!refreshed) {
+            await _instance?._clearSessionOnce();
             handler.next(e);
             return;
           }
@@ -80,7 +93,7 @@ class ApiClient {
     if (AppConfig.enableHttpLogs) {
       dio.interceptors.add(
         LogInterceptor(
-          requestHeader: true,
+          requestHeader: false,
           requestBody: true,
           responseBody: true,
         ),
@@ -129,8 +142,19 @@ class ApiClient {
       await tokenStorage.writeTokens(accessToken: access, refreshToken: refresh);
       return true;
     } catch (_) {
-      await tokenStorage.clear();
       return false;
+    }
+  }
+
+  Future<void> _clearSessionOnce() async {
+    if (_isClearingSession) return;
+    _isClearingSession = true;
+    try {
+      if (kDebugMode) debugPrint('[auth][refresh] failed -> clear session and notify unauthenticated');
+      await tokenStorage.clearAuthToken();
+      AuthStateSignal.instance.notifyUnauthenticated();
+    } finally {
+      _isClearingSession = false;
     }
   }
 

@@ -4,6 +4,20 @@ import 'api_exception.dart';
 import '../../shared/utils/runtime_write_guard.dart';
 
 class ErrorMapper {
+  static int? retryAfterSeconds(Object e) {
+    if (e is! DioException) return null;
+    if (e.response?.statusCode != 429) return null;
+    final data = e.response?.data;
+    if (data is Map) {
+      final sec = (data['retry_after_seconds'] as num?)?.toInt();
+      if (sec != null && sec > 0) return sec;
+    }
+    final header = e.response?.headers.value('retry-after');
+    final parsed = int.tryParse((header ?? '').trim());
+    if (parsed != null && parsed > 0) return parsed;
+    return null;
+  }
+
   static String _mapReason(String? reason) {
     switch (reason) {
       case 'event_paused':
@@ -71,10 +85,16 @@ class ErrorMapper {
             final mapped = _mapReason(reason);
             if (mapped.isNotEmpty) return mapped;
           }
-          if (code == 401) return 'Session expirée. Reconnexion en cours...';
+          if (code == 401) return 'Non authentifié. Connecte-toi pour continuer.';
           if (code == 403) return 'Accès refusé.';
           if (code == 404) return 'Ressource introuvable.';
-          if (code == 429) return 'Trop de requêtes. Attends quelques secondes puis réessaie.';
+          if (code == 429) {
+            final retryAfter = retryAfterSeconds(e);
+            if (retryAfter != null) {
+              return 'Trop de requêtes. Réessaie dans ${retryAfter}s.';
+            }
+            return 'Trop de requêtes. Attends quelques secondes puis réessaie.';
+          }
           if (code != null && code >= 500) return 'Serveur indisponible. Réessaie.';
           return 'Erreur serveur ($code).';
         case DioExceptionType.unknown:

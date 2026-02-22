@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +23,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? _sessionToken;
+  Timer? _pendingPoll;
   String _idem() => "profile-v2-${DateTime.now().millisecondsSinceEpoch}";
 
   @override
@@ -33,6 +36,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final token = await ref.read(authRepositoryProvider).api.tokenStorage.readToken();
     if (!mounted) return;
     setState(() => _sessionToken = token);
+  }
+
+  void _syncPendingPoll(AppUser? me) {
+    final shouldPoll = me?.roleRequestPending != null;
+    if (!shouldPoll) {
+      _pendingPoll?.cancel();
+      _pendingPoll = null;
+      return;
+    }
+    if (_pendingPoll != null) return;
+    _pendingPoll = Timer.periodic(const Duration(seconds: 50), (_) {
+      ref.invalidate(meProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pendingPoll?.cancel();
+    super.dispose();
   }
 
   Future<void> _patchPreference(Future<void> Function() action, String okMessage) async {
@@ -132,6 +154,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final runtimeStateAsync = ctx.hasActiveEvent
         ? ref.watch(_profileEventProvider(ctx.activeEventId!))
         : const AsyncValue<String>.data('N/A');
+
+    _syncPendingPoll(meAsync.valueOrNull);
 
 
     if (session.status == AuthStatus.unauthenticated) {
