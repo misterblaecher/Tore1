@@ -139,7 +139,7 @@ def _wallet_ledger_type(tx: WalletTx) -> str:
 
 
 def get_db() -> Iterator[Session]:
-    from main import get_db as _get_db
+    from app.legacy.monolith import get_db as _get_db
 
     yield from _get_db()
 
@@ -167,7 +167,7 @@ def get_current_user(
     user = db.get(AppUser, tok.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    from main import _enforce_user_sanctions
+    from app.legacy.monolith import _enforce_user_sanctions
 
     _enforce_user_sanctions(db, user)
     return user

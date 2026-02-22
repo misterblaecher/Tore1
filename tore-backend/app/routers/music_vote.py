@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.services.audit_service import write_audit_log
 from app.services.p3_common import get_event_runtime_state
 from db import get_db, now_utc
-from main import JWT_ALG, JWT_SECRET, get_current_user
+from app.legacy.monolith import JWT_ALG, JWT_SECRET, get_current_user
 from models import (
     AppToken,
     AppUser,

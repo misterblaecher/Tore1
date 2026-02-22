@@ -1,5 +1,13 @@
-"""ASGI entrypoint wrapper exposing the existing application instance."""
+"""Application composition entrypoint."""
 
-from main import app
+from app.core.startup import run_startup
+from app.legacy import monolith
 
-__all__ = ["app"]
+
+def create_app():
+    app = monolith.app
+    run_startup(app)
+    return app
+
+
+__all__ = ["create_app"]

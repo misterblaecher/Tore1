@@ -113,7 +113,7 @@ def bet_out(bet: Bet) -> Dict[str, Any]:
 
 
 def optional_current_user(authorization: Optional[str], db: Session) -> Optional[AppUser]:
-    from main import _extract_bearer_token, _resolve_app_user_from_token
+    from app.legacy.monolith import _extract_bearer_token, _resolve_app_user_from_token
 
     raw = _extract_bearer_token(authorization)
     if not raw:
@@ -141,7 +141,7 @@ def create_position(
     stake: int,
     idempotency_key: str,
 ) -> Dict[str, Any]:
-    from main import _apply_wallet_tx, get_or_create_wallet
+    from app.legacy.monolith import _apply_wallet_tx, get_or_create_wallet
 
     try:
         bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
@@ -233,7 +233,7 @@ def create_position(
 
 
 def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Dict[str, Any]:
-    from main import _role_rank, resolve_event_role
+    from app.legacy.monolith import _role_rank, resolve_event_role
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
@@ -277,7 +277,7 @@ def resolve_bet(db: Session, *, bet_id: int, outcome: str, actor: AppUser) -> Di
 
 
 def finalize_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
-    from main import _apply_wallet_tx, _role_rank, resolve_event_role
+    from app.legacy.monolith import _apply_wallet_tx, _role_rank, resolve_event_role
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
@@ -356,7 +356,7 @@ def finalize_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
 
 
 def cancel_bet(db: Session, *, bet_id: int, actor: AppUser) -> Dict[str, Any]:
-    from main import _apply_wallet_tx, _role_rank, resolve_event_role
+    from app.legacy.monolith import _apply_wallet_tx, _role_rank, resolve_event_role
 
     bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()
     if not bet:
@@ -440,7 +440,7 @@ def list_bets(
 
 
 def create_bet(db: Session, *, payload, user: AppUser) -> Dict[str, Any]:
-    from main import get_or_create_event_config, require_role_for_event
+    from app.legacy.monolith import get_or_create_event_config, require_role_for_event
 
     scope = ensure_bet_scope(payload.scope)
     kind = ensure_bet_kind(payload.kind)
@@ -521,7 +521,7 @@ def get_bet_detail(db: Session, *, bet_id: int, authorization: Optional[str]) ->
 
 
 def get_bet_me(db: Session, *, bet_id: int, user: AppUser, include_wallet_balance: bool) -> Dict[str, Any]:
-    from main import get_or_create_wallet
+    from app.legacy.monolith import get_or_create_wallet
 
     bet = db.get(Bet, bet_id)
     if not bet:

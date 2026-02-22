@@ -1,5 +1,5 @@
 """FastAPI DB dependency wrappers."""
 
-from main import get_db
+from app.legacy.monolith import get_db
 
 __all__ = ["get_db"]

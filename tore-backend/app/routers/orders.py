@@ -75,7 +75,7 @@ BUCKET_MINUTES = 15
 
 
 def get_db() -> Iterator[Session]:
-    from main import get_db as _get_db
+    from app.legacy.monolith import get_db as _get_db
 
     yield from _get_db()
 
@@ -108,7 +108,7 @@ def create_order_route(
     idempotency_header: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
-    from main import _extract_bearer_token, _resolve_app_user_from_token
+    from app.legacy.monolith import _extract_bearer_token, _resolve_app_user_from_token
 
     token_user_id: Optional[str] = None
     raw = _extract_bearer_token(authorization)
@@ -155,7 +155,7 @@ def issue_client_order_qr(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    from main import _extract_bearer_token, _resolve_app_user_from_token
+    from app.legacy.monolith import _extract_bearer_token, _resolve_app_user_from_token
 
     raw = _extract_bearer_token(authorization)
     if not raw:
