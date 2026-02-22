@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -12,19 +13,23 @@ import '../network/token_storage.dart';
 import 'auth_models.dart';
 import 'auth_repository.dart';
 
-enum AuthStatus { unknown, loading, guest, authenticated, unauthenticated }
+enum AuthStatus { unknown, loading, guest, authenticated, unauthenticated, bootstrapError }
 
 class AuthSessionState {
   final AuthStatus status;
   final AppUser? user;
+  final String? message;
+  final bool isOfflineError;
 
-  const AuthSessionState._(this.status, {this.user});
+  const AuthSessionState._(this.status, {this.user, this.message, this.isOfflineError = false});
 
   const AuthSessionState.unknown() : this._(AuthStatus.unknown);
   const AuthSessionState.loading() : this._(AuthStatus.loading);
   const AuthSessionState.guest() : this._(AuthStatus.guest);
   const AuthSessionState.unauthenticated() : this._(AuthStatus.unauthenticated);
   const AuthSessionState.authenticated(AppUser? user) : this._(AuthStatus.authenticated, user: user);
+  const AuthSessionState.bootstrapError(String message, {bool isOfflineError = false})
+    : this._(AuthStatus.bootstrapError, message: message, isOfflineError: isOfflineError);
 
   bool get isGuest => status == AuthStatus.guest;
   bool get isAuthed => status == AuthStatus.authenticated;
@@ -46,19 +51,52 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
 
   Future<void> bootstrap() async {
     state = const AuthSessionState.loading();
-    final token = await _storage.readToken();
-    final guestMode = await _storage.readGuestModeEnabled();
+    try {
+      debugPrint('[auth][bootstrap] start');
+      debugPrint('[auth][bootstrap] load token');
+      final token = await _storage.readToken();
+      final guestMode = await _storage.readGuestModeEnabled();
 
-    if (token != null && token.isNotEmpty) {
-      final me = await _repo.tryMe();
+      if (token == null || token.isEmpty) {
+        debugPrint('[auth][bootstrap] no token -> ${guestMode ? 'guest mode' : 'unauthenticated'}');
+        state = guestMode ? const AuthSessionState.guest() : const AuthSessionState.unauthenticated();
+        return;
+      }
+
+      debugPrint('[auth][bootstrap] token found -> /auth/me');
+      final me = await _repo
+          .tryMe()
+          .timeout(const Duration(seconds: 9), onTimeout: () => throw TimeoutException('auth bootstrap timeout'));
       if (me == null) {
+        debugPrint('[auth][bootstrap] /auth/me unauthenticated');
         state = const AuthSessionState.unauthenticated();
       } else {
+        debugPrint('[auth][bootstrap] /auth/me ok');
         state = AuthSessionState.authenticated(me);
       }
-      return;
+    } on TimeoutException {
+      debugPrint('[auth][bootstrap] timeout');
+      state = const AuthSessionState.bootstrapError('Connexion impossible. Vérifie ton réseau.', isOfflineError: true);
+    } on DioException catch (e) {
+      final networkError =
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionError;
+      final status = e.response?.statusCode;
+      debugPrint('[auth][bootstrap] dio fail type=${e.type} status=$status');
+      if (status == 401 || status == 403) {
+        state = const AuthSessionState.unauthenticated();
+        return;
+      }
+      final message = networkError
+          ? 'Connexion impossible. Vérifie ton réseau.'
+          : 'Session indisponible. Réessaie.';
+      state = AuthSessionState.bootstrapError(message, isOfflineError: networkError);
+    } catch (err) {
+      debugPrint('[auth][bootstrap] fail $err');
+      state = const AuthSessionState.bootstrapError('Session indisponible. Réessaie.');
     }
-    state = guestMode ? const AuthSessionState.guest() : const AuthSessionState.unauthenticated();
   }
 
   Future<void> continueAsGuest() async {

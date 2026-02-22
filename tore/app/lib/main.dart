@@ -167,6 +167,15 @@ class _BootEntryState extends ConsumerState<_BootEntry> {
     if (authSession.status == AuthStatus.loading) {
       return const _BootSplash(title: 'TORÈ', status: 'Session…');
     }
+    if (authSession.status == AuthStatus.bootstrapError) {
+      return _BootSplash(
+        title: 'TORÈ',
+        status: authSession.isOfflineError ? 'Réseau indisponible' : 'Connexion impossible',
+        details: authSession.message,
+        onRetry: () => ref.read(authSessionProvider.notifier).refreshSession(),
+        onContinueGuest: () => ref.read(authSessionProvider.notifier).continueAsGuest(),
+      );
+    }
     return authSession.isAuthed || authSession.isGuest ? const AppShell() : const WelcomeScreen();
   }
 }
@@ -178,6 +187,7 @@ class _BootSplash extends ConsumerWidget {
     this.details,
     this.onRetry,
     this.onContinueReadOnly,
+    this.onContinueGuest,
   });
 
   final String title;
@@ -185,6 +195,7 @@ class _BootSplash extends ConsumerWidget {
   final String? details;
   final VoidCallback? onRetry;
   final VoidCallback? onContinueReadOnly;
+  final VoidCallback? onContinueGuest;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -216,7 +227,7 @@ class _BootSplash extends ConsumerWidget {
               ],
               if (onRetry != null) ...[
                 const SizedBox(height: 14),
-                FilledButton(onPressed: onRetry, child: const Text('Retry')),
+                FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
               ],
               if (onContinueReadOnly != null) ...[
                 const SizedBox(height: 8),
@@ -224,7 +235,14 @@ class _BootSplash extends ConsumerWidget {
                   onPressed: onContinueReadOnly,
                   child: const Text('Continuer en mode lecture'),
                 ),
-              ]
+              ],
+              if (onContinueGuest != null) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: onContinueGuest,
+                  child: const Text('Continuer en invité'),
+                ),
+              ],
             ],
           ),
         ),
