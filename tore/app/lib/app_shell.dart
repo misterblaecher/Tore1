@@ -6,7 +6,7 @@ import 'features/navigation/presentation/home_territory_feed_screen.dart';
 import 'features/navigation/presentation/events_discovery_screen.dart';
 import 'features/navigation/presentation/polymarket_tab_screen.dart';
 import 'features/navigation/presentation/profile_screen.dart';
-import 'features/qr/presentation/qr_scanner_screen.dart';
+import 'features/qr/presentation/qr_scanner_gate_screen.dart';
 import 'shared/widgets/network_banner.dart';
 import 'ui/app_design_system.dart';
 import 'core/auth/providers.dart';
@@ -31,8 +31,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     return Navigator(key: key, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root));
   }
 
-  Future<void> _openScan(bool isGuest) async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen()));
+  Future<void> _openScan() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerGateScreen()));
   }
 
   @override
@@ -91,7 +91,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         backgroundColor: AppColors.accentGold,
         foregroundColor: Colors.black,
         elevation: 16,
-        onPressed: () => _openScan(isGuest),
+        onPressed: _openScan,
         tooltip: 'Scan',
         child: Container(
           decoration: const BoxDecoration(

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../state.dart';
+import '../../../shared/widgets/ui_fallbacks.dart';
 import '../../../ui/app_design_system.dart';
 import '../../../core/auth/providers.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
@@ -196,7 +197,7 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
             SizedBox(
               height: 172,
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const ToreLoadingSkeleton(lines: 4)
                   : ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _events.length,
@@ -220,6 +221,11 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                       },
                     ),
             ),
+            if (!_loading && _events.isEmpty)
+              const ToreEmptyState(
+                title: 'Territoire calme',
+                message: "Aucun événement actif pour l'instant.",
+              ),
             const SizedBox(height: 16),
             const SolarSectionTitle("Bars vivants"),
             const SizedBox(height: 8),
@@ -238,8 +244,8 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
               const SolarSectionTitle("Arènes actives"),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: const [
-                SolarChip(label: "Battle en cours"),
-                SolarChip(label: "Hunt en feu"),
+                SolarChip(label: "Arène centrale"),
+                SolarChip(label: "Territoire étudiant"),
                 SolarChip(label: "Polymarket chaud"),
               ]),
             ],

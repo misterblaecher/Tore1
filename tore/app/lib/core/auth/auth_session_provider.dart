@@ -26,7 +26,7 @@ class AuthSessionState {
   const AuthSessionState.unknown() : this._(AuthStatus.unknown);
   const AuthSessionState.loading() : this._(AuthStatus.loading);
   const AuthSessionState.guest() : this._(AuthStatus.guest);
-  const AuthSessionState.unauthenticated() : this._(AuthStatus.unauthenticated);
+  const AuthSessionState.unauthenticated({String? message}) : this._(AuthStatus.unauthenticated, message: message);
   const AuthSessionState.authenticated(AppUser? user) : this._(AuthStatus.authenticated, user: user);
   const AuthSessionState.bootstrapError(String message, {bool isOfflineError = false})
     : this._(AuthStatus.bootstrapError, message: message, isOfflineError: isOfflineError);
@@ -160,7 +160,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     if (guestId != null && guestId.isNotEmpty) {
       await _storage.writeGuestDeviceId(guestId);
     }
-    state = const AuthSessionState.unauthenticated();
+    state = const AuthSessionState.unauthenticated(message: 'Session expirée. Connecte-toi à nouveau.');
   }
 
   Future<void> _completeLogin(AuthTokens tokens) async {

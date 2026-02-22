@@ -10,14 +10,17 @@ class ToreNetworkBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(networkStateProvider);
-    if (snapshot.state == NetworkState.online) return const SizedBox.shrink();
-
+    final isOnline = snapshot.state == NetworkState.online;
     final isOffline = snapshot.state == NetworkState.offline;
-    final bg = isOffline ? Colors.red.shade100 : Colors.orange.shade100;
-    final border = isOffline ? Colors.red.shade300 : Colors.orange.shade300;
-    final text = isOffline
-        ? 'Serveur indisponible — mode lecture.'
-        : 'Réseau instable — certaines actions sont bloquées.';
+    final bg = isOnline
+        ? const Color(0x2200C853)
+        : (isOffline ? Colors.red.shade100 : Colors.orange.shade100);
+    final border = isOnline
+        ? const Color(0x6600C853)
+        : (isOffline ? Colors.red.shade300 : Colors.orange.shade300);
+    final text = isOnline
+        ? 'ONLINE'
+        : (isOffline ? 'OFFLINE — mode lecture.' : 'DEGRADED — réseau instable.');
 
     return Material(
       color: bg,
@@ -27,16 +30,17 @@ class ToreNetworkBanner extends ConsumerWidget {
         decoration: BoxDecoration(border: Border(bottom: BorderSide(color: border))),
         child: Row(
           children: [
-            Icon(isOffline ? Icons.cloud_off : Icons.wifi_tethering_error_rounded),
+            Icon(isOnline ? Icons.wifi : (isOffline ? Icons.cloud_off : Icons.wifi_tethering_error_rounded)),
             const SizedBox(width: 8),
             Expanded(child: Text(text)),
-            TextButton(
-              onPressed: () async {
-                await ref.read(networkStateProvider.notifier).refresh();
-                await ref.read(appBootProvider.notifier).bootstrap();
-              },
-              child: const Text('Retry'),
-            ),
+            if (!isOnline)
+              TextButton(
+                onPressed: () async {
+                  await ref.read(networkStateProvider.notifier).refresh();
+                  await ref.read(appBootProvider.notifier).bootstrap();
+                },
+                child: const Text('Retry'),
+              ),
           ],
         ),
       ),
