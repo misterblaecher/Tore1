@@ -6,7 +6,7 @@ class AppUser {
   final bool showAddress;
   final bool showAvatar;
   final bool showIdentityToStaff;
-  final String? bio;
+  final String bio;
   final String visibility;
   final bool showIdentityInBar;
 
@@ -18,7 +18,7 @@ class AppUser {
     required this.showAddress,
     required this.showAvatar,
     required this.showIdentityToStaff,
-    required this.bio,
+    this.bio = '',
     required this.visibility,
     required this.showIdentityInBar,
   });
@@ -32,7 +32,7 @@ class AppUser {
       showAddress: (json['show_address'] as bool?) ?? false,
       showAvatar: (json['show_avatar'] as bool?) ?? true,
       showIdentityToStaff: (json['show_identity_to_staff'] as bool?) ?? false,
-      bio: json['bio']?.toString(),
+      bio: (json['bio'] ?? '').toString(),
       visibility: (json['visibility'] ?? 'public').toString(),
       showIdentityInBar: (json['show_identity_in_bar'] as bool?) ?? false,
     );
