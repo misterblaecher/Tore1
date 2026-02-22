@@ -113,16 +113,6 @@
       radial-gradient(circle at 80% 30%, rgba(255, 90, 31, 0.06), transparent 30%),
       url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.26'/%3E%3C/svg%3E");
   }
-
-  [id] {
-    scroll-margin-top: 6rem;
-  }
-
-  @media (min-width: 768px) {
-    [id] {
-      scroll-margin-top: 7rem;
-    }
-  }
 }
 
 @layer utilities {
