@@ -12,7 +12,6 @@ class EventPolymarketScreen extends ConsumerWidget {
     final ctx = ref.watch(activeEventContextProvider).valueOrNull;
     final permissions = ctx?.permissions ?? const EventPermissions(canCreateBets: false, canResolveBets: false);
     return PolymarketTabScreen(
-      initialScope: 'event',
       eventOnly: true,
       canCreateBets: permissions.canCreateBets,
       canResolveBets: permissions.canResolveBets,
