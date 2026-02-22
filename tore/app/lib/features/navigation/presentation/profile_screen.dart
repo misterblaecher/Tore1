@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
+import '../../../core/auth/auth_models.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../state.dart';
 import '../../../core/network/api_exception.dart';
@@ -188,6 +189,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               const SizedBox(height: 18),
 
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Mode de compte', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          (AccountMode.user, 'Utilisateur'),
+                          (AccountMode.organizer, 'Organisateur'),
+                          (AccountMode.team, 'Équipe'),
+                        ].map((entry) {
+                          return ChoiceChip(
+                            label: Text(entry.$2),
+                            selected: me.accountMode == entry.$1,
+                            onSelected: (_) => _patchPreference(
+                              () => ref.read(authRepositoryProvider).patchMe(accountMode: entry.$1),
+                              'Mode mis à jour',
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),

@@ -18,6 +18,7 @@ import 'package:tore/features/ticker/ticker_providers.dart';
 import 'package:tore/features/wallet/presentation/wallet_screen.dart';
 import 'package:tore/features/map_calendar/presentation/calendar_screen.dart';
 import 'package:tore/state.dart';
+import 'package:tore/core/auth/auth_models.dart';
 import 'package:tore/ui/components/components.dart';
 import 'package:tore/shared/utils/write_gate.dart';
 
@@ -36,6 +37,8 @@ class HomeHubScreen extends ConsumerWidget {
     final modules = ref.watch(_modulesProvider).maybeWhen(data: (m) => m, orElse: () => const <String, dynamic>{});
     final committeesModule = modules['committee_os'] == true;
     final glossaryModule = modules['folklore_glossary'] == true;
+    final me = ref.watch(meProvider).valueOrNull;
+    final accountMode = me?.accountMode ?? AccountMode.user;
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -72,12 +75,13 @@ class HomeHubScreen extends ConsumerWidget {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FloatingActionButton.extended(
-            heroTag: 'create-event-fab',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
-            icon: const Icon(Icons.add),
-            label: const Text('+ Créer'),
-          ),
+          if (accountMode == AccountMode.organizer)
+            FloatingActionButton.extended(
+              heroTag: 'create-event-fab',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+              icon: const Icon(Icons.add),
+              label: const Text('Créer event'),
+            ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
             heroTag: 'scan-qr-fab',
@@ -114,6 +118,19 @@ class HomeHubScreen extends ConsumerWidget {
                 : null,
           ),
           const SizedBox(height: 14),
+          ToreCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Mode actif: ${accountMode.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                if (accountMode == AccountMode.user) const Text('Découvrir et participer aux events.'),
+                if (accountMode == AccountMode.organizer) const Text('Créer et gérer des events depuis l'app.'),
+                if (accountMode == AccountMode.team) const Text('Scanner QR et gérer les check-ins.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           if (!hasEvent)
             ToreCard(
               child: Column(

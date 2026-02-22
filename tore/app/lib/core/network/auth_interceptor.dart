@@ -46,6 +46,7 @@ class AuthInterceptor extends Interceptor {
   Future<void> _handleUnauthorized(RequestOptions requestOptions, int? statusCode) async {
     if (requestOptions.extra['skipAuth'] == true) return;
     if (statusCode != 401 && statusCode != 403) return;
+    if (statusCode == 401 && requestOptions.extra['retried401'] != true) return;
     if (_clearingInvalidToken) return;
 
     final currentToken = await tokenStorage.readToken();

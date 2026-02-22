@@ -74,6 +74,7 @@ class ErrorMapper {
           if (code == 401) return 'Session expirée. Reconnexion en cours...';
           if (code == 403) return 'Accès refusé.';
           if (code == 404) return 'Ressource introuvable.';
+          if (code == 429) return 'Trop de requêtes. Attends quelques secondes puis réessaie.';
           if (code != null && code >= 500) return 'Serveur indisponible. Réessaie.';
           return 'Erreur serveur ($code).';
         case DioExceptionType.unknown:
