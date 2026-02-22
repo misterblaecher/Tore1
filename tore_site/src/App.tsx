@@ -3,13 +3,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
 
 // Implemented pages
 import Produit from "./pages/Produit";
-import Bars from "./pages/Bars";
 import Comites from "./pages/Comites";
 import Roadmap from "./pages/Roadmap";
 import Pricing from "./pages/Pricing";
@@ -53,7 +51,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/produit" element={<Produit />} />
-          <Route path="/bars" element={<Bars />} />
+          <Route path="/bars" element={<Navigate to="/#beta" replace />} />
           <Route path="/comites" element={<Comites />} />
           <Route path="/roadmap" element={<Roadmap />} />
           <Route path="/pricing" element={<Pricing />} />
@@ -63,7 +61,7 @@ const App = () => (
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/cookies" element={<Cookies />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
