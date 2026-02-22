@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
+import '../../../ui/app_design_system.dart';
 
 class CompleteProfileScreen extends ConsumerStatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -17,8 +18,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   String? _error;
 
   Future<void> _submit() async {
-    final display = _displayCtrl.text.trim();
-    if (display.isEmpty) {
+    if (_displayCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Le pseudo est obligatoire.');
       return;
     }
@@ -27,13 +27,11 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
       _error = null;
     });
     try {
-      await ref.read(authRepositoryProvider).patchMe(displayName: display, bio: _bioCtrl.text.trim());
+      await ref.read(authRepositoryProvider).patchMe(displayName: _displayCtrl.text.trim(), bio: _bioCtrl.text.trim());
       ref.invalidate(meProvider);
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _error = 'Impossible de sauvegarder. Réessaie.');
+      if (mounted) setState(() => _error = 'Impossible de sauvegarder. Réessaie.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -44,19 +42,22 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Compléter profil')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          const Text('Avant de continuer, ajoute un pseudo.'),
-          const SizedBox(height: 12),
-          TextField(controller: _displayCtrl, enabled: !_loading, decoration: const InputDecoration(labelText: 'Pseudo *')),
-          const SizedBox(height: 10),
-          TextField(controller: _bioCtrl, enabled: !_loading, maxLines: 3, decoration: const InputDecoration(labelText: 'Bio (optionnel)')),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _loading ? null : _submit, child: Text(_loading ? 'Sauvegarde...' : 'Continuer')),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-          ],
+          const AppCard(child: Text('Avant de continuer, ajoute un pseudo.')),
+          const SizedBox(height: AppSpacing.sm),
+          AppCard(
+            child: Column(
+              children: [
+                TextField(controller: _displayCtrl, enabled: !_loading, decoration: const InputDecoration(labelText: 'Pseudo *')),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(controller: _bioCtrl, enabled: !_loading, maxLines: 3, decoration: const InputDecoration(labelText: 'Bio (optionnel)')),
+                const SizedBox(height: AppSpacing.md),
+                PrimaryButton(label: _loading ? 'Sauvegarde...' : 'Continuer', onPressed: _loading ? null : _submit, loading: _loading),
+                if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
+              ],
+            ),
+          ),
         ],
       ),
     );

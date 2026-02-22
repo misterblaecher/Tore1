@@ -21,6 +21,8 @@ import 'package:tore/state.dart';
 import 'package:tore/core/auth/auth_models.dart';
 import 'package:tore/ui/components/components.dart';
 import 'package:tore/shared/utils/write_gate.dart';
+import 'package:tore/ui/app_design_system.dart';
+import 'package:tore/features/navigation/presentation/soiree_ops_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
@@ -122,6 +124,7 @@ class HomeHubScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SectionTitle('Mode soirée'),
                 Text('Mode actif: ${accountMode.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 if (accountMode == AccountMode.user) const Text('Découvrir et participer aux events.'),
@@ -146,6 +149,29 @@ class HomeHubScreen extends ConsumerWidget {
                 ],
               ),
             ),
+
+          if (accountMode == AccountMode.organizer)
+            _ModuleCard(
+              icon: Icons.event,
+              title: 'Mes events',
+              subtitle: 'Lister et opérer tes soirées dans l'app',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: true))),
+            ),
+          if (accountMode == AccountMode.organizer)
+            _ModuleCard(
+              icon: Icons.add_circle_outline,
+              title: 'Créer un event',
+              subtitle: 'Formulaire rapide app-first',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: true))),
+            ),
+          if (accountMode == AccountMode.team)
+            _ModuleCard(
+              icon: Icons.qr_code_scanner_outlined,
+              title: 'Scanner QR (check-in)',
+              subtitle: 'Valider un check-in event_checkin:<id>',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: false))),
+            ),
+
           if (!hasEvent)
             _ModuleCard(
               icon: Icons.calendar_month_outlined,

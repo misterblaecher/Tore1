@@ -10895,6 +10895,36 @@ def my_events(user: AppUser = Depends(get_current_user), db: Session = Depends(g
     return payload
 
 
+
+
+@app.post("/events/{event_id}/checkin")
+def app_event_team_checkin(event_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    mode = (user.account_mode or "user").lower()
+    if mode not in {"team", "organizer"}:
+        raise HTTPException(status_code=403, detail="Non autorisé")
+
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event introuvable")
+
+    already = db.query(EventSafetyCheckin).filter(
+        EventSafetyCheckin.event_id == event_id,
+        EventSafetyCheckin.user_id == user.id,
+        EventSafetyCheckin.type == "TEAM_CHECKIN",
+    ).first()
+    if already:
+        return {"status": "duplicate", "message": "Déjà check-in"}
+
+    row = EventSafetyCheckin(
+        event_id=event_id,
+        user_id=user.id,
+        type="TEAM_CHECKIN",
+        created_at=now_utc(),
+    )
+    db.add(row)
+    db.commit()
+    return {"status": "ok", "message": "Check-in validé"}
+
 @app.get("/orgas/{org_id}/events/private")
 def list_orga_private_events(
     org_id: int,

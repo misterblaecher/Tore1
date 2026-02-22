@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_design_system.dart';
+
 class NetworkErrorFallback extends StatelessWidget {
   const NetworkErrorFallback({
     super.key,
@@ -22,13 +24,13 @@ class NetworkErrorFallback extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56),
+            Icon(icon, size: 56, color: AppColors.warning),
             const SizedBox(height: 14),
             Text(title, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
             const SizedBox(height: 10),
             Text(message, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
             const SizedBox(height: 18),
-            FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Réessayer')),
+            PrimaryButton(label: 'Réessayer', icon: Icons.refresh, onPressed: onRetry),
           ],
         ),
       ),
