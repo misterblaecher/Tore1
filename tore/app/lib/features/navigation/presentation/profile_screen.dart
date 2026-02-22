@@ -593,7 +593,6 @@ class _LoginRequiredBody extends StatelessWidget {
           ],
         ),
       ),
-      ),
     );
   }
 }
