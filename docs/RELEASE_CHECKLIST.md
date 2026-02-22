@@ -2,13 +2,38 @@
 
 Checklist minimale avant release (sans ajout de feature produit).
 
+## 0) Variables d’environnement requises (minimum local CI)
+
+- Backend (`tore-backend`):
+  - `DATABASE_URL`
+  - `TORE_JWT_SECRET`
+  - `TORE_SECRET`
+  - `TORE_QR_SIGNING_KEYS` **ou** `TORE_QR_SIGNING_SECRET`
+  - `TORE_CORS_ORIGINS`
+- Portal (`tore-portal`):
+  - `VITE_API_BASE_URL` (ou fallback `VITE_API_BASE`)
+- Flutter (`tore/app`):
+  - `TORE_API_BASE_URL`
+
+Référence: `.env.example` racine + `tore-portal/.env.example` + `tore/app/.env.example`.
+
 ## 1) Versioning
 - [ ] Bump de version (si applicable: backend, portal, app mobile, ou release tag).
 - [ ] Vérifier changelog / notes de release associées.
 
-## 2) Quality gates locaux
-- [ ] Backend: `cd tore-backend && pytest -q`
-- [ ] Portal: `cd tore-portal && npm ci && npm run build`
+## 2) Quality gates locaux (commandes exactes)
+- [ ] Backend:
+  - `cd tore-backend`
+  - `pytest -q`
+- [ ] Portal:
+  - `cd tore-portal`
+  - `npm ci`
+  - `npm run build`
+- [ ] Flutter:
+  - `cd tore/app`
+  - `flutter pub get`
+  - `flutter analyze`
+  - `flutter build apk --debug`
 
 ## 3) Scripts d'exploitation
 - [ ] Seed minimal: `python scripts/seed_minimal.py`
