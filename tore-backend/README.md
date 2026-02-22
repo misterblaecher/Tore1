@@ -37,6 +37,9 @@ Réponse:
 - `RATE_LIMIT_MAX` *(optionnel)* : nombre max de requêtes par empreinte ip+user-agent (défaut 3).
 - `ACCOUNT_EMAIL_COOLDOWN_MIN` *(optionnel)* : anti doublon email+phone (défaut 2 minutes).
 - `RUN_MIGRATIONS` *(optionnel, défaut `1`)* : exécute automatiquement `alembic upgrade head` au démarrage backend.
+- `ORGA_CODE` : code requis pour demander le mode `organizer` via `POST /auth/role/request-upgrade`.
+- `TEAM_CODE` : code requis pour demander le mode `team` via `POST /auth/role/request-upgrade`.
+- `ADMIN_API_KEY` : clé serveur pour les endpoints admin de validation (`GET/PATCH /admin/role-requests`, header `X-Admin-Api-Key`).
 - `MIGRATIONS_FATAL` *(optionnel, défaut `1`)* : si les migrations échouent, stoppe le process (`1`) ou continue avec warning (`0`).
 
 ### Render free : migrations auto au boot

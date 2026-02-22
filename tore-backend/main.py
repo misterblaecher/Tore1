@@ -130,6 +130,7 @@ from models import (
     UserSanction,
     GlobalFeatureFlag,
     AccountRequest,
+    RoleUpgradeRequest,
 )
 
 
@@ -182,6 +183,9 @@ GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 ENABLE_SMS_OTP = (os.getenv("ENABLE_SMS_OTP") or "false").strip().lower() in {"1", "true", "yes", "on"}
 ENABLE_WHATSAPP_OTP = (os.getenv("ENABLE_WHATSAPP_OTP") or "false").strip().lower() in {"1", "true", "yes", "on"}
+ORGA_CODE = (os.getenv("ORGA_CODE") or "").strip()
+TEAM_CODE = (os.getenv("TEAM_CODE") or "").strip()
+ADMIN_API_KEY = (os.getenv("ADMIN_API_KEY") or "").strip()
 
 # Price engine knobs (simple but fun)
 MIN_MULT = 0.50
@@ -530,6 +534,31 @@ def _ensure_app_user_privacy_columns() -> None:
         s.close()
 
 
+
+
+def _ensure_role_upgrade_requests_table() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    s = get_session()
+    try:
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS role_upgrade_requests (
+                id INTEGER NOT NULL PRIMARY KEY,
+                user_id VARCHAR NOT NULL,
+                requested_mode VARCHAR(16) NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                created_at DATETIME,
+                reviewed_at DATETIME,
+                reviewed_by VARCHAR(120),
+                note TEXT
+            )
+        """))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_role_upgrade_requests_user_id ON role_upgrade_requests (user_id)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_role_upgrade_requests_status ON role_upgrade_requests (status)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_role_upgrade_requests_mode ON role_upgrade_requests (requested_mode)"))
+        s.commit()
+    finally:
+        s.close()
 def ensure_seed() -> None:
     Base.metadata.create_all(engine)
     _ensure_orders_payment_columns()
@@ -537,6 +566,7 @@ def ensure_seed() -> None:
     _ensure_polymarket_v1_columns()
     _ensure_wallet_indexes()
     _ensure_app_user_privacy_columns()
+    _ensure_role_upgrade_requests_table()
     ensure_sqlite_compat(engine)
     s = get_session()
     try:
@@ -845,6 +875,28 @@ def _apply_user_anonymization(user: AppUser) -> None:
 def _require_global_admin(identity: Dict[str, Any]) -> None:
     if (identity.get("role") or "").upper() != "ADMIN_GLOBAL":
         raise HTTPException(status_code=403, detail={"reason": "FORBIDDEN_ADMIN_GLOBAL"})
+
+
+def _require_admin_api_key(x_admin_api_key: Optional[str] = Header(default=None, alias="X-Admin-Api-Key")) -> str:
+    if not ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail={"reason": "admin_key_not_configured"})
+    provided = (x_admin_api_key or "").strip()
+    if not provided or provided != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail={"reason": "invalid_admin_api_key"})
+    return "admin"
+
+
+def _serialize_role_upgrade_request(row: RoleUpgradeRequest) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "user_id": row.user_id,
+        "requested_mode": row.requested_mode,
+        "status": row.status,
+        "created_at": _serialize_dt(row.created_at),
+        "reviewed_at": _serialize_dt(row.reviewed_at),
+        "reviewed_by": row.reviewed_by,
+        "note": row.note,
+    }
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
@@ -1252,6 +1304,16 @@ class PatchMeIn(BaseModel):
     visibility: Optional[str] = None
     show_identity_in_bar: Optional[bool] = None
     account_mode: Optional[Literal["user", "organizer", "team"]] = None
+
+
+class RoleUpgradeRequestIn(BaseModel):
+    requested_mode: Literal["user", "organizer", "team"]
+    code: str = Field(min_length=1, max_length=120)
+
+
+class RoleUpgradeReviewIn(BaseModel):
+    action: Literal["approve", "reject"]
+    note: Optional[str] = Field(default=None, max_length=500)
 
 
 class IdentityConsentBarPatchIn(BaseModel):
@@ -3888,6 +3950,12 @@ def me(
             else None
         )
         active_sanction = _active_sanction_for_user(s, user.id)
+        pending_role_request = (
+            s.query(RoleUpgradeRequest)
+            .filter(RoleUpgradeRequest.user_id == user.id, RoleUpgradeRequest.status == "pending")
+            .order_by(RoleUpgradeRequest.created_at.desc())
+            .first()
+        )
         return {
             "id": user.id,
             "display_name": user.display_name,
@@ -3911,6 +3979,7 @@ def me(
                 else None
             ),
             "account_mode": (user.account_mode if user.account_mode in ALLOWED_ACCOUNT_MODES else "user"),
+            "role_request_pending": (_serialize_role_upgrade_request(pending_role_request) if pending_role_request else None),
         }
     finally:
         s.close()
@@ -3939,6 +4008,8 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
         if payload.account_mode is not None:
             if payload.account_mode not in ALLOWED_ACCOUNT_MODES:
                 raise HTTPException(status_code=422, detail={"detail": "Invalid account_mode", "code": "invalid_account_mode"})
+            if payload.account_mode != "user":
+                raise HTTPException(status_code=403, detail={"reason": "role_upgrade_requires_approval"})
             u.account_mode = payload.account_mode
         settings = s.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == u.id).first()
         if payload.show_identity_to_staff is not None or payload.visibility is not None or payload.show_identity_in_bar is not None:
@@ -3993,6 +4064,90 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
         }
     finally:
         s.close()
+
+
+@app.post("/auth/role/request-upgrade")
+def auth_role_request_upgrade(payload: RoleUpgradeRequestIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    requested_mode = payload.requested_mode
+    if requested_mode == "user":
+        raise HTTPException(status_code=400, detail={"reason": "user_mode_does_not_require_request"})
+
+    expected_code = ORGA_CODE if requested_mode == "organizer" else TEAM_CODE
+    provided_code = (payload.code or "").strip()
+    if not expected_code or provided_code != expected_code:
+        raise HTTPException(status_code=403, detail={"reason": "invalid_role_code"})
+
+    existing_pending = (
+        db.query(RoleUpgradeRequest)
+        .filter(
+            RoleUpgradeRequest.user_id == user.id,
+            RoleUpgradeRequest.requested_mode == requested_mode,
+            RoleUpgradeRequest.status == "pending",
+        )
+        .order_by(RoleUpgradeRequest.created_at.desc())
+        .first()
+    )
+    if existing_pending:
+        return {"request": _serialize_role_upgrade_request(existing_pending), "idempotent": True}
+
+    row = RoleUpgradeRequest(user_id=user.id, requested_mode=requested_mode, status="pending")
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"request": _serialize_role_upgrade_request(row), "idempotent": False}
+
+
+@app.get("/admin/role-requests")
+def admin_role_requests(
+    status: str = Query(default="pending"),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: Optional[int] = Query(default=None),
+    _: str = Depends(_require_admin_api_key),
+    db: Session = Depends(get_db),
+):
+    normalized = (status or "pending").strip().lower()
+    if normalized not in {"pending", "approved", "rejected"}:
+        raise HTTPException(status_code=422, detail={"reason": "invalid_status"})
+
+    q = db.query(RoleUpgradeRequest).filter(RoleUpgradeRequest.status == normalized)
+    if cursor is not None:
+        q = q.filter(RoleUpgradeRequest.id < cursor)
+    rows = q.order_by(RoleUpgradeRequest.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    clipped = rows[:limit]
+    next_cursor = clipped[-1].id if has_more and clipped else None
+    return {"items": [_serialize_role_upgrade_request(row) for row in clipped], "next_cursor": next_cursor}
+
+
+@app.patch("/admin/role-requests/{request_id}")
+def admin_role_requests_review(
+    request_id: int,
+    payload: RoleUpgradeReviewIn,
+    _: str = Depends(_require_admin_api_key),
+    db: Session = Depends(get_db),
+):
+    row = db.get(RoleUpgradeRequest, request_id)
+    if not row:
+        raise HTTPException(status_code=404, detail={"reason": "request_not_found"})
+    if row.status != "pending":
+        return {"request": _serialize_role_upgrade_request(row), "idempotent": True}
+
+    row.reviewed_at = now_utc()
+    row.reviewed_by = "admin"
+    row.note = payload.note
+    if payload.action == "approve":
+        user = db.get(AppUser, row.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail={"reason": "user_not_found"})
+        user.account_mode = row.requested_mode
+        db.add(user)
+        row.status = "approved"
+    else:
+        row.status = "rejected"
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"request": _serialize_role_upgrade_request(row), "idempotent": False}
 
 
 class AdminSanctionIn(BaseModel):

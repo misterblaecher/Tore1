@@ -49,6 +49,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+
+  Future<String?> _askUpgradeCode(AccountMode mode) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Code ${mode == AccountMode.organizer ? 'Organisateur' : 'Équipe'}'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(hintText: 'Entrer le code'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(controller.text.trim()), child: const Text('Envoyer')),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
   Future<void> _upgradeGuestAccount() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -197,6 +219,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       const Text('Mode de compte', style: TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
+                      if (me.roleRequestPending != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text('Demande en attente: ${me.roleRequestPending!.requestedMode.name}'),
+                        ),
                       Wrap(
                         spacing: 8,
                         children: [
@@ -207,10 +234,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           return ChoiceChip(
                             label: Text(entry.$2),
                             selected: me.accountMode == entry.$1,
-                            onSelected: (_) => _patchPreference(
-                              () => ref.read(authRepositoryProvider).patchMe(accountMode: entry.$1),
-                              'Mode mis à jour',
-                            ),
+                            onSelected: (_) async {
+                              if (entry.$1 == AccountMode.user) {
+                                await _patchPreference(
+                                  () => ref.read(authRepositoryProvider).patchMe(accountMode: AccountMode.user),
+                                  'Mode utilisateur activé',
+                                );
+                                return;
+                              }
+                              final code = await _askUpgradeCode(entry.$1);
+                              if (code == null || code.isEmpty) return;
+                              await _patchPreference(
+                                () => ref.read(authRepositoryProvider).requestRoleUpgrade(mode: entry.$1, code: code),
+                                'Demande envoyée: en attente de validation admin',
+                              );
+                            },
                           );
                         }).toList(),
                       ),

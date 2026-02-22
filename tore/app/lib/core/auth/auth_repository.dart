@@ -90,6 +90,15 @@ class AuthRepository {
     await api.dio.post(ApiEndpoints.authUpgradeGuest, data: {'guest_device_id': guestDeviceId});
   }
 
+  Future<RoleUpgradeRequest> requestRoleUpgrade({required AccountMode mode, required String code}) async {
+    final r = await api.dio.post(ApiEndpoints.authRoleRequestUpgrade, data: {
+      'requested_mode': accountModeToJson(mode),
+      'code': code,
+    });
+    final data = (r.data as Map).cast<String, dynamic>();
+    return RoleUpgradeRequest.fromJson((data['request'] as Map).cast<String, dynamic>());
+  }
+
   Future<AppUser> patchMe({
     String? displayName,
     String? avatarUrl,
