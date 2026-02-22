@@ -154,7 +154,7 @@ class HomeHubScreen extends ConsumerWidget {
             _ModuleCard(
               icon: Icons.event,
               title: 'Mes events',
-              subtitle: 'Lister et opérer tes soirées dans l'app',
+              subtitle: "Lister et opérer tes soirées dans l'app",
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: true))),
             ),
           if (accountMode == AccountMode.organizer)
