@@ -150,6 +150,7 @@ from partner_auth import router as partner_auth_router, current_identity as curr
 from app.db.sqlite_compat import ensure_sqlite_compat
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
+from app.utils.migrations import run_migrations_on_startup
 
 
 # ---------------------------------------------------------------------
@@ -1940,7 +1941,7 @@ app = FastAPI(
 )
 
 logging.basicConfig(level=logging.INFO)
-logging.info(f"BOOT commit={os.getenv('RENDER_GIT_COMMIT')} db={DATABASE_URL}")
+logging.info("BOOT commit=%s", os.getenv("RENDER_GIT_COMMIT"))
 
 
 
@@ -2011,6 +2012,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
+    run_migrations_on_startup()
     validate_env_or_warn()
     _startup_sanity_checks()
     if _should_bootstrap_on_startup():

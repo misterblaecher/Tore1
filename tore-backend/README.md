@@ -36,6 +36,12 @@ Réponse:
 - `RATE_LIMIT_WINDOW` *(optionnel)* : fenêtre anti-spam en minutes (défaut 10).
 - `RATE_LIMIT_MAX` *(optionnel)* : nombre max de requêtes par empreinte ip+user-agent (défaut 3).
 - `ACCOUNT_EMAIL_COOLDOWN_MIN` *(optionnel)* : anti doublon email+phone (défaut 2 minutes).
+- `RUN_MIGRATIONS` *(optionnel, défaut `1`)* : exécute automatiquement `alembic upgrade head` au démarrage backend.
+- `MIGRATIONS_FATAL` *(optionnel, défaut `1`)* : si les migrations échouent, stoppe le process (`1`) ou continue avec warning (`0`).
+
+### Render free : migrations auto au boot
+
+Sur Render free, l'accès Shell et le **Pre-Deploy Command** sont payants. Le backend applique donc les migrations Alembic automatiquement au startup (avant de servir les requêtes) pour garantir que le schéma en production reste à jour (ex: création de `account_requests` via la migration `0003`).
 
 ## Curl de test
 
