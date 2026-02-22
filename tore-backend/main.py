@@ -36,7 +36,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, Mapped, mapped_column
 
 from db import Base, engine, get_session, now_utc, DATABASE_URL
-from app.services.rate_limit_service import metrics_lite, record_status_code, enforce_rate_limit
+from app.services.rate_limit_service import (
+    metrics_lite,
+    record_status_code,
+    enforce_rate_limit,
+    RateLimitExceeded,
+    standard_rate_limit_http_exception,
+)
 from models import (
     Bar,
     Event,
@@ -3681,8 +3687,11 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
         raise HTTPException(status_code=400, detail={"reason": "invalid_email"})
 
     actor_ip = request.client.host if request.client else "unknown"
-    enforce_rate_limit(EMAIL_OTP_SCOPE_EMAIL, email)
-    enforce_rate_limit(EMAIL_OTP_SCOPE_IP, actor_ip)
+    try:
+        enforce_rate_limit(EMAIL_OTP_SCOPE_EMAIL, email)
+        enforce_rate_limit(EMAIL_OTP_SCOPE_IP, actor_ip)
+    except RateLimitExceeded as exc:
+        raise standard_rate_limit_http_exception(scope=exc.scope, retry_after_seconds=exc.retry_after_seconds)
 
     raw_code = f"{secrets.randbelow(1000000):06d}"
     db.add(

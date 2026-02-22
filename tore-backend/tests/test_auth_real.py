@@ -229,3 +229,25 @@ def test_email_request_otp_dev_dry_run_when_smtp_fails(monkeypatch):
     assert res.status_code == 200
     assert res.json()["ok"] is True
     assert len(res.json().get("code", "")) == 6
+
+
+def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
+    monkeypatch.setenv("ENV", "DEV")
+    monkeypatch.setenv("TORE_DEV_EXPOSE_MAGIC_TOKEN", "1")
+    rate_limit_service._SCOPE_LIMITS["auth_email_request_otp_email"] = (1, 60)
+    rate_limit_service._SCOPE_LIMITS["auth_email_request_otp_ip"] = (100, 60)
+
+    client = TestClient(app)
+    email = f"otp-limit-{now_utc().timestamp()}@example.com"
+
+    first = client.post("/auth/email/request_otp", json={"email": email})
+    assert first.status_code == 200
+
+    second = client.post("/auth/email/request_otp", json={"email": email})
+    assert second.status_code == 429
+    assert second.headers.get("Retry-After") is not None
+    body = second.json().get("detail", {})
+    assert body.get("detail") == "Too many requests"
+    assert isinstance(body.get("retry_after_seconds"), int)
+    assert body.get("retry_after_seconds") >= 1
+    assert body.get("scope") == "auth_email_request_otp_email"

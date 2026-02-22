@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../state.dart';
 import '../../../core/auth/email_token.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/providers.dart';
 
 class EmailAuthScreen extends ConsumerStatefulWidget {
@@ -43,6 +44,13 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
         _requested = true;
         _devToken = out.devToken;
         _cooldown = out.resendCooldownSeconds;
+      });
+      _tickCooldown();
+    } on EmailRateLimitException catch (e) {
+      setState(() {
+        _requested = true;
+        _cooldown = e.retryAfterSeconds;
+        _error = 'Trop de tentatives. Réessaie dans ${e.retryAfterSeconds} secondes.';
       });
       _tickCooldown();
     } catch (_) {
