@@ -7,7 +7,6 @@ export const WHATSAPP_URL = "https://wa.me/qr/RJBBQE34G3ALI1";
 export const DISPLAY_PHONE_NUMBER = "+3249560497";
 
 export const WAITLIST_URL = cleanEnvUrl(import.meta.env.VITE_WAITLIST_URL);
-export const ACCOUNT_URL = cleanEnvUrl(import.meta.env.VITE_ACCOUNT_URL);
 export const FEEDBACK_URL = cleanEnvUrl(import.meta.env.VITE_FEEDBACK_URL);
 
 export const IOS_BETA_URL = cleanEnvUrl(import.meta.env.VITE_IOS_BETA_URL);

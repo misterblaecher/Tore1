@@ -145,7 +145,6 @@ const extensions = [
   },
 ];
 
-
 const API_URL = import.meta.env.VITE_API_URL?.trim();
 
 type AccountRole = "student" | "committee" | "bar" | "dj";
@@ -167,7 +166,7 @@ const Index = () => {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AccountRole | "">("");
-  const apiReady = Boolean(API_URL);
+  const apiReady = Boolean(API_URL && API_URL.startsWith("http"));
 
   const scrollToWaitlist = () => {
     document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
@@ -545,10 +544,13 @@ const Index = () => {
                 className="grid gap-4 md:grid-cols-2"
                 onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault();
-                  if (!API_URL) {
+                  if (!API_URL || !API_URL.startsWith("http")) {
                     setAccountError("Backend non configuré.");
+                    toast({ title: "Erreur", description: "Backend non configuré.", variant: "destructive", duration: 3200 });
                     return;
                   }
+
+                  const accountRequestUrl = `${API_URL.replace(/\/+$/, "")}/public/account-request`;
                   setAccountError(null);
                   setAccountLoading(true);
                   const formData = new FormData(event.currentTarget);
@@ -556,7 +558,7 @@ const Index = () => {
                   const payload = {
                     name: String(formData.get("name") || "").trim(),
                     email: String(formData.get("email") || "").trim(),
-                    phone: String(formData.get("phone") || "").trim(),
+                    phone: String(formData.get("phone") || "").trim().replace(/\s+/g, ""),
                     is_whatsapp: formData.get("is_whatsapp") === "on",
                     role,
                     committee_name: role === "committee" ? String(formData.get("committee_name") || "").trim() || null : null,
@@ -565,14 +567,35 @@ const Index = () => {
                   };
 
                   try {
-                    const response = await fetch(`${API_URL}/public/account-request`, {
+                    console.debug(`Account request POST to: ${accountRequestUrl}`);
+                    const response = await fetch(accountRequestUrl, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(payload),
                     });
-                    const result = await response.json().catch(() => ({}));
+
                     if (!response.ok) {
-                      const message = result?.detail?.message || result?.message || "Impossible d'enregistrer la demande.";
+                      const contentType = response.headers.get("content-type") || "";
+                      const responseBody = contentType.includes("application/json")
+                        ? await response.json().catch(() => null)
+                        : await response.text().catch(() => "");
+                      const backendMessage =
+                        (typeof responseBody === "object" && responseBody
+                          ? (responseBody as { detail?: { message?: string } | string; message?: string }).detail &&
+                            typeof (responseBody as { detail?: { message?: string } | string }).detail === "object"
+                            ? ((responseBody as { detail?: { message?: string } }).detail?.message ?? "")
+                            : typeof (responseBody as { detail?: string }).detail === "string"
+                              ? (responseBody as { detail?: string }).detail ?? ""
+                              : (responseBody as { message?: string }).message ?? ""
+                          : typeof responseBody === "string"
+                            ? responseBody
+                            : "") || "";
+                      const messageByStatus: Record<number, string> = {
+                        400: "Demande invalide. Vérifie les informations envoyées.",
+                        422: "Certains champs sont invalides. Vérifie le formulaire.",
+                        429: "Trop de tentatives. Réessaie un peu plus tard.",
+                      };
+                      const message = backendMessage || messageByStatus[response.status] || "Impossible d'enregistrer la demande.";
                       setAccountError(message);
                       toast({ title: "Erreur", description: message, variant: "destructive", duration: 3200 });
                       return;
