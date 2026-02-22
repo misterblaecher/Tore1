@@ -45,6 +45,13 @@ class AppSpacing {
   static const sm = 12.0;
   static const md = 16.0;
   static const lg = 24.0;
+  static const xl = 32.0;
+}
+
+class AppRadii {
+  static const sm = 10.0;
+  static const md = 16.0;
+  static const lg = 22.0;
 }
 
 class AppTextStyles {
@@ -75,6 +82,47 @@ class PrimaryButton extends StatelessWidget {
         minimumSize: const Size.fromHeight(52),
       ),
     );
+  }
+}
+
+class ToreButton extends StatelessWidget {
+  const ToreButton.primary({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.loading = false,
+  }) : secondary = false;
+
+  const ToreButton.secondary({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  })  : secondary = true,
+        loading = false;
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool loading;
+  final bool secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    if (secondary) {
+      return OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon ?? Icons.chevron_right),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppColors.accentRed),
+          foregroundColor: AppColors.accentRed,
+          minimumSize: const Size.fromHeight(52),
+        ),
+        label: Text(label),
+      );
+    }
+    return PrimaryButton(label: label, onPressed: onPressed, icon: icon, loading: loading);
   }
 }
 
@@ -127,6 +175,16 @@ class AppCard extends StatelessWidget {
   }
 }
 
+class ToreCard extends StatelessWidget {
+  const ToreCard({super.key, required this.child, this.padding = const EdgeInsets.all(AppSpacing.md)});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) => SolarCard(padding: padding, child: child);
+}
+
 class SolarCard extends StatelessWidget {
   const SolarCard({super.key, required this.child, this.padding = const EdgeInsets.all(AppSpacing.md)});
 
@@ -152,6 +210,16 @@ class SectionTitle extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: Text(text, style: AppTextStyles.sectionTitle),
       );
+}
+
+class ToreSectionHeader extends StatelessWidget {
+  const ToreSectionHeader(this.text, {super.key, this.trailing});
+
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => SolarSectionTitle(text, trailing: trailing);
 }
 
 class AppChip extends StatelessWidget {
@@ -212,6 +280,15 @@ class SolarBackground extends StatelessWidget {
       child: child,
     );
   }
+}
+
+class HaloBackground extends StatelessWidget {
+  const HaloBackground({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SolarBackground(child: child);
 }
 
 class AuthRequiredNotice extends StatelessWidget {

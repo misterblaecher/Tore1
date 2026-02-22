@@ -118,7 +118,7 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
             ]),
           ),
           const SizedBox(height: AppSpacing.sm),
-          const AppCard(child: Text('Téléphone / WhatsApp bientôt disponibles.')),
+          const AppCard(child: Text('Authentification email active. Les autres méthodes apparaîtront uniquement si activées.')),
           if (kDebugMode)
             SecondaryButton(
               label: 'Coller code depuis presse-papier',

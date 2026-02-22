@@ -38,6 +38,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(authSessionProvider);
     return Scaffold(
       backgroundColor: const Color(0xFF08080C),
       body: SolarBackground(
@@ -56,6 +57,10 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
               const SizedBox(height: 28),
               if (_error != null) ...[
                 Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+                const SizedBox(height: 10),
+              ],
+              if (session.message != null) ...[
+                Text(session.message!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.accentGold)),
                 const SizedBox(height: 10),
               ],
               PrimaryButton(

@@ -5,6 +5,7 @@ import '../../../core/auth/auth_models.dart';
 import '../../../core/auth/providers.dart';
 import '../../../state.dart';
 import '../../../ui/app_design_system.dart';
+import '../../../shared/widgets/ui_fallbacks.dart';
 import '../../events/presentation/create_event_wizard_screen.dart';
 
 class EventsDiscoveryScreen extends ConsumerStatefulWidget {
@@ -42,10 +43,16 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
           future: api.bars(),
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return const Padding(
+                padding: EdgeInsets.all(AppSpacing.md),
+                child: ToreLoadingSkeleton(lines: 6),
+              );
             }
             if (snap.hasError) {
-              return const Center(child: Text('Impossible de charger les events.'));
+              return ToreErrorState(
+                message: 'Impossible de charger les events.',
+                onRetry: () => setState(() {}),
+              );
             }
 
             final bars = (snap.data ?? []).cast<Map<String, dynamic>>();
@@ -60,6 +67,13 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
               if (_filter == 'tonight') return event['when'] == 'Ce soir';
               return event['when'] == 'Cette semaine';
             }).toList();
+
+            if (filtered.isEmpty) {
+              return const ToreEmptyState(
+                title: 'Aucun événement',
+                message: "Aucune arène active pour ce filtre actuellement.",
+              );
+            }
 
             return Column(
               children: [
