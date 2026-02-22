@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../network/api_client.dart';
 import '../network/api_endpoints.dart';
@@ -46,13 +47,23 @@ class AuthRepository {
   }
 
   Future<EmailRequestResult> requestEmailOtp(String email) async {
-    final r = await api.dio.post(ApiEndpoints.authEmailRequestOtp, data: {'email': email});
-    final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
-    return EmailRequestResult(
-      devToken: (data['code'] ?? data['token'] ?? data['dev_token'])?.toString(),
-      expiresInSeconds: (data['expires_in_seconds'] as num?)?.toInt() ?? 600,
-      resendCooldownSeconds: (data['resend_cooldown_seconds'] as num?)?.toInt() ?? 30,
-    );
+    try {
+      final r = await api.dio.post(ApiEndpoints.authEmailRequestOtp, data: {'email': email});
+      if (kDebugMode) {
+        debugPrint('[auth][otp] response status=${r.statusCode} body=${r.data}');
+      }
+      final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+      return EmailRequestResult(
+        devToken: (data['code'] ?? data['token'] ?? data['dev_token'])?.toString(),
+        expiresInSeconds: (data['expires_in_seconds'] as num?)?.toInt() ?? 600,
+        resendCooldownSeconds: (data['resend_cooldown_seconds'] as num?)?.toInt() ?? 30,
+      );
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        debugPrint('[auth][otp] response status=${e.response?.statusCode} body=${e.response?.data}');
+      }
+      rethrow;
+    }
   }
 
   Future<AuthTokens> verifyEmailOtp({required String email, required String code}) async {

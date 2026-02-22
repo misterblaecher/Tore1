@@ -673,11 +673,18 @@ def _send_email(subject: str, body: str, to_email: str) -> None:
     msg["To"] = target
     msg.set_content(body)
 
-    with smtplib.SMTP(host, port, timeout=10) as smtp:
-        smtp.starttls()
-        if username:
-            smtp.login(username, password)
-        smtp.send_message(msg)
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as smtp:
+            smtp.starttls()
+            if username:
+                smtp.login(username, password)
+            smtp.send_message(msg)
+    except Exception:
+        logging.exception("email.send.failed subject=%s to=%s", subject, target)
+        if _strict_dev_env_enabled():
+            logging.info("email.send.dev_dry_run subject=%s to=%s", subject, to_email)
+            return
+        raise
 
 
 def _send_otp_email(target_email: str, code: str) -> None:

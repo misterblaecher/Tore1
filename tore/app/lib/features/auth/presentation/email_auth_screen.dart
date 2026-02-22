@@ -30,8 +30,15 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
       _loading = true;
       _error = null;
     });
+    final email = _emailCtrl.text.trim();
+    if (kDebugMode) {
+      debugPrint('[auth][otp] request -> POST /auth/email/request_otp body={"email":"$email"}');
+    }
     try {
-      final out = await ref.read(authRepositoryProvider).requestEmailOtp(_emailCtrl.text.trim());
+      final out = await ref.read(authRepositoryProvider).requestEmailOtp(email);
+      if (kDebugMode) {
+        debugPrint('[auth][otp] request <- success expires=${out.expiresInSeconds}s cooldown=${out.resendCooldownSeconds}s');
+      }
       setState(() {
         _requested = true;
         _devToken = out.devToken;

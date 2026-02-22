@@ -48,6 +48,22 @@ class AuthInterceptor extends Interceptor {
     if (statusCode != 401 && statusCode != 403) return;
     if (_clearingInvalidToken) return;
 
+    final currentToken = await tokenStorage.readToken();
+    if (currentToken == null || currentToken.isEmpty) {
+      if (AppConfig.enableAuthLogs) {
+        debugPrint('[auth] ignoring $statusCode (no token in storage)');
+      }
+      return;
+    }
+
+    final guestMode = await tokenStorage.readGuestModeEnabled();
+    if (guestMode) {
+      if (AppConfig.enableAuthLogs) {
+        debugPrint('[auth] ignoring $statusCode while guest mode is enabled');
+      }
+      return;
+    }
+
     _clearingInvalidToken = true;
     try {
       await tokenStorage.clearAuthToken();
