@@ -17,7 +17,7 @@ router = APIRouter(tags=["map-calendar"])
 
 
 def get_db() -> Iterator[Session]:
-    from main import get_db as _get_db
+    from app.legacy.monolith import get_db as _get_db
 
     yield from _get_db()
 

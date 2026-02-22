@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, Bet, BetResolutionLog, EventConfig, EventRuntimeState, EventStaff, PolymarketEventIdempotency
-from main import get_current_user
+from app.legacy.monolith import get_current_user
 from app.schemas.polymarket import (
     BetCreateIn,
     BetDetailOut,
@@ -88,7 +88,7 @@ def _rate_limit_event_create(user_id: str) -> None:
 
 
 def get_db() -> Iterator[Session]:
-    from main import get_db as _get_db
+    from app.legacy.monolith import get_db as _get_db
 
     yield from _get_db()
 

@@ -10,7 +10,7 @@ from app.schemas.battles import CreateBattleIn, JoinBattleIn, WinnerIn
 
 
 def create_battle(db: Session, payload: CreateBattleIn) -> dict:
-    from main import random_code, require_feature
+    from app.legacy.monolith import random_code, require_feature
 
     if payload.event_id:
         require_feature(db, payload.event_id, "battles_enabled")
@@ -29,7 +29,7 @@ def create_battle(db: Session, payload: CreateBattleIn) -> dict:
 
 
 def join_battle(db: Session, payload: JoinBattleIn) -> dict:
-    from main import require_feature
+    from app.legacy.monolith import require_feature
 
     battle = db.scalar(select(Battle).where(Battle.join_code == payload.join_code))
     if not battle:

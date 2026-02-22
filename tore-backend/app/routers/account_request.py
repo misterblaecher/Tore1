@@ -23,7 +23,7 @@ _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def get_db() -> Iterator[Session]:
-    from main import get_db as _get_db
+    from app.legacy.monolith import get_db as _get_db
 
     yield from _get_db()
 
