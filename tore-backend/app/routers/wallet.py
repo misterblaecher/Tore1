@@ -377,6 +377,10 @@ def wallet_transfer(
     db: Session = Depends(get_db),
 ):
     idem = _required_idempotency(idempotency_header, None)
+    reason_code = (payload.reason_code or "wallet_transfer").strip()
+    reason_text = (payload.reason_text or payload.reason or "").strip()
+    if not reason_text:
+        raise HTTPException(status_code=422, detail={"reason": "missing_reason", "message": "reason_text required"})
 
     existing = (
         db.query(TicketTransferIdempotency)
@@ -423,7 +427,7 @@ def wallet_transfer(
         to_user_id=to_user_id,
         amount=payload.amount,
         event_id=resolved_event_id,
-        reason=payload.reason,
+        reason=reason_text,
     )
     out_tx = WalletTx(user_id=user.id, kind="DEBIT", amount_tickets=-payload.amount, ref_type="GIFT_OUT", ref_id=None, idempotency_key=f"transfer:out:{idem}")
     in_tx = WalletTx(user_id=to_user_id, kind="CREDIT", amount_tickets=payload.amount, ref_type="GIFT_IN", ref_id=None, idempotency_key=f"transfer:in:{idem}")
@@ -449,7 +453,7 @@ def wallet_transfer(
         entity_id=str(transfer.id),
         event_id=resolved_event_id,
         bar_id=None,
-        payload={"from_user_id": user.id, "to_user_id": to_user_id, "amount": payload.amount, "reason": payload.reason},
+        payload={"from_user_id": user.id, "to_user_id": to_user_id, "amount": payload.amount, "reason_code": reason_code, "reason_text": reason_text},
     )
     db.commit()
     return WalletTransferOut(**response_json)

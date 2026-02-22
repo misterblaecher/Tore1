@@ -49,11 +49,11 @@ def get_event_runtime_state(db: Session, event_id: int) -> str:
 
 def effective_module_state(db: Session, event_id: int, module_field: Optional[str]) -> tuple[str, str]:
     event_state = get_event_runtime_state(db, event_id)
-    if event_state == "CLOSED":
-        return "OFF", "event_closed"
+    if event_state in {"CLOSED", "ENDED"}:
+        return "OFF", "event_ended"
     if event_state == "FROZEN":
         return "OFF", "event_frozen"
-    if event_state == "PAUSE":
+    if event_state in {"PAUSE", "PAUSED"}:
         return "READ_ONLY", "event_paused"
     if event_state == "DEGRADED":
         if module_field in {"entry_enabled", "checkins_enabled", "wifi_enabled", "safety_enabled", "wallet_enabled"}:
@@ -85,7 +85,7 @@ def ensure_event_action_allowed(db: Session, event_id: int, module_field: Option
     if state == "READ_ONLY" and not write:
         return
     code_map = {
-        "event_closed": "EVENT_CLOSED",
+        "event_ended": "EVENT_ENDED",
         "event_frozen": "EVENT_FROZEN",
         "event_paused": "EVENT_PAUSED",
         "event_degraded_critical": "EVENT_DEGRADED",
@@ -93,14 +93,14 @@ def ensure_event_action_allowed(db: Session, event_id: int, module_field: Option
         "module_off": "MODULE_OFF",
     }
     msg_map = {
-        "event_closed": "Event is closed",
+        "event_ended": "Event is ended",
         "event_frozen": "Event is frozen",
         "event_paused": "Event is paused",
         "event_degraded_critical": "Event is degraded for this critical module",
         "menu_only_restriction": "Event is in menu-only mode",
         "module_off": "Module is disabled",
     }
-    status = 409 if reason == "module_off" else 423
+    status = 412 if reason == "module_off" else 423
     raise HTTPException(
         status_code=status,
         detail={

@@ -84,7 +84,7 @@ def test_wallet_transfer_insufficient_funds_and_rate_limit_429():
 
     low = client.post(
         "/wallet/transfers",
-        json={"event_id": event_id, "to_user_id": receiver_id, "amount": 999},
+        json={"event_id": event_id, "to_user_id": receiver_id, "amount": 999, "reason_text": "stress"},
         headers={"Authorization": f"Bearer {sender_token}", "Idempotency-Key": "low-1"},
     )
     assert low.status_code == 400
@@ -94,7 +94,7 @@ def test_wallet_transfer_insufficient_funds_and_rate_limit_429():
     for i in range(15):
         res = client.post(
             "/wallet/transfers",
-            json={"event_id": event_id, "to_user_id": receiver_id, "amount": 1},
+            json={"event_id": event_id, "to_user_id": receiver_id, "amount": 1, "reason_text": "stress"},
             headers={"Authorization": f"Bearer {sender_token}", "Idempotency-Key": f"rl-{i}"},
         )
         if res.status_code == 429:

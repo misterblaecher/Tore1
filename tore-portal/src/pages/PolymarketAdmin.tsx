@@ -23,6 +23,11 @@ type MarketsResponse = {
   next_cursor?: string | null
 }
 
+type Snapshot = {
+  event_state?: string
+  modules?: Record<string, { effective_state?: 'ON' | 'OFF' | 'READ_ONLY'; reason?: string | null }>
+}
+
 const STATUS_OPTIONS: Array<{ label: string; value: StatusFilter }> = [
   { label: 'Live', value: 'live' },
   { label: 'Resolved', value: 'resolved' },
@@ -82,6 +87,7 @@ export default function PolymarketAdmin() {
   const [error, setError] = useState<string | null>(null)
 
   const [runtimeReason, setRuntimeReason] = useState<string | null>(null)
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [disputeNoteById, setDisputeNoteById] = useState<Record<number, string>>({})
   const [resolveOutcomeById, setResolveOutcomeById] = useState<Record<number, 'YES' | 'NO'>>({})
 
@@ -93,7 +99,9 @@ export default function PolymarketAdmin() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null
   }, [eventIdInput])
 
-  const writeBlocked = runtimeReason === 'event_paused' || runtimeReason === 'module_off' || runtimeReason === 'revoked' || runtimeReason === 'rate_limited'
+  const moduleState = snapshot?.modules?.polymarket_enabled?.effective_state || 'ON'
+  const stateReason = moduleState === 'OFF' ? 'module_off' : moduleState === 'READ_ONLY' ? 'event_paused' : null
+  const writeBlocked = !!stateReason || runtimeReason === 'event_paused' || runtimeReason === 'module_off' || runtimeReason === 'revoked' || runtimeReason === 'rate_limited'
 
   const currentCursor = cursorStack[cursorStack.length - 1] ?? null
 
@@ -142,6 +150,15 @@ export default function PolymarketAdmin() {
       setLoading(false)
     }
   }
+
+
+  useEffect(() => {
+    if (scope !== 'event' || !eventId) {
+      setSnapshot(null)
+      return
+    }
+    api<Snapshot>(`/partner/portal/event/${eventId}/state-snapshot`).then(setSnapshot).catch(() => setSnapshot(null))
+  }, [scope, eventId])
 
   useEffect(() => {
     setCursorStack([null])
@@ -294,6 +311,8 @@ export default function PolymarketAdmin() {
         </div>
       </div>
 
+      {scope === 'event' && eventId ? <div style={{ ...cardStyle(), marginBottom: 12 }}>Event state: {snapshot?.event_state || 'LIVE'}</div> : null}
+      {stateReason === 'module_off' ? <div style={{ ...cardStyle(), marginBottom: 12 }}>Module désactivé</div> : null}
       {runtimeReason ? (
         <div
           style={{
