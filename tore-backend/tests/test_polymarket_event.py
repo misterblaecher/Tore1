@@ -30,7 +30,7 @@ def test_module_off_blocks_event_polymarket_writes_and_list():
 
     list_res = client.get(f"/events/{event_id}/polymarket", headers={"Authorization": f"Bearer {token}"})
     assert list_res.status_code == 403
-    assert list_res.json()["detail"]["reason"] == "MODULE_OFF"
+    assert list_res.json()["detail"]["reason"] == "module_off"
 
     create_res = client.post(
         f"/events/{event_id}/polymarket",
@@ -140,6 +140,7 @@ def test_buy_blocked_when_paused_or_frozen():
         headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "buy-1"},
     )
     assert paused.status_code == 423
+    assert paused.json()["detail"]["reason"] == "event_paused"
 
     s = get_session()
     try:
@@ -156,3 +157,36 @@ def test_buy_blocked_when_paused_or_frozen():
         headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "buy-2"},
     )
     assert frozen.status_code == 423
+
+
+def test_buy_blocked_when_event_ended():
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    token, user_id = _create_guest(client)
+    event_id = _create_event()
+    _enable_event_bets(event_id)
+    _seed_event_admin(event_id, user_id)
+    manager_token = _seed_wallet_manager()
+    _topup_wallet(client, manager_token, user_id, 50)
+
+    created = client.post(
+        f"/events/{event_id}/polymarket",
+        json={"question": "Will this market end?", "type": "objective"},
+        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "buy-ended-create-1"},
+    )
+    market_id = created.json()["id"]
+
+    s = get_session()
+    try:
+        s.add(EventRuntimeState(event_id=event_id, state="ENDED", updated_at=now_utc() - timedelta(minutes=1)))
+        s.commit()
+    finally:
+        s.close()
+
+    ended = client.post(
+        f"/events/{event_id}/polymarket/{market_id}/buy",
+        json={"side": "YES", "amountTickets": 10},
+        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "buy-ended-1"},
+    )
+    assert ended.status_code == 423
+    assert ended.json()["detail"]["reason"] == "ended"

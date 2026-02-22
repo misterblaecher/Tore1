@@ -6,7 +6,8 @@ bool isWriteBlockedByEventState(String? state) {
       normalized == 'DEGRADED' ||
       normalized == 'READ_ONLY' ||
       normalized == 'FROZEN' ||
-      normalized == 'CLOSED';
+      normalized == 'CLOSED' ||
+      normalized == 'ENDED';
 }
 
 String? eventWriteBlockedReason(String? state, {bool criticalOnly = true}) {
@@ -15,7 +16,7 @@ String? eventWriteBlockedReason(String? state, {bool criticalOnly = true}) {
   if (normalized == 'MENU_ONLY') return 'Menu only — commandes bloquées';
   if (normalized == 'FROZEN') return 'FROZEN — aucune action';
   if (normalized == 'DEGRADED' && criticalOnly) return 'Réseau instable — actions sensibles bloquées';
-  if (normalized == 'CLOSED') return 'Event fermé: cette action n’est plus disponible.';
+  if (normalized == 'CLOSED' || normalized == 'ENDED') return 'Event terminé: cette action n’est plus disponible.';
   return null;
 }
 
@@ -26,7 +27,7 @@ String? normalizeRuntimeBlockReason({String? state, String? reason}) {
   if (normalizedReason == 'menu_only') return 'menu_only';
   if (normalizedReason == 'degraded') return 'degraded';
   if (normalizedReason == 'frozen') return 'frozen';
-  if (normalizedReason == 'closed' || normalizedReason == 'event_closed') return 'closed';
+  if (normalizedReason == 'closed' || normalizedReason == 'event_closed' || normalizedReason == 'ended') return 'closed';
 
   final normalizedState = (state ?? '').trim().toUpperCase();
   if (normalizedState == 'PAUSE' || normalizedState == 'PAUSED') return 'event_paused';
@@ -34,7 +35,7 @@ String? normalizeRuntimeBlockReason({String? state, String? reason}) {
   if (normalizedState == 'MENU_ONLY') return 'menu_only';
   if (normalizedState == 'DEGRADED') return 'degraded';
   if (normalizedState == 'FROZEN') return 'frozen';
-  if (normalizedState == 'CLOSED') return 'closed';
+  if (normalizedState == 'CLOSED' || normalizedState == 'ENDED') return 'closed';
   return null;
 }
 

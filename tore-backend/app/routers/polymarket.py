@@ -34,22 +34,24 @@ _EVENT_CREATE_RATE_LIMIT: dict[str, list] = {}
 
 def _runtime_write_guard_for_event(db: Session, event_id: int) -> None:
     runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event_id).first()
-    state = ((runtime.state if runtime else None) or "LIVE").upper()
+    state = ((runtime.state if runtime else None) or "RUNNING").upper()
+    normalized = "RUNNING" if state == "LIVE" else "PAUSED" if state == "PAUSE" else "ENDED" if state == "CLOSED" else state
     blocked = {
-        "PAUSE": "EVENT_PAUSED",
+        "PAUSED": "EVENT_PAUSED",
         "MENU_ONLY": "EVENT_MENU_ONLY",
         "DEGRADED": "EVENT_DEGRADED",
         "FROZEN": "EVENT_FROZEN",
-        "CLOSED": "EVENT_CLOSED",
+        "ENDED": "EVENT_CLOSED",
     }
-    if state in blocked:
-        raise HTTPException(status_code=423, detail={"reason": state.lower(), "code": blocked[state], "message": "Action blocked"})
+    if normalized in blocked:
+        reason = "event_paused" if normalized == "PAUSED" else normalized.lower()
+        raise HTTPException(status_code=423, detail={"reason": reason, "code": blocked[normalized], "message": "Action blocked"})
 
 
 def _ensure_event_polymarket_enabled(db: Session, event_id: int) -> None:
     cfg = db.query(EventConfig).filter(EventConfig.event_id == event_id).first()
     if not cfg or not bool(cfg.allow_user_bets):
-        raise HTTPException(status_code=403, detail={"reason": "MODULE_OFF", "message": "Module polymarket_event disabled"})
+        raise HTTPException(status_code=403, detail={"reason": "module_off", "message": "Module polymarket_event disabled"})
 
 
 def _event_market_row(bet: Bet, snapshot: dict) -> dict:
