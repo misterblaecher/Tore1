@@ -3,6 +3,14 @@ import { Copy, ShieldCheck, ScanLine, Network, BookOpenText, Ticket, Building2, 
 import { Header, Footer } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  ANDROID_BETA_URL,
+  DISPLAY_PHONE_NUMBER,
+  FEEDBACK_URL,
+  IOS_BETA_URL,
+  WAITLIST_URL,
+  WHATSAPP_URL,
+} from "@/lib/external-links";
 
 const modules = [
   {
@@ -31,9 +39,6 @@ const modules = [
     icon: Lock,
   },
 ];
-
-const whatsappUrl = "https://wa.me/qr/RJBBQE34G3ALI1";
-const phoneNumber = "+3249560497";
 
 const roadmapPhases = [
   {
@@ -141,14 +146,17 @@ const extensions = [
 
 const Index = () => {
   const { toast } = useToast();
+  const scrollToWaitlist = () => {
+    document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const copyPhoneNumber = async () => {
     try {
-      await navigator.clipboard.writeText(phoneNumber);
-      toast({ title: "Copié", description: `Numéro ${phoneNumber} copié.`, duration: 2400 });
+      await navigator.clipboard.writeText(DISPLAY_PHONE_NUMBER);
+      toast({ title: "Copié", description: `Numéro ${DISPLAY_PHONE_NUMBER} copié.`, duration: 2400 });
     } catch {
       const textArea = document.createElement("textarea");
-      textArea.value = phoneNumber;
+      textArea.value = DISPLAY_PHONE_NUMBER;
       textArea.setAttribute("readonly", "");
       textArea.style.position = "absolute";
       textArea.style.left = "-9999px";
@@ -160,7 +168,7 @@ const Index = () => {
 
       toast({
         title: copied ? "Copié" : "Copie indisponible",
-        description: copied ? `Numéro ${phoneNumber} copié.` : "Copiez manuellement le numéro affiché.",
+        description: copied ? `Numéro ${DISPLAY_PHONE_NUMBER} copié.` : "Copiez manuellement le numéro affiché.",
         variant: copied ? "default" : "destructive",
         duration: 2400,
       });
@@ -204,6 +212,29 @@ const Index = () => {
                 <Button asChild size="lg" variant="outline" className="h-12 px-7 text-sm sm:text-base font-semibold border-accent/40 hover:bg-accent/10">
                   <Link to="/bars">Accès Bar / Comité</Link>
                 </Button>
+                <Button asChild size="lg" variant="ghost" className="h-12 px-7 text-sm sm:text-base font-semibold text-muted-foreground hover:text-foreground hover:bg-card/30">
+                  <Link to="/#beta">Télécharger (Bêta)</Link>
+                </Button>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {WAITLIST_URL ? (
+                  <a href={WAITLIST_URL} target="_blank" rel="noreferrer" className="text-sm text-accent hover:text-accent/90 transition-colors">
+                    Rejoindre la bêta
+                  </a>
+                ) : (
+                  <button onClick={scrollToWaitlist} className="text-sm text-accent hover:text-accent/90 transition-colors text-left">
+                    Rejoindre la bêta
+                  </button>
+                )}
+                {FEEDBACK_URL ? (
+                  <a href={FEEDBACK_URL} target="_blank" rel="noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Donner un feedback
+                  </a>
+                ) : (
+                  <Link to="/#contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Donner un feedback
+                  </Link>
+                )}
               </div>
               <Link to="/#contact" className="inline-flex text-sm text-muted-foreground hover:text-accent transition-colors">
                 Contact ops →
@@ -391,6 +422,113 @@ const Index = () => {
           </div>
         </section>
 
+
+
+        <section id="beta" className="py-16 md:py-24 border-b border-border/50 bg-card/20 section-ember-texture">
+          <div className="container">
+            <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Accès bêta</p>
+                <h2 className="text-3xl md:text-5xl font-semibold tracking-tight">Télécharger TORÈ (Bêta)</h2>
+                <p className="text-muted-foreground text-base md:text-lg leading-relaxed">
+                  Déploiement progressif à Liège. Accès sur invitation pour bars et comités.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Si un lien n'est pas encore disponible, rejoignez la waitlist pour recevoir votre accès d'installation.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-background/70 p-6 md:p-8 metal-edge-card space-y-4">
+                <Button
+                  asChild={Boolean(IOS_BETA_URL)}
+                  onClick={IOS_BETA_URL ? undefined : scrollToWaitlist}
+                  size="lg"
+                  className="w-full h-12 font-semibold"
+                >
+                  {IOS_BETA_URL ? (
+                    <a href={IOS_BETA_URL} target="_blank" rel="noreferrer">Télécharger iOS (Bêta)</a>
+                  ) : (
+                    <span>Télécharger iOS (Bêta)</span>
+                  )}
+                </Button>
+                <Button
+                  asChild={Boolean(ANDROID_BETA_URL)}
+                  onClick={ANDROID_BETA_URL ? undefined : scrollToWaitlist}
+                  size="lg"
+                  variant="outline"
+                  className="w-full h-12 font-semibold border-accent/40 hover:bg-accent/10"
+                >
+                  {ANDROID_BETA_URL ? (
+                    <a href={ANDROID_BETA_URL} target="_blank" rel="noreferrer">Télécharger Android (Bêta)</a>
+                  ) : (
+                    <span>Télécharger Android (Bêta)</span>
+                  )}
+                </Button>
+                {WAITLIST_URL ? (
+                  <div className="pt-2">
+                    <a href={WAITLIST_URL} target="_blank" rel="noreferrer" className="text-sm text-accent hover:text-accent/90 transition-colors">
+                      Recevoir le lien d'installation →
+                    </a>
+                  </div>
+                ) : (
+                  <div className="pt-2 text-sm text-muted-foreground">Recevoir le lien d'installation via WhatsApp.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <section id="waitlist" className="py-16 md:py-24 border-b border-border/50 section-ember-texture">
+          <div className="container">
+            <div className="max-w-4xl rounded-2xl border border-border/60 bg-background/65 p-8 md:p-10 metal-edge-card space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Rejoindre la bêta</p>
+              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Waitlist pilotes TORÈ</h2>
+              <p className="text-muted-foreground">Profils ciblés : Étudiant, Bar, Comité, DJ. Décrivez votre rôle et votre besoin pilote.</p>
+              <p className="text-sm text-muted-foreground">Ce qu'on mesure : intérêt module et demandes de tests terrain.</p>
+              {WAITLIST_URL ? (
+                <Button asChild size="lg" className="h-12 px-7 text-sm sm:text-base font-semibold w-full sm:w-auto">
+                  <a href={WAITLIST_URL} target="_blank" rel="noreferrer">Rejoindre la waitlist</a>
+                </Button>
+              ) : (
+                <Button asChild size="lg" className="h-12 px-7 text-sm sm:text-base font-semibold w-full sm:w-auto">
+                  <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">Contact WhatsApp</a>
+                </Button>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section id="feedback" className="py-16 md:py-24 border-b border-border/50 bg-card/20 section-ember-texture">
+          <div className="container">
+            <div className="max-w-4xl rounded-2xl border border-border/60 bg-background/65 p-8 md:p-10 metal-edge-card space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Feedback terrain</p>
+              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Donner un feedback opérationnel</h2>
+              <p className="text-muted-foreground">Retour attendu : module testé, contexte, point de friction et amélioration prioritaire.</p>
+              {FEEDBACK_URL ? (
+                <Button asChild size="lg" variant="outline" className="h-12 px-7 text-sm sm:text-base font-semibold border-accent/40 hover:bg-accent/10 w-full sm:w-auto">
+                  <a href={FEEDBACK_URL} target="_blank" rel="noreferrer">Envoyer un feedback</a>
+                </Button>
+              ) : (
+                <Button asChild size="lg" variant="outline" className="h-12 px-7 text-sm sm:text-base font-semibold border-accent/40 hover:bg-accent/10 w-full sm:w-auto">
+                  <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">Feedback via WhatsApp</a>
+                </Button>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="py-16 md:py-24 border-b border-border/50 section-ember-texture">
+          <div className="container">
+            <div className="max-w-4xl rounded-2xl border border-border/60 bg-background/65 p-8 md:p-10 metal-edge-card">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent mb-4">Tests terrain</p>
+              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight mb-4">Tests modulaires à Liège — 1 module à la fois.</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                Objectif : stabilité réseau faible, contrôle opérationnel et audit minimal avant généralisation.
+              </p>
+            </div>
+          </div>
+        </section>
+
         <section id="contact" className="py-16 md:py-24 section-ember-texture">
           <div className="container">
             <div className="max-w-4xl rounded-2xl border border-accent/30 bg-[linear-gradient(135deg,rgba(11,11,11,0.95),rgba(28,16,10,0.96))] p-8 md:p-12 metal-edge-card">
@@ -402,7 +540,7 @@ const Index = () => {
               </p>
               <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-4">
                 <Button asChild size="lg" className="h-12 px-7 text-sm sm:text-base font-semibold">
-                  <a href={whatsappUrl} target="_blank" rel="noreferrer">
+                  <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">
                     WhatsApp
                   </a>
                 </Button>
@@ -412,7 +550,7 @@ const Index = () => {
                 </Button>
               </div>
               <div className="mt-5 space-y-1 text-sm text-foreground/90">
-                <p>WhatsApp: {phoneNumber}</p>
+                <p>WhatsApp: {DISPLAY_PHONE_NUMBER}</p>
                 <p className="text-muted-foreground">Email bientôt.</p>
               </div>
             </div>
