@@ -274,10 +274,8 @@ def get_ticker_feed(
     since: Optional[str] = Query(default=None),
     types: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
-    user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ = user
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -321,9 +319,7 @@ async def stream_ticker_feed(
     event_id: int,
     cursor: Optional[str] = Query(default=None),
     once: bool = Query(default=False),
-    user: AppUser = Depends(get_current_user),
 ):
-    _ = user
     session = get_db().__next__()
     try:
         event = session.get(Event, event_id)

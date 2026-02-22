@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'auth_state_signal.dart';
+import '../network/api_endpoints.dart';
 import '../network/providers.dart';
 import '../network/token_storage.dart';
 import 'auth_models.dart';
@@ -61,8 +63,22 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
 
   Future<void> continueAsGuest() async {
     final existing = await _storage.readGuestDeviceId();
+    final guestDeviceId = existing ?? _newGuestDeviceId();
+
+    final response = await _repo.api.dio.post(
+      ApiEndpoints.authGuest,
+      data: {'display_name': 'Invité'},
+      options: Options(extra: {'skipAuth': true}),
+    );
+    final data = (response.data is Map) ? (response.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final token = (data['token'] ?? data['access_token'] ?? '').toString();
+    if (token.isEmpty) {
+      throw Exception('Réponse /auth/guest invalide (token manquant).');
+    }
+
+    await _storage.writeToken(token);
     await _storage.writeGuestModeEnabled(true);
-    await _storage.writeGuestDeviceId(existing ?? _newGuestDeviceId());
+    await _storage.writeGuestDeviceId(guestDeviceId);
     state = const AuthSessionState.guest();
   }
 

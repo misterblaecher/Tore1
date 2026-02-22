@@ -87,7 +87,7 @@ def test_ticker_feed_pagination_and_order_status_and_module_toggle_and_stream_co
     assert topup.status_code == 200
 
 
-    feed = client.get(f'/events/{event_id}/ticker?limit=2', headers={'Authorization': f'Bearer {user_token}'})
+    feed = client.get(f'/events/{event_id}/ticker?limit=2')
     assert feed.status_code == 200
     data = feed.json()
     assert len(data['items']) == 2
@@ -96,6 +96,6 @@ def test_ticker_feed_pagination_and_order_status_and_module_toggle_and_stream_co
     assert 'order_created' in kinds
     assert 'status_changed' in kinds
 
-    with client.stream('GET', f'/events/{event_id}/ticker/stream?once=true', headers={'Authorization': f'Bearer {user_token}'}) as response:
+    with client.stream('GET', f'/events/{event_id}/ticker/stream?once=true') as response:
         assert response.status_code == 200
         assert response.headers['content-type'].startswith('text/event-stream')

@@ -210,3 +210,22 @@ def test_verify_otp_counts_attempts_and_blocks_after_limit(monkeypatch):
 
     blocked = client.post("/auth/email/verify_otp", json={"email": "attempts@example.com", "code": "111111"})
     assert blocked.status_code == 429
+
+
+def test_email_request_otp_dev_dry_run_when_smtp_fails(monkeypatch):
+    monkeypatch.setenv("ENV", "DEV")
+    monkeypatch.setenv("TORE_DEV_EXPOSE_MAGIC_TOKEN", "1")
+    monkeypatch.setenv("SMTP_HOST", "smtp.invalid.local")
+
+    def fake_smtp(*args, **kwargs):
+        raise OSError("smtp down")
+
+    monkeypatch.setattr("main.smtplib.SMTP", fake_smtp)
+
+    client = TestClient(app)
+    email = f"otp-dry-{now_utc().timestamp()}@example.com"
+    res = client.post("/auth/email/request_otp", json={"email": email})
+
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    assert len(res.json().get("code", "")) == 6
