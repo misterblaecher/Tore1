@@ -211,6 +211,7 @@ class _BootSplash extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0D),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -224,7 +225,24 @@ class _BootSplash extends ConsumerWidget {
                   final enabled = ref.read(perfOverlayEnabledProvider);
                   ref.read(perfOverlayEnabledProvider.notifier).state = !enabled;
                 },
-                child: Text(title, style: Theme.of(context).textTheme.headlineMedium),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.35, end: 1),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOut,
+                  builder: (context, value, child) => Opacity(opacity: value, child: child),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(color: const Color(0xFFB11226).withOpacity(0.18), blurRadius: 20, spreadRadius: 1),
+                        ],
+                      ),
+                      child: Image.asset('assets/branding/logo_full_fire.png', width: 72, height: 72, errorBuilder: (_, __, ___) => const Icon(Icons.local_fire_department_outlined, size: 48)),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(title, style: Theme.of(context).textTheme.headlineMedium),
+                  ]),
+                ),
               ),
               const SizedBox(height: 16),
               if (onRetry == null) ...[

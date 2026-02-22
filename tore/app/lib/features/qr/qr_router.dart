@@ -43,8 +43,8 @@ class QrRouterService {
     }
 
     if (payload.isUnknown) {
-      onOutcome?.call(const QrRouteOutcome.unknown('QR inconnu'));
-      await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR inconnu');
+      onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
+      await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR non reconnu');
       return;
     }
 
@@ -253,9 +253,45 @@ class QrRouterService {
           ),
         );
         return;
+      case QrType.barProfile:
+        final barId = payload.barId ?? int.tryParse(payload.tokenId ?? '');
+        if (barId == null) {
+          onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
+          await _openUnknown(context: context, payload: payload, reason: 'bar id manquant');
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('Bar'));
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ModuleUnavailableScreen(
+              title: 'Page bar',
+              message: 'Bar #$barId: page détaillée bientôt disponible.',
+              reasonCode: 'bar_profile_stub',
+            ),
+          ),
+        );
+        return;
+      case QrType.userProfile:
+        final profileId = payload.tokenId ?? payload.fields['id'];
+        if (profileId == null || profileId.isEmpty) {
+          onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
+          await _openUnknown(context: context, payload: payload, reason: 'profile id manquant');
+          return;
+        }
+        onOutcome?.call(const QrRouteOutcome.success('Profil'));
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ModuleUnavailableScreen(
+              title: 'Profil public',
+              message: 'Profil $profileId: page publique en préparation.',
+              reasonCode: 'profile_stub',
+            ),
+          ),
+        );
+        return;
       case QrType.unknown:
-        onOutcome?.call(const QrRouteOutcome.unknown('QR inconnu'));
-        await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR inconnu');
+        onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
+        await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR non reconnu');
         return;
     }
   }

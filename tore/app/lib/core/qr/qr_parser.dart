@@ -16,6 +16,8 @@ enum QrType {
   staffInvite,
   staffBackup,
   orgaInvite,
+  barProfile,
+  userProfile,
   unknown,
 }
 
@@ -175,8 +177,10 @@ class QrParser {
       case 'bar_staff':
       case 'staff_bar':
       case 'staff':
-      case 'bar':
         return QrType.staffBar;
+      case 'bar':
+      case 'bar_profile':
+        return QrType.barProfile;
       case 'wifi':
       case 'wifi_token':
         return QrType.wifi;
@@ -205,8 +209,10 @@ class QrParser {
       case 'event_staff_backup':
         return QrType.staffBackup;
       case 'orga_invite':
-      case 'profile':
         return QrType.orgaInvite;
+      case 'profile':
+      case 'user_profile':
+        return QrType.userProfile;
       default:
         return QrType.unknown;
     }

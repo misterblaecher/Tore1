@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_context/app_context.dart';
-import 'features/events/presentation/event_config_providers.dart';
-import 'features/navigation/presentation/home_hub_screen.dart';
+import 'features/navigation/presentation/home_territory_feed_screen.dart';
+import 'features/navigation/presentation/events_discovery_screen.dart';
 import 'features/navigation/presentation/polymarket_tab_screen.dart';
 import 'features/navigation/presentation/profile_screen.dart';
-import 'features/navigation/presentation/ticker_screen.dart';
 import 'features/qr/presentation/qr_scanner_screen.dart';
 import 'shared/widgets/network_banner.dart';
+import 'ui/app_design_system.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -32,39 +32,23 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(appContextInitProvider);
-    final appCtx = ref.watch(appContextProvider);
-
-    final eventId = appCtx.activeEventId;
-    final eventConfig = eventId != null ? ref.watch(eventConfigProvider(eventId)) : null;
-
-    final showTickerTab = eventConfig?.maybeWhen(
-          data: (cfg) => cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
-          orElse: () => true,
-        ) ?? true;
-    final showPolymarketTab = eventConfig?.maybeWhen(
-          data: (cfg) => cfg.polymarketEnabled,
-          orElse: () => true,
-        ) ?? true;
-
     final tabs = <_ShellTab>[
       _ShellTab(
         key: _homeNavKey,
         icon: Icons.home_outlined,
         label: 'Home',
-        root: const HomeHubScreen(),
+        root: const HomeTerritoryFeedScreen(),
       ),
-      if (showTickerTab)
-        _ShellTab(
-          key: _tickerNavKey,
-          icon: Icons.stacked_line_chart_outlined,
-          label: 'Ticker',
-          root: const TickerScreen(),
-        ),
-      if (showPolymarketTab)
-        _ShellTab(
+      _ShellTab(
+        key: _tickerNavKey,
+        icon: Icons.event_outlined,
+        label: 'Events',
+        root: const EventsDiscoveryScreen(),
+      ),
+      _ShellTab(
           key: _polymarketNavKey,
           icon: Icons.candlestick_chart_outlined,
-          label: 'Polymarket',
+          label: 'Market',
           root: const PolymarketTabScreen(),
         ),
       _ShellTab(
@@ -95,10 +79,13 @@ class _AppShellState extends ConsumerState<AppShell> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.large(
+        backgroundColor: AppColors.accentGold,
+        foregroundColor: Colors.black,
+        elevation: 10,
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
         tooltip: 'Scanner QR',
-        child: const Icon(Icons.qr_code_scanner_outlined),
+        child: const Icon(Icons.qr_code_scanner_outlined, size: 32),
       ),
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
