@@ -1,0 +1,140 @@
+
+
+Roadmap UI - Parcours Utilisateur
+Référence de design pour l'UI USER de TORÈ (flux complet, navigation, états, règles d'affichage).
+
+
+Preview - Loading / Splash
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2026-02-10
+
+
+
+
+Vue d'ensemble
+Cette roadmap décrit l'UI USER : du lancement jusqu'aux fonctionnalités live (menu, wallet, ticker, bets).
+• Principe clé : l'utilisateur ne voit que les modules activés (modules OFF invisibles).
+• Scanner QR est l'action centrale (accès event, menu, validations).
+• Lisibilité premium : densité contrôlée, typographie stable, animations courtes et signifiantes.
+
+
+Navigation USER (LOCK)
+• Bottom nav : Home / Ticker / Scanner (FAB) / Polymarket / Profil.
+• Classement : accessible depuis Event Hub, Ticker ou Polymarket (pas dans la nav).
+• Routing : le QR dirige vers la destination correcte (event hub, menu, wallet, etc.).
+
+
+Palette & règles typographiques
+
+ÉlémentRègle UIRubisAccent primaire (badges LIVE, focus, glow).NoirFond / header / immersion.JauneCTA de confirmation (CONFIRMER / JOIN).MonoChiffres : prix, solde, heures, stats.
+1) Splash / Boot (LOCK)
+• Logo TORÈ + animation "Marquage du Toré" (glow rubis + coup de pinceau + punch logo).
+• Loader fin jaune en bas (référence preview).
+• États : loading / erreur réseau / offline (retry + continuer hors-ligne si applicable).
+
+2) Home / Hub (LOCK)
+• Action reine : Scanner un QR (accent rubis).
+• Actions secondaires en cards : Bars / Events / Wallet / Polymarket (global).
+• Bottom nav : Home / Ticker / Scanner / Polymarket / Profil.
+
+3) QR Scanner (LOCK - central)
+• Plein écran caméra + cadre rubis + guidance minimaliste.
+• Bottom sheet : lampe / code manuel / aide.
+• Auto-lampe si faible luminosité + override manuel.
+• Routing propre (aucun placeholder).
+• Mode "entrée / contrôle" : ultra lisible, transitions nettes.
+
+4) Bars (LOCK - cards trading compactes)
+• Grille 2 colonnes (mobile) • cards compactes ratio ~ 4:3 • skeleton au chargement.
+• Card bar : bandeau haut rubis + statut ? OPEN / ? LIVE EVENT / ? CLOSED.
+• Nom (1 ligne) + meta (distance/quartier) + icônes modules actifs (QR/Menu/Wallet/Bets).
+• Tap card ? liste des Events du bar. Bar fermé : card grisée + tap désactivé.
+• Micro-interactions : press léger (tilt minimal), pas d'effet "jeu".
+
+5) Events (liste d'un bar) (LOCK)
+• Header : retour + nom bar, filtres chips Live / Today / Upcoming.
+• Cards events compactes : nom, date/heure (mono), statut LIVE/UPCOMING/ENDED.
+• Tap event ? Join Event (ou direct Event Hub si join inline).
+
+6) Join Event (LOCK)
+• Si QR validé : skip Join ? direct Event Hub.
+• Sinon : écran minimal (nom event + champ code optionnel + CTA JOIN jaune).
+• Si accès via liste : option "Scanner QR" si requis par le lieu.
+
+7) Event Hub (USER) (LOCK)
+• Affiche uniquement les modules disponibles (modules OFF invisibles).
+• Entrées possibles : Menu / Wallet / Ticker / Polymarket Event / Classement, selon activation.
+• Banners : pause, réseau instable, messages clairs (sans bruit).
+
+8) Menu Event (USER) (LOCK - écran le plus critique)
+• Filtres chips sticky (catégories + favoris si activé).
+• Liste dense, prix en mono, bouton + rapide.
+• Bottom bar panier visible seulement si items > 0.
+• Confirmation : CTA CONFIRMER (jaune) + Annuler.
+• Réseau faible : lecture via cache après 1er chargement (si implémenté).
+
+9) Wallet (USER) (LOCK)
+• Solde en grand (mono) + historique en timeline simple.
+• Actions seulement si autorisées (recharge staff/gifts plus tard).
+• Simplicité : pas de complexité comptable côté user.
+
+10) Ticker Live (USER) (LOCK)
+• Feed d'événements (commandes/bets/crash/gifts/annonces).
+• Filtres dans un sheet + mode pause.
+• Gestion rafraîchissement + états réseau (loading / retry).
+
+11) Polymarket GLOBAL (LOCK)
+• Hub global (hors soirée) : liste des marchés + filtres (live/objectifs/subjectifs/résolus).
+• Bet detail : chart + stats + transparence.
+• Animations signifiantes : placement bet / résolution (courtes, propres).
+
+12) Polymarket EVENT (LOCK)
+• Accessible depuis Event Hub uniquement.
+• Bets liés à la soirée. Création possible par users si autorisé par l'orga.
+• Bet detail : chart + stats (pool, participants, ta position, payout potentiel).
+• Résolution : animations gagné/perdu + parcours dispute/cancel clair.
+
+13) Classement (USER) (LOCK - hors nav)
+• Accessible via Event Hub / Ticker / Polymarket.
+• Top 3 en cards + liste dense ensuite.
+
+14) Profil & Settings (USER) (LOCK)
+• Privacy : public/amis/privé + toggles par section.
+• Thème : auto selon l'heure + override user.
+• Accessibilité : contraste renforcé, réduire animations.
+
+Checklist de complétude (USER)
+• Parcours principal complet : Boot ? Home ? Scanner/Join ? Event Hub ?
+Menu/Wallet/Ticker/Bets ? Profil.
+• Écrans structurants inclus : Bars, Events (bar), Join Event.
+• États critiques : réseau faible / offline / erreur de scan / bar fermé / event terminé.
+
+
+
+

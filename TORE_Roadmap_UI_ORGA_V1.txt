@@ -1,0 +1,41 @@
+TORE - Roadmap UI ORGA (Official V1)
+
+Core Principles
+
+• ORGA and USER interfaces are strictly separated.
+• UI is dense, functional, and decision-focused.
+• Critical actions require strong confirmations.
+• Event State Machine governs all UI states.
+• All actions are logged and traceable.
+
+
+Mode 1 - EVENT ALL-IN
+
+• Event Control Hub: Entries dominant, live profitability, module toggles, urgency actions, system status.
+• Entry Staff Mode: Fullscreen scan, large counter, instant feedback, offline queue support.
+• Menu Admin (Simplified): Quick price edits, stock toggles, global price adjustments.
+• Polymarket Admin: Bet creation, resolver management, resolution with double confirmation, dispute handling.
+• Urgency Actions: Pause orders, freeze bets, freeze entry, emergency broadcast.
+
+
+Mode 2 - BAR MODE
+
+• Bar Dashboard: Daily revenue, live orders, top products.
+• Orders Live: Order list with status and timing.
+• Full Menu Admin: Product editing, categories, analytics, optional market activation.
+• Analytics: Revenue tracking, product performance metrics.
+
+
+Event State Machine
+
+• States: LIVE, PAUSE, MENU_ONLY, CLOSED, NETWORK_DEGRADED.
+• Module States: ON, OFF, FROZEN.
+• Priority Rule: Event State overrides Module State.
+• State changes propagate to USER within <2 seconds.
+
+• All state changes are versioned and timestamped.
+
+
+
+
+Version 1.0 - 2026
