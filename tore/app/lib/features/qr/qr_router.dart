@@ -179,6 +179,11 @@ class QrRouterService {
         );
         return;
       case QrType.orga:
+        if (_requiresAuthenticatedUser()) {
+          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          await _showAuthRequired(context);
+          return;
+        }
         final orgId = payload.committeeId ?? payload.eventId;
         if (orgId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Orga invalide'));
@@ -191,6 +196,11 @@ class QrRouterService {
         );
         return;
       case QrType.staffInvite:
+        if (_requiresAuthenticatedUser()) {
+          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          await _showAuthRequired(context);
+          return;
+        }
         final code = (payload.tokenId ?? payload.fields['code'] ?? '').trim();
         if (code.isEmpty) {
           await _openUnknown(context: context, payload: payload, reason: 'code invite manquant');
@@ -200,6 +210,11 @@ class QrRouterService {
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffInviteJoinScreen(code: code)));
         return;
       case QrType.staffBackup:
+        if (_requiresAuthenticatedUser()) {
+          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          await _showAuthRequired(context);
+          return;
+        }
         onOutcome?.call(const QrRouteOutcome.success('Staff backup'));
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -208,6 +223,11 @@ class QrRouterService {
         );
         return;
       case QrType.orgaInvite:
+        if (_requiresAuthenticatedUser()) {
+          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          await _showAuthRequired(context);
+          return;
+        }
         final code = (payload.tokenId ?? payload.fields['code'] ?? '').trim();
         if (code.isEmpty) {
           await _openUnknown(context: context, payload: payload, reason: 'code invite orga manquant');

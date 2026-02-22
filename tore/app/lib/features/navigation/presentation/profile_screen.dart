@@ -168,7 +168,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildGuestScaffold(AuthSession session) {
+  Widget _buildGuestScaffold(AuthSessionState session) {
     final guestId = session.user?.id ?? 'guest';
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
@@ -210,7 +210,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _buildAuthedScaffold({
     required BuildContext context,
     required AsyncValue<AppUser> meAsync,
-    required AppContext ctx,
+    required AppContextState ctx,
     required AsyncValue<String> runtimeStateAsync,
   }) {
     return Scaffold(
@@ -218,20 +218,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: AppBar(title: const Text('Profil')),
       body: SolarBackground(
         child: meAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) {
-          final isUnauthorized = e is ApiException && (e.statusCode == 401 || e.statusCode == 403);
-          if (isUnauthorized) {
-            return const _LoginRequiredBody(message: 'Connecte-toi pour voir ton profil.');
-          }
-          return Center(child: Text('Erreur: $e'));
-        },
-        data: (me) {
-          final initials = _initials(me.displayName, me.id);
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) {
+            final isUnauthorized = e is ApiException && (e.statusCode == 401 || e.statusCode == 403);
+            if (isUnauthorized) {
+              return const _LoginRequiredBody(message: 'Connecte-toi pour voir ton profil.');
+            }
+            return Center(child: Text('Erreur: $e'));
+          },
+          data: (me) {
+            final initials = _initials(me.displayName, me.id);
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
               Row(
                 children: [
                   CircleAvatar(
@@ -547,9 +547,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 },
               ),
 
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
