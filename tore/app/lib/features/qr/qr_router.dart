@@ -24,7 +24,7 @@ import '../qr/presentation/qr_revoked_screen.dart';
 import '../qr/presentation/qr_unknown_screen.dart';
 import '../qr/presentation/wifi_screen.dart';
 import '../staff/presentation/staff_providers.dart';
-import '../auth/presentation/email_auth_screen.dart';
+import '../../shared/widgets/require_auth_sheet.dart';
 
 class QrRouterService {
   QrRouterService(this._ref);
@@ -154,7 +154,7 @@ class QrRouterService {
             MaterialPageRoute(
               builder: (_) => const ModuleUnavailableScreen(
                 title: 'Module BAR indisponible',
-                message: 'Session BAR créée. Le module live arrive en P3.',
+                message: 'Session BAR créée. Utilise le tableau bar depuis le portail staff.',
                 reasonCode: 'bar_pending_p3',
               ),
             ),
@@ -166,7 +166,7 @@ class QrRouterService {
           MaterialPageRoute(
             builder: (_) => const ModuleUnavailableScreen(
               title: 'Module manager indisponible',
-              message: "Session manager créée. L'écran dédié n'est pas encore disponible.",
+              message: "Session manager créée. Ce mode n'est pas accessible sur cette version mobile.",
               reasonCode: 'manager_module_unavailable',
             ),
           ),
@@ -278,8 +278,8 @@ class QrRouterService {
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => const ModuleUnavailableScreen(
-              title: 'Module pas encore dispo',
-              message: 'Module pas encore dispo',
+              title: 'Module indisponible',
+              message: 'Ce module n'est pas accessible pour le moment.',
               reasonCode: 'module_unavailable',
             ),
           ),
@@ -297,7 +297,7 @@ class QrRouterService {
           MaterialPageRoute(
             builder: (_) => ModuleUnavailableScreen(
               title: 'Page bar',
-              message: 'Bar #$barId: page détaillée bientôt disponible.',
+              message: 'Bar #$barId: accès indisponible depuis ce QR.',
               reasonCode: 'bar_profile_stub',
             ),
           ),
@@ -315,7 +315,7 @@ class QrRouterService {
           MaterialPageRoute(
             builder: (_) => ModuleUnavailableScreen(
               title: 'Profil public',
-              message: 'Profil $profileId: page publique en préparation.',
+              message: 'Profil $profileId: accès indisponible depuis ce QR.',
               reasonCode: 'profile_stub',
             ),
           ),
@@ -334,31 +334,7 @@ class QrRouterService {
   }
 
   Future<void> _showAuthRequired(BuildContext context) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Connecte-toi pour continuer', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const Text('Cette action de scan demande un compte authentifié.'),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
-                },
-                child: const Text('Créer un compte / Se connecter'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    await RequireAuthSheet.show(context, message: 'Cette action de scan demande un compte connecté.');
   }
 
   Future<void> _routeValidationError(
@@ -405,7 +381,7 @@ class QrRouterService {
   Future<void> _openUnknown({required BuildContext context, required QrPayload payload, required String reason}) async {
     final manualRaw = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (_) => QrUnknownScreen(raw: payload.raw, reason: reason, reasonCode: payload.reason ?? 'unknown'),
+        builder: (_) => UnknownQrScreen(raw: payload.raw, reason: reason, reasonCode: payload.reason ?? 'unknown'),
       ),
     );
     if (manualRaw != null && manualRaw.isNotEmpty && manualRaw.trim() != payload.raw.trim()) {
