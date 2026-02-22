@@ -7,7 +7,7 @@ export function Footer() {
         <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} TORÈ — OS Numérique Territorial.</p>
         <nav className="flex items-center gap-6 text-sm">
           <Link to="/#account" className="text-muted-foreground hover:text-foreground transition-colors">
-            Créer un compte
+            Compte
           </Link>
           <Link to="/#contact" className="text-muted-foreground hover:text-foreground transition-colors">
             Contact

@@ -120,6 +120,7 @@ from models import (
     UserPrivacyDeleteRequest,
     UserSanction,
     GlobalFeatureFlag,
+    AccountRequest,
 )
 
 
@@ -318,22 +319,28 @@ def _debug_signing_key_ids() -> list[str]:
 
 
 def _cors_origins() -> list[str]:
-    raw = (os.getenv("TORE_CORS_ORIGINS") or "").strip()
+    raw = (
+        os.getenv("CORS_ALLOWED_ORIGINS")
+        or os.getenv("TORE_CORS_ORIGINS")
+        or os.getenv("CORS_ORIGINS")
+        or ""
+    ).strip()
     if raw:
         values = [v.strip() for v in raw.split(",") if v.strip()]
-        return values or ["*"]
+        return [v for v in values if v != "*"]
 
-    env_name = (os.getenv("TORE_ENV") or os.getenv("ENV") or "dev").strip().lower()
-    if env_name in {"prod", "production"}:
-        logging.warning("TORE_CORS_ORIGINS is empty in production profile; CORS allowlist is empty.")
-        return []
-
-    return [
+    site_url = (os.getenv("TORE_SITE_URL") or os.getenv("PUBLIC_URL") or "").strip()
+    defaults = [
+        "https://tore-site.onrender.com",
+        "https://tore.onrender.com",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ]
+    if site_url:
+        defaults.append(site_url)
+    return defaults
 
 
 def _validate_qr_signing_keys_format() -> tuple[bool, str]:
@@ -1968,6 +1975,7 @@ from app.routers.music_vote import router as music_vote_router
 from app.routers.event_wifi import router as event_wifi_router
 from app.routers.safety_v1 import router as safety_v1_router
 from app.routers.map_calendar import router as map_calendar_router
+from app.routers.account_request import router as account_request_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -1989,10 +1997,12 @@ app.include_router(music_vote_router)
 app.include_router(event_wifi_router)
 app.include_router(safety_v1_router)
 app.include_router(map_calendar_router)
+app.include_router(account_request_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=r"^https://.*\.onrender\.com$",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
