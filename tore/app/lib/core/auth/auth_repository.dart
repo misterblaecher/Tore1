@@ -56,14 +56,19 @@ class AuthRepository {
 
   Future<EmailRequestResult> requestEmailOtp(String email) async {
     try {
-      final r = await api.dio.post(ApiEndpoints.authEmailRequestOtp, data: {'email': email});
+      final r = await api.dio.post(
+        ApiEndpoints.authEmailRequestOtp,
+        data: {'email': email},
+        options: Options(extra: {'skipRetry': true}),
+      );
       final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
       return EmailRequestResult(devToken: data['otp_debug']?.toString());
     } on DioException catch (e) {
       final reason = _extractReason(e.response?.data);
       if (e.response?.statusCode == 429 || reason == 'rate_limited') {
         final data = (e.response?.data is Map) ? (e.response!.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
-        final retryAfterFromBody = (data['retry_after_seconds'] as num?)?.toInt();
+        final nestedDetail = (data['detail'] is Map) ? (data['detail'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+        final retryAfterFromBody = (nestedDetail['retry_after_seconds'] as num?)?.toInt() ?? (data['retry_after_seconds'] as num?)?.toInt();
         final retryAfterFromHeader = int.tryParse((e.response?.headers.value('retry-after') ?? '').trim());
         throw EmailRateLimitException((retryAfterFromBody ?? retryAfterFromHeader ?? 30).clamp(1, 600));
       }

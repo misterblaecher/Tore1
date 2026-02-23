@@ -8,7 +8,11 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
+
+from db import engine
+from models import AuthOtpCode
 
 _LOGGER = logging.getLogger(__name__)
 _MIGRATION_LOCK = threading.Lock()
@@ -57,6 +61,14 @@ def _run_alembic_upgrade_head() -> None:
     command.upgrade(config, "head")
 
 
+def _apply_otp_migrations() -> None:
+    AuthOtpCode.__table__.create(bind=engine, checkfirst=True)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_email_created_at ON auth_otp_codes (email, created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_email_used_at ON auth_otp_codes (email, used_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_expires_at ON auth_otp_codes (expires_at)"))
+
+
 def run_migrations_on_startup() -> None:
     global _MIGRATIONS_EXECUTED
 
@@ -70,13 +82,15 @@ def run_migrations_on_startup() -> None:
             return
 
         fatal = _env_bool("MIGRATIONS_FATAL", default=True)
-        _LOGGER.info("Running migrations...")
+        _LOGGER.info("Running migrations (RUN_MIGRATIONS=1, MIGRATIONS_FATAL=%s)", int(fatal))
 
         try:
             for attempt, delay in enumerate(_RETRY_BACKOFF_SECONDS, start=1):
                 try:
                     _run_alembic_upgrade_head()
+                    _apply_otp_migrations()
                     _LOGGER.info("Migrations applied successfully")
+                    _LOGGER.info("OTP migrations applied (RUN_MIGRATIONS=1)")
                     _MIGRATIONS_EXECUTED = True
                     return
                 except Exception as exc:  # pragma: no cover - retry branch split for clarity

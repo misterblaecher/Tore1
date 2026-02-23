@@ -43,6 +43,7 @@ from app.services.rate_limit_service import (
     enforce_rate_limit,
     RateLimitExceeded,
     standard_rate_limit_http_exception,
+    email_otp_rate_limit_http_exception,
 )
 from models import (
     Bar,
@@ -3914,7 +3915,7 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
         enforce_rate_limit(EMAIL_OTP_SCOPE_EMAIL, email)
         enforce_rate_limit(EMAIL_OTP_SCOPE_IP, actor_ip)
     except RateLimitExceeded as exc:
-        raise standard_rate_limit_http_exception(scope=exc.scope, retry_after_seconds=exc.retry_after_seconds)
+        raise email_otp_rate_limit_http_exception(retry_after_seconds=exc.retry_after_seconds)
 
     now = now_utc()
     raw_code = f"{secrets.randbelow(1000000):06d}"

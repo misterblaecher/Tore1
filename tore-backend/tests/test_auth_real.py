@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from db import Base, engine, get_session, now_utc
-from main import app, ensure_seed
+from main import app, ensure_seed, run_migrations_on_startup
 import pytest
 from models import AppUser, AuthOtpCode
 from app.services import rate_limit_service
@@ -299,12 +299,13 @@ def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
 
     second = client.post("/auth/email/request_otp", json={"email": email})
     assert second.status_code == 429
-    assert second.headers.get("Retry-After") is not None
+    retry_after_header = second.headers.get("Retry-After")
+    assert retry_after_header is not None
     body = second.json().get("detail", {})
-    assert body.get("detail") == "Too many requests"
-    assert isinstance(body.get("retry_after_seconds"), int)
-    assert body.get("retry_after_seconds") >= 1
-    assert body.get("scope") == "auth_email_request_otp_email"
+    assert body == {
+        "code": "rate_limited",
+        "retry_after_seconds": int(retry_after_header),
+    }
 
 
 def test_email_request_otp_invalid_email_returns_400():
@@ -329,3 +330,24 @@ def test_email_verify_otp_rejects_reuse(monkeypatch):
     again = client.post("/auth/email/verify_otp", json={"email": email, "code": code})
     assert again.status_code == 400
     assert again.json()["detail"]["reason"] == "already_used"
+
+
+def test_email_request_otp_migration_bootstrap_creates_table(monkeypatch):
+    monkeypatch.setenv("RUN_MIGRATIONS", "1")
+    monkeypatch.setenv("MIGRATIONS_FATAL", "1")
+    monkeypatch.setenv("TORE_EMAIL_OTP_DEV_MODE", "1")
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS auth_otp_codes"))
+
+    import app.utils.migrations as migrations
+
+    migrations._MIGRATIONS_EXECUTED = False
+    run_migrations_on_startup()
+
+    client = TestClient(app)
+    email = f"otp-migrate-{now_utc().timestamp()}@example.com"
+    res = client.post("/auth/email/request_otp", json={"email": email})
+
+    assert res.status_code == 200
+    assert res.json().get("ok") is True

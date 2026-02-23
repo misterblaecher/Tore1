@@ -42,7 +42,7 @@ _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
     ),
     "auth_email_request_otp_email": (
         int(os.getenv("TORE_EMAIL_OTP_RATE_LIMIT", os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_MAX", "3"))),
-        int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_WINDOW_S", "600")),
+        int(os.getenv("TORE_EMAIL_OTP_WINDOW_SECONDS", os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_WINDOW_S", "60"))),
     ),
     "auth_email_request_otp_ip": (
         int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_IP_MAX", "15")),
@@ -96,6 +96,18 @@ def standard_rate_limit_http_exception(scope: str, retry_after_seconds: int) -> 
             "scope": scope,
         },
         headers={"Retry-After": str(int(retry_after_seconds))},
+    )
+
+
+def email_otp_rate_limit_http_exception(retry_after_seconds: int) -> HTTPException:
+    retry_after = int(retry_after_seconds)
+    return HTTPException(
+        status_code=429,
+        detail={
+            "code": "rate_limited",
+            "retry_after_seconds": retry_after,
+        },
+        headers={"Retry-After": str(retry_after)},
     )
 
 
