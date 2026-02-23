@@ -76,6 +76,19 @@ void main() {
       expect(payload.committeeId, 7);
     });
 
+
+    test('parse legacy https open orga deeplink compatibility', () {
+      final payload = parser.parse('https://app.tore.be/open?type=orga&id=7');
+      expect(payload.type, QrType.orga);
+      expect(payload.committeeId, 7);
+    });
+
+    test('parse legacy https open staff backup deeplink compatibility', () {
+      final payload = parser.parse('https://app.tore.be/open?type=staff_backup&id=12');
+      expect(payload.type, QrType.staffBackup);
+      expect(payload.eventId, 12);
+    });
+
     test('parse open join code deeplink', () {
       final payload = parser.parse('tore://open?type=join&code=JOIN66');
       expect(payload.type, QrType.joinEvent);

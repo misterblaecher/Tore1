@@ -28,7 +28,7 @@ void main() {
   testWidgets('EntryModeScreen shows scanner and manual mode controls', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.binding.setSurfaceSize(const Size(414, 896));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
@@ -37,16 +37,24 @@ void main() {
           entryServiceProvider.overrideWithValue(FakeEntryService()),
           healthRepositoryProvider.overrideWithValue(FakeHealthRepository()),
         ],
-        child: const MaterialApp(home: EntryModeScreen(eventId: 1)),
+        child: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(414, 896),
+            devicePixelRatio: 1,
+            textScaler: TextScaler.linear(1),
+          ),
+          child: const MaterialApp(home: EntryModeScreen(eventId: 1)),
+        ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('Mode manuel'), findsOneWidget);
     expect(find.text('SCAN'), findsOneWidget);
 
     await tester.tap(find.text('Mode manuel'));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('+1'), findsOneWidget);
     expect(find.text('+5'), findsOneWidget);

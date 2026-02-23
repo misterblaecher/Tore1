@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../../features/menu_market/presentation/menu_screen.dart' as v3_menu;
 import '../../../features/orders/presentation/order_status_live_screen.dart' as v3_orders;
 import '../../models/rebuild_types.dart';
@@ -22,7 +20,7 @@ class RebuildMenuAdapterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        ProviderScope(child: v3_menu.MenuScreen(eventId: eventId)),
+        v3_menu.MenuScreen(eventId: eventId),
         Positioned(top: 0, left: 0, right: 0, child: NetworkBanner(state: network)),
         if (eventState != EventState.live)
           const Positioned.fill(
@@ -64,7 +62,7 @@ class RebuildOrdersAdapterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        ProviderScope(child: v3_orders.OrderStatusLiveScreen(orderId: orderId)),
+        v3_orders.OrderStatusLiveScreen(orderId: orderId),
         Positioned(top: 0, left: 0, right: 0, child: NetworkBanner(state: network)),
         if (eventState != EventState.live)
           const Positioned.fill(

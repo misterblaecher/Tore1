@@ -113,6 +113,9 @@ class QrParser {
     final firstPathSegment = uri.pathSegments.isNotEmpty ? uri.pathSegments.first.toLowerCase() : '';
     final target = host == 'app.tore.be' ? firstPathSegment : (host.isNotEmpty ? host : firstPathSegment);
     final type = _mapType(target, query['type']);
+    final dynamicId = query['id'];
+    final eventId = _toInt(query['event_id'] ?? query['eventid'] ?? dynamicId);
+    final committeeId = _toInt(query['committee_id'] ?? query['org_id'] ?? (type == QrType.orga ? dynamicId : null));
 
     if (type == QrType.unknown) {
       return QrPayload(type: QrType.unknown, raw: raw, parsedAt: now, reason: 'format invalide', fields: query);
@@ -122,9 +125,9 @@ class QrParser {
       type: type,
       raw: raw,
       parsedAt: now,
-      eventId: _toInt(query['event_id'] ?? query['id']),
+      eventId: eventId,
       barId: _toInt(query['bar_id']),
-      committeeId: _toInt(query['committee_id'] ?? query['org_id']),
+      committeeId: committeeId,
       orderId: _toInt(query['order_id']),
       tokenId: query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
       battleId: _toInt(query['battle_id']),

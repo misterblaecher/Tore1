@@ -38,7 +38,8 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('JOIN66'), findsOneWidget);
+    final codeField = tester.widget<TextField>(find.byType(TextField).first);
+    expect(codeField.controller?.text, 'JOIN66');
   });
 
   testWidgets('autoJoinPublic redirects to EventPublicScreen', (tester) async {
