@@ -7,6 +7,7 @@ import 'models/qr_resolve.dart';
 import 'models/rebuild_types.dart';
 import 'models/snapshot.dart';
 import 'routing/app_routes.dart';
+import 'routing/deep_link_router.dart';
 import 'routing/qr_router.dart';
 import 'routing/route_guards.dart';
 import 'services/api_client.dart';
@@ -38,6 +39,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   final _cache = CacheStore();
   final _guards = RouteGuards();
   final _router = QrRouter();
+  final _deepLinkRouter = DeepLinkRouter();
   final _networkStateResolver = NetworkStateResolver();
   late final IdempotencyStore _writerStore = IdempotencyStore(persistence: SharedPrefsIdempotencyPersistence());
   late final IdempotentWriter _writer = IdempotentWriter(store: _writerStore);
@@ -45,6 +47,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   late final AppEnvironment _environment = appEnvironmentFromDefine();
   late final BuildInfo _buildInfo = BuildInfo.fromEnvironment();
   late final RemoteConfigService _remoteConfigService = RemoteConfigService(apiClient: _api, cacheStore: _cache, environment: _environment);
+  static const String _startupUrl = String.fromEnvironment('TORE_STARTUP_URL', defaultValue: '');
 
   ToreMode _mode = ToreMode.user;
   UserSnapshot? _userSnapshot;
@@ -92,7 +95,12 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     } catch (_) {
       await ClientLog.instance.log('boot.hydration_fallback', {'reason': 'remote_unavailable'});
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        if (_startupUrl.trim().isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _openDeepLink(_startupUrl));
+        }
+      }
     }
   }
 
@@ -173,6 +181,39 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     }
   }
 
+
+
+  Future<void> _openDeepLink(String url) async {
+    final parsed = _deepLinkRouter.parse(url);
+    if (parsed == null) {
+      if (!mounted) return;
+      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Lien invalide', 'message': 'Le lien n'est pas supporté par cette version de l'app.'});
+      return;
+    }
+
+    if (parsed.isQr) {
+      await _resolveQrPayload(parsed.qrPayload!);
+      return;
+    }
+
+    final route = parsed.route;
+    if (!_guards.routeAllowedForMode(route, _mode)) {
+      if (!mounted) return;
+      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Mauvais mode', 'message': 'Ce lien n'est pas autorisé pour le mode actif.'});
+      return;
+    }
+
+    final moduleId = _moduleForRoute(route);
+    if (moduleId != null && !_guards.deepLinkAllowed(_effectiveState(moduleId))) {
+      if (!mounted) return;
+      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Module indisponible', 'message': 'Le module ciblé est OFF ou temporairement désactivé.'});
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.pushNamed(context, route);
+  }
+
   Future<void> _sensitiveWrite(String moduleId, String action) async {
     if (!_networkStateResolver.canWrite(_network)) {
       ClientLog.instance.log('write.blocked', {'reason_code': 'offline_write_blocked', 'network_state': _network.name, 'event_state': _eventContext?.eventState.name ?? 'none', 'module_state': _effectiveState(moduleId).name});
@@ -235,6 +276,35 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   }
 
 
+  String? _moduleForRoute(String route) {
+    const map = {
+      AppRoutes.home: 'user_home',
+      AppRoutes.scanner: 'user_qr_scanner',
+      AppRoutes.bars: 'user_bars',
+      AppRoutes.events: 'user_events',
+      AppRoutes.join: 'user_join',
+      AppRoutes.eventHub: 'user_event_hub',
+      AppRoutes.menu: 'user_menu',
+      AppRoutes.wallet: 'user_wallet',
+      AppRoutes.ticker: 'user_ticker',
+      AppRoutes.polymarketGlobal: 'user_polymarket_global',
+      AppRoutes.polymarketEvent: 'user_polymarket_event',
+      AppRoutes.profile: 'user_login_profile',
+      AppRoutes.orgaHub: 'orga_event_control_hub',
+      AppRoutes.orgaEntry: 'orga_entry_mode',
+      AppRoutes.orgaMenu: 'orga_menu_admin',
+      AppRoutes.orgaMarket: 'orga_polymarket_admin',
+      AppRoutes.orgaUrgency: 'orga_urgency_actions',
+      AppRoutes.orgaExports: 'orga_finance_admin',
+      AppRoutes.barDashboard: 'bar_dashboard',
+      AppRoutes.barOrders: 'bar_orders_live',
+      AppRoutes.barMenu: 'bar_full_menu_admin',
+      AppRoutes.barZones: 'bar_zones_qr',
+      AppRoutes.barAnalytics: 'bar_analytics',
+    };
+    return map[route];
+  }
+
   void _openDiagnostics() {
     if (!_diagnosticsAllowed) return;
     Navigator.pushNamed(context, AppRoutes.devDiagnostics);
@@ -266,8 +336,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.orgaUrgency: (_) => OrgaUrgencyActionsScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_urgency_actions', a)),
         AppRoutes.userHelp: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
         AppRoutes.orgaRunbook: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
-        AppRoutes.orgaExports: (_) => OrgaExportsScreen(eventId: _eventContext?.eventId ?? '42', moduleStates: _eventContext?.moduleStates ?? const {}, backendPack: _orgaQrPack),
-        AppRoutes.devDiagnostics: (_) => _diagnosticsAllowed ? DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, environment: _environment, environmentColor: _environmentColor, buildInfo: _buildInfo, remoteConfig: _remoteConfig ?? RemoteConfigPayload.defaults(_environment), onSimulatedNetworkChanged: (state) { if (!mounted) return; setState(() { _network = state; _networkTransitionAt = DateTime.now(); }); }) : const ScreenScaffold(title: 'Diagnostics disabled', scopeBadges: ['PROD'], body: BlockedStateView(title: 'Diagnostics hidden', message: 'Diagnostics are disabled by remote config.')),
+        AppRoutes.orgaExports: (_) => OrgaExportsScreen(eventId: _eventContext?.eventId ?? '42', environment: _environment, moduleStates: _eventContext?.moduleStates ?? const {}, backendPack: _orgaQrPack, onOpenInApp: _openDeepLink),
+        AppRoutes.devDiagnostics: (_) => _diagnosticsAllowed ? DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, environment: _environment, environmentColor: _environmentColor, buildInfo: _buildInfo, remoteConfig: _remoteConfig ?? RemoteConfigPayload.defaults(_environment), onSimulatedNetworkChanged: (state) { if (!mounted) return; setState(() { _network = state; _networkTransitionAt = DateTime.now(); }); }, onOpenUrl: _openDeepLink) : const ScreenScaffold(title: 'Diagnostics disabled', scopeBadges: ['PROD'], body: BlockedStateView(title: 'Diagnostics hidden', message: 'Diagnostics are disabled by remote config.')),
         AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
         AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network, rows: _orders.map((o) => ListTile(title: Text('Order ${o.id}'), trailing: Text(o.status))).toList()),
         AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
