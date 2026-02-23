@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../config/app_environment.dart';
+
 class ToreTokens {
   static const black = Color(0xFF050506);
   static const surface = Color(0xFF111118);
@@ -75,5 +77,16 @@ class ToreTheme {
         foregroundColor: Colors.black,
       ),
     );
+  }
+
+  static Color envBadgeColor(AppEnvironment environment) {
+    switch (environment) {
+      case AppEnvironment.dev:
+        return Colors.blueGrey;
+      case AppEnvironment.stage:
+        return ToreTokens.warning;
+      case AppEnvironment.prod:
+        return ToreTokens.ok;
+    }
   }
 }

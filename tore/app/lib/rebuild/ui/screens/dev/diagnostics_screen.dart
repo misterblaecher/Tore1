@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../config/app_environment.dart';
 import '../../../models/event_context.dart';
 import '../../../models/rebuild_types.dart';
 import '../../../models/snapshot.dart';
@@ -9,6 +12,7 @@ import '../../../services/api_client.dart';
 import '../../../services/cache_store.dart';
 import '../../../services/client_log.dart';
 import '../../../services/idempotency_store.dart';
+import '../../../services/remote_config.dart';
 import '../../theme/tore_theme.dart';
 import '../../widgets/primitives.dart';
 
@@ -23,6 +27,10 @@ class DiagnosticsScreen extends StatefulWidget {
     required this.apiClient,
     required this.cacheStore,
     required this.idempotencyStore,
+    required this.environment,
+    required this.environmentColor,
+    required this.buildInfo,
+    required this.remoteConfig,
     required this.onSimulatedNetworkChanged,
   });
 
@@ -34,6 +42,10 @@ class DiagnosticsScreen extends StatefulWidget {
   final ApiClient apiClient;
   final CacheStore cacheStore;
   final IdempotencyStore idempotencyStore;
+  final AppEnvironment environment;
+  final Color environmentColor;
+  final BuildInfo buildInfo;
+  final RemoteConfigPayload remoteConfig;
   final ValueChanged<ConnectivityState> onSimulatedNetworkChanged;
 
   @override
@@ -71,14 +83,31 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
     return ScreenScaffold(
       title: 'Diagnostics',
-      scopeBadges: const ['DEV'],
+      scopeBadges: ['DEV', appEnvironmentLabel(widget.environment)],
       body: ListView(
         shrinkWrap: true,
         children: [
-          _section('Build', [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Environment'),
+            subtitle: Text('Current channel: ${appEnvironmentLabel(widget.environment)}'),
+            trailing: ToreBadge(label: appEnvironmentLabel(widget.environment), color: widget.environmentColor),
+          ),
+          _section('Build info', [
             _line('Flavor', kReleaseMode ? 'release' : 'dev'),
-            _line('Version', const String.fromEnvironment('APP_VERSION', defaultValue: 'dev-build')),
+            _line('Version', widget.buildInfo.semver),
+            _line('Build number', '${widget.buildInfo.buildNumber}'),
+            _line('Git SHA', widget.buildInfo.gitSha),
+            _line('Build time', widget.buildInfo.buildTime),
             _line('Mode', widget.mode.name.toUpperCase()),
+          ]),
+          _section('Remote config', [
+            _line('source', widget.remoteConfig.source),
+            _line('disable_writes_global', widget.remoteConfig.disableWritesGlobal ? 'true' : 'false'),
+            _line('diagnostics_enabled', widget.remoteConfig.diagnosticsEnabled ? 'true' : 'false'),
+            _line('min_supported_build', '${widget.remoteConfig.minSupportedBuild ?? '-'}'),
+            _line('min_supported_version', widget.remoteConfig.minSupportedVersion ?? '-'),
+            _line('fetched_at', widget.remoteConfig.fetchedAt.toIso8601String()),
           ]),
           _section('Snapshot', [
             _line('Roles', widget.snapshot?.roles.join(', ') ?? '-'),
@@ -109,6 +138,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           const SizedBox(height: ToreTokens.s8),
           ...logs.take(80).map((e) => ListTile(title: Text(e.event), subtitle: Text('${e.ts.toIso8601String()}\n${scrubJsonMap(e.fields)}'))),
           const SizedBox(height: ToreTokens.s8),
+          FilledButton(onPressed: _copyBuildInfo, child: const Text('Copy build info')),
+          FilledButton(onPressed: _copyTelemetry, child: const Text('Export telemetry (scrubbed)')),
           FilledButton(onPressed: _copyBlob, child: const Text('Copy diagnostics to clipboard')),
           if (!kReleaseMode) ...[
             OutlinedButton(onPressed: _clearCaches, child: const Text('Clear caches')),
@@ -135,12 +166,39 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
   Widget _line(String k, String v) => Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('$k: $v'));
 
+  Future<void> _copyBuildInfo() async {
+    final info = {
+      'version': widget.buildInfo.semver,
+      'build_number': widget.buildInfo.buildNumber,
+      'git_sha': widget.buildInfo.gitSha,
+      'build_time': widget.buildInfo.buildTime,
+      'environment': appEnvironmentLabel(widget.environment),
+    };
+    await Clipboard.setData(ClipboardData(text: const JsonEncoder.withIndent('  ').convert(info)));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Build info copied.')));
+  }
+
+  Future<void> _copyTelemetry() async {
+    final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter).take(120);
+    final lines = logs.map((entry) => jsonEncode({
+          'ts': entry.ts.toIso8601String(),
+          'event': entry.event,
+          'fields': scrubJsonMap(entry.fields),
+        }));
+    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Telemetry export copied (scrubbed).')));
+  }
+
   Future<void> _copyBlob() async {
     final scrubbedEvent = widget.eventContext?.eventId == null ? 'none' : scrubJsonMap({'user_id': widget.eventContext!.eventId})['user_id'];
     final blob = StringBuffer()
       ..writeln('mode=${widget.mode.name}')
       ..writeln('network=${widget.networkState.name}')
       ..writeln('event=$scrubbedEvent')
+      ..writeln('build=${widget.buildInfo.semver}+${widget.buildInfo.buildNumber}')
+      ..writeln('environment=${appEnvironmentLabel(widget.environment)}')
       ..writeln('roles=${widget.snapshot?.roles.join(',') ?? '-'}')
       ..writeln('cache=${scrubJsonMap(_cache.map((key, value) => MapEntry(key, value?.inMinutes.toString() ?? 'missing')))}')
       ..writeln('errors=${widget.apiClient.recentErrorCodes()}')
@@ -149,7 +207,6 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diagnostics copied.')));
   }
-
 
   String logsBlob() {
     final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter).take(50);

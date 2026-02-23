@@ -7,8 +7,10 @@ import '../../theme/tore_theme.dart';
 import '../../widgets/primitives.dart';
 
 class BootSplashScreen extends StatelessWidget {
-  const BootSplashScreen({super.key, required this.network, this.onLongPressDiagnostics});
+  const BootSplashScreen({super.key, required this.network, required this.environmentLabel, required this.environmentColor, this.onLongPressDiagnostics});
   final ConnectivityState network;
+  final String environmentLabel;
+  final Color environmentColor;
   final VoidCallback? onLongPressDiagnostics;
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -17,7 +19,15 @@ class BootSplashScreen extends StatelessWidget {
           title: 'Boot',
           connectivity: network,
           scopeBadges: const ['USER'],
-          body: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LoadingSkeleton(lines: 3), SizedBox(height: ToreTokens.s12), Text('TORÈ v3 rebuild boot…'), Text('Long-press logo for diagnostics'), Text('Offline mode supported')]),
+          body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const LoadingSkeleton(lines: 3),
+            const SizedBox(height: ToreTokens.s12),
+            Text('TORÈ v3 rebuild boot…'),
+            const Text('Long-press logo for diagnostics'),
+            const Text('Offline mode supported'),
+            const SizedBox(height: ToreTokens.s8),
+            Opacity(opacity: .75, child: ToreBadge(label: environmentLabel, color: environmentColor)),
+          ]),
         ),
       );
 }

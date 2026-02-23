@@ -5,10 +5,12 @@ import '../../theme/tore_theme.dart';
 import '../../widgets/primitives.dart';
 
 class OrgaEventControlHubScreen extends StatelessWidget {
-  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true, this.entryApprovedCount = 0, this.onOpenExports, this.onOpenRunbook});
+  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true, this.entryApprovedCount = 0, required this.environmentLabel, required this.environmentColor, this.onOpenExports, this.onOpenRunbook});
   final ConnectivityState network;
   final bool writeAllowed;
   final int entryApprovedCount;
+  final String environmentLabel;
+  final Color environmentColor;
   final VoidCallback? onOpenExports;
   final VoidCallback? onOpenRunbook;
 
@@ -16,7 +18,7 @@ class OrgaEventControlHubScreen extends StatelessWidget {
   Widget build(BuildContext context) => ScreenScaffold(
         title: 'Event Control Hub',
         connectivity: network,
-        scopeBadges: const ['ORGA', 'CONTROL'],
+        scopeBadges: ['ORGA', 'CONTROL', environmentLabel],
         body: Column(
           children: [
             Card(
@@ -34,7 +36,7 @@ class OrgaEventControlHubScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: ToreTokens.s8),
-            const ListTile(title: Text('System status'), subtitle: Text('All green')),
+            ListTile(title: const Text('System status'), subtitle: Text('All green • $environmentLabel'), trailing: ToreBadge(label: environmentLabel, color: environmentColor)),
             SwitchListTile(value: true, onChanged: writeAllowed ? (_) {} : null, title: const Text('Module ENTRY enabled')),
             SwitchListTile(value: true, onChanged: writeAllowed ? (_) {} : null, title: const Text('Module MENU enabled')),
             ListTile(

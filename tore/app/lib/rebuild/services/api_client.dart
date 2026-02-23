@@ -177,6 +177,18 @@ class ApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> fetchRemoteConfig() async {
+    final json = await _getJson('/mobile/remote-config', network: ConnectivityState.online);
+    if (json.isEmpty || !json.containsKey('disable_writes_global')) {
+      return {
+        ...json,
+        'disable_writes_global': false,
+        'disable_writes_message': 'Writes are temporarily frozen.',
+      };
+    }
+    return json;
+  }
+
   Future<Map<String, dynamic>> writeEntryScan(String eventId, Map<String, dynamic> payload, {required String idempotencyKey, required ConnectivityState network}) {
     return _postJson('/partner/portal/orga/events/$eventId/entry/scan', payload, headers: {'X-Idempotency-Key': idempotencyKey}, network: network);
   }
