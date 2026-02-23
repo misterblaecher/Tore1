@@ -300,3 +300,78 @@ def test_candidate_add_writes_audit_log():
         assert row is not None
     finally:
         s.close()
+
+def test_pre_event_suggest_and_vote_with_cooldown_and_idempotency():
+    seed = _seed(module_on=True)
+    client = TestClient(app)
+    token, _ = _guest_token(client, 'pre-user')
+
+    suggest = client.post(
+        f"/events/{seed['event_id']}/music/pre_event/suggest",
+        json={'provider': 'spotify', 'externalUrl': 'https://open.spotify.com/track/pre1', 'title': 'Pre1', 'artist': 'Artist'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'pre-s-1'},
+    )
+    assert suggest.status_code == 200
+    same = client.post(
+        f"/events/{seed['event_id']}/music/pre_event/suggest",
+        json={'provider': 'spotify', 'externalUrl': 'https://open.spotify.com/track/pre1', 'title': 'Pre1', 'artist': 'Artist'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'pre-s-1'},
+    )
+    assert same.status_code == 200
+
+    blocked = client.post(
+        f"/events/{seed['event_id']}/music/pre_event/suggest",
+        json={'provider': 'spotify', 'externalUrl': 'https://open.spotify.com/track/pre2', 'title': 'Pre2', 'artist': 'Artist'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'pre-s-2'},
+    )
+    assert blocked.status_code == 429
+
+    vote = client.post(
+        f"/events/{seed['event_id']}/music/pre_event/vote",
+        json={'suggestionId': suggest.json()['suggestionId']},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'pre-v-1'},
+    )
+    assert vote.status_code == 200
+
+
+def test_new_rounds_lifecycle_and_permissions():
+    seed = _seed(module_on=True)
+    client = TestClient(app)
+    dj_token, dj_user_id = _guest_token(client, 'dj-round')
+
+    denied = client.post(
+        f"/events/{seed['event_id']}/music/rounds/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f'Bearer {seed["staff_token"]}', 'Idempotency-Key': 'rd-deny'},
+    )
+    assert denied.status_code == 403
+
+    client.post(
+        f"/events/{seed['event_id']}/music/admin/settings",
+        json={"enabled": True, "djOverrideEnabled": True},
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'set-rnd'},
+    )
+    s = get_session()
+    try:
+        s.add(EventStaff(event_id=seed['event_id'], user_id=dj_user_id, role='dj', is_active=True))
+        s.commit()
+    finally:
+        s.close()
+
+    started = client.post(
+        f"/events/{seed['event_id']}/music/rounds/start",
+        json={'durationSec': 120},
+        headers={'Authorization': f'Bearer {dj_token}', 'Idempotency-Key': 'rd-start'},
+    )
+    assert started.status_code == 200
+
+    current = client.get(f"/events/{seed['event_id']}/music/rounds/current")
+    assert current.status_code == 200
+    assert current.json()['round']['status'] == 'OPEN'
+
+    closed = client.post(
+        f"/events/{seed['event_id']}/music/rounds/close",
+        headers={'Authorization': f"Bearer {seed['manager_token']}", 'Idempotency-Key': 'rd-close'},
+    )
+    assert closed.status_code == 200
+    assert closed.json()['round']['status'] == 'LOCKED'

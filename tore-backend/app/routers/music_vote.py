@@ -25,6 +25,9 @@ from models import (
     EventMusicAdminIdempotency,
     EventMusicCandidate,
     EventMusicSetting,
+    EventMusicSuggestion,
+    EventMusicSuggestionVote,
+    EventMusicRound,
     EventMusicVote,
     EventStaff,
 )
@@ -34,6 +37,8 @@ router = APIRouter(prefix="/events", tags=["music-vote"])
 
 _PROVIDER_SET = {"spotify", "apple", "youtube_music", "ytmusic", "soundcloud"}
 _ALLOWED_ROUND_DURATIONS = {60, 120, 180, 300}
+_PRE_EVENT_COOLDOWN_SECONDS = 20
+
 
 
 class TrackCandidateIn(BaseModel):
@@ -50,6 +55,17 @@ class TrackCandidateIn(BaseModel):
 
 class VoteIn(BaseModel):
     candidate: TrackCandidateIn
+
+
+class PreEventSuggestIn(BaseModel):
+    provider: str
+    externalUrl: str = Field(min_length=8, max_length=512)
+    title: str = Field(default="", max_length=180)
+    artist: str = Field(default="", max_length=180)
+
+
+class PreEventVoteIn(BaseModel):
+    suggestionId: int
 
 
 class CandidateAddIn(BaseModel):
@@ -86,6 +102,7 @@ class NowPlayingIn(BaseModel):
 
 class SkipIn(BaseModel):
     reason: str = Field(min_length=1, max_length=180)
+    reopen: bool = False
 
 
 def _hash_token(raw: str) -> str:
@@ -294,6 +311,68 @@ def _winning_row(db: Session, event_id: int):
     )
 
 
+
+
+def _current_round_row(db: Session, event_id: int) -> Optional[EventMusicRound]:
+    return (
+        db.query(EventMusicRound)
+        .filter(EventMusicRound.event_id == event_id)
+        .order_by(EventMusicRound.created_at.desc(), EventMusicRound.id.desc())
+        .first()
+    )
+
+
+def _current_round_payload(db: Session, event_id: int) -> dict:
+    row = _current_round_row(db, event_id)
+    if not row:
+        return {"round": None}
+    winner = None
+    if row.winner_candidate_id:
+        candidate = db.get(EventMusicCandidate, row.winner_candidate_id)
+        if candidate:
+            winner = _candidate_out(candidate)
+    return {
+        "round": {
+            "id": row.id,
+            "eventId": row.event_id,
+            "status": (row.status or "CLOSED").upper(),
+            "durationSec": row.duration_sec,
+            "startedAt": row.started_at.isoformat() if row.started_at else None,
+            "endsAt": row.ends_at.isoformat() if row.ends_at else None,
+            "closedAt": row.closed_at.isoformat() if row.closed_at else None,
+            "winnerCandidateId": row.winner_candidate_id,
+            "winnerCandidate": winner,
+            "createdBy": row.created_by,
+        }
+    }
+
+
+def _pre_event_top(db: Session, event_id: int, limit: int = 20) -> list[dict]:
+    rows = (
+        db.query(
+            EventMusicSuggestion,
+            func.count(EventMusicSuggestionVote.id).label("votes"),
+        )
+        .outerjoin(EventMusicSuggestionVote, EventMusicSuggestionVote.suggestion_id == EventMusicSuggestion.id)
+        .filter(EventMusicSuggestion.event_id == event_id)
+        .group_by(EventMusicSuggestion.id)
+        .order_by(func.count(EventMusicSuggestionVote.id).desc(), EventMusicSuggestion.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": suggestion.id,
+            "provider": suggestion.provider,
+            "externalUrl": suggestion.external_url,
+            "title": suggestion.title,
+            "artist": suggestion.artist,
+            "votes": int(votes or 0),
+            "createdAt": suggestion.created_at.isoformat() if suggestion.created_at else None,
+        }
+        for suggestion, votes in rows
+    ]
+
 def _lock_round_with_winner(db: Session, event_id: int, settings: EventMusicSetting) -> None:
     now = now_utc()
     row = _winning_row(db, event_id)
@@ -364,6 +443,110 @@ def _ensure_module_or_404(db: Session, event_id: int) -> Event:
         raise HTTPException(status_code=404, detail={"reason": "MODULE_OFF", "message": "Music vote module off"})
     return event
 
+
+
+
+@router.get("/{event_id}/music/pre_event")
+def music_pre_event_get(event_id: int, db: Session = Depends(get_db)):
+    _ensure_module_or_404(db, event_id)
+    return {"items": _pre_event_top(db, event_id), "top": _pre_event_top(db, event_id, limit=8)}
+
+
+@router.post("/{event_id}/music/pre_event/suggest")
+def music_pre_event_suggest(
+    event_id: int,
+    body: PreEventSuggestIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    _ensure_module_or_404(db, event_id)
+    _runtime_write_guard(db, event_id)
+    existing = (
+        db.query(EventMusicActionIdempotency)
+        .filter(
+            EventMusicActionIdempotency.event_id == event_id,
+            EventMusicActionIdempotency.action_type == "pre_event_suggest",
+            EventMusicActionIdempotency.idempotency_key == idempotency_key,
+            EventMusicActionIdempotency.actor_user_id == user.id,
+        )
+        .first()
+    )
+    if existing:
+        return existing.response_json
+    last = (
+        db.query(EventMusicSuggestion)
+        .filter(EventMusicSuggestion.event_id == event_id, EventMusicSuggestion.user_id == user.id)
+        .order_by(EventMusicSuggestion.created_at.desc())
+        .first()
+    )
+    if last and (now_utc() - last.created_at).total_seconds() < _PRE_EVENT_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=429, detail={"reason": "suggestion_cooldown"})
+    provider, normalized_url, _ = _normalize_candidate_link(body.provider, body.externalUrl)
+    row = EventMusicSuggestion(
+        event_id=event_id,
+        user_id=user.id,
+        provider=provider,
+        external_url=normalized_url,
+        title=body.title,
+        artist=body.artist,
+    )
+    db.add(row)
+    db.flush()
+    payload = {"ok": True, "suggestionId": row.id, "top": _pre_event_top(db, event_id, limit=8)}
+    db.add(EventMusicActionIdempotency(event_id=event_id, action_type="pre_event_suggest", actor_user_id=user.id, idempotency_key=idempotency_key, response_json=payload))
+    db.commit()
+    return payload
+
+
+@router.post("/{event_id}/music/pre_event/vote")
+def music_pre_event_vote(
+    event_id: int,
+    body: PreEventVoteIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail={"reason": "idempotency_required"})
+    _ensure_module_or_404(db, event_id)
+    _runtime_write_guard(db, event_id)
+    existing = (
+        db.query(EventMusicActionIdempotency)
+        .filter(
+            EventMusicActionIdempotency.event_id == event_id,
+            EventMusicActionIdempotency.action_type == "pre_event_vote",
+            EventMusicActionIdempotency.idempotency_key == idempotency_key,
+            EventMusicActionIdempotency.actor_user_id == user.id,
+        )
+        .first()
+    )
+    if existing:
+        return existing.response_json
+    suggestion = db.get(EventMusicSuggestion, body.suggestionId)
+    if not suggestion or suggestion.event_id != event_id:
+        raise HTTPException(status_code=404, detail={"reason": "suggestion_not_found"})
+    last = (
+        db.query(EventMusicSuggestionVote)
+        .filter(EventMusicSuggestionVote.event_id == event_id, EventMusicSuggestionVote.user_id == user.id)
+        .order_by(EventMusicSuggestionVote.created_at.desc())
+        .first()
+    )
+    if last and (now_utc() - last.created_at).total_seconds() < _PRE_EVENT_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=429, detail={"reason": "vote_cooldown"})
+    existing_vote = db.query(EventMusicSuggestionVote).filter(
+        EventMusicSuggestionVote.event_id == event_id,
+        EventMusicSuggestionVote.user_id == user.id,
+        EventMusicSuggestionVote.suggestion_id == body.suggestionId,
+    ).first()
+    if not existing_vote:
+        db.add(EventMusicSuggestionVote(event_id=event_id, user_id=user.id, suggestion_id=body.suggestionId))
+    payload = {"ok": True, "top": _pre_event_top(db, event_id, limit=8)}
+    db.add(EventMusicActionIdempotency(event_id=event_id, action_type="pre_event_vote", actor_user_id=user.id, idempotency_key=idempotency_key, response_json=payload))
+    db.commit()
+    return payload
 
 @router.get("/{event_id}/music")
 def music_get(event_id: int, db: Session = Depends(get_db)):
@@ -655,6 +838,7 @@ def _admin_or_dj_guard(db: Session, event: Event, settings: EventMusicSetting, a
 
 
 @router.post("/{event_id}/music/admin/round/start")
+@router.post("/{event_id}/music/rounds/start")
 def music_round_start(
     event_id: int,
     body: RoundStartIn,
@@ -684,6 +868,15 @@ def music_round_start(
     settings.round_started_at = started_at
     settings.round_duration_sec = body.durationSec
     settings.round_ends_at = started_at + timedelta(seconds=body.durationSec)
+    round_row = EventMusicRound(
+        event_id=event_id,
+        status="OPEN",
+        duration_sec=body.durationSec,
+        started_at=started_at,
+        ends_at=started_at + timedelta(seconds=body.durationSec),
+        created_by=f"{actor_role}:{actor_partner_id or 'dj'}",
+    )
+    db.add(round_row)
     settings.round_locked_at = None
     settings.winner_candidate_key = None
     settings.winner_candidate_json = None
@@ -711,6 +904,7 @@ def music_round_start(
 
 
 @router.post("/{event_id}/music/admin/round/end")
+@router.post("/{event_id}/music/rounds/close")
 def music_round_end(
     event_id: int,
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
@@ -732,7 +926,20 @@ def music_round_end(
         return existing.response_json
 
     _lock_round_with_winner(db, event_id, settings)
-    response = {"ok": True, "round": _round_payload(settings), "winner": _winner_payload(settings)}
+    round_row = _current_round_row(db, event_id)
+    if round_row and (round_row.status or "").upper() == "OPEN":
+        round_row.status = "CLOSED"
+        round_row.closed_at = now_utc()
+        winner_key = settings.winner_candidate_key
+        if winner_key:
+            winner_candidate = db.query(EventMusicCandidate).filter(
+                EventMusicCandidate.event_id == event_id,
+                EventMusicCandidate.round_id == settings.round_id,
+                EventMusicCandidate.candidate_key == winner_key,
+            ).first()
+            round_row.winner_candidate_id = winner_candidate.id if winner_candidate else None
+        db.add(round_row)
+    response = {"ok": True, "round": _round_payload(settings), "winner": _winner_payload(settings), "current": _current_round_payload(db, event_id).get("round")}
     db.add(EventMusicAdminIdempotency(event_id=event_id, action_type="round_end", idempotency_key=idempotency_key, actor_partner_id=actor_partner_id, response_json=response))
     write_audit_log(
         db,
@@ -749,7 +956,14 @@ def music_round_end(
     return response
 
 
+@router.get("/{event_id}/music/rounds/current")
+def music_round_current(event_id: int, db: Session = Depends(get_db)):
+    _ensure_module_or_404(db, event_id)
+    return _current_round_payload(db, event_id)
+
+
 @router.post("/{event_id}/music/admin/now-playing")
+@router.post("/{event_id}/music/now_playing")
 def music_now_playing(
     event_id: int,
     body: NowPlayingIn,
@@ -796,6 +1010,7 @@ def music_now_playing(
 
 
 @router.post("/{event_id}/music/admin/skip")
+@router.post("/{event_id}/music/skip_winner")
 def music_skip(
     event_id: int,
     body: SkipIn,
@@ -821,7 +1036,7 @@ def music_skip(
     settings.winner_candidate_json = None
     settings.winner_decided_at = None
     settings.winner_votes_count = 0
-    settings.round_status = "IDLE"
+    settings.round_status = "OPEN" if body.reopen and settings.round_started_at else "IDLE"
     settings.round_locked_at = None
     settings.last_updated_at = now_utc()
     settings.updated_at = now_utc()
@@ -844,6 +1059,7 @@ def music_skip(
 
 
 @router.post("/{event_id}/music/admin/force")
+@router.post("/{event_id}/music/force")
 def music_force(
     event_id: int,
     body: ForceIn,

@@ -27,6 +27,7 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
   MusicProvider _provider = MusicProvider.spotify;
   Map<String, dynamic>? _payload;
   Map<String, dynamic>? _context;
+  Map<String, dynamic>? _preEventPayload;
   bool _loading = true;
   bool _posting = false;
   Timer? _pollTimer;
@@ -66,10 +67,12 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
       final api = ref.read(apiProvider);
       final music = await api.getMusic(widget.eventId);
       final context = await api.eventContext(widget.eventId);
+      final preEvent = await api.getMusicPreEvent(widget.eventId);
       if (mounted) {
         setState(() {
           _payload = music;
           _context = context;
+          _preEventPayload = preEvent;
         });
       }
     } catch (_) {
@@ -124,6 +127,40 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     }
   }
 
+
+  Future<void> _suggestPreEvent() async {
+    final raw = _urlCtrl.text.trim();
+    if (!isLocallyValidCandidateLink(raw, _provider) || _posting) return;
+    setState(() => _posting = true);
+    try {
+      await ref.read(apiProvider).suggestMusicPreEvent(
+        eventId: widget.eventId,
+        provider: musicProviderApiValue(_provider),
+        externalUrl: raw,
+        title: _titleHintCtrl.text.trim(),
+        idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
+      );
+      await _load();
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  Future<void> _votePreEvent(int suggestionId) async {
+    if (_posting) return;
+    setState(() => _posting = true);
+    try {
+      await ref.read(apiProvider).voteMusicPreEvent(
+        eventId: widget.eventId,
+        suggestionId: suggestionId,
+        idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
+      );
+      await _load();
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
   String _countdown(Map<String, dynamic> round) {
     final endsAtRaw = round['endsAt']?.toString();
     if (endsAtRaw == null) return '--:--';
@@ -169,13 +206,43 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
+          : DefaultTabController(
+              length: 2,
+              child: Column(
                 children: [
-                  if (_payload == null) const Text('Module indisponible.'),
-                  if (_payload != null) ...[
+                  const TabBar(tabs: [Tab(text: 'Pré-event'), Tab(text: 'Live')]),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _load,
+                      child: TabBarView(children: [
+                        ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            DropdownButton<MusicProvider>(
+                              value: _provider,
+                              items: MusicProvider.values.map((provider) => DropdownMenuItem(value: provider, child: Text(musicProviderLabel(provider)))).toList(),
+                              onChanged: (v) => setState(() => _provider = v ?? MusicProvider.spotify),
+                            ),
+                            TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Lien')),
+                            TextField(controller: _titleHintCtrl, decoration: const InputDecoration(labelText: 'Titre (optionnel)')),
+                            const SizedBox(height: 8),
+                            ElevatedButton(onPressed: writeBlocked || _posting ? null : _suggestPreEvent, child: const Text('Suggérer un son')),
+                            const SizedBox(height: 12),
+                            ...(((_preEventPayload?['items'] as List?) ?? const [])).map((row) {
+                              final item = Map<String, dynamic>.from(row as Map);
+                              return Card(child: ListTile(
+                                title: Text('${item['title'] ?? 'Track'} - ${item['artist'] ?? ''}'),
+                                subtitle: Text('Votes: ${item['votes'] ?? 0}'),
+                                trailing: IconButton(icon: const Icon(Icons.thumb_up_alt_outlined), onPressed: writeBlocked || _posting ? null : () => _votePreEvent((item['id'] ?? 0) as int)),
+                              ));
+                            }),
+                          ],
+                        ),
+                        ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            if (_payload == null) const Text('Module indisponible.'),
+                            if (_payload != null) ...[
                     Card(
                       child: ListTile(
                         title: Text(
@@ -241,6 +308,10 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                       );
                     }),
                   ],
+                        ),
+                      ]),
+                    ),
+                  ),
                 ],
               ),
             ),

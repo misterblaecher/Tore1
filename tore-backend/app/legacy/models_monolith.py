@@ -2067,6 +2067,45 @@ class EventMusicAdminIdempotency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
+class EventMusicSuggestion(Base):
+    __tablename__ = "event_music_suggestions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(24), index=True)
+    external_url: Mapped[str] = mapped_column(String(512))
+    title: Mapped[str] = mapped_column(String(180), default="")
+    artist: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventMusicSuggestionVote(Base):
+    __tablename__ = "event_music_suggestion_votes"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", "suggestion_id", name="uq_event_music_suggestion_vote"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    suggestion_id: Mapped[int] = mapped_column(ForeignKey("event_music_suggestions.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class EventMusicRound(Base):
+    __tablename__ = "event_music_rounds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="OPEN", index=True)
+    duration_sec: Mapped[int] = mapped_column(Integer, default=120)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    winner_candidate_id: Mapped[Optional[int]] = mapped_column(ForeignKey("event_music_candidates.id"), nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class EventBattleRound(Base):
     __tablename__ = "event_battle_rounds"
 
