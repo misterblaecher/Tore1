@@ -227,6 +227,12 @@ class CommitteeHomeScreen extends ConsumerWidget {
                   ),
                 ),
               ListTile(
+                title: const Text('Espace comité'),
+                subtitle: const Text('Feed · Calendrier · Dépenses (V1)'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeSpaceScreen(committeeId: committeeId, canManage: ['MOD', 'ADMIN', 'OWNER'].contains(role)))),
+              ),
+              ListTile(
                 title: const Text('Finances'),
                 subtitle: Text(perms['can_manage_finances'] == true ? 'Ledger + exports + ajout entrées' : 'Ledger + exports (lecture)'),
                 trailing: const Icon(Icons.chevron_right),
@@ -904,6 +910,145 @@ class _CommitteeBaptemeScreenState extends ConsumerState<CommitteeBaptemeScreen>
           );
         },
       ),
+    );
+  }
+}
+
+
+
+class CommitteeSpaceScreen extends ConsumerWidget {
+  const CommitteeSpaceScreen({super.key, required this.committeeId, required this.canManage});
+  final int committeeId;
+  final bool canManage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Espace comité'),
+          bottom: const TabBar(tabs: [Tab(text: 'Feed'), Tab(text: 'Calendrier'), Tab(text: 'Dépenses')]),
+        ),
+        body: TabBarView(
+          children: [
+            _CommitteeSpaceFeedTab(committeeId: committeeId, canManage: canManage),
+            _CommitteeSpaceCalendarTab(committeeId: committeeId),
+            _CommitteeSpaceExpensesTab(committeeId: committeeId),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CommitteeSpaceFeedTab extends ConsumerWidget {
+  const _CommitteeSpaceFeedTab({required this.committeeId, required this.canManage});
+  final int committeeId;
+  final bool canManage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder(
+      future: ref.read(apiProvider).committeeSpaceFeedPosts(committeeId: committeeId),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return const Center(child: Text('Impossible de charger le feed.'));
+        final items = ((snap.data!['items'] as List?) ?? const []).cast<Map>();
+        if (items.isEmpty) {
+          return const Center(child: Text('Aucun post pour le moment.'));
+        }
+        return RefreshIndicator(
+          onRefresh: () async => ref.read(apiProvider).committeeSpaceFeedPosts(committeeId: committeeId),
+          child: ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              if (!canManage) const _ReadOnlyBanner(label: 'Lecture seule: création réservée MOD/ADMIN/OWNER'),
+              for (final row in items)
+                Card(
+                  child: ListTile(
+                    title: Text((row['title'] ?? '').toString()),
+                    subtitle: Text((row['body'] ?? '').toString()),
+                    trailing: row['isPinned'] == true ? const Icon(Icons.push_pin, size: 18) : null,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CommitteeSpaceCalendarTab extends ConsumerWidget {
+  const _CommitteeSpaceCalendarTab({required this.committeeId});
+  final int committeeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final month = DateTime.now().toIso8601String().substring(0, 7);
+    return FutureBuilder(
+      future: ref.read(apiProvider).committeeSpaceCalendarItems(committeeId: committeeId, month: month),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return const Center(child: Text('Impossible de charger le calendrier.'));
+        final items = ((snap.data!['items'] as List?) ?? const []).cast<Map>();
+        if (items.isEmpty) return const Center(child: Text('Aucun élément calendrier ce mois-ci.'));
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            for (final row in items)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.event_note_outlined),
+                  title: Text((row['title'] ?? '').toString()),
+                  subtitle: Text('${row['date'] ?? ''}${(row['location'] ?? '').toString().isEmpty ? '' : ' · ${row['location']}'}'),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CommitteeSpaceExpensesTab extends ConsumerWidget {
+  const _CommitteeSpaceExpensesTab({required this.committeeId});
+  final int committeeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final month = DateTime.now().toIso8601String().substring(0, 7);
+    return FutureBuilder(
+      future: ref.read(apiProvider).committeeSpaceExpenses(committeeId: committeeId, month: month),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return const Center(child: Text('Impossible de charger les dépenses.'));
+        final items = ((snap.data!['items'] as List?) ?? const []).cast<Map>();
+        final totals = Map<String, dynamic>.from((snap.data!['totalsByCategory'] as Map?) ?? const {});
+        if (items.isEmpty) return const Center(child: Text('Aucune dépense sur la période.'));
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            if (totals.isNotEmpty)
+              Card(
+                child: ListTile(
+                  title: const Text('Totaux par catégorie'),
+                  subtitle: Text(totals.entries.map((e) => '${e.key}: ${e.value}').join(' · ')),
+                ),
+              ),
+            for (final row in items)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.receipt_long_outlined),
+                  title: Text((row['label'] ?? '').toString()),
+                  subtitle: Text('${row['category'] ?? '-'} · ${row['date'] ?? '-'}'),
+                  trailing: Text('${row['amountCents'] ?? 0}c'),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
