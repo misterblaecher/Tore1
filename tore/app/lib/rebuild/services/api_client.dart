@@ -10,7 +10,18 @@ import '../models/qr_resolve.dart';
 import '../models/rebuild_types.dart';
 import '../models/snapshot.dart';
 import 'cache_store.dart';
+import 'client_log.dart';
 import 'network_state_resolver.dart';
+
+class ApiRequestStat {
+  const ApiRequestStat({required this.method, required this.path, required this.status, required this.latencyMs, required this.at});
+
+  final String method;
+  final String path;
+  final int status;
+  final int latencyMs;
+  final DateTime at;
+}
 
 class ApiClient {
   ApiClient({CacheStore? cacheStore, NetworkStateResolver? networkStateResolver})
@@ -21,6 +32,12 @@ class ApiClient {
   final Dio _dio;
   final CacheStore _cache;
   final NetworkStateResolver _networkStateResolver;
+  final List<ApiRequestStat> _recentRequests = <ApiRequestStat>[];
+  final List<String> _recentErrors = <String>[];
+
+  List<ApiRequestStat> recentRequests() => _recentRequests.reversed.take(10).toList(growable: false);
+
+  List<String> recentErrorCodes() => _recentErrors.reversed.take(10).toList(growable: false);
 
   Future<UserSnapshot> fetchMeSnapshot() async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -63,8 +80,10 @@ class ApiClient {
   }
 
   Future<QrResolve> resolveQr(String payload) async {
+    await ClientLog.instance.log('qr.scan', {'type': 'unknown', 'signed': payload.contains('sig='), 'expires_in': payload.contains('exp=') ? 'embedded' : 'n/a'});
     try {
       final json = await _postJson('/qr/resolve', {'payload': payload}, network: ConnectivityState.online);
+      await ClientLog.instance.log('qr.route', {'target': json['type']?.toString() ?? 'unknown', 'success': true});
       return QrResolve.fromJson(json);
     } catch (_) {
       final normalized = payload.trim().toLowerCase();
@@ -88,6 +107,7 @@ class ApiClient {
       } else {
         rawResponse = {'valid': true, 'type': 'event_hub', 'event_id': 42, 'route_front': '/event/42'};
       }
+      await ClientLog.instance.log('qr.route', {'target': rawResponse['type']?.toString() ?? 'unknown', 'success': false});
       return QrResolve.fromJson(rawResponse);
     }
   }
@@ -143,6 +163,14 @@ class ApiClient {
     return EntryStatsDto.fromJson(json);
   }
 
+  Future<Map<String, dynamic>?> fetchOrgaQrPack(String eventId, {required ConnectivityState network}) async {
+    try {
+      return await _getJson('/partner/portal/orga/events/$eventId/qr/pack', network: network);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> writeEntryScan(String eventId, Map<String, dynamic> payload, {required String idempotencyKey, required ConnectivityState network}) {
     return _postJson('/partner/portal/orga/events/$eventId/entry/scan', payload, headers: {'X-Idempotency-Key': idempotencyKey}, network: network);
   }
@@ -168,7 +196,10 @@ class ApiClient {
   Future<Map<String, dynamic>> _cacheFirstGet({required String key, required String path, Map<String, dynamic>? query, required ConnectivityState network}) async {
     final cached = await _cache.loadJson(key, ttl: const Duration(minutes: 5));
     if (network == ConnectivityState.offline) {
-      if (cached != null) return cached.payload;
+      if (cached != null) {
+        await ClientLog.instance.log('offline.read_cache', {'key': key});
+        return cached.payload;
+      }
       throw const ApiError(ErrorModel(code: 'offline_read_unavailable', message: 'offline_read_unavailable'));
     }
     if (cached != null && !cached.isStale) return cached.payload;
@@ -184,24 +215,32 @@ class ApiClient {
 
   Future<Map<String, dynamic>> _getJson(String path, {Map<String, dynamic>? query, required ConnectivityState network}) async {
     return _withRetry(() async {
+      final watch = Stopwatch()..start();
       final res = await _dio.get(path, queryParameters: query);
+      _recordRequest('GET', path, res.statusCode ?? 200, watch.elapsedMilliseconds);
       return _asMap(res.data);
     }, retries: _networkStateResolver.getMaxGetRetries(network));
   }
 
   Future<Map<String, dynamic>> _postJson(String path, Map<String, dynamic> body, {Map<String, dynamic>? headers, required ConnectivityState network}) async {
     if (!_networkStateResolver.canWrite(network)) {
+      await ClientLog.instance.log('write.blocked', {'reason_code': 'offline_write_blocked', 'network_state': network.name, 'event_state': 'unknown', 'module_state': 'unknown'});
       throw const ApiError(ErrorModel(code: 'offline_write_blocked', message: 'offline_write_blocked'));
     }
+    final watch = Stopwatch()..start();
     final res = await _dio.post(path, data: body, options: Options(headers: headers));
+    _recordRequest('POST', path, res.statusCode ?? 200, watch.elapsedMilliseconds);
     return _asMap(res.data);
   }
 
   Future<Map<String, dynamic>> _patchJson(String path, Map<String, dynamic> body, {Map<String, dynamic>? headers, required ConnectivityState network}) async {
     if (!_networkStateResolver.canWrite(network)) {
+      await ClientLog.instance.log('write.blocked', {'reason_code': 'offline_write_blocked', 'network_state': network.name, 'event_state': 'unknown', 'module_state': 'unknown'});
       throw const ApiError(ErrorModel(code: 'offline_write_blocked', message: 'offline_write_blocked'));
     }
+    final watch = Stopwatch()..start();
     final res = await _dio.patch(path, data: body, options: Options(headers: headers));
+    _recordRequest('PATCH', path, res.statusCode ?? 200, watch.elapsedMilliseconds);
     return _asMap(res.data);
   }
 
@@ -224,8 +263,16 @@ class ApiClient {
     if (error is ApiError) return error;
     if (error is DioException) {
       final reason = (error.response?.data as Map?)?['reason']?.toString() ?? 'backend_down';
-      return ApiError(ErrorModel(code: normalizeUiCode(reason), message: resolveUiCopy(reason).message));
+      final normalized = normalizeUiCode(reason);
+      _recentErrors.add(normalized);
+      if (_recentErrors.length > 20) {
+        _recentErrors.removeAt(0);
+      }
+      ClientLog.instance.log('api.error', {'normalized_code': normalized});
+      return ApiError(ErrorModel(code: normalized, message: resolveUiCopy(reason).message));
     }
+    _recentErrors.add('backend_down');
+    ClientLog.instance.log('api.error', {'normalized_code': 'backend_down'});
     return const ApiError(ErrorModel(code: 'backend_down', message: 'Service indisponible'));
   }
 
@@ -239,6 +286,14 @@ class ApiClient {
     if (value is Map) return value.cast<String, dynamic>();
     if (value is List) return {'items': value};
     return {'value': value};
+  }
+
+  void _recordRequest(String method, String path, int status, int latencyMs) {
+    _recentRequests.add(ApiRequestStat(method: method, path: path, status: status, latencyMs: latencyMs, at: DateTime.now()));
+    if (_recentRequests.length > 50) {
+      _recentRequests.removeAt(0);
+    }
+    ClientLog.instance.log('api.request', {'path': path, 'method': method, 'latency_ms': latencyMs, 'status': status});
   }
 
   void _logWire(String endpoint, Map<String, dynamic> payload) {

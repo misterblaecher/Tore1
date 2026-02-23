@@ -10,3 +10,5 @@
 8. Orders live refresh: verify updates only while ONLINE (no polling/refresh loop in DEGRADED/OFFLINE).
 9. Zones toggle write: confirm guard + idempotency header + optional reason payload when required.
 10. Accessibility quick pass: high contrast + reduce motion toggles still keep flows usable.
+11. Diagnostics access: long-press Splash or Profile header (3–5s), validate snapshot/event/network/cache/api/idempotency panels + copy blob.
+12. ORGA exports: open Event Control > QR Pack/Exports, verify module-aware QR list + open/copy export links (or blocked state if unavailable).

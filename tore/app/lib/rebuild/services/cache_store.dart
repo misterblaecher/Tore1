@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/event_context.dart';
 import '../models/snapshot.dart';
+import 'client_log.dart';
 
 class CacheStore {
   static const _meKey = 'tore_rebuild_me_snapshot_v1';
@@ -43,13 +44,12 @@ class CacheStore {
 
   Future<void> saveJson(String key, Map<String, dynamic> payload) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      key,
-      jsonEncode({
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'payload': payload,
-      }),
-    );
+    final wire = {
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'payload': payload,
+    };
+    await prefs.setString(key, jsonEncode(wire));
+    await ClientLog.instance.log('cache.write', {'key': key, 'size_bytes': jsonEncode(wire).length});
   }
 
   Future<CachePayload?> loadJson(String key, {Duration? ttl}) async {
@@ -60,7 +60,42 @@ class CacheStore {
     final ts = (decoded['timestamp'] as num?)?.toInt() ?? 0;
     final payload = (decoded['payload'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     final age = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
-    return CachePayload(payload: payload, isStale: ttl != null && age > ttl, cachedAt: DateTime.fromMillisecondsSinceEpoch(ts));
+    final stale = ttl != null && age > ttl;
+    await ClientLog.instance.log('cache.read', {'key': key, 'age_ms': age.inMilliseconds, 'stale': stale});
+    return CachePayload(payload: payload, isStale: stale, cachedAt: DateTime.fromMillisecondsSinceEpoch(ts));
+  }
+
+  Future<Map<String, Duration?>> cacheStatusSummary() async {
+    final keys = {
+      'bars': barsKey(),
+      'menu': menuKey('event', '42'),
+      'wallet': walletKey('event', '42'),
+      'ticker': tickerKey('42'),
+      'orders': ordersKey('event', '42'),
+      'zones': zonesKey('1'),
+    };
+    final prefs = await SharedPreferences.getInstance();
+    final out = <String, Duration?>{};
+    for (final row in keys.entries) {
+      final raw = prefs.getString(row.value);
+      if (raw == null) {
+        out[row.key] = null;
+        continue;
+      }
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final ts = (decoded['timestamp'] as num?)?.toInt() ?? 0;
+      out[row.key] = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+    }
+    return out;
+  }
+
+  Future<void> clearDomainCaches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final prefixes = ['bars:', 'bar_events:', 'menu:', 'wallet:', 'ticker:', 'orders:', 'zones:'];
+    final toDelete = prefs.getKeys().where((k) => prefixes.any((p) => k.startsWith(p))).toList();
+    for (final key in toDelete) {
+      await prefs.remove(key);
+    }
   }
 }
 

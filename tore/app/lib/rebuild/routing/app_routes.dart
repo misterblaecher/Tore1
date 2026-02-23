@@ -13,12 +13,17 @@ class AppRoutes {
   static const polymarketGlobal = '/user/polymarket_global';
   static const polymarketEvent = '/user/polymarket_event';
   static const profile = '/user/profile';
+  static const userHelp = '/user/help';
 
   static const orgaHub = '/orga/hub';
   static const orgaEntry = '/orga/entry';
   static const orgaMenu = '/orga/menu_admin';
   static const orgaMarket = '/orga/polymarket_admin';
   static const orgaUrgency = '/orga/urgency';
+  static const orgaExports = '/orga/exports';
+  static const orgaRunbook = '/orga/runbook';
+
+  static const devDiagnostics = '/dev/diagnostics';
 
   static const barDashboard = '/bar/dashboard';
   static const barOrders = '/bar/orders';

@@ -7,14 +7,18 @@ import '../../theme/tore_theme.dart';
 import '../../widgets/primitives.dart';
 
 class BootSplashScreen extends StatelessWidget {
-  const BootSplashScreen({super.key, required this.network});
+  const BootSplashScreen({super.key, required this.network, this.onLongPressDiagnostics});
   final ConnectivityState network;
+  final VoidCallback? onLongPressDiagnostics;
   @override
-  Widget build(BuildContext context) => ScreenScaffold(
-        title: 'Boot',
-        connectivity: network,
-        scopeBadges: const ['USER'],
-        body: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LoadingSkeleton(lines: 3), SizedBox(height: ToreTokens.s12), Text('TORÈ v3 rebuild boot…'), Text('Offline mode supported')]),
+  Widget build(BuildContext context) => GestureDetector(
+        onLongPress: onLongPressDiagnostics,
+        child: ScreenScaffold(
+          title: 'Boot',
+          connectivity: network,
+          scopeBadges: const ['USER'],
+          body: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LoadingSkeleton(lines: 3), SizedBox(height: ToreTokens.s12), Text('TORÈ v3 rebuild boot…'), Text('Long-press logo for diagnostics'), Text('Offline mode supported')]),
+        ),
       );
 }
 
@@ -333,8 +337,10 @@ class PolymarketEventScreen extends StatelessWidget {
 }
 
 class ProfileSettingsScreen extends StatefulWidget {
-  const ProfileSettingsScreen({super.key, this.network = ConnectivityState.online});
+  const ProfileSettingsScreen({super.key, this.network = ConnectivityState.online, this.onOpenDiagnostics, this.onOpenHelp});
   final ConnectivityState network;
+  final VoidCallback? onOpenDiagnostics;
+  final VoidCallback? onOpenHelp;
 
   @override
   State<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
@@ -349,7 +355,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         connectivity: widget.network,
         scopeBadges: const ['USER'],
         body: Column(children: [
-          const ListTile(title: Text('Privacy level'), subtitle: Text('Public / Friends / Private')),
+          GestureDetector(
+            onLongPress: widget.onOpenDiagnostics,
+            child: const ListTile(title: Text('Profile header (long press for diagnostics)'), subtitle: Text('Privacy level')),
+          ),
           SwitchListTile(value: true, onChanged: (_) {}, title: const Text('Night theme')),
           ValueListenableBuilder<bool>(
             valueListenable: TorePreferences.highContrast,
@@ -362,6 +371,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           ),
           SwitchListTile(value: reduceMotion, onChanged: (v) => setState(() => reduceMotion = v), title: const Text('Reduce motion')),
           SwitchListTile(value: true, onChanged: (_) {}, title: const Text('Mask balance on lock screen')),
+          ListTile(title: const Text('Help / Runbook'), trailing: const Icon(Icons.help_outline), onTap: widget.onOpenHelp),
         ]),
       );
 }

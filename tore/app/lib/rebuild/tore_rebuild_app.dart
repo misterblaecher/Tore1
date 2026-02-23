@@ -10,10 +10,14 @@ import 'routing/qr_router.dart';
 import 'routing/route_guards.dart';
 import 'services/api_client.dart';
 import 'services/cache_store.dart';
+import 'services/client_log.dart';
 import 'services/idempotency_store.dart';
 import 'services/network_state_resolver.dart';
 import 'ui/module_catalog.dart';
 import 'ui/screens/bar/bar_screens.dart';
+import 'ui/screens/dev/diagnostics_screen.dart';
+import 'ui/screens/help/runbook_screens.dart';
+import 'ui/screens/orga/orga_exports_screen.dart';
 import 'ui/screens/orga/orga_screens.dart';
 import 'ui/screens/user/user_screens.dart';
 import 'ui/theme/tore_theme.dart';
@@ -32,13 +36,15 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   final _guards = RouteGuards();
   final _router = QrRouter();
   final _networkStateResolver = NetworkStateResolver();
-  late final IdempotentWriter _writer = IdempotentWriter(store: IdempotencyStore(persistence: SharedPrefsIdempotencyPersistence()));
+  late final IdempotencyStore _writerStore = IdempotencyStore(persistence: SharedPrefsIdempotencyPersistence());
+  late final IdempotentWriter _writer = IdempotentWriter(store: _writerStore);
   late final List<ModuleDefinition> _defs = buildModuleDefinitions();
 
   ToreMode _mode = ToreMode.user;
   UserSnapshot? _userSnapshot;
   EventContext? _eventContext;
   ConnectivityState _network = ConnectivityState.online;
+  DateTime _networkTransitionAt = DateTime.now();
   bool _loading = true;
   bool _consented = false;
   List<BarDto> _bars = const [];
@@ -51,10 +57,12 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   EntryStatsDto? _entryStats;
   List<OrderDto> _orders = const [];
   List<ZoneDto> _zones = const [];
+  Map<String, dynamic>? _orgaQrPack;
 
   @override
   void initState() {
     super.initState();
+    ClientLog.instance.hydrate();
     _bootstrap();
   }
 
@@ -86,6 +94,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     _entryStats = await _api.fetchEntryStats('42', network: _network);
     _orders = (await _api.fetchOrdersLive('42', network: _network)).items;
     _zones = await _api.fetchZones('1', network: _network);
+    _orgaQrPack = await _api.fetchOrgaQrPack(_eventContext?.eventId ?? '42', network: _network);
   }
 
   ModuleState _effectiveState(String id) {
@@ -115,6 +124,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
 
   Future<void> _sensitiveWrite(String moduleId, String action) async {
     if (!_networkStateResolver.canWrite(_network)) {
+      ClientLog.instance.log('write.blocked', {'reason_code': 'offline_write_blocked', 'network_state': _network.name, 'event_state': _eventContext?.eventState.name ?? 'none', 'module_state': _effectiveState(moduleId).name});
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Action impossible hors ligne. Revenez en ligne pour confirmer.')));
       return;
     }
@@ -163,6 +173,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       'orga_menu_admin': AppRoutes.orgaMenu,
       'orga_polymarket_admin': AppRoutes.orgaMarket,
       'orga_urgency_actions': AppRoutes.orgaUrgency,
+      'orga_finance_admin': AppRoutes.orgaExports,
       'bar_dashboard': AppRoutes.barDashboard,
       'bar_orders_live': AppRoutes.barOrders,
       'bar_full_menu_admin': AppRoutes.barMenu,
@@ -172,6 +183,10 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     return map[moduleId];
   }
 
+
+  void _openDiagnostics() {
+    Navigator.pushNamed(context, AppRoutes.devDiagnostics);
+  }
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -179,7 +194,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       theme: ToreTheme.build(),
       initialRoute: AppRoutes.boot,
       routes: {
-        AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)),
+        AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)),
         AppRoutes.home: (_) => HomeHubScreen(network: _network, cards: [HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext), ..._moduleCards(ToreMode.user)]),
         AppRoutes.scanner: (_) => QrScannerScreen(onResolve: _resolveQrPayload, network: _network),
         AppRoutes.bars: (_) => BarsScreen(network: _network, children: _bars.map((b) => ListTile(title: Text(b.name), subtitle: Text(b.city ?? b.id))).toList()),
@@ -191,12 +206,16 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.ticker: (_) => TickerScreen(network: _network, rows: _ticker.map((t) => ListTile(title: Text(t.message))).toList()),
         AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(network: _network, rows: _polyGlobal.map((m) => ListTile(title: Text(m.title))).toList()),
         AppRoutes.polymarketEvent: (_) => PolymarketEventScreen(network: _network, rows: _polyEvent.map((m) => ListTile(title: Text(m.title))).toList()),
-        AppRoutes.profile: (_) => ProfileSettingsScreen(network: _network),
-        AppRoutes.orgaHub: (_) => OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub'), entryApprovedCount: _entryStats?.approvedCount ?? 0),
+        AppRoutes.profile: (_) => ProfileSettingsScreen(network: _network, onOpenDiagnostics: _openDiagnostics, onOpenHelp: () => Navigator.pushNamed(context, AppRoutes.userHelp)),
+        AppRoutes.orgaHub: (_) => OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub'), entryApprovedCount: _entryStats?.approvedCount ?? 0, onOpenExports: () => Navigator.pushNamed(context, AppRoutes.orgaExports), onOpenRunbook: () => Navigator.pushNamed(context, AppRoutes.orgaRunbook)),
         AppRoutes.orgaEntry: (_) => EntryStaffScreen(network: _network),
         AppRoutes.orgaMenu: (_) => OrgaMenuAdminScreen(network: _network),
         AppRoutes.orgaMarket: (_) => OrgaPolymarketAdminScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_polymarket_admin', a)),
         AppRoutes.orgaUrgency: (_) => OrgaUrgencyActionsScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_urgency_actions', a)),
+        AppRoutes.userHelp: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
+        AppRoutes.orgaRunbook: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
+        AppRoutes.orgaExports: (_) => OrgaExportsScreen(eventId: _eventContext?.eventId ?? '42', moduleStates: _eventContext?.moduleStates ?? const {}, backendPack: _orgaQrPack),
+        AppRoutes.devDiagnostics: (_) => DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, onSimulatedNetworkChanged: (state) => setState(() { _network = state; _networkTransitionAt = DateTime.now(); })),
         AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
         AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network, rows: _orders.map((o) => ListTile(title: Text('Order ${o.id}'), trailing: Text(o.status))).toList()),
         AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
@@ -205,14 +224,14 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.blocked: (_) => const ScreenScaffold(title: 'Blocked', scopeBadges: ['GUARD'], body: BlockedStateView(title: 'Accès indisponible', message: 'Ce module est OFF, en pause ou non autorisé pour votre mode actuel.')),
       },
       home: !_consented || _loading
-          ? (_loading ? BootSplashScreen(network: _network) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)))
+          ? (_loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)))
           : Scaffold(
               appBar: AppBar(
                 title: const Text('TORÈ Night OS'),
                 actions: [
                   DropdownButton<ConnectivityState>(
                     value: _network,
-                    onChanged: (v) => setState(() => _network = v ?? _network),
+                    onChanged: (v) => setState(() { _network = v ?? _network; _networkTransitionAt = DateTime.now(); }),
                     items: ConnectivityState.values.map((e) => DropdownMenuItem(value: e, child: Text(e.name))).toList(),
                   ),
                   DropdownButton<ToreMode>(

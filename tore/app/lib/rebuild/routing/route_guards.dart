@@ -1,3 +1,4 @@
+import 'app_routes.dart';
 import '../models/rebuild_types.dart';
 import '../models/snapshot.dart';
 
@@ -13,8 +14,10 @@ class RouteGuards {
   bool deepLinkAllowed(ModuleState state) => state != ModuleState.off;
 
   bool routeAllowedForMode(String route, ToreMode mode) {
+    if (route == AppRoutes.devDiagnostics) return true;
     if (route.startsWith('/orga')) return mode == ToreMode.orga;
     if (route.startsWith('/bar')) return mode == ToreMode.bar;
-    return mode == ToreMode.user || route == '/blocked';
+    if (route.startsWith('/user')) return mode == ToreMode.user;
+    return route == '/blocked';
   }
 }
