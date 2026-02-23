@@ -5,10 +5,12 @@ import '../../theme/tore_theme.dart';
 import '../../widgets/primitives.dart';
 
 class OrgaEventControlHubScreen extends StatelessWidget {
-  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true, this.entryApprovedCount = 0});
+  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true, this.entryApprovedCount = 0, this.onOpenExports, this.onOpenRunbook});
   final ConnectivityState network;
   final bool writeAllowed;
   final int entryApprovedCount;
+  final VoidCallback? onOpenExports;
+  final VoidCallback? onOpenRunbook;
 
   @override
   Widget build(BuildContext context) => ScreenScaffold(
@@ -40,6 +42,8 @@ class OrgaEventControlHubScreen extends StatelessWidget {
               subtitle: Text(writeAllowed ? 'Access enabled' : 'Read-only mode'),
               trailing: const Icon(Icons.warning_amber),
             ),
+            ListTile(title: const Text('QR Pack / Exports'), trailing: const Icon(Icons.ios_share), onTap: onOpenExports),
+            ListTile(title: const Text('Runbook'), trailing: const Icon(Icons.menu_book), onTap: onOpenRunbook),
           ],
         ),
       );
