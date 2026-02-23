@@ -5,9 +5,10 @@ import '../../theme/tore_theme.dart';
 import '../../widgets/primitives.dart';
 
 class OrgaEventControlHubScreen extends StatelessWidget {
-  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true});
+  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true, this.entryApprovedCount = 0});
   final ConnectivityState network;
   final bool writeAllowed;
+  final int entryApprovedCount;
 
   @override
   Widget build(BuildContext context) => ScreenScaffold(
@@ -25,7 +26,7 @@ class OrgaEventControlHubScreen extends StatelessWidget {
                   children: [
                     Text('Entrées validées', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: ToreTokens.s4),
-                    Text('421', style: ToreTypography.monoNumber(context, size: 40)),
+                    Text('$entryApprovedCount', style: ToreTypography.monoNumber(context, size: 40)),
                   ],
                 ),
               ),
