@@ -151,10 +151,15 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                       Expanded(child: Text('Code DEV: $_devToken', style: const TextStyle(color: Colors.deepOrange))),
                       IconButton(
                         onPressed: () async {
-                          await Clipboard.setData(ClipboardData(text: _devToken));
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copié')));
-                        },
+                            final devToken = _devToken;
+                            if (devToken != null && devToken.isNotEmpty) {
+                              await Clipboard.setData(ClipboardData(text: devToken));
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Code copié')),
+                              );
+                            }
+                          },
                         icon: const Icon(Icons.copy),
                       ),
                     ],
