@@ -1618,6 +1618,57 @@ class CommitteeForumPost(Base):
     deleted_by: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
 
 
+class CommitteePost(Base):
+    __tablename__ = "committee_posts"
+    __table_args__ = (
+        Index("ix_committee_posts_feed", "committee_id", "is_deleted", "is_pinned", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    body: Mapped[str] = mapped_column(Text)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeCalendarItem(Base):
+    __tablename__ = "committee_calendar_items"
+    __table_args__ = (
+        Index("ix_committee_calendar_items_feed", "committee_id", "date", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    date: Mapped[str] = mapped_column(String(10), index=True)
+    location: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class CommitteeExpense(Base):
+    __tablename__ = "committee_expenses"
+    __table_args__ = (
+        Index("ix_committee_expenses_feed", "committee_id", "date", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("committees.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(180))
+    category: Mapped[str] = mapped_column(String(120), index=True)
+    date: Mapped[str] = mapped_column(String(10), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
 class CommitteeLedgerEntry(Base):
     __tablename__ = "committee_ledger_entries"
     __table_args__ = (

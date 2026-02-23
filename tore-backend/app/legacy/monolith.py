@@ -108,6 +108,9 @@ from models import (
     CommitteeAdminIdempotency,
     CommitteeForumCategory,
     CommitteeForumPost,
+    CommitteePost,
+    CommitteeCalendarItem,
+    CommitteeExpense,
     CommitteeLedgerEntry,
     CommitteeLedgerIdempotency,
     CommitteeBudgetBucket,
@@ -1936,6 +1939,26 @@ class CommitteeForumUpdateCategoryIn(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     orderIndex: Optional[int] = Field(default=None, ge=0, le=1000)
     isArchived: Optional[bool] = None
+
+
+class CommitteeSpacePostIn(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+    body: str = Field(min_length=1, max_length=4000)
+    pinned: bool = False
+
+
+class CommitteeSpaceCalendarIn(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+    date: str = Field(min_length=10, max_length=10)
+    location: Optional[str] = Field(default=None, max_length=180)
+    notes: Optional[str] = Field(default=None, max_length=4000)
+
+
+class CommitteeSpaceExpenseIn(BaseModel):
+    amountCents: int = Field(gt=0, le=50_000_000)
+    label: str = Field(min_length=1, max_length=180)
+    category: str = Field(min_length=1, max_length=120)
+    date: str = Field(min_length=10, max_length=10)
 
 
 class CommitteeFinanceLedgerCreateIn(BaseModel):
@@ -5438,6 +5461,53 @@ def _forum_post_payload(db: Session, row: CommitteeForumPost) -> dict[str, Any]:
     }
 
 
+def _committee_space_mod_or_owner(membership: CommitteeMembership) -> None:
+    if (membership.role or "MEMBER").upper() not in {"OWNER", "ADMIN", "MOD"}:
+        raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+
+
+def _committee_post_payload(db: Session, row: CommitteePost) -> dict[str, Any]:
+    actor = db.get(AppUser, row.created_by)
+    return {
+        "id": row.id,
+        "committeeId": row.committee_id,
+        "title": row.title,
+        "body": row.body,
+        "isPinned": bool(row.is_pinned),
+        "createdBy": row.created_by,
+        "createdByDisplayName": actor.display_name if actor else row.created_by,
+        "createdAt": row.created_at.isoformat(),
+        "updatedAt": row.updated_at.isoformat(),
+    }
+
+
+def _committee_calendar_payload(row: CommitteeCalendarItem) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "committeeId": row.committee_id,
+        "title": row.title,
+        "date": row.date,
+        "location": row.location,
+        "notes": row.notes,
+        "createdBy": row.created_by,
+        "createdAt": row.created_at.isoformat(),
+        "updatedAt": row.updated_at.isoformat(),
+    }
+
+
+def _committee_expense_payload(row: CommitteeExpense) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "committeeId": row.committee_id,
+        "amountCents": row.amount_cents,
+        "label": row.label,
+        "category": row.category,
+        "date": row.date,
+        "createdBy": row.created_by,
+        "createdAt": row.created_at.isoformat(),
+    }
+
+
 def _folklore_glossary_module_enabled() -> bool:
     return _env_bool("TORE_MODULE_FOLKLORE_GLOSSARY", default=True)
 
@@ -6511,6 +6581,305 @@ def committee_bapteme_export_slots_csv(
     for r in rows:
         writer.writerow([r.id, r.starts_at.isoformat(), r.ends_at.isoformat(), r.location, r.description])
     return StreamingResponse(iter([buf.getvalue()]), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename=committee_{committee_id}_bapteme_slots_{campaignId}.csv'})
+
+
+@app.get("/committees/{committee_id}/space")
+def committee_space_me(
+    committee_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    return {
+        "committeeId": committee_id,
+        "membership": {
+            "userId": membership.user_id,
+            "role": membership.role,
+        },
+        "sections": ["feed", "calendar", "expenses"],
+    }
+
+
+@app.get("/committees/{committee_id}/feed/posts")
+def committee_feed_posts(
+    committee_id: int,
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    q = db.query(CommitteePost).filter(CommitteePost.committee_id == committee_id, CommitteePost.is_deleted.is_(False))
+    if cursor:
+        try:
+            ts_iso, raw_id = cursor.split("|", 1)
+            ts = datetime.fromisoformat(ts_iso)
+            post_id = int(raw_id)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail={"reason": "bad_cursor"}) from exc
+        q = q.filter(
+            (CommitteePost.is_pinned.is_(True) & ((CommitteePost.created_at < ts) | ((CommitteePost.created_at == ts) & (CommitteePost.id < post_id))))
+            | (CommitteePost.is_pinned.is_(False) & ((CommitteePost.created_at < ts) | ((CommitteePost.created_at == ts) & (CommitteePost.id < post_id))))
+        )
+    rows = q.order_by(CommitteePost.is_pinned.desc(), CommitteePost.created_at.desc(), CommitteePost.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    next_cursor = None
+    if has_more and page:
+        last = page[-1]
+        next_cursor = f"{last.created_at.isoformat()}|{last.id}"
+    return {"items": [_committee_post_payload(db, row) for row in page], "nextCursor": next_cursor}
+
+
+@app.post("/committees/{committee_id}/feed/posts")
+def committee_feed_create_post(
+    committee_id: int,
+    payload: CommitteeSpacePostIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = CommitteePost(
+        committee_id=committee_id,
+        title=payload.title.strip(),
+        body=payload.body.strip(),
+        is_pinned=bool(payload.pinned),
+        created_by=user.id,
+        updated_at=now_utc(),
+    )
+    db.add(row)
+    db.flush()
+    response = _committee_post_payload(db, row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.feed.create', entity_type='committee_post', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return response
+
+
+@app.put("/committees/{committee_id}/feed/posts/{post_id}")
+def committee_feed_update_post(
+    committee_id: int,
+    post_id: int,
+    payload: CommitteeSpacePostIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = db.get(CommitteePost, post_id)
+    if row is None or row.committee_id != committee_id or row.is_deleted:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    row.title = payload.title.strip()
+    row.body = payload.body.strip()
+    row.is_pinned = bool(payload.pinned)
+    row.updated_at = now_utc()
+    db.add(row)
+    response = _committee_post_payload(db, row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.feed.update', entity_type='committee_post', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return response
+
+
+@app.delete("/committees/{committee_id}/feed/posts/{post_id}")
+def committee_feed_delete_post(
+    committee_id: int,
+    post_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = db.get(CommitteePost, post_id)
+    if row is None or row.committee_id != committee_id or row.is_deleted:
+        raise HTTPException(status_code=404, detail={"reason": "post_not_found"})
+    row.is_deleted = True
+    row.updated_at = now_utc()
+    db.add(row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.feed.delete', entity_type='committee_post', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/committees/{committee_id}/calendar/items")
+def committee_calendar_items(
+    committee_id: int,
+    month: Optional[str] = Query(default=None, min_length=7, max_length=7),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    q = db.query(CommitteeCalendarItem).filter(CommitteeCalendarItem.committee_id == committee_id)
+    if month:
+        q = q.filter(CommitteeCalendarItem.date.like(f"{month}%"))
+    rows = q.order_by(CommitteeCalendarItem.date.asc(), CommitteeCalendarItem.id.asc()).all()
+    return {"items": [_committee_calendar_payload(row) for row in rows], "month": month}
+
+
+@app.post("/committees/{committee_id}/calendar/items")
+def committee_calendar_create_item(
+    committee_id: int,
+    payload: CommitteeSpaceCalendarIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = CommitteeCalendarItem(
+        committee_id=committee_id,
+        title=payload.title.strip(),
+        date=payload.date,
+        location=(payload.location or '').strip() or None,
+        notes=(payload.notes or '').strip() or None,
+        created_by=user.id,
+        updated_at=now_utc(),
+    )
+    db.add(row)
+    db.flush()
+    response = _committee_calendar_payload(row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.calendar.create', entity_type='committee_calendar_item', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return response
+
+
+@app.put("/committees/{committee_id}/calendar/items/{item_id}")
+def committee_calendar_update_item(
+    committee_id: int,
+    item_id: int,
+    payload: CommitteeSpaceCalendarIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = db.get(CommitteeCalendarItem, item_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "calendar_item_not_found"})
+    row.title = payload.title.strip()
+    row.date = payload.date
+    row.location = (payload.location or '').strip() or None
+    row.notes = (payload.notes or '').strip() or None
+    row.updated_at = now_utc()
+    db.add(row)
+    response = _committee_calendar_payload(row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.calendar.update', entity_type='committee_calendar_item', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return response
+
+
+@app.delete("/committees/{committee_id}/calendar/items/{item_id}")
+def committee_calendar_delete_item(
+    committee_id: int,
+    item_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = db.get(CommitteeCalendarItem, item_id)
+    if row is None or row.committee_id != committee_id:
+        raise HTTPException(status_code=404, detail={"reason": "calendar_item_not_found"})
+    db.delete(row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.calendar.delete', entity_type='committee_calendar_item', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/committees/{committee_id}/expenses")
+def committee_expenses(
+    committee_id: int,
+    month: Optional[str] = Query(default=None, min_length=7, max_length=7),
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    q = db.query(CommitteeExpense).filter(CommitteeExpense.committee_id == committee_id)
+    if month:
+        q = q.filter(CommitteeExpense.date.like(f"{month}%"))
+    if cursor:
+        try:
+            d, raw_id = cursor.split("|", 1)
+            expense_id = int(raw_id)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail={"reason": "bad_cursor"}) from exc
+        q = q.filter((CommitteeExpense.date < d) | ((CommitteeExpense.date == d) & (CommitteeExpense.id < expense_id)))
+    rows = q.order_by(CommitteeExpense.date.desc(), CommitteeExpense.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    next_cursor = None
+    if has_more and page:
+        last = page[-1]
+        next_cursor = f"{last.date}|{last.id}"
+    totals: dict[str, int] = {}
+    if month:
+        grouped = db.query(CommitteeExpense.category, func.sum(CommitteeExpense.amount_cents)).filter(
+            CommitteeExpense.committee_id == committee_id,
+            CommitteeExpense.date.like(f"{month}%"),
+        ).group_by(CommitteeExpense.category).all()
+        totals = {category: int(total or 0) for category, total in grouped}
+    return {"items": [_committee_expense_payload(row) for row in page], "nextCursor": next_cursor, "totalsByCategory": totals}
+
+
+@app.post("/committees/{committee_id}/expenses")
+def committee_expenses_create(
+    committee_id: int,
+    payload: CommitteeSpaceExpenseIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    membership = _require_committee_member(db, committee_id, user)
+    _committee_space_mod_or_owner(membership)
+    row = CommitteeExpense(
+        committee_id=committee_id,
+        amount_cents=payload.amountCents,
+        label=payload.label.strip(),
+        category=payload.category.strip(),
+        date=payload.date,
+        created_by=user.id,
+        updated_at=now_utc(),
+    )
+    db.add(row)
+    db.flush()
+    response = _committee_expense_payload(row)
+    write_audit_log(db, actor_partner_id=None, actor_role='app_user', action='committee.space.expense.create', entity_type='committee_expense', entity_id=str(row.id), event_id=None, bar_id=None, committee_id=committee_id, payload={'committee_id': committee_id})
+    db.commit()
+    return response
+
+
+@app.get("/committees/{committee_id}/expenses/export.json")
+def committee_expenses_export_json(
+    committee_id: int,
+    month: Optional[str] = Query(default=None, min_length=7, max_length=7),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_committee_module()
+    _require_committee_member(db, committee_id, user)
+    q = db.query(CommitteeExpense).filter(CommitteeExpense.committee_id == committee_id)
+    if month:
+        q = q.filter(CommitteeExpense.date.like(f"{month}%"))
+    rows = q.order_by(CommitteeExpense.date.asc(), CommitteeExpense.id.asc()).all()
+    total = sum(row.amount_cents for row in rows)
+    return {
+        "committeeId": committee_id,
+        "month": month,
+        "count": len(rows),
+        "totalCents": total,
+        "items": [_committee_expense_payload(row) for row in rows],
+        "generatedAt": now_utc().isoformat(),
+    }
 
 
 @app.get("/committees/{committee_id}/forum/categories")
