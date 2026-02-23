@@ -47,8 +47,8 @@ class ModuleCard extends StatelessWidget {
         trailing: Wrap(
           spacing: 8,
           children: [
-            Badge(label: def.scope.name.toUpperCase()),
-            if (def.sensitive) const Badge(label: 'SENSITIVE'),
+            ToreBadge(label: def.scope.name.toUpperCase()),
+            if (def.sensitive) const ToreBadge(label: 'SENSITIVE'),
           ],
         ),
         onTap: frozen ? null : onOpen,
@@ -57,8 +57,9 @@ class ModuleCard extends StatelessWidget {
   }
 }
 
-class Badge extends StatelessWidget {
-  const Badge({super.key, required this.label});
+/// Keep a Tore-specific name to avoid collisions with Flutter Material widgets (e.g., Badge).
+class ToreBadge extends StatelessWidget {
+  const ToreBadge({super.key, required this.label});
   final String label;
 
   @override
