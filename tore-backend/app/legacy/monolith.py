@@ -11,6 +11,7 @@ import smtplib
 import secrets
 import string
 import hashlib
+import hmac
 import json
 import subprocess
 import threading
@@ -220,6 +221,31 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 def _strict_dev_env_enabled() -> bool:
     return (os.getenv("ENV") or "").strip().upper() == "DEV"
+
+
+def _otp_dev_mode_enabled() -> bool:
+    return _env_bool("TORE_EMAIL_OTP_DEV_MODE", default=_strict_dev_env_enabled())
+
+
+def _otp_exp_minutes() -> int:
+    try:
+        return max(1, int(os.getenv("TORE_EMAIL_OTP_EXP_MINUTES", str(EMAIL_OTP_TTL_MIN))))
+    except ValueError:
+        return EMAIL_OTP_TTL_MIN
+
+
+def _otp_max_attempts() -> int:
+    try:
+        return max(1, int(os.getenv("TORE_EMAIL_OTP_MAX_ATTEMPTS", "5")))
+    except ValueError:
+        return 5
+
+
+def _otp_request_rate_limit() -> int:
+    try:
+        return max(1, int(os.getenv("TORE_EMAIL_OTP_RATE_LIMIT", "3")))
+    except ValueError:
+        return 3
 
 
 @dataclass
@@ -536,6 +562,26 @@ def _ensure_app_user_privacy_columns() -> None:
 
 
 
+def _ensure_auth_otp_columns() -> None:
+    s = get_session()
+    try:
+        if engine.dialect.name == "sqlite":
+            columns = {row[1] for row in s.execute(text("PRAGMA table_info(auth_otp_codes)")).fetchall()}
+            if "last_attempt_at" not in columns:
+                s.execute(text("ALTER TABLE auth_otp_codes ADD COLUMN last_attempt_at DATETIME"))
+            if "request_id" not in columns:
+                s.execute(text("ALTER TABLE auth_otp_codes ADD COLUMN request_id VARCHAR(120)"))
+            if "user_id" not in columns:
+                s.execute(text("ALTER TABLE auth_otp_codes ADD COLUMN user_id VARCHAR"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_email_created_at ON auth_otp_codes (email, created_at DESC)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_email_used_at ON auth_otp_codes (email, used_at)"))
+        s.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_expires_at ON auth_otp_codes (expires_at)"))
+        s.commit()
+    finally:
+        s.close()
+
+
+
 def _ensure_role_upgrade_requests_table() -> None:
     if engine.dialect.name != "sqlite":
         return
@@ -566,6 +612,7 @@ def ensure_seed() -> None:
     _ensure_polymarket_v1_columns()
     _ensure_wallet_indexes()
     _ensure_app_user_privacy_columns()
+    _ensure_auth_otp_columns()
     _ensure_role_upgrade_requests_table()
     ensure_sqlite_compat(engine)
     s = get_session()
@@ -692,6 +739,12 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _otp_hash_code(email: str, code: str, created_at: datetime) -> str:
+    secret = (os.getenv("TORE_SECRET") or JWT_SECRET or "dev-secret-change-me").encode("utf-8")
+    payload = f"{code}:{email}:{int(created_at.timestamp())}".encode("utf-8")
+    return hmac.new(secret, payload, hashlib.sha256).hexdigest()
 
 
 def _normalize_email(email: str) -> str:
@@ -3851,94 +3904,105 @@ def auth_providers_status():
 @app.post("/auth/email/request_otp")
 def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Session = Depends(get_db)):
     email = _normalize_email(payload.email)
-    if "@" not in email:
+    if not email or "@" not in email:
         raise HTTPException(status_code=400, detail={"reason": "invalid_email"})
 
     actor_ip = request.client.host if request.client else "unknown"
+    request_id = _request_id_from_request(request)
+
     try:
         enforce_rate_limit(EMAIL_OTP_SCOPE_EMAIL, email)
         enforce_rate_limit(EMAIL_OTP_SCOPE_IP, actor_ip)
     except RateLimitExceeded as exc:
         raise standard_rate_limit_http_exception(scope=exc.scope, retry_after_seconds=exc.retry_after_seconds)
 
-    raw_code = f"{secrets.randbelow(1000000):06d}"
     now = now_utc()
-    db.query(AuthOtpCode).filter(
-        AuthOtpCode.email == email,
-        AuthOtpCode.used_at.is_(None),
-        AuthOtpCode.expires_at > now,
-    ).update({AuthOtpCode.used_at: now}, synchronize_session=False)
-    db.add(
-        AuthOtpCode(
-            email=email,
-            code_hash=_hash_token(raw_code),
-            expires_at=now_utc() + timedelta(minutes=EMAIL_OTP_TTL_MIN),
-            request_ip=actor_ip,
-            max_attempts=5,
-        )
+    raw_code = f"{secrets.randbelow(1000000):06d}"
+    otp_row = AuthOtpCode(
+        email=email,
+        code_hash=_otp_hash_code(email, raw_code, now),
+        expires_at=now + timedelta(minutes=_otp_exp_minutes()),
+        request_ip=actor_ip,
+        request_id=request_id,
+        max_attempts=_otp_max_attempts(),
     )
+    existing_user = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
+    if existing_user:
+        otp_row.user_id = existing_user.id
+    db.add(otp_row)
     db.commit()
+
+    out: Dict[str, Any] = {"ok": True, "sent": True}
+    if _otp_dev_mode_enabled() or _env_bool("ALLOW_DEV_OTP", False):
+        logging.info("DEV OTP for %s: %s", email, raw_code)
+        out.update({"sent": False, "otp_debug": raw_code, "reason": "dev_mode"})
+        return out
+
+    provider_key = (os.getenv("EMAIL_PROVIDER_API_KEY") or "").strip()
+    smtp_host = (os.getenv("SMTP_HOST") or "").strip()
+    if not provider_key and not smtp_host:
+        raise HTTPException(status_code=500, detail={"reason": "email_provider_missing", "code": "email_provider_missing"})
 
     magic_link = _build_magic_redirect_url(payload.redirect_url, email, raw_code)
     _send_otp_email(email, raw_code, magic_link=magic_link)
-    out: Dict[str, Any] = {
-        "ok": True,
-        "expires_in_seconds": EMAIL_OTP_TTL_MIN * 60,
-        "resend_cooldown_seconds": 30,
-        "masked_email": _mask_email_target(email),
-    }
-    if _strict_dev_env_enabled() and _env_bool("TORE_DEV_EXPOSE_MAGIC_TOKEN", True):
-        out["code"] = raw_code
     return out
 
 
 @app.post("/auth/email/verify_otp")
 def auth_email_verify_otp(payload: EmailOtpVerifyIn, request: Request, db: Session = Depends(get_db)):
     email = _normalize_email(payload.email)
-    code_hash = _hash_token((payload.code or "").strip())
+    code = (payload.code or "").strip()
     now = now_utc()
     actor_ip = request.client.host if request.client else "unknown"
     enforce_rate_limit(EMAIL_OTP_VERIFY_SCOPE, f"{actor_ip}:{email}")
 
-    row = (
+    latest = (
         db.query(AuthOtpCode)
-        .filter(
-            AuthOtpCode.email == email,
-            AuthOtpCode.used_at.is_(None),
-            AuthOtpCode.expires_at > now,
-        )
+        .filter(AuthOtpCode.email == email)
         .order_by(AuthOtpCode.created_at.desc())
         .first()
     )
-    if not row:
-        raise HTTPException(status_code=401, detail={"reason": "invalid_or_expired_code"})
+    if not latest:
+        raise HTTPException(status_code=400, detail={"reason": "invalid_code"})
 
-    if row.attempts >= row.max_attempts:
+    if latest.used_at is not None:
+        raise HTTPException(status_code=400, detail={"reason": "already_used"})
+
+    if latest.expires_at <= now:
+        raise HTTPException(status_code=400, detail={"reason": "expired_code"})
+
+    if latest.attempts >= latest.max_attempts:
         raise HTTPException(status_code=429, detail={"reason": "too_many_attempts"})
 
-    if row.code_hash != code_hash:
-        row.attempts += 1
-        db.add(row)
+    expected_hash = _otp_hash_code(email, code, latest.created_at)
+    if latest.code_hash != expected_hash:
+        latest.attempts += 1
+        latest.last_attempt_at = now
+        db.add(latest)
         db.commit()
-        raise HTTPException(status_code=401, detail={"reason": "invalid_or_expired_code"})
+        raise HTTPException(status_code=400, detail={"reason": "invalid_code"})
 
-    row.used_at = now
+    latest.used_at = now
+    latest.last_attempt_at = now
+
     created = False
     user = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
     if not user:
         created = True
-        user = AppUser(id=secrets.token_hex(16), display_name=email.split("@")[0], email=email)
+        suffix = secrets.token_hex(2)
+        user = AppUser(id=secrets.token_hex(16), display_name=f"User-{suffix}", email=email)
         db.add(user)
         db.flush()
 
+    latest.user_id = user.id
     tokens = _issue_auth_tokens(db, user)
-    db.add(row)
+    db.add(latest)
     db.commit()
 
     if created:
         _send_welcome_email(email)
 
-    return {**tokens, "user": _user_snapshot(db, user), "created": created}
+    return {"token": tokens["access_token"], **tokens, "user": _user_snapshot(db, user), "created": created}
 
 
 @app.post("/auth/email/request_link")

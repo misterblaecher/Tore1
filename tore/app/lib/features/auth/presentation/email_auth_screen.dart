@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,23 +37,29 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
     });
     try {
       final out = await ref.read(authRepositoryProvider).requestEmailOtp(_emailCtrl.text.trim());
+      if (!mounted) return;
       setState(() {
         _requested = true;
         _devToken = out.devToken;
-        _cooldown = out.resendCooldownSeconds;
+        _cooldown = 30;
       });
       _tickCooldown();
     } on EmailRateLimitException catch (e) {
+      if (!mounted) return;
       setState(() {
         _requested = true;
         _cooldown = e.retryAfterSeconds;
-        _error = 'Trop de tentatives. Réessaie dans ${e.retryAfterSeconds} secondes.';
+        _error = 'Trop de tentatives';
       });
       _tickCooldown();
+    } on EmailAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _requestErrorMessage(e.code));
     } catch (_) {
+      if (!mounted) return;
       setState(() => _error = 'Impossible d\'envoyer le code.');
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -72,14 +77,49 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
       _error = null;
     });
     try {
-      await ref.read(authSessionProvider.notifier).loginWithEmail(email: _emailCtrl.text.trim(), token: EmailToken.normalize(_tokenCtrl.text));
+      await ref.read(authSessionProvider.notifier).loginWithEmail(
+        email: _emailCtrl.text.trim(),
+        token: EmailToken.normalize(_tokenCtrl.text),
+      );
       if (mounted) Navigator.of(context).pop();
+    } on EmailAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _verifyErrorMessage(e.code));
     } on DioException {
+      if (!mounted) return;
       setState(() => _error = 'Hors-ligne. Vérifie ta connexion.');
     } catch (_) {
+      if (!mounted) return;
       setState(() => _error = 'Code invalide ou expiré.');
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _requestErrorMessage(String code) {
+    switch (code) {
+      case 'invalid_email':
+        return 'Email invalide';
+      case 'rate_limited':
+        return 'Trop de tentatives';
+      case 'email_provider_missing':
+        return 'Service email indisponible';
+      default:
+        return 'Impossible d\'envoyer le code.';
+    }
+  }
+
+  String _verifyErrorMessage(String code) {
+    switch (code) {
+      case 'expired_code':
+        return 'Code expiré.';
+      case 'already_used':
+        return 'Code déjà utilisé.';
+      case 'too_many_attempts':
+      case 'rate_limited':
+        return 'Trop de tentatives';
+      default:
+        return 'Code invalide ou expiré.';
     }
   }
 
@@ -101,34 +141,37 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
                 loading: _loading,
                 onPressed: _loading || _cooldown > 0 || ref.watch(networkStatusProvider) != NetworkState.online ? null : _requestCode,
               ),
+              if (_devToken != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text('Code DEV: $_devToken', style: const TextStyle(color: Colors.deepOrange))),
+                      IconButton(
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: _devToken));
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copié')));
+                        },
+                        icon: const Icon(Icons.copy),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (_requested) ...[
                 const SizedBox(height: AppSpacing.md),
                 TextField(controller: _tokenCtrl, keyboardType: TextInputType.number, maxLength: 6, decoration: const InputDecoration(labelText: 'Code 6 chiffres')),
-                PrimaryButton(label: 'Vérifier code', icon: Icons.verified_outlined, loading: _loading, onPressed: _verify),
-              ],
-              if (kDebugMode && _devToken != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                SelectableText('DEV code: $_devToken', style: const TextStyle(color: Colors.orangeAccent)),
+                PrimaryButton(label: 'Valider', icon: Icons.verified_outlined, loading: _loading, onPressed: _verify),
               ],
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(_error!, style: const TextStyle(color: Colors.redAccent)),
               ],
-              if (_loading) const Padding(padding: EdgeInsets.only(top: AppSpacing.sm), child: Center(child: CircularProgressIndicator())),
             ]),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          const AppCard(child: Text('Authentification email active. Les autres méthodes apparaîtront uniquement si activées.')),
-          if (kDebugMode)
-            SecondaryButton(
-              label: 'Coller code depuis presse-papier',
-              icon: Icons.content_paste,
-              onPressed: () async {
-                final data = await Clipboard.getData('text/plain');
-                final text = data?.text;
-                if (text != null && text.isNotEmpty) _tokenCtrl.text = text.trim();
-              },
-            ),
         ],
       ),
     );
