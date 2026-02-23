@@ -3,9 +3,11 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tore/rebuild/models/qr_resolve.dart';
 import 'package:tore/rebuild/models/safe_parsing.dart';
+import 'package:tore/rebuild/models/rebuild_types.dart';
 import 'package:tore/rebuild/routing/app_routes.dart';
 import 'package:tore/rebuild/routing/qr_router.dart';
 import 'package:tore/rebuild/services/client_log.dart';
+import 'package:tore/rebuild/ui/theme/tore_theme.dart';
 
 void main() {
   test('scrubber redacts auth headers, jwt, query params, and contact fields', () {
@@ -41,6 +43,16 @@ void main() {
     expect(safeGetMap(data, 'nested'), isEmpty);
     expect(safeGetList(data, 'items'), isEmpty);
     expect(tryParseDateTime(data['when'], fallback: DateTime.fromMillisecondsSinceEpoch(0)), DateTime.fromMillisecondsSinceEpoch(0));
+  });
+
+  test('event state helper and spacing rhythm tokens stay stable', () {
+    expect(EventState.live.isLive, isTrue);
+    expect(EventState.paused.isLive, isFalse);
+
+    expect(ToreTokens.s8, 8.0);
+    expect(ToreTokens.s12, 12.0);
+    expect(ToreTokens.s16, 16.0);
+    expect(ToreTokens.s24, 24.0);
   });
 
   test('QR router no-throw fallback under fuzzed partial payloads', () {
