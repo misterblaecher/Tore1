@@ -89,6 +89,10 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   }
 
   Future<void> _sensitiveWrite(String moduleId, String action) async {
+    if (!_networkStateResolver.canWrite(_network)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Action impossible hors ligne. Revenez en ligne pour confirmer.')));
+      return;
+    }
     final reason = await ConfirmDialogWithReason.show(context, title: 'Confirm $action');
     if (reason == null) return;
     await _writer.write(
@@ -152,28 +156,28 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       routes: {
         AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)),
         AppRoutes.home: (_) => HomeHubScreen(network: _network, cards: [HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext), ..._moduleCards(ToreMode.user)]),
-        AppRoutes.scanner: (_) => QrScannerScreen(onResolve: _resolveQrPayload),
+        AppRoutes.scanner: (_) => QrScannerScreen(onResolve: _resolveQrPayload, network: _network),
         AppRoutes.bars: (_) => BarsScreen(network: _network, children: _moduleCards(ToreMode.user)),
-        AppRoutes.events: (_) => BarEventsScreen(children: _moduleCards(ToreMode.user)),
-        AppRoutes.join: (_) => JoinEventScreen(writeAllowed: _writeAllowed('user_join'), onJoin: () => _sensitiveWrite('user_join', 'join_event')),
-        AppRoutes.eventHub: (_) => EventHubScreen(network: _network, modules: _moduleCards(ToreMode.user)),
+        AppRoutes.events: (_) => BarEventsScreen(children: _moduleCards(ToreMode.user), network: _network),
+        AppRoutes.join: (_) => JoinEventScreen(writeAllowed: _writeAllowed('user_join'), onJoin: () => _sensitiveWrite('user_join', 'join_event'), network: _network),
+        AppRoutes.eventHub: (_) => EventHubScreen(network: _network, modules: _moduleCards(ToreMode.user), eventState: _eventContext?.eventState ?? EventState.draft, writeAllowedReason: _writeAllowed('user_event_hub') ? 'Writes enabled' : 'Writes blocked by network or event state'),
         AppRoutes.menu: (_) => MenuScreen(network: _network, items: [for (var i = 0; i < 6; i++) const ListTile(title: Text('Drink'), trailing: Text('9.50', style: TextStyle(fontFamily: 'monospace')))]),
-        AppRoutes.wallet: (_) => WalletScreen(rows: [for (var i = 0; i < 5; i++) ListTile(title: Text('TX $i'), trailing: const Text('-5.00', style: TextStyle(fontFamily: 'monospace')))]),
-        AppRoutes.ticker: (_) => TickerScreen(rows: [for (var i = 0; i < 7; i++) ListTile(title: Text('Feed item $i'))]),
-        AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(rows: [for (var i = 0; i < 4; i++) ListTile(title: Text('Market #$i'))]),
-        AppRoutes.polymarketEvent: (_) => PolymarketEventScreen(rows: [for (var i = 0; i < 4; i++) ListTile(title: Text('Event market #$i'))]),
-        AppRoutes.profile: (_) => const ProfileSettingsScreen(),
-        AppRoutes.orgaHub: (_) => const OrgaEventControlHubScreen(),
-        AppRoutes.orgaEntry: (_) => const EntryStaffScreen(),
-        AppRoutes.orgaMenu: (_) => const OrgaMenuAdminScreen(),
-        AppRoutes.orgaMarket: (_) => OrgaPolymarketAdminScreen(onSensitive: (a) => _sensitiveWrite('orga_polymarket_admin', a)),
-        AppRoutes.orgaUrgency: (_) => OrgaUrgencyActionsScreen(onSensitive: (a) => _sensitiveWrite('orga_urgency_actions', a)),
-        AppRoutes.barDashboard: (_) => const BarDashboardScreen(),
-        AppRoutes.barOrders: (_) => const OrdersLiveScreen(),
-        AppRoutes.barMenu: (_) => const FullMenuAdminScreen(),
-        AppRoutes.barZones: (_) => const ZonesQrAdminScreen(),
-        AppRoutes.barAnalytics: (_) => const AnalyticsScreen(),
-        AppRoutes.blocked: (_) => const Scaffold(body: Center(child: Text('Route blocked: module OFF or unauthorized mode'))),
+        AppRoutes.wallet: (_) => WalletScreen(network: _network, rows: [for (var i = 0; i < 5; i++) ListTile(title: Text('TX $i'), trailing: const Text('-5.00', style: TextStyle(fontFamily: 'monospace')))]),
+        AppRoutes.ticker: (_) => TickerScreen(network: _network, rows: [for (var i = 0; i < 7; i++) ListTile(title: Text('Feed item $i'))]),
+        AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(network: _network, rows: [for (var i = 0; i < 4; i++) ListTile(title: Text('Market #$i'))]),
+        AppRoutes.polymarketEvent: (_) => PolymarketEventScreen(network: _network, rows: [for (var i = 0; i < 4; i++) ListTile(title: Text('Event market #$i'))]),
+        AppRoutes.profile: (_) => ProfileSettingsScreen(network: _network),
+        AppRoutes.orgaHub: (_) => OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub')),
+        AppRoutes.orgaEntry: (_) => EntryStaffScreen(network: _network),
+        AppRoutes.orgaMenu: (_) => OrgaMenuAdminScreen(network: _network),
+        AppRoutes.orgaMarket: (_) => OrgaPolymarketAdminScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_polymarket_admin', a)),
+        AppRoutes.orgaUrgency: (_) => OrgaUrgencyActionsScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_urgency_actions', a)),
+        AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
+        AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network),
+        AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
+        AppRoutes.barZones: (_) => ZonesQrAdminScreen(network: _network),
+        AppRoutes.barAnalytics: (_) => AnalyticsScreen(network: _network),
+        AppRoutes.blocked: (_) => const ScreenScaffold(title: 'Blocked', scopeBadges: ['GUARD'], body: BlockedStateView(title: 'Accès indisponible', message: 'Ce module est OFF, en pause ou non autorisé pour votre mode actuel.')),
       },
       home: !_consented || _loading
           ? (_loading ? BootSplashScreen(network: _network) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)))
@@ -214,7 +218,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
         if (name.startsWith('/orga') && _mode != ToreMode.orga) {
-          return MaterialPageRoute(builder: (_) => const Scaffold(body: Center(child: Text('Blocked by mode guard'))));
+          return MaterialPageRoute(builder: (_) => const ScreenScaffold(title: 'Blocked', scopeBadges: ['GUARD'], body: BlockedStateView(title: 'Mauvais mode', message: 'Passez en mode ORGA pour ouvrir cet écran.')));
         }
         return null;
       },
