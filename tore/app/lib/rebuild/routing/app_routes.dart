@@ -8,6 +8,7 @@ class AppRoutes {
   static const join = '/user/join';
   static const eventHub = '/user/event_hub';
   static const menu = '/user/menu';
+  static const orders = '/user/orders';
   static const wallet = '/user/wallet';
   static const ticker = '/user/ticker';
   static const polymarketGlobal = '/user/polymarket_global';
