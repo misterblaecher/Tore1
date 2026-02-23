@@ -415,7 +415,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             ),
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
-        if (name.startsWith('/legacy') || name.startsWith('/features') || name.startsWith('/shell') || name.startsWith('/app_shell')) {
+        if (_guards.isLegacyRoute(name)) {
           return MaterialPageRoute(
             builder: (_) => const ScreenScaffold(
               title: 'Blocked',

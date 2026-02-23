@@ -9,20 +9,31 @@ if ! command -v dart >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "[1/3] dart format --set-exit-if-changed lib test"
+echo "[1/4] dart format --set-exit-if-changed lib test"
 dart format --set-exit-if-changed lib test || {
   echo "Formatting issues found. Run: dart format lib test"
   exit 1
 }
 
-echo "[2/3] flutter analyze (or dart analyze fallback)"
+echo "[2/4] flutter analyze (or dart analyze fallback)"
 if command -v flutter >/dev/null 2>&1; then
   flutter analyze
 else
   dart analyze
 fi
 
-echo "[3/3] dart test"
+echo "[3/4] dart test"
 dart test
+
+echo "[4/4] route-surface guard checks"
+if rg -n "^\s*AppRoutes\.[A-Za-z0-9_]+\s*:\s*\(_\)\s*=>\s*AppShell\(" lib/rebuild/tore_rebuild_app.dart; then
+  echo "Legacy AppShell wired into rebuild routes."
+  exit 1
+fi
+
+if rg -n "^\s*static const .*=['\"]\/app_shell['\"]" lib/rebuild/routing/app_routes.dart; then
+  echo "Legacy /app_shell route exposed in AppRoutes."
+  exit 1
+fi
 
 echo "RC verification complete."

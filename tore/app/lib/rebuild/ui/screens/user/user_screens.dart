@@ -234,59 +234,6 @@ class EventHubScreen extends StatelessWidget {
   }
 }
 
-class MenuScreen extends StatelessWidget {
-  const MenuScreen({super.key, required this.network, required this.items});
-  final ConnectivityState network;
-  final List<Widget> items;
-  @override
-  Widget build(BuildContext context) {
-    final offline = network == ConnectivityState.offline;
-    return ScreenScaffold(
-      title: 'Menu',
-      connectivity: network,
-      scopeBadges: const ['USER', 'CACHE-FIRST'],
-      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.refresh), label: const Text('Pull to refresh'))),
-        const SizedBox(height: ToreTokens.s8),
-        if (items.isEmpty)
-          const EmptyStateView(message: 'Le menu sera publié prochainement.')
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: ToreTokens.s8),
-            itemBuilder: (_, i) => items[i],
-          ),
-        if (offline) const Padding(padding: EdgeInsets.only(top: ToreTokens.s8), child: Text('Affichage cache local.')),
-      ]),
-      footer: Container(
-        padding: const EdgeInsets.all(ToreTokens.s12),
-        color: ToreTokens.surfaceAlt,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                const Text('Cart total'),
-                Text('42.00 €', style: ToreTypography.monoNumber(context, size: 18)),
-              ]),
-            ),
-            Semantics(
-              button: true,
-              label: 'CONFIRMER',
-              child: FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: ToreTokens.yellowCta, foregroundColor: Colors.black),
-                onPressed: offline ? null : () {},
-                child: const Text('Confirmer'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class WalletScreen extends StatelessWidget {
   const WalletScreen({super.key, required this.rows, this.network = ConnectivityState.online});
   final List<Widget> rows;

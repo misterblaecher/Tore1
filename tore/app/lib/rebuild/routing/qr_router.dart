@@ -2,11 +2,45 @@ import '../models/qr_resolve.dart';
 import 'app_routes.dart';
 
 class QrRouter {
+  static const Set<String> _allowedTargets = {
+    AppRoutes.boot,
+    AppRoutes.consent,
+    AppRoutes.home,
+    AppRoutes.scanner,
+    AppRoutes.bars,
+    AppRoutes.events,
+    AppRoutes.join,
+    AppRoutes.eventHub,
+    AppRoutes.menu,
+    AppRoutes.orders,
+    AppRoutes.wallet,
+    AppRoutes.ticker,
+    AppRoutes.polymarketGlobal,
+    AppRoutes.polymarketEvent,
+    AppRoutes.profile,
+    AppRoutes.userHelp,
+    AppRoutes.orgaHub,
+    AppRoutes.orgaEntry,
+    AppRoutes.orgaMenu,
+    AppRoutes.orgaMarket,
+    AppRoutes.orgaUrgency,
+    AppRoutes.orgaExports,
+    AppRoutes.orgaRunbook,
+    AppRoutes.devDiagnostics,
+    AppRoutes.barDashboard,
+    AppRoutes.barOrders,
+    AppRoutes.barMenu,
+    AppRoutes.barZones,
+    AppRoutes.barAnalytics,
+    AppRoutes.blocked,
+  };
+
   String targetFor(QrResolve? resolved) {
     if (resolved == null) return AppRoutes.blocked;
     final routeFront = resolved.routeFront?.trim();
     if (routeFront != null && routeFront.isNotEmpty) {
-      return routeFront.startsWith('/') ? routeFront : AppRoutes.blocked;
+      if (!routeFront.startsWith('/')) return AppRoutes.blocked;
+      return _allowedTargets.contains(routeFront) ? routeFront : AppRoutes.blocked;
     }
 
     switch (resolved.type) {

@@ -55,6 +55,12 @@
   - Headers: `X-Idempotency-Key`
   - Response keys: updated zone (`id,name,enabled`).
 
+
+## Runtime client boundary (rebuild convergence)
+- Rebuild shell QR resolve calls pass through `ContractApi` (`rebuild/services/contract_api.dart`) as the contract boundary.
+- Rebuild adapter routes (`/user/menu`, `/user/orders`, `/bar/orders`) do not own separate API clients and rely on rebuild-level guards/banners/state overlays.
+- Avoid introducing direct per-tree API client drift for rebuild-visible flows; keep route surface and deep links under rebuild routers.
+
 ## Source references
 Routes inventoried from backend routers and monolith files:
 - `tore-backend/app/legacy/monolith.py`
