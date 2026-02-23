@@ -39,7 +39,7 @@ def test_email_magic_link_request_verify_one_time_and_expiry(monkeypatch):
 
     request_link = client.post("/auth/email/request_link", json={"email": "alice@example.com"})
     assert request_link.status_code == 200
-    token = request_link.json().get("code") or request_link.json().get("token")
+    token = request_link.json().get("otp_debug") or request_link.json().get("code") or request_link.json().get("token")
     assert token
 
     verify_ok = client.post("/auth/email/verify_link", json={"email": "alice@example.com", "token": token})
@@ -49,10 +49,10 @@ def test_email_magic_link_request_verify_one_time_and_expiry(monkeypatch):
     assert verify_data["refresh_token"]
 
     reuse = client.post("/auth/email/verify_link", json={"email": "alice@example.com", "token": token})
-    assert reuse.status_code == 401
+    assert reuse.status_code == 400
 
     req2 = client.post("/auth/email/request_link", json={"email": "bob@example.com"})
-    tok2 = req2.json().get("code") or req2.json()["token"]
+    tok2 = req2.json().get("otp_debug") or req2.json().get("code") or req2.json()["token"]
 
     s = get_session()
     try:
@@ -69,7 +69,7 @@ def test_email_magic_link_request_verify_one_time_and_expiry(monkeypatch):
         s.close()
 
     expired = client.post("/auth/email/verify_link", json={"email": "bob@example.com", "token": tok2})
-    assert expired.status_code == 401
+    assert expired.status_code == 400
 
 
 def test_email_request_link_rate_limit(monkeypatch):
@@ -93,7 +93,7 @@ def test_refresh_rotates_and_old_refresh_is_revoked(monkeypatch):
     req = client.post("/auth/email/request_link", json={"email": "refresh@example.com"})
     verify = client.post(
         "/auth/email/verify_link",
-        json={"email": "refresh@example.com", "token": req.json().get("code") or req.json()["token"]},
+        json={"email": "refresh@example.com", "token": req.json().get("otp_debug") or req.json().get("code") or req.json()["token"]},
     )
     assert verify.status_code == 200
     refresh_token = verify.json()["refresh_token"]
@@ -109,12 +109,14 @@ def test_refresh_rotates_and_old_refresh_is_revoked(monkeypatch):
 
 def test_magic_link_request_never_exposes_token_outside_dev(monkeypatch):
     monkeypatch.setenv("ENV", "PROD")
-    monkeypatch.setenv("TORE_DEV_EXPOSE_MAGIC_TOKEN", "0")
+    monkeypatch.setenv("TORE_EMAIL_OTP_DEV_MODE", "0")
+    monkeypatch.setenv("EMAIL_PROVIDER_API_KEY", "provider-key")
     client = TestClient(app)
 
     res = client.post("/auth/email/request_link", json={"email": "safe@example.com"})
     assert res.status_code == 200
     assert "token" not in res.json()
+    assert "otp_debug" not in res.json()
 
 
 def test_upgrade_guest_endpoint_acknowledges_device_id():
@@ -193,7 +195,7 @@ def test_refresh_rejects_deleted_user(monkeypatch):
     req = client.post("/auth/email/request_link", json={"email": email})
     verify = client.post(
         "/auth/email/verify_link",
-        json={"email": email, "token": req.json().get("code") or req.json()["token"]},
+        json={"email": email, "token": req.json().get("otp_debug") or req.json().get("code") or req.json()["token"]},
     )
     assert verify.status_code == 200
     refresh_token = verify.json()["refresh_token"]
@@ -230,7 +232,7 @@ def test_email_otp_and_welcome_only_on_first_account_creation(monkeypatch):
     email = f"otp-welcome-{now_utc().timestamp()}@example.com"
     req1 = client.post("/auth/email/request_otp", json={"email": email})
     assert req1.status_code == 200
-    code1 = req1.json().get("code")
+    code1 = req1.json().get("otp_debug") or req1.json().get("code")
     assert code1 and len(code1) == 6
 
     verify1 = client.post("/auth/email/verify_otp", json={"email": email, "code": code1})
@@ -239,7 +241,7 @@ def test_email_otp_and_welcome_only_on_first_account_creation(monkeypatch):
 
     req2 = client.post("/auth/email/request_otp", json={"email": email})
     assert req2.status_code == 200
-    code2 = req2.json().get("code")
+    code2 = req2.json().get("otp_debug") or req2.json().get("code")
     verify2 = client.post("/auth/email/verify_otp", json={"email": email, "code": code2})
     assert verify2.status_code == 200
     assert verify2.json()["created"] is False
@@ -258,7 +260,7 @@ def test_verify_otp_counts_attempts_and_blocks_after_limit(monkeypatch):
 
     for _ in range(5):
         bad = client.post("/auth/email/verify_otp", json={"email": "attempts@example.com", "code": "000000"})
-        assert bad.status_code == 401
+        assert bad.status_code == 400
 
     blocked = client.post("/auth/email/verify_otp", json={"email": "attempts@example.com", "code": "111111"})
     assert blocked.status_code == 429
@@ -280,7 +282,7 @@ def test_email_request_otp_dev_dry_run_when_smtp_fails(monkeypatch):
 
     assert res.status_code == 200
     assert res.json()["ok"] is True
-    assert len(res.json().get("code", "")) == 6
+    assert len((res.json().get("otp_debug") or res.json().get("code") or "")) == 6
 
 
 def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
@@ -303,3 +305,27 @@ def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
     assert isinstance(body.get("retry_after_seconds"), int)
     assert body.get("retry_after_seconds") >= 1
     assert body.get("scope") == "auth_email_request_otp_email"
+
+
+def test_email_request_otp_invalid_email_returns_400():
+    client = TestClient(app)
+    res = client.post("/auth/email/request_otp", json={"email": "not-an-email"})
+    assert res.status_code == 400
+    assert res.json()["detail"]["reason"] == "invalid_email"
+
+
+def test_email_verify_otp_rejects_reuse(monkeypatch):
+    monkeypatch.setenv("ENV", "DEV")
+    monkeypatch.setenv("TORE_EMAIL_OTP_DEV_MODE", "1")
+    client = TestClient(app)
+    email = f"reuse-{now_utc().timestamp()}@example.com"
+
+    req = client.post("/auth/email/request_otp", json={"email": email})
+    code = req.json().get("otp_debug")
+    assert code
+
+    ok = client.post("/auth/email/verify_otp", json={"email": email, "code": code})
+    assert ok.status_code == 200
+    again = client.post("/auth/email/verify_otp", json={"email": email, "code": code})
+    assert again.status_code == 400
+    assert again.json()["detail"]["reason"] == "already_used"

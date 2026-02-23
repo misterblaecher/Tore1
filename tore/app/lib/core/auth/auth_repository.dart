@@ -1,6 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-
 import '../network/api_client.dart';
 import '../network/api_endpoints.dart';
 import 'auth_models.dart';
@@ -14,16 +12,20 @@ class AuthTokens {
 
 class EmailRequestResult {
   final String? devToken;
-  final int expiresInSeconds;
-  final int resendCooldownSeconds;
 
-  const EmailRequestResult({this.devToken, this.expiresInSeconds = 600, this.resendCooldownSeconds = 30});
+  const EmailRequestResult({this.devToken});
 }
 
 class EmailRateLimitException implements Exception {
   final int retryAfterSeconds;
 
   const EmailRateLimitException(this.retryAfterSeconds);
+}
+
+class EmailAuthException implements Exception {
+  final String code;
+
+  const EmailAuthException(this.code);
 }
 
 class AuthRepository {
@@ -55,35 +57,33 @@ class AuthRepository {
   Future<EmailRequestResult> requestEmailOtp(String email) async {
     try {
       final r = await api.dio.post(ApiEndpoints.authEmailRequestOtp, data: {'email': email});
-      if (kDebugMode) {
-        debugPrint('[auth][otp] response status=${r.statusCode}');
-      }
       final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
-      return EmailRequestResult(
-        devToken: (data['code'] ?? data['token'] ?? data['dev_token'])?.toString(),
-        expiresInSeconds: (data['expires_in_seconds'] as num?)?.toInt() ?? 600,
-        resendCooldownSeconds: (data['resend_cooldown_seconds'] as num?)?.toInt() ?? 30,
-      );
+      return EmailRequestResult(devToken: data['otp_debug']?.toString());
     } on DioException catch (e) {
-      if (kDebugMode) {
-        debugPrint('[auth][otp] response status=${e.response?.statusCode}');
-      }
-      if (e.response?.statusCode == 429) {
+      final reason = _extractReason(e.response?.data);
+      if (e.response?.statusCode == 429 || reason == 'rate_limited') {
         final data = (e.response?.data is Map) ? (e.response!.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
         final retryAfterFromBody = (data['retry_after_seconds'] as num?)?.toInt();
         final retryAfterFromHeader = int.tryParse((e.response?.headers.value('retry-after') ?? '').trim());
         throw EmailRateLimitException((retryAfterFromBody ?? retryAfterFromHeader ?? 30).clamp(1, 600));
       }
+      if (reason != null) throw EmailAuthException(reason);
       rethrow;
     }
   }
 
   Future<AuthTokens> verifyEmailOtp({required String email, required String code}) async {
-    final r = await api.dio.post(
-      ApiEndpoints.authEmailVerifyOtp,
-      data: {'email': email, 'code': code},
-    );
-    return _parseTokens(r.data);
+    try {
+      final r = await api.dio.post(ApiEndpoints.authEmailVerifyOtp, data: {'email': email, 'code': code});
+      return _parseTokens(r.data);
+    } on DioException catch (e) {
+      final reason = _extractReason(e.response?.data);
+      if (e.response?.statusCode == 429 || reason == 'too_many_attempts') {
+        throw const EmailAuthException('too_many_attempts');
+      }
+      if (reason != null) throw EmailAuthException(reason);
+      rethrow;
+    }
   }
 
   Future<void> upgradeGuest({required String guestDeviceId}) async {
@@ -131,11 +131,22 @@ class AuthRepository {
 
   AuthTokens _parseTokens(dynamic rawData) {
     final data = (rawData as Map).cast<String, dynamic>();
-    final access = (data['access_token'] ?? data['accessToken'] ?? '').toString();
+    final access = (data['access_token'] ?? data['accessToken'] ?? data['token'] ?? '').toString();
     final refresh = (data['refresh_token'] ?? data['refreshToken'] ?? '').toString();
-    if (access.isEmpty || refresh.isEmpty) {
-      throw Exception('Réponse auth invalide: tokens manquants');
+    if (access.isEmpty) {
+      throw Exception('Réponse auth invalide: token manquant');
     }
-    return AuthTokens(accessToken: access, refreshToken: refresh);
+    return AuthTokens(accessToken: access, refreshToken: refresh.isEmpty ? access : refresh);
+  }
+
+  String? _extractReason(dynamic payload) {
+    if (payload is! Map) return null;
+    final map = payload.cast<String, dynamic>();
+    final detail = map['detail'];
+    if (detail is Map) {
+      final d = detail.cast<String, dynamic>();
+      return (d['reason'] ?? d['code'])?.toString();
+    }
+    return (map['reason'] ?? map['code'])?.toString();
   }
 }

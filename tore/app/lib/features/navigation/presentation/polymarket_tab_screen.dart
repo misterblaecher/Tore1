@@ -29,6 +29,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _hasError = false;
@@ -37,11 +38,13 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
 
     try {
       final response = await ref.read(apiProvider).fetchPolymarketMarkets(scope: 'global', status: 'all', type: 'all');
+      if (!mounted) return;
       setState(() {
         _markets = response.items;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _hasError = true;
         _error = ErrorMapper.message(e);
