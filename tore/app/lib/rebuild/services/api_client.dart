@@ -1,13 +1,29 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+
+import '../../config/app_config.dart';
+import '../models/backend_models.dart';
+import '../models/error_model.dart';
 import '../models/event_context.dart';
 import '../models/qr_resolve.dart';
 import '../models/rebuild_types.dart';
 import '../models/snapshot.dart';
+import 'cache_store.dart';
+import 'network_state_resolver.dart';
 
 class ApiClient {
+  ApiClient({CacheStore? cacheStore, NetworkStateResolver? networkStateResolver})
+      : _cache = cacheStore ?? CacheStore(),
+        _networkStateResolver = networkStateResolver ?? NetworkStateResolver(),
+        _dio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrlResolved, connectTimeout: const Duration(seconds: 10), receiveTimeout: const Duration(seconds: 15)));
+
+  final Dio _dio;
+  final CacheStore _cache;
+  final NetworkStateResolver _networkStateResolver;
+
   Future<UserSnapshot> fetchMeSnapshot() async {
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     final rawJson = {
       'id': 'user_123',
       'account_mode': 'orga',
@@ -29,15 +45,7 @@ class ApiClient {
   }
 
   Future<EventContext> fetchEventContext(String eventId, List<ModuleDefinition> defs) async {
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    final rawJson = {
-      'event': {'id': int.tryParse(eventId.replaceAll('event_', '')) ?? 42},
-      'eventState': 'RUNNING',
-      'modulesOn': ['user_join', 'user_menu', 'bar_orders_live'],
-      'lastUpdatedAt': DateTime.now().toIso8601String(),
-    };
-    _logWire('/events/{id}/context', rawJson);
-
+    final rawJson = await _getJson('/events/$eventId/context', network: ConnectivityState.online);
     final states = <String, ModuleState>{
       for (final d in defs) d.id: d.scope == ScopeBadge.event || d.scope == ScopeBadge.bar ? ModuleState.on : ModuleState.readOnly,
       'user_hunts': ModuleState.frozen,
@@ -46,40 +54,191 @@ class ApiClient {
     };
     final context = EventContext(
       eventId: eventId,
-      eventState: mapBackendStateAlias(rawJson['eventState']! as String),
+      eventState: mapBackendStateAlias((rawJson['eventState'] ?? rawJson['event_state'] ?? 'RUNNING').toString()),
       moduleStates: states,
-      syncedAt: DateTime.parse(rawJson['lastUpdatedAt']! as String),
+      syncedAt: DateTime.tryParse((rawJson['lastUpdatedAt'] ?? DateTime.now().toIso8601String()).toString()) ?? DateTime.now(),
     );
     _logNormalized('/events/{id}/context', {'eventState': context.eventState.name});
     return context;
   }
 
   Future<QrResolve> resolveQr(String payload) async {
-    await Future<void>.delayed(const Duration(milliseconds: 160));
-    final normalized = payload.trim().toLowerCase();
-    Map<String, dynamic> rawResponse;
-    if (normalized.isEmpty || normalized == 'unknown') {
-      rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'invalid_qr'};
-    } else if (normalized.contains('expired')) {
-      rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'expired_qr'};
-    } else if (normalized.contains('replay')) {
-      rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'replay_qr'};
-    } else if (normalized.contains('module_off')) {
-      rawResponse = {'valid': false, 'type': 'menu', 'reason': 'module_off'};
-    } else if (normalized.contains('paused')) {
-      rawResponse = {'valid': false, 'type': 'event_hub', 'reason': 'event_paused'};
-    } else if (normalized.contains('down')) {
-      rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'backend_down'};
-    } else if (normalized.contains('join')) {
-      rawResponse = {'valid': true, 'type': 'join_event', 'event_id': 42, 'route_front': '/event/42/join'};
-    } else if (normalized.contains('menu')) {
-      rawResponse = {'valid': true, 'type': 'menu', 'event_id': 42, 'route_front': '/event/42/menu'};
-    } else {
-      rawResponse = {'valid': true, 'type': 'event_hub', 'event_id': 42, 'route_front': '/event/42'};
+    try {
+      final json = await _postJson('/qr/resolve', {'payload': payload}, network: ConnectivityState.online);
+      return QrResolve.fromJson(json);
+    } catch (_) {
+      final normalized = payload.trim().toLowerCase();
+      Map<String, dynamic> rawResponse;
+      if (normalized.isEmpty || normalized == 'unknown') {
+        rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'invalid_qr'};
+      } else if (normalized.contains('expired')) {
+        rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'expired_qr'};
+      } else if (normalized.contains('replay')) {
+        rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'replay_qr'};
+      } else if (normalized.contains('module_off')) {
+        rawResponse = {'valid': false, 'type': 'menu', 'reason': 'module_off'};
+      } else if (normalized.contains('paused')) {
+        rawResponse = {'valid': false, 'type': 'event_hub', 'reason': 'event_paused'};
+      } else if (normalized.contains('down')) {
+        rawResponse = {'valid': false, 'type': 'unknown', 'reason': 'backend_down'};
+      } else if (normalized.contains('join')) {
+        rawResponse = {'valid': true, 'type': 'join_event', 'event_id': 42, 'route_front': '/event/42/join'};
+      } else if (normalized.contains('menu')) {
+        rawResponse = {'valid': true, 'type': 'menu', 'event_id': 42, 'route_front': '/event/42/menu'};
+      } else {
+        rawResponse = {'valid': true, 'type': 'event_hub', 'event_id': 42, 'route_front': '/event/42'};
+      }
+      return QrResolve.fromJson(rawResponse);
     }
-    _logWire('/qr/resolve', rawResponse);
-    _logNormalized('/qr/resolve', {'reason': rawResponse['reason'], 'type': rawResponse['type']});
-    return QrResolve.fromJson(rawResponse);
+  }
+
+  Future<List<BarDto>> fetchBars({required ConnectivityState network, String? cursor, int limit = 20}) async {
+    final key = _cache.barsKey();
+    final json = await _cacheFirstGet(key: key, path: '/bars', query: {'cursor': cursor, 'limit': limit}, network: network);
+    return _items(json).map(BarDto.fromJson).toList();
+  }
+
+  Future<List<EventDto>> fetchBarEvents(String barId, {String filter = 'all', required ConnectivityState network, String? cursor, int limit = 20}) async {
+    final key = _cache.barEventsKey(barId, filter);
+    final json = await _cacheFirstGet(key: key, path: '/bars/$barId/events', query: {'filter': filter, 'cursor': cursor, 'limit': limit}, network: network);
+    return _items(json).map(EventDto.fromJson).toList();
+  }
+
+  Future<void> joinEvent(String eventId, {String? optionalCode, required String idempotencyKey, required ConnectivityState network}) async {
+    await _postJson('/events/$eventId/join', {'code': optionalCode}, headers: {'X-Idempotency-Key': idempotencyKey}, network: network);
+  }
+
+  Future<List<MenuItemDto>> fetchMenu({String? barId, String? eventId, required ConnectivityState network}) async {
+    final scope = eventId != null ? 'event' : 'bar';
+    final id = eventId ?? barId ?? 'unknown';
+    final path = eventId != null ? '/events/$eventId/menu' : '/menu/public/$barId';
+    final json = await _cacheFirstGet(key: _cache.menuKey(scope, id), path: path, network: network);
+    final payload = (json['menu'] ?? json['items'] ?? json) as Object;
+    if (payload is List) return payload.whereType<Map<String, dynamic>>().map(MenuItemDto.fromJson).toList();
+    return _items(json).map(MenuItemDto.fromJson).toList();
+  }
+
+  Future<WalletDto> fetchWallet({String? eventId, required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: _cache.walletKey(eventId == null ? 'me' : 'event', eventId ?? 'me'), path: '/wallet/me', query: eventId == null ? null : {'event_id': eventId}, network: network);
+    return WalletDto.fromJson(json);
+  }
+
+  Future<PagedResult<TickerItemDto>> fetchTicker(String eventId, {String? cursor, int limit = 30, required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: _cache.tickerKey(eventId), path: '/events/$eventId/ticker', query: {'cursor': cursor, 'limit': limit}, network: network);
+    return PagedResult(items: _items(json).map(TickerItemDto.fromJson).toList(), nextCursor: json['next_cursor']?.toString());
+  }
+
+  Future<List<PolymarketDto>> fetchPolymarketGlobal({required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: 'polymarket:global:v1', path: '/polymarket/global', network: network);
+    return _items(json).map(PolymarketDto.fromJson).toList();
+  }
+
+  Future<List<PolymarketDto>> fetchPolymarketEvent(String eventId, {required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: 'polymarket:event:$eventId:v1', path: '/events/$eventId/polymarket', network: network);
+    return _items(json).map(PolymarketDto.fromJson).toList();
+  }
+
+  Future<EntryStatsDto> fetchEntryStats(String eventId, {required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: 'entry_stats:$eventId:v1', path: '/partner/portal/orga/events/$eventId/entry/stats', network: network);
+    return EntryStatsDto.fromJson(json);
+  }
+
+  Future<Map<String, dynamic>> writeEntryScan(String eventId, Map<String, dynamic> payload, {required String idempotencyKey, required ConnectivityState network}) {
+    return _postJson('/partner/portal/orga/events/$eventId/entry/scan', payload, headers: {'X-Idempotency-Key': idempotencyKey}, network: network);
+  }
+
+  Future<PagedResult<OrderDto>> fetchOrdersLive(String eventId, {String? cursor, int limit = 25, required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: _cache.ordersKey('event', eventId), path: '/orders/live', query: {'event_id': eventId, 'cursor': cursor, 'limit': limit}, network: network);
+    return PagedResult(items: _items(json).map(OrderDto.fromJson).toList(), nextCursor: json['next_cursor']?.toString());
+  }
+
+  Future<void> updateOrderStatus(String orderId, String status, {String? reason, required String idempotencyKey, required ConnectivityState network}) async {
+    await _patchJson('/orders/$orderId/status', {'status': status, if (reason != null) 'reason_text': reason}, headers: {'X-Idempotency-Key': idempotencyKey}, network: network);
+  }
+
+  Future<List<ZoneDto>> fetchZones(String barId, {required ConnectivityState network}) async {
+    final json = await _cacheFirstGet(key: _cache.zonesKey(barId), path: '/partner/portal/bar/$barId/zones', network: network);
+    return _items(json).map(ZoneDto.fromJson).toList();
+  }
+
+  Future<void> toggleZone(String zoneId, bool enabled, {String? reason, required String idempotencyKey, required ConnectivityState network}) async {
+    await _patchJson('/partner/portal/zones/$zoneId', {'enabled': enabled, if (reason != null) 'reason_text': reason}, headers: {'X-Idempotency-Key': idempotencyKey}, network: network);
+  }
+
+  Future<Map<String, dynamic>> _cacheFirstGet({required String key, required String path, Map<String, dynamic>? query, required ConnectivityState network}) async {
+    final cached = await _cache.loadJson(key, ttl: const Duration(minutes: 5));
+    if (network == ConnectivityState.offline) {
+      if (cached != null) return cached.payload;
+      throw const ApiError(ErrorModel(code: 'offline_read_unavailable', message: 'offline_read_unavailable'));
+    }
+    if (cached != null && !cached.isStale) return cached.payload;
+    try {
+      final json = await _getJson(path, query: query, network: network);
+      await _cache.saveJson(key, json);
+      return json;
+    } catch (_) {
+      if (cached != null) return cached.payload;
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> _getJson(String path, {Map<String, dynamic>? query, required ConnectivityState network}) async {
+    return _withRetry(() async {
+      final res = await _dio.get(path, queryParameters: query);
+      return _asMap(res.data);
+    }, retries: _networkStateResolver.getMaxGetRetries(network));
+  }
+
+  Future<Map<String, dynamic>> _postJson(String path, Map<String, dynamic> body, {Map<String, dynamic>? headers, required ConnectivityState network}) async {
+    if (!_networkStateResolver.canWrite(network)) {
+      throw const ApiError(ErrorModel(code: 'offline_write_blocked', message: 'offline_write_blocked'));
+    }
+    final res = await _dio.post(path, data: body, options: Options(headers: headers));
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> _patchJson(String path, Map<String, dynamic> body, {Map<String, dynamic>? headers, required ConnectivityState network}) async {
+    if (!_networkStateResolver.canWrite(network)) {
+      throw const ApiError(ErrorModel(code: 'offline_write_blocked', message: 'offline_write_blocked'));
+    }
+    final res = await _dio.patch(path, data: body, options: Options(headers: headers));
+    return _asMap(res.data);
+  }
+
+  Future<T> _withRetry<T>(Future<T> Function() run, {required int retries}) async {
+    Object? last;
+    for (var attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await run();
+      } catch (e) {
+        last = e;
+        if (attempt < retries) {
+          await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+        }
+      }
+    }
+    throw _normalizeError(last);
+  }
+
+  ApiError _normalizeError(Object? error) {
+    if (error is ApiError) return error;
+    if (error is DioException) {
+      final reason = (error.response?.data as Map?)?['reason']?.toString() ?? 'backend_down';
+      return ApiError(ErrorModel(code: normalizeUiCode(reason), message: resolveUiCopy(reason).message));
+    }
+    return const ApiError(ErrorModel(code: 'backend_down', message: 'Service indisponible'));
+  }
+
+  List<Map<String, dynamic>> _items(Map<String, dynamic> map) {
+    final rows = (map['items'] ?? map['rows'] ?? map['events'] ?? map['orders'] ?? map['markets'] ?? <dynamic>[]) as List<dynamic>;
+    return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.cast<String, dynamic>();
+    if (value is List) return {'items': value};
+    return {'value': value};
   }
 
   void _logWire(String endpoint, Map<String, dynamic> payload) {
@@ -97,4 +256,9 @@ class ApiClient {
       return true;
     }());
   }
+}
+
+class ApiError implements Exception {
+  const ApiError(this.error);
+  final ErrorModel error;
 }

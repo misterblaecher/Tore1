@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/event_context.dart';
+import 'models/backend_models.dart';
 import 'models/qr_resolve.dart';
 import 'models/rebuild_types.dart';
 import 'models/snapshot.dart';
@@ -40,6 +41,16 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   ConnectivityState _network = ConnectivityState.online;
   bool _loading = true;
   bool _consented = false;
+  List<BarDto> _bars = const [];
+  List<EventDto> _barEvents = const [];
+  List<MenuItemDto> _menuItems = const [];
+  WalletDto? _wallet;
+  List<TickerItemDto> _ticker = const [];
+  List<PolymarketDto> _polyGlobal = const [];
+  List<PolymarketDto> _polyEvent = const [];
+  EntryStatsDto? _entryStats;
+  List<OrderDto> _orders = const [];
+  List<ZoneDto> _zones = const [];
 
   @override
   void initState() {
@@ -59,8 +70,22 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       _eventContext = await _api.fetchEventContext('event_42', _defs);
       await _cache.saveUser(_userSnapshot!);
       await _cache.saveEvent(_eventContext!);
+      await _loadDomainData();
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadDomainData() async {
+    _bars = await _api.fetchBars(network: _network);
+    _barEvents = await _api.fetchBarEvents('1', network: _network);
+    _menuItems = await _api.fetchMenu(eventId: '42', network: _network);
+    _wallet = await _api.fetchWallet(eventId: '42', network: _network);
+    _ticker = (await _api.fetchTicker('42', network: _network)).items;
+    _polyGlobal = await _api.fetchPolymarketGlobal(network: _network);
+    _polyEvent = await _api.fetchPolymarketEvent('42', network: _network);
+    _entryStats = await _api.fetchEntryStats('42', network: _network);
+    _orders = (await _api.fetchOrdersLive('42', network: _network)).items;
+    _zones = await _api.fetchZones('1', network: _network);
   }
 
   ModuleState _effectiveState(String id) {
@@ -157,25 +182,25 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)),
         AppRoutes.home: (_) => HomeHubScreen(network: _network, cards: [HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext), ..._moduleCards(ToreMode.user)]),
         AppRoutes.scanner: (_) => QrScannerScreen(onResolve: _resolveQrPayload, network: _network),
-        AppRoutes.bars: (_) => BarsScreen(network: _network, children: _moduleCards(ToreMode.user)),
-        AppRoutes.events: (_) => BarEventsScreen(children: _moduleCards(ToreMode.user), network: _network),
+        AppRoutes.bars: (_) => BarsScreen(network: _network, children: _bars.map((b) => ListTile(title: Text(b.name), subtitle: Text(b.city ?? b.id))).toList()),
+        AppRoutes.events: (_) => BarEventsScreen(children: _barEvents.map((e) => ListTile(title: Text(e.title), subtitle: Text(e.state ?? 'LIVE'))).toList(), network: _network),
         AppRoutes.join: (_) => JoinEventScreen(writeAllowed: _writeAllowed('user_join'), onJoin: () => _sensitiveWrite('user_join', 'join_event'), network: _network),
         AppRoutes.eventHub: (_) => EventHubScreen(network: _network, modules: _moduleCards(ToreMode.user), eventState: _eventContext?.eventState ?? EventState.draft, writeAllowedReason: _writeAllowed('user_event_hub') ? 'Writes enabled' : 'Writes blocked by network or event state'),
-        AppRoutes.menu: (_) => MenuScreen(network: _network, items: [for (var i = 0; i < 6; i++) const ListTile(title: Text('Drink'), trailing: Text('9.50', style: TextStyle(fontFamily: 'monospace')))]),
-        AppRoutes.wallet: (_) => WalletScreen(network: _network, rows: [for (var i = 0; i < 5; i++) ListTile(title: Text('TX $i'), trailing: const Text('-5.00', style: TextStyle(fontFamily: 'monospace')))]),
-        AppRoutes.ticker: (_) => TickerScreen(network: _network, rows: [for (var i = 0; i < 7; i++) ListTile(title: Text('Feed item $i'))]),
-        AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(network: _network, rows: [for (var i = 0; i < 4; i++) ListTile(title: Text('Market #$i'))]),
-        AppRoutes.polymarketEvent: (_) => PolymarketEventScreen(network: _network, rows: [for (var i = 0; i < 4; i++) ListTile(title: Text('Event market #$i'))]),
+        AppRoutes.menu: (_) => MenuScreen(network: _network, items: _menuItems.map((m) => ListTile(title: Text(m.name), trailing: Text(m.price.toStringAsFixed(2)))).toList()),
+        AppRoutes.wallet: (_) => WalletScreen(network: _network, rows: (_wallet?.timeline ?? const []).map((tx) => ListTile(title: Text(tx.type), trailing: Text(tx.delta.toStringAsFixed(2), style: const TextStyle(fontFamily: 'monospace')))).toList()),
+        AppRoutes.ticker: (_) => TickerScreen(network: _network, rows: _ticker.map((t) => ListTile(title: Text(t.message))).toList()),
+        AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(network: _network, rows: _polyGlobal.map((m) => ListTile(title: Text(m.title))).toList()),
+        AppRoutes.polymarketEvent: (_) => PolymarketEventScreen(network: _network, rows: _polyEvent.map((m) => ListTile(title: Text(m.title))).toList()),
         AppRoutes.profile: (_) => ProfileSettingsScreen(network: _network),
-        AppRoutes.orgaHub: (_) => OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub')),
+        AppRoutes.orgaHub: (_) => OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub'), entryApprovedCount: _entryStats?.approvedCount ?? 0),
         AppRoutes.orgaEntry: (_) => EntryStaffScreen(network: _network),
         AppRoutes.orgaMenu: (_) => OrgaMenuAdminScreen(network: _network),
         AppRoutes.orgaMarket: (_) => OrgaPolymarketAdminScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_polymarket_admin', a)),
         AppRoutes.orgaUrgency: (_) => OrgaUrgencyActionsScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_urgency_actions', a)),
         AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
-        AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network),
+        AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network, rows: _orders.map((o) => ListTile(title: Text('Order ${o.id}'), trailing: Text(o.status))).toList()),
         AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
-        AppRoutes.barZones: (_) => ZonesQrAdminScreen(network: _network),
+        AppRoutes.barZones: (_) => ZonesQrAdminScreen(network: _network, zones: _zones.map((z) => z.name).toList()),
         AppRoutes.barAnalytics: (_) => AnalyticsScreen(network: _network),
         AppRoutes.blocked: (_) => const ScreenScaffold(title: 'Blocked', scopeBadges: ['GUARD'], body: BlockedStateView(title: 'Accès indisponible', message: 'Ce module est OFF, en pause ou non autorisé pour votre mode actuel.')),
       },

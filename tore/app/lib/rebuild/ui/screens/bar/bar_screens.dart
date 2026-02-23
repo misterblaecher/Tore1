@@ -20,27 +20,23 @@ class BarDashboardScreen extends StatelessWidget {
 }
 
 class OrdersLiveScreen extends StatelessWidget {
-  const OrdersLiveScreen({super.key, this.network = ConnectivityState.online});
+  const OrdersLiveScreen({super.key, this.network = ConnectivityState.online, this.rows = const []});
   final ConnectivityState network;
+  final List<Widget> rows;
   @override
   Widget build(BuildContext context) {
-    const states = ['queued', 'mixing', 'served'];
     return ScreenScaffold(
       title: 'Orders Live',
       connectivity: network,
       scopeBadges: const ['BAR', 'LIVE'],
-      body: ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: states.length,
-        itemBuilder: (_, i) {
-          final s = states[i];
-          return ListTile(
-            title: Text('Order #${s.hashCode % 1000}'),
-            trailing: ToreBadge(label: s.toUpperCase(), color: s == 'served' ? Colors.green : ToreTokens.ruby),
-          );
-        },
-      ),
+      body: rows.isEmpty
+          ? const EmptyStateView(message: 'Aucune commande live.')
+          : ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rows.length,
+              itemBuilder: (_, i) => rows[i],
+            ),
     );
   }
 }
