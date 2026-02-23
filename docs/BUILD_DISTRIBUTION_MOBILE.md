@@ -1,52 +1,88 @@
 # Mobile build & distribution
 
-## Required env/defines
-- `TORE_ENV`: `dev`, `stage`, or `prod`.
-- API base URL should follow environment:
-  - DEV: `https://dev-api.tore.app`
-  - STAGE: `https://stage-api.tore.app`
-  - PROD: `https://api.tore.app`
-- Recommended dart define usage:
-  - `--dart-define=TORE_ENV=dev`
-  - `--dart-define=TORE_ENV=stage`
-  - `--dart-define=TORE_ENV=prod`
+## Required Dart defines
+Every build command below must set:
+- `TORE_ENV=dev|stage|prod`
+- `TORE_API_BASE_URL=<env API base>`
+- `TORE_STARTUP_URL=<optional deep link/route for QA fast-entry>`
 
-## Build commands
-From `tore/app`:
+Recommended API bases:
+- DEV: `https://dev-api.tore.app`
+- STAGE: `https://stage-api.tore.app`
+- PROD: `https://api.tore.app`
+
+## Android builds
+Run from `tore/app` after dependency sync:
 
 ```bash
 flutter clean && flutter pub get
-flutter build apk --flavor dev --dart-define=TORE_ENV=dev
-flutter build apk --flavor stage --dart-define=TORE_ENV=stage
-flutter build apk --flavor prod --dart-define=TORE_ENV=prod
 ```
 
+### APK (internal test / sideload)
 ```bash
-flutter build ipa --flavor prod --dart-define=TORE_ENV=prod
+flutter build apk --release \
+  --flavor dev \
+  --dart-define=TORE_ENV=dev \
+  --dart-define=TORE_API_BASE_URL=https://dev-api.tore.app \
+  --dart-define=TORE_STARTUP_URL=tore://home-hub
+
+flutter build apk --release \
+  --flavor stage \
+  --dart-define=TORE_ENV=stage \
+  --dart-define=TORE_API_BASE_URL=https://stage-api.tore.app \
+  --dart-define=TORE_STARTUP_URL=tore://home-hub
+
+flutter build apk --release \
+  --flavor prod \
+  --dart-define=TORE_ENV=prod \
+  --dart-define=TORE_API_BASE_URL=https://api.tore.app
 ```
 
-## Version bump checklist
-1. Update version/build in `tore/app/pubspec.yaml` (`version: x.y.z+build`).
-2. Rebuild flavor artifacts.
-3. Update remote config:
-   - `min_supported_version`
-   - `min_supported_build`
-4. Re-run:
-   - `./scripts/rc_verify_mobile.sh`
-   - `./scripts/rc_grep_pii.sh`
+### Android App Bundle (Play Store)
+```bash
+flutter build appbundle --release \
+  --flavor stage \
+  --dart-define=TORE_ENV=stage \
+  --dart-define=TORE_API_BASE_URL=https://stage-api.tore.app
+
+flutter build appbundle --release \
+  --flavor prod \
+  --dart-define=TORE_ENV=prod \
+  --dart-define=TORE_API_BASE_URL=https://api.tore.app
+```
+
+## iOS build
+### IPA (TestFlight)
+```bash
+flutter build ipa --release \
+  --flavor prod \
+  --dart-define=TORE_ENV=prod \
+  --dart-define=TORE_API_BASE_URL=https://api.tore.app
+```
+
+Optional QA fast-entry:
+```bash
+flutter build ipa --release \
+  --flavor stage \
+  --dart-define=TORE_ENV=stage \
+  --dart-define=TORE_API_BASE_URL=https://stage-api.tore.app \
+  --dart-define=TORE_STARTUP_URL=tore://orga/control
+```
+
+## Artifact naming convention
+Rename/copy exported binaries using:
+
+`tore_<env>_<version>+<build>_<gitsha>.<apk|aab|ipa>`
+
+Examples:
+- `tore_dev_1.8.0+220_a1b2c3d.apk`
+- `tore_stage_1.8.0+220_a1b2c3d.aab`
+- `tore_prod_1.8.0+220_a1b2c3d.ipa`
 
 ## Distribution quick steps
-### TestFlight (iOS)
-1. Build IPA with `prod` flavor.
-2. Upload in Xcode Organizer / Transporter.
-3. Add release notes and assign testers in App Store Connect.
-
-### Internal APK (Android)
-1. Build APK/AAB for target flavor.
-2. Upload to internal track (Play Console) or internal MDM.
-3. Share install instructions with environment badge expectation.
-
-## OS-level deep link plumbing (platform checklist)
-- Android: add `intent-filter` entries for `tore://` + verified `https://*.tore.app/*` in `AndroidManifest.xml`.
-- iOS: add URL Types for `tore` and Associated Domains for `applinks:dev.tore.app`, `applinks:stage.tore.app`, `applinks:tore.app`.
-- Validate links with platform tooling before RC sign-off.
+1. Build artifact with matching env flavor + defines.
+2. Verify runtime diagnostics shows expected env/API base.
+3. Upload:
+   - APK/AAB: internal or Play track.
+   - IPA: TestFlight via Organizer/Transporter.
+4. Attach release notes and Night-1 checklist links in operator handoff.
