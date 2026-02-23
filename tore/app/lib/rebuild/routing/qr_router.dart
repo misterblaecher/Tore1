@@ -19,13 +19,26 @@ class QrRouter {
         return AppRoutes.eventHub;
       case 'orders_live':
         return AppRoutes.barOrders;
+      case 'order':
+      case 'order_client':
+        return AppRoutes.orders;
       case 'wallet':
         return AppRoutes.wallet;
       case 'profile':
+      case 'user_profile':
         return AppRoutes.profile;
+      case 'polymarket':
+      case 'pm':
+        return AppRoutes.polymarketGlobal;
+      case 'orga':
       case 'orga_entry':
+      case 'staff_entry':
+      case 'entry_staff':
         return AppRoutes.orgaEntry;
       case 'bar_zones':
+      case 'bar_profile':
+      case 'bar_staff':
+      case 'staff_bar':
         return AppRoutes.barZones;
       default:
         return AppRoutes.blocked;

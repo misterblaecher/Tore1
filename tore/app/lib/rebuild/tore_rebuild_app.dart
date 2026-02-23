@@ -6,12 +6,14 @@ import 'models/backend_models.dart';
 import 'models/qr_resolve.dart';
 import 'models/rebuild_types.dart';
 import 'models/snapshot.dart';
+import 'routing/adapter_routes.dart';
 import 'routing/app_routes.dart';
 import 'routing/deep_link_router.dart';
 import 'routing/qr_router.dart';
 import 'routing/route_guards.dart';
 import 'services/api_client.dart';
 import 'services/cache_store.dart';
+import 'services/contract_api.dart';
 import 'services/client_log.dart';
 import 'services/idempotency_store.dart';
 import 'services/network_state_resolver.dart';
@@ -36,6 +38,7 @@ class ToreRebuildApp extends StatefulWidget {
 
 class _ToreRebuildAppState extends State<ToreRebuildApp> {
   final _api = ApiClient();
+  late final ContractApi _contractApi = RebuildContractApi(_api);
   final _cache = CacheStore();
   final _guards = RouteGuards();
   final _router = QrRouter();
@@ -165,7 +168,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
 
   Future<void> _resolveQrPayload(String payload) async {
     try {
-      final resolved = await _api.resolveQr(payload);
+      final resolved = await _contractApi.resolveQr(payload);
       final route = _router.targetFor(resolved);
       if (!mounted) return;
       if (resolved.isError || route == AppRoutes.blocked) {
@@ -276,6 +279,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       'user_join': AppRoutes.join,
       'user_event_hub': AppRoutes.eventHub,
       'user_menu': AppRoutes.menu,
+      'user_orders_lifecycle': AppRoutes.orders,
       'user_wallet': AppRoutes.wallet,
       'user_ticker': AppRoutes.ticker,
       'user_polymarket_global': AppRoutes.polymarketGlobal,
@@ -306,6 +310,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       AppRoutes.join: 'user_join',
       AppRoutes.eventHub: 'user_event_hub',
       AppRoutes.menu: 'user_menu',
+      AppRoutes.orders: 'user_orders_lifecycle',
       AppRoutes.wallet: 'user_wallet',
       AppRoutes.ticker: 'user_ticker',
       AppRoutes.polymarketGlobal: 'user_polymarket_global',
@@ -344,7 +349,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.events: (_) => BarEventsScreen(children: _barEvents.map((e) => ListTile(title: Text(e.title), subtitle: Text(e.state ?? 'LIVE'))).toList(), network: _network),
         AppRoutes.join: (_) => JoinEventScreen(writeAllowed: _writeAllowed('user_join'), onJoin: () => _sensitiveWrite('user_join', 'join_event'), network: _network),
         AppRoutes.eventHub: (_) => EventHubScreen(network: _network, modules: _moduleCards(ToreMode.user), eventState: _eventContext?.eventState ?? EventState.draft, writeAllowedReason: _writeAllowed('user_event_hub') ? 'Writes enabled' : 'Writes blocked by network or event state'),
-        AppRoutes.menu: (_) => MenuScreen(network: _network, items: _menuItems.map((m) => ListTile(title: Text(m.name), trailing: Text(m.price.toStringAsFixed(2)))).toList()),
+        ...buildAdapterRoutes(network: _network, eventId: int.tryParse(_eventContext?.eventId ?? '42') ?? 42, orderId: _orders.isEmpty ? 1 : int.tryParse(_orders.first.id) ?? 1, eventState: _eventContext?.eventState ?? EventState.draft),
         AppRoutes.wallet: (_) => WalletScreen(network: _network, rows: (_wallet?.timeline ?? const []).map((tx) => ListTile(title: Text(tx.type), trailing: Text(tx.delta.toStringAsFixed(2), style: const TextStyle(fontFamily: 'monospace')))).toList()),
         AppRoutes.ticker: (_) => TickerScreen(network: _network, rows: _ticker.map((t) => ListTile(title: Text(t.message))).toList()),
         AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(network: _network, rows: _polyGlobal.map((m) => ListTile(title: Text(m.title))).toList()),
@@ -360,7 +365,6 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.orgaExports: (_) => OrgaExportsScreen(eventId: _eventContext?.eventId ?? '42', environment: _environment, moduleStates: _eventContext?.moduleStates ?? const {}, backendPack: _orgaQrPack, onOpenInApp: _openDeepLink),
         AppRoutes.devDiagnostics: (_) => _diagnosticsAllowed ? DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, environment: _environment, environmentColor: _environmentColor, buildInfo: _buildInfo, remoteConfig: _remoteConfig ?? RemoteConfigPayload.defaults(_environment), onSimulatedNetworkChanged: (state) { if (!mounted) return; setState(() { _network = state; _networkTransitionAt = DateTime.now(); }); }, onOpenUrl: _openDeepLink) : const ScreenScaffold(title: 'Diagnostics disabled', scopeBadges: ['PROD'], body: BlockedStateView(title: 'Diagnostics hidden', message: 'Diagnostics are disabled by remote config.')),
         AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
-        AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network, rows: _orders.map((o) => ListTile(title: Text('Order ${o.id}'), trailing: Text(o.status))).toList()),
         AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
         AppRoutes.barZones: (_) => ZonesQrAdminScreen(network: _network, zones: _zones.map((z) => z.name).toList()),
         AppRoutes.barAnalytics: (_) => AnalyticsScreen(network: _network),
