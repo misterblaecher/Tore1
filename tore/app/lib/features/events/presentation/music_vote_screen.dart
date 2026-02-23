@@ -245,73 +245,73 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                           children: [
                             if (_payload == null) const Text('Module indisponible.'),
                             if (_payload != null) ...[
-                    Card(
-                      child: ListTile(
-                        title: Text(
-                          roundStatus == 'OPEN'
-                              ? 'Round OPEN • ${_countdown(round)}'
-                              : roundStatus == 'LOCKED'
-                                  ? 'Winner locked'
-                                  : 'Waiting for next round',
-                        ),
-                      ),
-                    ),
-                    if (_payload!['nowPlaying'] is Map)
-                      Card(
-                        child: ListTile(
-                          title: Text('Now Playing: ${_payload!['nowPlaying']['title'] ?? ''}'),
-                          subtitle: Text('Open in ${_payload!['nowPlaying']['provider'] ?? ''}: ${_payload!['nowPlaying']['externalUrl'] ?? ''}'),
-                        ),
-                      ),
-                    if (_payload!['winner'] is Map)
-                      Card(
-                        child: ListTile(
-                          title: Text('Next winner: ${_payload!['winner']['candidate']['title'] ?? ''}'),
-                          subtitle: Text('Votes: ${_payload!['winner']['votesCount'] ?? 0} • Open in ${_payload!['winner']['candidate']['provider'] ?? ''}'),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    DropdownButton<MusicProvider>(
-                      value: _provider,
-                      items: MusicProvider.values
-                          .map((provider) => DropdownMenuItem(value: provider, child: Text(musicProviderLabel(provider))))
-                          .toList(),
-                      onChanged: (v) => setState(() => _provider = v ?? MusicProvider.spotify),
-                    ),
-                    TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Lien')),
-                    TextField(controller: _titleHintCtrl, decoration: const InputDecoration(labelText: 'Titre (optionnel)')),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: canVote ? _addCandidate : null,
-                      child: const Text('Ajouter'),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Candidats', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    if (((_payload!['candidates'] as List?) ?? const []).isEmpty)
-                      const Card(child: ListTile(title: Text('Aucun candidat live'), subtitle: Text('Ajoute un morceau quand un round est ouvert.'))),
-                    ...(((_payload!['candidates'] as List?) ?? const [])).map((row) {
-                      final candidate = Map<String, dynamic>.from(row as Map);
-                      final provider = musicProviderFromApi('${candidate['provider'] ?? ''}');
-                      final url = (candidate['urlOriginal'] ?? candidate['externalUrl'] ?? '').toString();
-                      return Card(
-                        child: ListTile(
-                          title: Text((candidate['titleHint'] ?? '').toString().isNotEmpty ? '${candidate['titleHint']}' : 'Lien'),
-                          subtitle: Text(candidateShortLink(url)),
-                          leading: Chip(label: Text(provider == null ? '${candidate['provider'] ?? ''}' : musicProviderLabel(provider))),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.open_in_new),
-                            onPressed: () async {
-                              final uri = Uri.tryParse(url);
-                              if (uri != null) {
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
-                              }
-                            },
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
+                              Card(
+                                child: ListTile(
+                                  title: Text(
+                                    roundStatus == 'OPEN'
+                                        ? 'Round OPEN • ${_countdown(round)}'
+                                        : roundStatus == 'LOCKED'
+                                            ? 'Winner locked'
+                                            : 'Waiting for next round',
+                                  ),
+                                ),
+                              ),
+                              if (_payload!['nowPlaying'] is Map)
+                                Card(
+                                  child: ListTile(
+                                    title: Text('Now Playing: ${_payload!['nowPlaying']['title'] ?? ''}'),
+                                    subtitle: Text('Open in ${_payload!['nowPlaying']['provider'] ?? ''}: ${_payload!['nowPlaying']['externalUrl'] ?? ''}'),
+                                  ),
+                                ),
+                              if (_payload!['winner'] is Map)
+                                Card(
+                                  child: ListTile(
+                                    title: Text('Next winner: ${_payload!['winner']['candidate']['title'] ?? ''}'),
+                                    subtitle: Text('Votes: ${_payload!['winner']['votesCount'] ?? 0} • Open in ${_payload!['winner']['candidate']['provider'] ?? ''}'),
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              DropdownButton<MusicProvider>(
+                                value: _provider,
+                                items: MusicProvider.values
+                                    .map((provider) => DropdownMenuItem(value: provider, child: Text(musicProviderLabel(provider))))
+                                    .toList(),
+                                onChanged: (v) => setState(() => _provider = v ?? MusicProvider.spotify),
+                              ),
+                              TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Lien')),
+                              TextField(controller: _titleHintCtrl, decoration: const InputDecoration(labelText: 'Titre (optionnel)')),
+                              const SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: canVote ? _addCandidate : null,
+                                child: const Text('Ajouter'),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text('Candidats', style: TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              if (((_payload!['candidates'] as List?) ?? const []).isEmpty)
+                                const Card(child: ListTile(title: Text('Aucun candidat live'), subtitle: Text('Ajoute un morceau quand un round est ouvert.'))),
+                              ...(((_payload!['candidates'] as List?) ?? const [])).map((row) {
+                                final candidate = Map<String, dynamic>.from(row as Map);
+                                final provider = musicProviderFromApi('${candidate['provider'] ?? ''}');
+                                final url = (candidate['urlOriginal'] ?? candidate['externalUrl'] ?? '').toString();
+                                return Card(
+                                  child: ListTile(
+                                    title: Text((candidate['titleHint'] ?? '').toString().isNotEmpty ? '${candidate['titleHint']}' : 'Lien'),
+                                    subtitle: Text(candidateShortLink(url)),
+                                    leading: Chip(label: Text(provider == null ? '${candidate['provider'] ?? ''}' : musicProviderLabel(provider))),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.open_in_new),
+                                      onPressed: () async {
+                                        final uri = Uri.tryParse(url);
+                                        if (uri != null) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
                         ),
                       ]),
                     ),
