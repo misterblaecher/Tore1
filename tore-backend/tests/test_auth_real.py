@@ -285,6 +285,37 @@ def test_email_request_otp_dev_dry_run_when_smtp_fails(monkeypatch):
     assert len((res.json().get("otp_debug") or res.json().get("code") or "")) == 6
 
 
+
+def test_email_request_otp_returns_dev_token_when_provider_missing_in_dry_run(monkeypatch):
+    monkeypatch.setenv("ENV", "DEV")
+    monkeypatch.setenv("TORE_EMAIL_OTP_DRY_RUN", "1")
+    monkeypatch.delenv("EMAIL_PROVIDER_API_KEY", raising=False)
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+
+    client = TestClient(app)
+    email = f"otp-devtoken-{now_utc().timestamp()}@example.com"
+    res = client.post("/auth/email/request_otp", json={"email": email})
+
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    assert len(res.json()["devToken"]) == 6
+
+
+def test_email_request_otp_returns_503_when_provider_missing_and_dry_run_disabled(monkeypatch):
+    monkeypatch.setenv("ENV", "DEV")
+    monkeypatch.setenv("TORE_EMAIL_OTP_DRY_RUN", "0")
+    monkeypatch.setenv("TORE_EMAIL_OTP_DEV_MODE", "0")
+    monkeypatch.delenv("EMAIL_PROVIDER_API_KEY", raising=False)
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+
+    client = TestClient(app)
+    email = f"otp-no-provider-{now_utc().timestamp()}@example.com"
+    res = client.post("/auth/email/request_otp", json={"email": email})
+
+    assert res.status_code == 503
+    assert res.json() == {"detail": {"code": "email_provider_missing"}}
+
+
 def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
     monkeypatch.setenv("ENV", "DEV")
     monkeypatch.setenv("TORE_DEV_EXPOSE_MAGIC_TOKEN", "1")

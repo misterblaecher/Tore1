@@ -228,6 +228,10 @@ def _otp_dev_mode_enabled() -> bool:
     return _env_bool("TORE_EMAIL_OTP_DEV_MODE", default=_strict_dev_env_enabled())
 
 
+def _otp_dry_run_enabled() -> bool:
+    return _env_bool("TORE_EMAIL_OTP_DRY_RUN", default=False)
+
+
 def _otp_exp_minutes() -> int:
     try:
         return max(1, int(os.getenv("TORE_EMAIL_OTP_EXP_MINUTES", str(EMAIL_OTP_TTL_MIN))))
@@ -3940,16 +3944,19 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
     db.add(otp_row)
     db.commit()
 
+    provider_key = (os.getenv("EMAIL_PROVIDER_API_KEY") or "").strip()
+    smtp_host = (os.getenv("SMTP_HOST") or "").strip()
+    if not provider_key and not smtp_host:
+        if _otp_dry_run_enabled():
+            logging.info("OTP_DEBUG email=%s code=%s", email, raw_code)
+            return {"ok": True, "devToken": raw_code}
+        raise HTTPException(status_code=503, detail={"code": "email_provider_missing"})
+
     out: Dict[str, Any] = {"ok": True, "sent": True}
     if _otp_dev_mode_enabled() or _env_bool("ALLOW_DEV_OTP", False):
         logging.info("DEV OTP for %s: %s", email, raw_code)
         out.update({"sent": False, "otp_debug": raw_code, "reason": "dev_mode"})
         return out
-
-    provider_key = (os.getenv("EMAIL_PROVIDER_API_KEY") or "").strip()
-    smtp_host = (os.getenv("SMTP_HOST") or "").strip()
-    if not provider_key and not smtp_host:
-        raise HTTPException(status_code=500, detail={"reason": "email_provider_missing", "code": "email_provider_missing"})
 
     magic_link = _build_magic_redirect_url(payload.redirect_url, email, raw_code)
     _send_otp_email(email, raw_code, magic_link=magic_link)
