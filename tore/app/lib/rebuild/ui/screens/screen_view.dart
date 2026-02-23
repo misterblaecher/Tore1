@@ -21,9 +21,9 @@ class ScreenView extends StatelessWidget {
           Wrap(
             spacing: 8,
             children: [
-              Badge(label: definition.mode.name.toUpperCase()),
-              Badge(label: definition.scope.name.toUpperCase()),
-              Badge(label: state.name.toUpperCase()),
+              ToreBadge(label: definition.mode.name.toUpperCase()),
+              ToreBadge(label: definition.scope.name.toUpperCase()),
+              ToreBadge(label: state.name.toUpperCase()),
             ],
           ),
           const SizedBox(height: 12),
