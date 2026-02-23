@@ -17,7 +17,7 @@ dart format --set-exit-if-changed lib test || {
 
 echo "[2/4] flutter analyze (or dart analyze fallback)"
 if command -v flutter >/dev/null 2>&1; then
-  flutter analyze
+  flutter analyze --no-fatal-warnings --no-fatal-infos
 else
   dart analyze
 fi

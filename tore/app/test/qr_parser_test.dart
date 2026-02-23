@@ -64,6 +64,12 @@ void main() {
       expect(payload.eventId, 21);
     });
 
+
+    test('parse https open deeplink compatibility', () {
+      final payload = parser.parse('https://app.tore.be/open?type=event&id=21');
+      expect(payload.type, QrType.joinEvent);
+      expect(payload.eventId, 21);
+    });
     test('parse open orga deeplink', () {
       final payload = parser.parse('tore://open?type=orga&id=7');
       expect(payload.type, QrType.orga);

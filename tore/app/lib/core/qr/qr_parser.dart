@@ -108,9 +108,11 @@ class QrParser {
   }
 
   QrPayload _fromUri(String raw, Uri uri, DateTime now) {
-    final host = (uri.host.isNotEmpty ? uri.host : uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '').toLowerCase();
     final query = uri.queryParameters.map((key, value) => MapEntry(key.toLowerCase(), value));
-    final type = _mapType(host, query['type']);
+    final host = uri.host.toLowerCase();
+    final firstPathSegment = uri.pathSegments.isNotEmpty ? uri.pathSegments.first.toLowerCase() : '';
+    final target = host == 'app.tore.be' ? firstPathSegment : (host.isNotEmpty ? host : firstPathSegment);
+    final type = _mapType(target, query['type']);
 
     if (type == QrType.unknown) {
       return QrPayload(type: QrType.unknown, raw: raw, parsedAt: now, reason: 'format invalide', fields: query);

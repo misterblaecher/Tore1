@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,9 +15,19 @@ class _FakeTokenStorage extends TokenStorage {
   }
 }
 
-class _NoopErrorHandler extends ErrorInterceptorHandler {
+class _CompletingErrorHandler extends ErrorInterceptorHandler {
+  _CompletingErrorHandler() : _completer = Completer<void>();
+
+  final Completer<void> _completer;
+
+  Future<void> get completed => _completer.future;
+
   @override
-  void next(DioException error) {}
+  void next(DioException error) {
+    if (!_completer.isCompleted) {
+      _completer.complete();
+    }
+  }
 }
 
 void main() {
@@ -26,9 +38,10 @@ void main() {
     final requestOptions = RequestOptions(path: '/auth/me');
     final response = Response(requestOptions: requestOptions, statusCode: 401, data: {'detail': 'Invalid token'});
     final error = DioException(requestOptions: requestOptions, response: response);
+    final handler = _CompletingErrorHandler();
 
-    interceptor.onError(error, _NoopErrorHandler());
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    interceptor.onError(error, handler);
+    await handler.completed;
 
     expect(storage.cleared, isTrue);
   });
@@ -40,9 +53,10 @@ void main() {
     final requestOptions = RequestOptions(path: '/healthz', extra: {'skipAuth': true});
     final response = Response(requestOptions: requestOptions, statusCode: 401, data: {'detail': 'Invalid token'});
     final error = DioException(requestOptions: requestOptions, response: response);
+    final handler = _CompletingErrorHandler();
 
-    interceptor.onError(error, _NoopErrorHandler());
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    interceptor.onError(error, handler);
+    await handler.completed;
 
     expect(storage.cleared, isFalse);
   });
