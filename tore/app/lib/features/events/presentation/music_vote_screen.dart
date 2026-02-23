@@ -312,6 +312,7 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                                 );
                               }),
                             ],
+                          ],
                         ),
                       ]),
                     ),
