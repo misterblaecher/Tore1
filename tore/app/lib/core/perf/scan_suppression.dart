@@ -15,8 +15,13 @@ class ScanSuppression {
     final current = now ?? _clock();
     final isSame = _lastHash == hash;
     final isCooldown = _lastAt != null && current.difference(_lastAt!) < cooldown;
-    _lastHash = hash;
-    _lastAt = current;
-    return isSame && isCooldown;
+    final suppressed = isSame && isCooldown;
+
+    if (!suppressed) {
+      _lastHash = hash;
+      _lastAt = current;
+    }
+
+    return suppressed;
   }
 }
