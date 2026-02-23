@@ -56,7 +56,9 @@ void main() {
     final first = await store.keyForIntent('POST:/events/42/join');
     final second = await store.keyForIntent('POST:/events/42/join');
 
-    expect(first, equals(second));
+    expect(second.key, first.key);
+    expect(first.replayed, isFalse);
+    expect(second.replayed, isTrue);
   });
 
   test('QR error code mapping provides expected UX copy', () {

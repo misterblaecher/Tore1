@@ -22,7 +22,7 @@ void main() {
 
     final out = scrubJsonMap(input);
     expect(out['authorization'], '[redacted]');
-    expect((out['url'] as String), contains('[redacted]'));
+    expect((out['url'] as String), anyOf(contains('[redacted]'), contains('%5Bredacted%5D')));
     expect(out['email'], '[redacted]');
     expect(out['phone'], '[redacted]');
     expect((out['user_id'] as String), contains('***'));

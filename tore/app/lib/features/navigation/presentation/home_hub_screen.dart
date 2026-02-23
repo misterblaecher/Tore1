@@ -21,7 +21,7 @@ import 'package:tore/state.dart';
 import 'package:tore/core/auth/auth_models.dart';
 import 'package:tore/ui/components/components.dart' show ToreChip, ToreChipVariant, ToreDivider;
 import 'package:tore/shared/utils/write_gate.dart';
-import 'package:tore/ui/app_design_system.dart';
+import 'package:tore/ui/app_design_system.dart' as ds;
 import 'package:tore/features/navigation/presentation/soiree_ops_screen.dart';
 
 class HomeHubScreen extends ConsumerWidget {
@@ -131,11 +131,11 @@ class HomeHubScreen extends ConsumerWidget {
                 : null,
           ),
           const SizedBox(height: 14),
-          ToreCard(
+          ds.ToreCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SectionTitle('Mode soirée'),
+                const ds.SectionTitle('Mode soirée'),
                 Text('Mode actif: ${accountMode.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 if (accountMode == AccountMode.user) const Text('Découvrir et participer aux events.'),
@@ -146,7 +146,7 @@ class HomeHubScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           if (!hasEvent)
-            ToreCard(
+            ds.ToreCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -274,7 +274,7 @@ class _EventHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ToreCard(
+    return ds.ToreCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -339,7 +339,7 @@ class _ModuleCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: ToreCard(
+        child: ds.ToreCard(
           child: Column(
             children: [
               Row(

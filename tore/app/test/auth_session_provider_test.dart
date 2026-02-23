@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/core/auth/auth_session_provider.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('AuthSessionState transitions guest -> authenticated', () {
     const guest = AuthSessionState.guest();
     expect(guest.isGuest, true);

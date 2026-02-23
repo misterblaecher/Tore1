@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tore/core/perf/perf_tracer.dart';
 import 'package:tore/features/entry/data/entry_service.dart';
 import 'package:tore/features/entry/presentation/entry_mode_screen.dart';
+import 'package:tore/features/health/presentation/health_providers.dart';
+
+import 'support/test_network_fakes.dart';
 
 class FakeEntryService extends EntryService {
   FakeEntryService() : super(Dio(), PerfTracer());
@@ -25,9 +28,15 @@ void main() {
   testWidgets('EntryModeScreen shows scanner and manual mode controls', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [entryServiceProvider.overrideWithValue(FakeEntryService())],
+        overrides: [
+          entryServiceProvider.overrideWithValue(FakeEntryService()),
+          healthRepositoryProvider.overrideWithValue(FakeHealthRepository()),
+        ],
         child: const MaterialApp(home: EntryModeScreen(eventId: 1)),
       ),
     );

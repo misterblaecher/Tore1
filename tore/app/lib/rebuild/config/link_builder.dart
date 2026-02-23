@@ -16,7 +16,7 @@ class LinkBuilder {
     }
   }
 
-  String get appBase => 'tore://';
+  String get appBase => 'tore:/';
 
   String qr(String payload) => '$httpsBase/qr/${Uri.encodeComponent(payload)}';
 
