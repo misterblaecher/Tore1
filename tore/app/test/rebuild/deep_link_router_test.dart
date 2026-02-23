@@ -18,6 +18,16 @@ void main() {
     expect(router.parse('https://dev.tore.app/menu/event/e42')!.route, AppRoutes.menu);
   });
 
+
+  test('parses legacy open links and maps to rebuild routes only', () {
+    expect(router.parse('https://app.tore.be/open?type=event&id=event_42')!.route, AppRoutes.eventHub);
+    expect(router.parse('tore://open?type=join&id=event_42')!.route, AppRoutes.join);
+    final qr = router.parse('https://app.tore.be/open?type=qr&payload=legacy_payload');
+    expect(qr, isNotNull);
+    expect(qr!.isQr, isTrue);
+    expect(qr.qrPayload, 'legacy_payload');
+  });
+
   test('rejects unsupported hosts/schemes', () {
     expect(router.parse('http://tore.app/event/e42'), isNull);
     expect(router.parse('https://example.com/event/e42'), isNull);

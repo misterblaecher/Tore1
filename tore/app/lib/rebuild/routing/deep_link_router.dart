@@ -22,6 +22,9 @@ class DeepLinkRouter {
 
     if (!_isSupported(uri)) return null;
 
+    final legacyOpen = _parseLegacyOpen(uri);
+    if (legacyOpen != null) return legacyOpen;
+
     final segments = _segmentsFor(uri);
     if (segments.isEmpty) return null;
 
@@ -43,7 +46,32 @@ class DeepLinkRouter {
   bool _isSupported(Uri uri) {
     if (uri.scheme == 'tore') return true;
     if (uri.scheme != 'https') return false;
-    return const {'tore.app', 'dev.tore.app', 'stage.tore.app'}.contains(uri.host);
+    return const {'tore.app', 'dev.tore.app', 'stage.tore.app', 'app.tore.be'}.contains(uri.host);
+  }
+
+  DeepLinkRoute? _parseLegacyOpen(Uri uri) {
+    final isLegacyHost = uri.host == 'app.tore.be';
+    final isLegacyScheme = uri.scheme == 'tore';
+    final opensLegacySurface = (isLegacyHost && uri.path == '/open') || (isLegacyScheme && uri.host == 'open');
+    if (!opensLegacySurface) return null;
+
+    final type = uri.queryParameters['type']?.trim().toLowerCase();
+    final id = uri.queryParameters['id']?.trim();
+    final payload = uri.queryParameters['payload']?.trim();
+
+    switch (type) {
+      case 'event':
+        return (id != null && id.isNotEmpty) ? const DeepLinkRoute.route(AppRoutes.eventHub) : null;
+      case 'join':
+        return (id != null && id.isNotEmpty) ? const DeepLinkRoute.route(AppRoutes.join) : null;
+      case 'menu':
+        return (id != null && id.isNotEmpty) ? const DeepLinkRoute.route(AppRoutes.menu) : null;
+      case 'qr':
+        final qrPayload = payload ?? id;
+        return (qrPayload != null && qrPayload.isNotEmpty) ? DeepLinkRoute.qr(qrPayload) : null;
+      default:
+        return null;
+    }
   }
 
   List<String> _segmentsFor(Uri uri) {
