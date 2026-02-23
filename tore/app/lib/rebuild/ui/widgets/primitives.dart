@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/event_context.dart';
 import '../../models/rebuild_types.dart';
 import '../../models/snapshot.dart';
+import '../../services/network_state_resolver.dart';
 import '../theme/tore_theme.dart';
 
 class HeaderCard extends StatelessWidget {
@@ -59,6 +60,54 @@ class ModuleCard extends StatelessWidget {
   }
 }
 
+class ScreenScaffold extends StatelessWidget {
+  const ScreenScaffold({
+    super.key,
+    required this.title,
+    required this.body,
+    this.connectivity,
+    this.scopeBadges = const <String>[],
+    this.footer,
+  });
+
+  final String title;
+  final Widget body;
+  final ConnectivityState? connectivity;
+  final List<String> scopeBadges;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[
+      if (connectivity != null) NetworkBanner(state: connectivity!),
+      if (scopeBadges.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ToreTokens.s12),
+          child: Wrap(
+            spacing: ToreTokens.s8,
+            runSpacing: ToreTokens.s8,
+            children: [for (final badge in scopeBadges) ToreBadge(label: badge)],
+          ),
+        ),
+      body,
+      if (footer != null) ...[
+        const SizedBox(height: ToreTokens.s12),
+        footer!,
+      ],
+    ];
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(ToreTokens.s12),
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
 class NetworkBanner extends StatelessWidget {
   const NetworkBanner({super.key, required this.state});
   final ConnectivityState state;
@@ -68,10 +117,64 @@ class NetworkBanner extends StatelessWidget {
     if (state == ConnectivityState.online) return const SizedBox.shrink();
     final offline = state == ConnectivityState.offline;
     return Card(
-      color: offline ? Colors.red.withOpacity(0.15) : Colors.orange.withOpacity(0.15),
+      color: offline ? Colors.red.withOpacity(0.18) : Colors.orange.withOpacity(0.18),
       child: Padding(
         padding: const EdgeInsets.all(ToreTokens.s8),
-        child: Text(offline ? 'Offline: cache-only read, writes blocked.' : 'Network degraded: cache-first read enabled.'),
+        child: Row(
+          children: [
+            Icon(offline ? Icons.cloud_off : Icons.network_check),
+            const SizedBox(width: ToreTokens.s8),
+            Expanded(
+              child: Text(
+                offline
+                    ? 'Vous êtes hors ligne. Les lectures restent disponibles via le cache, et les actions sont temporairement bloquées.'
+                    : 'Connexion dégradée. Les données proviennent du cache en priorité et les rafraîchissements sont ralentis.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class LoadingSkeleton extends StatelessWidget {
+  const LoadingSkeleton({super.key, this.lines = 5, this.blockHeight = 52});
+  final int lines;
+  final double blockHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [for (var i = 0; i < lines; i++) SkeletonBlock(height: blockHeight)]);
+  }
+}
+
+class BlockedStateView extends StatelessWidget {
+  const BlockedStateView({super.key, required this.title, required this.message, this.ctaLabel, this.onTap});
+  final String title;
+  final String message;
+  final String? ctaLabel;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.block, size: 42),
+            const SizedBox(height: ToreTokens.s8),
+            Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+            const SizedBox(height: ToreTokens.s8),
+            Text(message, textAlign: TextAlign.center),
+            if (ctaLabel != null && onTap != null) ...[
+              const SizedBox(height: ToreTokens.s12),
+              FilledButton(onPressed: onTap, child: Text(ctaLabel!)),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -80,6 +183,14 @@ class NetworkBanner extends StatelessWidget {
 class ConfirmDialogWithReason extends StatefulWidget {
   const ConfirmDialogWithReason({super.key, required this.title});
   final String title;
+
+  static const reasonPresets = <String>[
+    'network_retry',
+    'customer_error',
+    'fraud_suspected',
+    'manual_override',
+    'other',
+  ];
 
   static Future<SensitiveReason?> show(BuildContext context, {required String title}) {
     return showDialog<SensitiveReason>(context: context, builder: (_) => ConfirmDialogWithReason(title: title));
@@ -90,26 +201,49 @@ class ConfirmDialogWithReason extends StatefulWidget {
 }
 
 class _ConfirmDialogWithReasonState extends State<ConfirmDialogWithReason> {
-  final _code = TextEditingController();
+  String _selected = ConfirmDialogWithReason.reasonPresets.first;
   final _text = TextEditingController();
+
+  bool get _requiresText => _selected == 'other' || _selected.isEmpty;
+  bool get _canSubmit => !_requiresText || _text.text.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: _code, decoration: const InputDecoration(labelText: 'reason_code')),
+        DropdownButtonFormField<String>(
+          value: _selected,
+          decoration: const InputDecoration(labelText: 'Motif'),
+          items: ConfirmDialogWithReason.reasonPresets
+              .map((reason) => DropdownMenuItem(value: reason, child: Text(reason)))
+              .toList(),
+          onChanged: (value) => setState(() => _selected = value ?? ''),
+        ),
         const SizedBox(height: ToreTokens.s8),
-        TextField(controller: _text, decoration: const InputDecoration(labelText: 'reason_text')),
+        TextField(
+          controller: _text,
+          decoration: InputDecoration(
+            labelText: _requiresText ? 'Détail (obligatoire)' : 'Détail (optionnel)',
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
         FilledButton(
-          onPressed: () {
-            if (_code.text.trim().isEmpty || _text.text.trim().isEmpty) return;
-            Navigator.pop(context, SensitiveReason(code: _code.text.trim(), text: _text.text.trim()));
-          },
-          child: const Text('Confirm'),
+          onPressed: _canSubmit
+              ? () {
+                  Navigator.pop(
+                    context,
+                    SensitiveReason(
+                      code: _selected.trim().isEmpty ? 'other' : _selected,
+                      text: _text.text.trim(),
+                    ),
+                  );
+                }
+              : null,
+          child: const Text('Confirmer'),
         )
       ],
     );
@@ -134,12 +268,49 @@ class ErrorStateView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
   @override
-  Widget build(BuildContext context) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(message), const SizedBox(height: 8), FilledButton(onPressed: onRetry, child: const Text('Retry'))]));
+  Widget build(BuildContext context) => Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
+        ]),
+      );
 }
 
 class EmptyStateView extends StatelessWidget {
-  const EmptyStateView({super.key, required this.message});
+  const EmptyStateView({super.key, required this.message, this.icon = Icons.inbox_outlined});
   final String message;
+  final IconData icon;
   @override
-  Widget build(BuildContext context) => Center(child: Text(message));
+  Widget build(BuildContext context) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 36),
+            const SizedBox(height: ToreTokens.s8),
+            Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      );
+}
+
+class WriteGuardButton extends StatelessWidget {
+  const WriteGuardButton({super.key, required this.network, required this.onPressed, required this.label});
+  final ConnectivityState network;
+  final VoidCallback onPressed;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolver = NetworkStateResolver();
+    final enabled = resolver.canWrite(network);
+    return FilledButton(
+      onPressed: enabled
+          ? onPressed
+          : () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Action indisponible hors ligne. Réessayez en ligne.')),
+              ),
+      child: Text(label),
+    );
+  }
 }

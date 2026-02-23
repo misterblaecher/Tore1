@@ -1,11 +1,79 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/rebuild_types.dart';
 import '../../theme/tore_theme.dart';
+import '../../widgets/primitives.dart';
 
-class BarDashboardScreen extends StatelessWidget { const BarDashboardScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Bar Dashboard',[const ListTile(title:Text('Revenue today'),trailing:Text('€ 2,430',style:TextStyle(fontFamily:'monospace'))),const ListTile(title:Text('Orders live'),trailing:Text('18'))]); }
-class OrdersLiveScreen extends StatelessWidget { const OrdersLiveScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Orders Live',[for(final s in ['queued','mixing','served']) ListTile(title:Text('Order #${s.hashCode%1000}'),trailing:Text(s.toUpperCase()))]); }
-class FullMenuAdminScreen extends StatelessWidget { const FullMenuAdminScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Full Menu Admin',[const ListTile(title:Text('Product editing shell')),const ListTile(title:Text('Price + tags + stock'))]); }
-class ZonesQrAdminScreen extends StatelessWidget { const ZonesQrAdminScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Zones QR Admin',[SwitchListTile(value:true,onChanged:(_){},title:const Text('Zone A enabled')),const ListTile(title:Text('Export zones (stub)'))]); }
-class AnalyticsScreen extends StatelessWidget { const AnalyticsScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Analytics',[const Text('Charts placeholder (no extra deps)'),Container(height:120,color:ToreTokens.surfaceAlt),const SizedBox(height:8),Container(height:120,color:ToreTokens.surfaceAlt)]); }
+class BarDashboardScreen extends StatelessWidget {
+  const BarDashboardScreen({super.key, this.network = ConnectivityState.online});
+  final ConnectivityState network;
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Bar Dashboard',
+        connectivity: network,
+        scopeBadges: const ['BAR'],
+        body: const Column(children: [
+          ListTile(title: Text('Revenue today'), trailing: Text('€ 2,430', style: TextStyle(fontFamily: 'monospace'))),
+          ListTile(title: Text('Orders live'), trailing: Text('18'))
+        ]),
+      );
+}
 
-Widget _frame(String title,List<Widget> children)=>Scaffold(appBar:AppBar(title:Text(title)),body:ListView(padding:const EdgeInsets.all(ToreTokens.s12),children:children));
+class OrdersLiveScreen extends StatelessWidget {
+  const OrdersLiveScreen({super.key, this.network = ConnectivityState.online});
+  final ConnectivityState network;
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Orders Live',
+        connectivity: network,
+        scopeBadges: const ['BAR', 'LIVE'],
+        body: Column(children: [
+          for (final s in ['queued', 'mixing', 'served'])
+            ListTile(
+              title: Text('Order #${s.hashCode % 1000}'),
+              trailing: ToreBadge(label: s.toUpperCase(), color: s == 'served' ? Colors.green : ToreTokens.ruby),
+            ),
+        ]),
+      );
+}
+
+class FullMenuAdminScreen extends StatelessWidget {
+  const FullMenuAdminScreen({super.key, this.network = ConnectivityState.online});
+  final ConnectivityState network;
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Full Menu Admin',
+        connectivity: network,
+        scopeBadges: const ['BAR'],
+        body: const Column(children: [ListTile(title: Text('Product editing shell')), ListTile(title: Text('Price + tags + stock'))]),
+      );
+}
+
+class ZonesQrAdminScreen extends StatelessWidget {
+  const ZonesQrAdminScreen({super.key, this.network = ConnectivityState.online, this.zones = const ['Zone A', 'Zone B']});
+  final ConnectivityState network;
+  final List<String> zones;
+
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Zones QR Admin',
+        connectivity: network,
+        scopeBadges: const ['BAR', 'GUARDED'],
+        body: zones.isEmpty
+            ? const EmptyStateView(message: 'Aucune zone QR configurée.')
+            : Column(children: [for (final zone in zones) SwitchListTile(value: true, onChanged: (_) {}, title: Text('$zone enabled'))]),
+        footer: FilledButton.icon(onPressed: zones.isEmpty ? null : () {}, icon: const Icon(Icons.download), label: const Text('Export zones (stub)')),
+      );
+}
+
+class AnalyticsScreen extends StatelessWidget {
+  const AnalyticsScreen({super.key, this.network = ConnectivityState.online});
+  final ConnectivityState network;
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Analytics',
+        connectivity: network,
+        scopeBadges: const ['BAR'],
+        body: Column(children: [const Text('Charts placeholder (no extra deps)'), Container(height: 120, color: ToreTokens.surfaceAlt), const SizedBox(height: 8), Container(height: 120, color: ToreTokens.surfaceAlt)]),
+      );
+}

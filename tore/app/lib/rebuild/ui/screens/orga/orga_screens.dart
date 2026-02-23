@@ -1,13 +1,150 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/rebuild_types.dart';
 import '../../theme/tore_theme.dart';
+import '../../widgets/primitives.dart';
 
-class OrgaEventControlHubScreen extends StatelessWidget { const OrgaEventControlHubScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Event Control Hub',[const ListTile(title:Text('Entries today'),trailing:Text('421',style:TextStyle(fontFamily:'monospace'))),const ListTile(title:Text('Profitability'),subtitle:Text('stub')),SwitchListTile(value:true,onChanged:(_){},title:const Text('Module toggles')),const ListTile(title:Text('System status'),subtitle:Text('All green'))]); }
-class EntryStaffScreen extends StatelessWidget { const EntryStaffScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Entry Staff',[Container(height:120,color:ToreTokens.surfaceAlt,child:const Center(child:Icon(Icons.qr_code_scanner,size:52))),const SizedBox(height:8),const Text('Counter: 244',style:TextStyle(fontSize:24,fontFamily:'monospace')),const ToreFeedback(ok:true,text:'Entry accepted')]); }
-class OrgaMenuAdminScreen extends StatelessWidget { const OrgaMenuAdminScreen({super.key}); @override Widget build(BuildContext context)=>_frame('Menu Admin',[const ListTile(title:Text('Mojito'),subtitle:Text('Quick edit price')),SwitchListTile(value:true,onChanged:(_){},title:const Text('Stock enabled'))]); }
-class OrgaPolymarketAdminScreen extends StatelessWidget { const OrgaPolymarketAdminScreen({super.key, required this.onSensitive}); final Future<void> Function(String action) onSensitive; @override Widget build(BuildContext context)=>_frame('Polymarket Admin',[FilledButton(onPressed:()=>onSensitive('create_market'),child:const Text('Create')),FilledButton(onPressed:()=>onSensitive('resolve_market'),child:const Text('Resolve')),OutlinedButton(onPressed:()=>onSensitive('dispute_market'),child:const Text('Dispute'))]); }
-class OrgaUrgencyActionsScreen extends StatelessWidget { const OrgaUrgencyActionsScreen({super.key, required this.onSensitive}); final Future<void> Function(String action) onSensitive; @override Widget build(BuildContext context)=>_frame('Urgency Actions',[FilledButton(onPressed:()=>onSensitive('pause_event'),child:const Text('Pause')),FilledButton(onPressed:()=>onSensitive('freeze_event'),child:const Text('Freeze')),FilledButton(onPressed:()=>onSensitive('broadcast'),child:const Text('Broadcast'))]); }
+class OrgaEventControlHubScreen extends StatelessWidget {
+  const OrgaEventControlHubScreen({super.key, this.network = ConnectivityState.online, this.writeAllowed = true});
+  final ConnectivityState network;
+  final bool writeAllowed;
 
-class ToreFeedback extends StatelessWidget { const ToreFeedback({super.key, required this.ok, required this.text}); final bool ok; final String text; @override Widget build(BuildContext context)=>Container(padding:const EdgeInsets.all(12),color:(ok?Colors.green:Colors.red).withOpacity(.18),child:Text(text)); }
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Event Control Hub',
+        connectivity: network,
+        scopeBadges: const ['ORGA', 'CONTROL'],
+        body: Column(
+          children: [
+            Card(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(ToreTokens.s12),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Entrées validées', style: TextStyle(fontSize: 16)),
+                    SizedBox(height: 4),
+                    Text('421', style: TextStyle(fontFamily: 'monospace', fontSize: 40, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+            const ListTile(title: Text('System status'), subtitle: Text('All green')),
+            SwitchListTile(value: true, onChanged: writeAllowed ? (_) {} : null, title: const Text('Module ENTRY enabled')),
+            SwitchListTile(value: true, onChanged: writeAllowed ? (_) {} : null, title: const Text('Module MENU enabled')),
+            ListTile(
+              title: const Text('Urgency actions'),
+              subtitle: Text(writeAllowed ? 'Access enabled' : 'Read-only mode'),
+              trailing: const Icon(Icons.warning_amber),
+            ),
+          ],
+        ),
+      );
+}
 
-Widget _frame(String title,List<Widget> children)=>Scaffold(appBar:AppBar(title:Text(title)),body:ListView(padding:const EdgeInsets.all(ToreTokens.s12),children:children));
+class EntryStaffScreen extends StatelessWidget {
+  const EntryStaffScreen({super.key, this.network = ConnectivityState.online});
+  final ConnectivityState network;
+
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Entry Staff',
+        connectivity: network,
+        scopeBadges: const ['ORGA', 'ENTRY'],
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(
+            height: 120,
+            color: ToreTokens.surfaceAlt,
+            child: const Center(child: Icon(Icons.qr_code_scanner, size: 52)),
+          ),
+          const SizedBox(height: 8),
+          const Text('Counter: 244', style: TextStyle(fontSize: 24, fontFamily: 'monospace')),
+          const SizedBox(height: 8),
+          const _EntryResultChip(status: 'OK', text: 'Entrée validée.'),
+          const _EntryResultChip(status: 'DENIED', text: 'Accès refusé: billet déjà utilisé.'),
+          const _EntryResultChip(status: 'ERROR', text: 'Lecture impossible: recommencez le scan.'),
+          const SizedBox(height: 8),
+          const Text('Derniers 5 scans'),
+          ...List.generate(5, (i) => ListTile(title: Text('Scan #${i + 1}'), subtitle: const Text('local cache only'))),
+        ]),
+      );
+}
+
+class OrgaMenuAdminScreen extends StatelessWidget {
+  const OrgaMenuAdminScreen({super.key, this.network = ConnectivityState.online});
+  final ConnectivityState network;
+
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Menu Admin',
+        connectivity: network,
+        scopeBadges: const ['ORGA', 'MENU'],
+        body: Column(children: [const ListTile(title: Text('Mojito'), subtitle: Text('Quick edit price')), SwitchListTile(value: true, onChanged: (_) {}, title: const Text('Stock enabled'))]),
+      );
+}
+
+class OrgaPolymarketAdminScreen extends StatelessWidget {
+  const OrgaPolymarketAdminScreen({super.key, required this.onSensitive, this.network = ConnectivityState.online});
+  final Future<void> Function(String action) onSensitive;
+  final ConnectivityState network;
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Polymarket Admin',
+        connectivity: network,
+        scopeBadges: const ['ORGA', 'MARKET'],
+        body: Column(children: [
+          WriteGuardButton(network: network, onPressed: () => onSensitive('create_market'), label: 'Create'),
+          const SizedBox(height: 8),
+          WriteGuardButton(network: network, onPressed: () => onSensitive('resolve_market'), label: 'Resolve'),
+          const SizedBox(height: 8),
+          WriteGuardButton(network: network, onPressed: () => onSensitive('dispute_market'), label: 'Dispute'),
+        ]),
+      );
+}
+
+class OrgaUrgencyActionsScreen extends StatelessWidget {
+  const OrgaUrgencyActionsScreen({super.key, required this.onSensitive, this.network = ConnectivityState.online});
+  final Future<void> Function(String action) onSensitive;
+  final ConnectivityState network;
+  @override
+  Widget build(BuildContext context) => ScreenScaffold(
+        title: 'Urgency Actions',
+        connectivity: network,
+        scopeBadges: const ['ORGA', 'URGENT'],
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          WriteGuardButton(network: network, onPressed: () => onSensitive('pause_event'), label: 'Pause event'),
+          const SizedBox(height: 8),
+          WriteGuardButton(network: network, onPressed: () => onSensitive('freeze_event'), label: 'Freeze event'),
+          const SizedBox(height: 8),
+          WriteGuardButton(network: network, onPressed: () => onSensitive('broadcast'), label: 'Broadcast message'),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: ToreTokens.surfaceAlt,
+            child: const Text('DEV payload preview:\n{"action":"pause_event","reason_code":"manual_override","reason_text":"..."}', style: TextStyle(fontFamily: 'monospace')),
+          ),
+        ]),
+      );
+}
+
+class _EntryResultChip extends StatelessWidget {
+  const _EntryResultChip({required this.status, required this.text});
+  final String status;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      'OK' => Colors.green,
+      'DENIED' => Colors.orange,
+      _ => Colors.red,
+    };
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
+      color: color.withOpacity(.18),
+      child: Row(children: [ToreBadge(label: status, color: color), const SizedBox(width: 8), Expanded(child: Text(text))]),
+    );
+  }
+}
