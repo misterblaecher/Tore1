@@ -187,7 +187,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     final parsed = _deepLinkRouter.parse(url);
     if (parsed == null) {
       if (!mounted) return;
-      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Lien invalide', 'message': 'Le lien n'est pas supporté par cette version de l'app.'});
+      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Lien invalide', 'message': "Le lien n'est pas supporté par cette version de l'app."});
       return;
     }
 
@@ -199,7 +199,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     final route = parsed.route;
     if (!_guards.routeAllowedForMode(route, _mode)) {
       if (!mounted) return;
-      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Mauvais mode', 'message': 'Ce lien n'est pas autorisé pour le mode actif.'});
+      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': 'Mauvais mode', 'message': "Ce lien n'est pas autorisé pour le mode actif."});
       return;
     }
 
@@ -232,8 +232,29 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   }
 
   List<Widget> _moduleCards(ToreMode mode) {
-    final defs = _defs.where((d) => d.mode == mode).where((d) => _effectiveState(d.id) != ModuleState.off).toList();
+    final visibleModuleIds = _visibleModuleIdsForMode(mode);
+    final defs = _defs
+        .where((d) => d.mode == mode)
+        .where((d) => _effectiveState(d.id) != ModuleState.off)
+        .where((d) => visibleModuleIds == null || visibleModuleIds.contains(d.id))
+        .toList();
     return [for (final d in defs) ModuleCard(def: d, state: _effectiveState(d.id), onOpen: () => _openModule(d.id))];
+  }
+
+  Set<String>? _visibleModuleIdsForMode(ToreMode mode) {
+    if (_environment != AppEnvironment.prod) return null;
+    if (mode != ToreMode.user) return null;
+    return const {
+      'user_home',
+      'user_event_hub',
+      'user_join',
+      'user_menu',
+      'user_wallet',
+      'user_ticker',
+      'user_polymarket_global',
+      'user_login_profile',
+      'user_qr_scanner',
+    };
   }
 
   void _openModule(String moduleId) {
@@ -390,6 +411,18 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             ),
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
+        if (name.startsWith('/legacy') || name.startsWith('/features') || name.startsWith('/shell') || name.startsWith('/app_shell')) {
+          return MaterialPageRoute(
+            builder: (_) => const ScreenScaffold(
+              title: 'Blocked',
+              scopeBadges: ['GUARD'],
+              body: BlockedStateView(
+                title: 'Surface legacy désactivée',
+                message: 'Cette surface legacy est masquée pendant la convergence rebuild.',
+              ),
+            ),
+          );
+        }
         if (name.startsWith('/orga') && _mode != ToreMode.orga) {
           return MaterialPageRoute(builder: (_) => const ScreenScaffold(title: 'Blocked', scopeBadges: ['GUARD'], body: BlockedStateView(title: 'Mauvais mode', message: 'Passez en mode ORGA pour ouvrir cet écran.')));
         }
