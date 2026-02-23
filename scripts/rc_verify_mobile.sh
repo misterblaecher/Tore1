@@ -4,8 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../tore/app"
 
 echo "[RC verify] Flutter/Dart toolchain checks"
-if ! command -v dart >/dev/null 2>&1; then
-  echo "dart not found. Install Flutter SDK (includes dart) then rerun."
+if ! command -v flutter >/dev/null 2>&1; then
+  echo "flutter not found. Install Flutter SDK, ensure \`flutter\` is in PATH, then rerun."
   exit 0
 fi
 
@@ -22,8 +22,8 @@ else
   dart analyze
 fi
 
-echo "[3/4] dart test"
-dart test
+echo "[3/4] flutter test"
+flutter test
 
 echo "[4/4] route-surface guard checks"
 if rg -n "^\s*AppRoutes\.[A-Za-z0-9_]+\s*:\s*\(_\)\s*=>\s*AppShell\(" lib/rebuild/tore_rebuild_app.dart; then

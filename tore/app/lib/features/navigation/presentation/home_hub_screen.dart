@@ -19,7 +19,7 @@ import 'package:tore/features/wallet/presentation/wallet_screen.dart';
 import 'package:tore/features/map_calendar/presentation/calendar_screen.dart';
 import 'package:tore/state.dart';
 import 'package:tore/core/auth/auth_models.dart';
-import 'package:tore/ui/components/components.dart';
+import 'package:tore/ui/components/components.dart' show ToreChip, ToreChipVariant, ToreDivider;
 import 'package:tore/shared/utils/write_gate.dart';
 import 'package:tore/ui/app_design_system.dart';
 import 'package:tore/features/navigation/presentation/soiree_ops_screen.dart';

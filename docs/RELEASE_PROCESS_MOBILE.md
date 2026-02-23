@@ -15,7 +15,7 @@
 ## 2) Install deps + checks
 1. `flutter clean && flutter pub get`
 2. `flutter analyze`
-3. `dart test`
+3. `flutter test`
 4. `./scripts/rc_verify_mobile.sh`
 5. `./scripts/rc_grep_pii.sh`
 
