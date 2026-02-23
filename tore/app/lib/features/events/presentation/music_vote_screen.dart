@@ -228,6 +228,8 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                             const SizedBox(height: 8),
                             ElevatedButton(onPressed: writeBlocked || _posting ? null : _suggestPreEvent, child: const Text('Suggérer un son')),
                             const SizedBox(height: 12),
+                            if (((_preEventPayload?['items'] as List?) ?? const []).isEmpty)
+                              const Card(child: ListTile(title: Text('Aucune suggestion pour le moment'), subtitle: Text('Sois le premier à proposer un son.'))),
                             ...(((_preEventPayload?['items'] as List?) ?? const [])).map((row) {
                               final item = Map<String, dynamic>.from(row as Map);
                               return Card(child: ListTile(
@@ -286,6 +288,8 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                     const SizedBox(height: 16),
                     const Text('Candidats', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
+                    if (((_payload!['candidates'] as List?) ?? const []).isEmpty)
+                      const Card(child: ListTile(title: Text('Aucun candidat live'), subtitle: Text('Ajoute un morceau quand un round est ouvert.'))),
                     ...(((_payload!['candidates'] as List?) ?? const [])).map((row) {
                       final candidate = Map<String, dynamic>.from(row as Map);
                       final provider = musicProviderFromApi('${candidate['provider'] ?? ''}');

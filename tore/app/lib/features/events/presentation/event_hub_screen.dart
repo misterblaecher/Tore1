@@ -120,7 +120,7 @@ class EventHubScreen extends ConsumerWidget {
       ),
       _module(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined, builder: (_) => HuntScreen(eventId: eventId)),
       _module(key: 'battles', title: 'Battles', subtitle: 'Affonds en direct', icon: Icons.sports_mma_outlined, builder: (_) => BattlesScreen(eventId: eventId)),
-      _module(key: 'music_vote', aliases: const ['music', 'vote'], title: 'Music vote', subtitle: 'Vote la prochaine track', icon: Icons.music_note_outlined, builder: (_) => MusicVoteScreen(eventId: eventId)),
+      _module(key: 'music_vote', aliases: const ['music', 'vote'], title: 'Musique', subtitle: 'Pré-event + live rounds', icon: Icons.music_note_outlined, builder: (_) => MusicVoteScreen(eventId: eventId)),
       _module(key: 'safety', title: 'Safe Kit', subtitle: 'Buddy, check-ins et alerte ORGA', icon: Icons.health_and_safety_outlined, builder: (_) => SafetyScreen(eventId: eventId)),
       _module(key: 'map', title: 'Carte', subtitle: 'Lieu, trajets & navettes', icon: Icons.map_outlined, builder: (_) => EventMapScreen(eventId: eventId)),
       _module(

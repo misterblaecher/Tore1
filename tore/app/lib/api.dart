@@ -576,6 +576,31 @@ class Api {
   Future<Map<String, dynamic>> committeeMembers(int committeeId) async =>
       Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/members')).data as Map);
 
+
+  Future<Map<String, dynamic>> committeeSpaceFeedPosts({required int committeeId, String? cursor, int limit = 20}) async {
+    final res = await _client.dio.get(
+      '/committees/$committeeId/feed/posts',
+      queryParameters: {'limit': limit, if (cursor != null && cursor.isNotEmpty) 'cursor': cursor},
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeSpaceCalendarItems({required int committeeId, String? month}) async {
+    final res = await _client.dio.get(
+      '/committees/$committeeId/calendar/items',
+      queryParameters: {if (month != null && month.isNotEmpty) 'month': month},
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> committeeSpaceExpenses({required int committeeId, String? month}) async {
+    final res = await _client.dio.get(
+      '/committees/$committeeId/expenses',
+      queryParameters: {if (month != null && month.isNotEmpty) 'month': month},
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> createCommitteeInviteCode({
     required int committeeId,
     String? expiresAtIso,
