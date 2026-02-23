@@ -5,6 +5,9 @@ import 'package:tore/api.dart';
 import 'package:tore/features/events/presentation/event_public_screen.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/state.dart';
+import 'package:tore/features/health/presentation/health_providers.dart';
+
+import 'support/test_network_fakes.dart';
 
 class _FakeApi extends Api {
   _FakeApi() : super('http://localhost:8000');
@@ -26,8 +29,9 @@ void main() {
 
   testWidgets('prefills join code from deep link routing', (tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(
+      ProviderScope(
+        overrides: [healthRepositoryProvider.overrideWithValue(FakeHealthRepository())],
+        child: const MaterialApp(
           home: JoinEventScreen(prefillCode: 'join66'),
         ),
       ),
@@ -40,7 +44,10 @@ void main() {
   testWidgets('autoJoinPublic redirects to EventPublicScreen', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [apiProvider.overrideWithValue(_FakeApi())],
+        overrides: [
+          apiProvider.overrideWithValue(_FakeApi()),
+          healthRepositoryProvider.overrideWithValue(FakeHealthRepository()),
+        ],
         child: const MaterialApp(
           home: JoinEventScreen(prefillEventId: 42, autoJoinPublic: true),
         ),
