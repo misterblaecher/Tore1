@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_environment.dart';
 import 'models/event_context.dart';
 import 'models/backend_models.dart';
 import 'models/qr_resolve.dart';
@@ -13,12 +14,14 @@ import 'services/cache_store.dart';
 import 'services/client_log.dart';
 import 'services/idempotency_store.dart';
 import 'services/network_state_resolver.dart';
+import 'services/remote_config.dart';
 import 'ui/module_catalog.dart';
 import 'ui/screens/bar/bar_screens.dart';
 import 'ui/screens/dev/diagnostics_screen.dart';
 import 'ui/screens/help/runbook_screens.dart';
 import 'ui/screens/orga/orga_exports_screen.dart';
 import 'ui/screens/orga/orga_screens.dart';
+import 'ui/screens/system/update_required_screen.dart';
 import 'ui/screens/user/user_screens.dart';
 import 'ui/theme/tore_theme.dart';
 import 'ui/widgets/primitives.dart';
@@ -39,6 +42,9 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   late final IdempotencyStore _writerStore = IdempotencyStore(persistence: SharedPrefsIdempotencyPersistence());
   late final IdempotentWriter _writer = IdempotentWriter(store: _writerStore);
   late final List<ModuleDefinition> _defs = buildModuleDefinitions();
+  late final AppEnvironment _environment = appEnvironmentFromDefine();
+  late final BuildInfo _buildInfo = BuildInfo.fromEnvironment();
+  late final RemoteConfigService _remoteConfigService = RemoteConfigService(apiClient: _api, cacheStore: _cache, environment: _environment);
 
   ToreMode _mode = ToreMode.user;
   UserSnapshot? _userSnapshot;
@@ -58,6 +64,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   List<OrderDto> _orders = const [];
   List<ZoneDto> _zones = const [];
   Map<String, dynamic>? _orgaQrPack;
+  RemoteConfigPayload? _remoteConfig;
 
   @override
   void initState() {
@@ -72,6 +79,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     final cachedEvent = await _cache.loadCachedEvent('event_42');
     _userSnapshot = cachedMe;
     _eventContext = cachedEvent;
+    _remoteConfig = await _remoteConfigService.load();
 
     try {
       if (_networkStateResolver.canReadRemote(_network)) {
@@ -120,7 +128,32 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     return base;
   }
 
-  bool _writeAllowed(String moduleId) => _networkStateResolver.canWrite(_network) && _effectiveState(moduleId) == ModuleState.on;
+
+  bool get _writesDisabledByRemote => _remoteConfig?.disableWritesGlobal == true;
+
+  bool get _belowMinSupportedVersion {
+    final minVersion = _remoteConfig?.minSupportedVersion;
+    if (minVersion != null && minVersion.isNotEmpty) {
+      return isBelowMinVersion(_buildInfo.semver, minVersion);
+    }
+    final minBuild = _remoteConfig?.minSupportedBuild;
+    return minBuild != null && _buildInfo.buildNumber < minBuild;
+  }
+
+  bool get _mustShowUpdateRequired => _belowMinSupportedVersion || (_writesDisabledByRemote && (_mode == ToreMode.orga || _belowMinSupportedVersion));
+
+  String get _updateRequiredMessage {
+    if (_belowMinSupportedVersion) {
+      return 'Please update app to continue. Minimum required: ${_remoteConfig?.minSupportedVersion ?? _remoteConfig?.minSupportedBuild ?? 'latest'}.';
+    }
+    return _remoteConfig?.disableWritesMessage ?? 'Writes are temporarily frozen.';
+  }
+
+  bool get _diagnosticsAllowed => _remoteConfig?.diagnosticsEnabled ?? (_environment != AppEnvironment.prod);
+
+  Color get _environmentColor => ToreTheme.envBadgeColor(_environment);
+
+  bool _writeAllowed(String moduleId) => !_writesDisabledByRemote && _networkStateResolver.canWrite(_network) && _effectiveState(moduleId) == ModuleState.on;
 
   Future<void> _resolveQrPayload(String payload) async {
     try {
@@ -203,6 +236,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
 
 
   void _openDiagnostics() {
+    if (!_diagnosticsAllowed) return;
     Navigator.pushNamed(context, AppRoutes.devDiagnostics);
   }
   @override
@@ -212,8 +246,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       theme: ToreTheme.build(),
       initialRoute: AppRoutes.boot,
       routes: {
-        AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () { if (!mounted) return; setState(() => _consented = true); }),
-        AppRoutes.home: (_) => HomeHubScreen(network: _network, cards: [HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext), ..._moduleCards(ToreMode.user)]),
+        AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network, environmentLabel: appEnvironmentLabel(_environment), environmentColor: _environmentColor, onLongPressDiagnostics: _diagnosticsAllowed ? _openDiagnostics : null) : ConsentCharterScreen(onAccept: () { if (!mounted) return; setState(() => _consented = true); }),
+        AppRoutes.home: (_) => _mustShowUpdateRequired ? UpdateRequiredScreen(mode: _mode, message: _updateRequiredMessage, blockedByVersion: _belowMinSupportedVersion) : HomeHubScreen(network: _network, cards: [HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext), ..._moduleCards(ToreMode.user)]),
         AppRoutes.scanner: (_) => QrScannerScreen(onResolve: _resolveQrPayload, network: _network),
         AppRoutes.bars: (_) => BarsScreen(network: _network, children: _bars.map((b) => ListTile(title: Text(b.name), subtitle: Text(b.city ?? b.id))).toList()),
         AppRoutes.events: (_) => BarEventsScreen(children: _barEvents.map((e) => ListTile(title: Text(e.title), subtitle: Text(e.state ?? 'LIVE'))).toList(), network: _network),
@@ -224,8 +258,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.ticker: (_) => TickerScreen(network: _network, rows: _ticker.map((t) => ListTile(title: Text(t.message))).toList()),
         AppRoutes.polymarketGlobal: (_) => PolymarketGlobalScreen(network: _network, rows: _polyGlobal.map((m) => ListTile(title: Text(m.title))).toList()),
         AppRoutes.polymarketEvent: (_) => PolymarketEventScreen(network: _network, rows: _polyEvent.map((m) => ListTile(title: Text(m.title))).toList()),
-        AppRoutes.profile: (_) => ProfileSettingsScreen(network: _network, onOpenDiagnostics: _openDiagnostics, onOpenHelp: () => Navigator.pushNamed(context, AppRoutes.userHelp)),
-        AppRoutes.orgaHub: (_) => OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub'), entryApprovedCount: _entryStats?.approvedCount ?? 0, onOpenExports: () => Navigator.pushNamed(context, AppRoutes.orgaExports), onOpenRunbook: () => Navigator.pushNamed(context, AppRoutes.orgaRunbook)),
+        AppRoutes.profile: (_) => ProfileSettingsScreen(network: _network, onOpenDiagnostics: _diagnosticsAllowed ? _openDiagnostics : null, onOpenHelp: () => Navigator.pushNamed(context, AppRoutes.userHelp)),
+        AppRoutes.orgaHub: (_) => _mustShowUpdateRequired ? UpdateRequiredScreen(mode: _mode, message: _updateRequiredMessage, blockedByVersion: _belowMinSupportedVersion) : OrgaEventControlHubScreen(network: _network, writeAllowed: _writeAllowed('orga_event_control_hub'), entryApprovedCount: _entryStats?.approvedCount ?? 0, environmentLabel: appEnvironmentLabel(_environment), environmentColor: _environmentColor, onOpenExports: () => Navigator.pushNamed(context, AppRoutes.orgaExports), onOpenRunbook: () => Navigator.pushNamed(context, AppRoutes.orgaRunbook)),
         AppRoutes.orgaEntry: (_) => EntryStaffScreen(network: _network),
         AppRoutes.orgaMenu: (_) => OrgaMenuAdminScreen(network: _network),
         AppRoutes.orgaMarket: (_) => OrgaPolymarketAdminScreen(network: _network, onSensitive: (a) => _sensitiveWrite('orga_polymarket_admin', a)),
@@ -233,7 +267,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.userHelp: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
         AppRoutes.orgaRunbook: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
         AppRoutes.orgaExports: (_) => OrgaExportsScreen(eventId: _eventContext?.eventId ?? '42', moduleStates: _eventContext?.moduleStates ?? const {}, backendPack: _orgaQrPack),
-        AppRoutes.devDiagnostics: (_) => DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, onSimulatedNetworkChanged: (state) { if (!mounted) return; setState(() { _network = state; _networkTransitionAt = DateTime.now(); }); }),
+        AppRoutes.devDiagnostics: (_) => _diagnosticsAllowed ? DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, environment: _environment, environmentColor: _environmentColor, buildInfo: _buildInfo, remoteConfig: _remoteConfig ?? RemoteConfigPayload.defaults(_environment), onSimulatedNetworkChanged: (state) { if (!mounted) return; setState(() { _network = state; _networkTransitionAt = DateTime.now(); }); }) : const ScreenScaffold(title: 'Diagnostics disabled', scopeBadges: ['PROD'], body: BlockedStateView(title: 'Diagnostics hidden', message: 'Diagnostics are disabled by remote config.')),
         AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
         AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network, rows: _orders.map((o) => ListTile(title: Text('Order ${o.id}'), trailing: Text(o.status))).toList()),
         AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
@@ -249,7 +283,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         },
       },
       home: !_consented || _loading
-          ? (_loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () { if (!mounted) return; setState(() => _consented = true); }))
+          ? (_loading ? BootSplashScreen(network: _network, environmentLabel: appEnvironmentLabel(_environment), environmentColor: _environmentColor, onLongPressDiagnostics: _diagnosticsAllowed ? _openDiagnostics : null) : ConsentCharterScreen(onAccept: () { if (!mounted) return; setState(() => _consented = true); }))
           : Scaffold(
               appBar: AppBar(
                 title: const Text('TORÈ Night OS'),
