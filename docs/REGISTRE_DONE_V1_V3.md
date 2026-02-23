@@ -1,6 +1,6 @@
 # REGISTRE DONE V1→V3 — TORÈ
 
-Date de mise à jour: 2026-02-22
+Date de mise à jour: 2026-02-23
 
 ## 1) État des features/modules (USER / ORGA / BAR / COMITÉ)
 
@@ -110,3 +110,14 @@ Date de mise à jour: 2026-02-22
 8. Staff entry/bar mode exploitables en condition terrain instable.
 9. Exports fin de soirée disponibles et vérifiés (CSV/PDF).
 10. Runbooks déploiement soirée/chapi testés bout-en-bout en local.
+
+
+## 8) Addendum convergence V3 ↔ Rebuild (ticket INVENTORY + DEDUP)
+
+- Entrée unique constatée dans le code: `main.dart` lance `ToreRebuildApp`.
+- Les surfaces `features/*` et `rebuild/*` coexistent avec duplication sur navigation USER, QR, bars/events/join/hub, wallet, ticker, polymarket, ORGA/BAR shells.
+- Décision de convergence:
+  - **Surface visible unique**: routing rebuild (`AppRoutes`) + deep links rebuild.
+  - **Source de vérité contrats backend**: `docs/MOBILE_BACKEND_CONTRACTS.md`.
+  - **V3** reste source de migration pour modules non encore paritaires (menu/orders avancés, committees, hunts/battles/wifi/map-calendar/glossary/safety).
+- Référence plan détaillé: `docs/APP_CONVERGENCE_MAP.md` (inventaire, routes audit, mismatch contrats, plan PR A/B/C).
