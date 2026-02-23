@@ -26,26 +26,42 @@ class QrResolve {
       );
 }
 
-ErrorModel mapQrReasonToError(String? code) {
-  switch ((code ?? 'qr_unknown').toLowerCase()) {
-    case 'qr_unknown':
-    case 'invalid_qr':
-      return const ErrorModel(code: 'qr_unknown', message: 'QR inconnu. Vérifiez le code ou essayez la saisie manuelle.');
+class UiCopy {
+  const UiCopy({required this.title, required this.message, required this.ctaLabel});
+  final String title;
+  final String message;
+  final String ctaLabel;
+}
+
+const Map<String, UiCopy> uiCopyMapping = {
+  'qr_unknown': UiCopy(title: 'QR inconnu', message: 'Code non reconnu. Scannez un QR TORÈ valide ou utilisez la saisie.', ctaLabel: 'Réessayer'),
+  'qr_expired': UiCopy(title: 'QR expiré', message: 'Ce QR a expiré. Demandez un nouveau code à l’accueil.', ctaLabel: 'Demander un nouveau QR'),
+  'qr_replay': UiCopy(title: 'QR déjà utilisé', message: 'Ce QR a déjà servi. Utilisez un QR non consommé.', ctaLabel: 'Utiliser un autre QR'),
+  'module_off': UiCopy(title: 'Module indisponible', message: 'Le module est coupé pour cet événement.', ctaLabel: 'Retour au hub'),
+  'event_paused': UiCopy(title: 'Événement en pause', message: 'Actions temporairement gelées. Reprenez dans quelques minutes.', ctaLabel: 'Compris'),
+  'backend_down': UiCopy(title: 'Service indisponible', message: 'Serveur occupé. Réessayez dans un instant.', ctaLabel: 'Réessayer'),
+  'offline_write_blocked': UiCopy(title: 'Action bloquée hors ligne', message: 'Repassez en ligne pour confirmer cette action.', ctaLabel: 'OK'),
+};
+
+String normalizeUiCode(String? code) {
+  switch ((code ?? '').toLowerCase()) {
     case 'expired':
     case 'expired_qr':
-      return const ErrorModel(code: 'expired', message: 'Ce QR est expiré. Demandez un nouveau QR pour continuer.');
+      return 'qr_expired';
     case 'replay':
     case 'replay_qr':
-      return const ErrorModel(code: 'replay', message: 'QR déjà utilisé. Utilisez un QR non consommé.');
-    case 'module_off':
-      return const ErrorModel(code: 'module_off', message: 'Ce module est désactivé pour le moment.');
-    case 'event_paused':
-      return const ErrorModel(code: 'event_paused', message: 'Événement en pause. Réessayez dès la reprise.');
-    case 'backend_down':
-      return const ErrorModel(code: 'backend_down', message: 'Service temporairement indisponible. Réessayez dans quelques instants.');
-    case 'forbidden':
-      return const ErrorModel(code: 'forbidden', message: 'Ce QR ne vous autorise pas à accéder à cette section.');
+      return 'qr_replay';
+    case 'invalid_qr':
+      return 'qr_unknown';
     default:
-      return ErrorModel(code: code ?? 'qr_unknown', message: 'Impossible de traiter ce QR pour l’instant.');
+      return (code == null || code.isEmpty) ? 'qr_unknown' : code.toLowerCase();
   }
+}
+
+UiCopy resolveUiCopy(String? code) => uiCopyMapping[normalizeUiCode(code)] ?? uiCopyMapping['qr_unknown']!;
+
+ErrorModel mapQrReasonToError(String? code) {
+  final normalized = normalizeUiCode(code);
+  final copy = resolveUiCopy(normalized);
+  return ErrorModel(code: normalized, message: copy.message);
 }
