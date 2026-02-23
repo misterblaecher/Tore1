@@ -42,3 +42,32 @@ Checklist terrain courte:
 - Écriture possible sans `Idempotency-Key`.
 - Action sensible acceptée sans `reason_code`/`reason_text`.
 - Route module OFF accessible sans garde visible.
+
+## Auth OTP email (DEV)
+
+Activer le mode OTP DEV côté backend:
+
+- `ENV=DEV`
+- `TORE_EMAIL_OTP_DEV_MODE=true` (ou `ALLOW_DEV_OTP=true`)
+
+Exemple request OTP:
+
+```bash
+curl -X POST http://localhost:8000/auth/email/request_otp \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com"}'
+```
+
+Exemple verify OTP:
+
+```bash
+curl -X POST http://localhost:8000/auth/email/verify_otp \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","code":"123456"}'
+```
+
+Ensuite vérifier la session:
+
+```bash
+curl http://localhost:8000/auth/me -H 'Authorization: Bearer <token>'
+```
