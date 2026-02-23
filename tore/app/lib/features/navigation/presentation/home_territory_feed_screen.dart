@@ -175,14 +175,22 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                     ],
                   ),
                 ),
-                SolarPrimaryButton(
-                  onPressed: session.isGuest
-                      ? null
-                      : () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-                          ),
-                  icon: Icons.qr_code_scanner_outlined,
-                  label: "Scan",
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      child: SolarPrimaryButton(
+                        onPressed: session.isGuest
+                            ? null
+                            : () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                                ),
+                        icon: Icons.qr_code_scanner_outlined,
+                        label: "Scan",
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -238,6 +246,11 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(bar.name), Text(bar.distanceLabel, style: AppTextStyles.muted)])),
                   const SolarChip(label: "Actif", color: AppColors.solarRedSoft),
                 ]),
+              ),
+            if (!_loading && _bars.isEmpty)
+              const ToreEmptyState(
+                title: 'Aucun bar pour l\'instant',
+                message: 'Reviens un peu plus tard pour découvrir les bars actifs.',
               ),
             if (kTrendingEnabled) ...[
               const SizedBox(height: 12),
