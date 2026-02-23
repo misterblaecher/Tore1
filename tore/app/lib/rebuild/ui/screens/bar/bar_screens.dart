@@ -19,28 +19,6 @@ class BarDashboardScreen extends StatelessWidget {
       );
 }
 
-class OrdersLiveScreen extends StatelessWidget {
-  const OrdersLiveScreen({super.key, this.network = ConnectivityState.online, this.rows = const []});
-  final ConnectivityState network;
-  final List<Widget> rows;
-  @override
-  Widget build(BuildContext context) {
-    return ScreenScaffold(
-      title: 'Orders Live',
-      connectivity: network,
-      scopeBadges: const ['BAR', 'LIVE'],
-      body: rows.isEmpty
-          ? const EmptyStateView(message: 'Aucune commande live.')
-          : ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: rows.length,
-              itemBuilder: (_, i) => rows[i],
-            ),
-    );
-  }
-}
-
 class FullMenuAdminScreen extends StatelessWidget {
   const FullMenuAdminScreen({super.key, this.network = ConnectivityState.online});
   final ConnectivityState network;

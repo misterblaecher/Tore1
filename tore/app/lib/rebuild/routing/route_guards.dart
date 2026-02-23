@@ -3,6 +3,8 @@ import '../models/rebuild_types.dart';
 import '../models/snapshot.dart';
 
 class RouteGuards {
+  static const List<String> _legacyPrefixes = ['/legacy', '/features', '/shell', '/app_shell'];
+
   bool modeAllowed(ToreMode mode, UserSnapshot? userSnapshot) {
     final roles = userSnapshot?.roles ?? const <String>{};
     final caps = userSnapshot?.capabilities ?? const <String>{};
@@ -20,4 +22,6 @@ class RouteGuards {
     if (route.startsWith('/user')) return mode == ToreMode.user;
     return route == '/blocked';
   }
+
+  bool isLegacyRoute(String route) => _legacyPrefixes.any(route.startsWith);
 }

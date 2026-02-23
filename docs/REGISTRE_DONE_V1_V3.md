@@ -117,7 +117,12 @@ Date de mise à jour: 2026-02-23
 - Entrée unique constatée dans le code: `main.dart` lance `ToreRebuildApp`.
 - Les surfaces `features/*` et `rebuild/*` coexistent avec duplication sur navigation USER, QR, bars/events/join/hub, wallet, ticker, polymarket, ORGA/BAR shells.
 - Décision de convergence:
-  - **Surface visible unique**: routing rebuild (`AppRoutes`) + deep links rebuild.
+  - **Surface visible unique**: rebuild `AppRoutes` (single visible surface).
+  - **Deep links publics**: rebuild `DeepLinkRouter` uniquement.
   - **Source de vérité contrats backend**: `docs/MOBILE_BACKEND_CONTRACTS.md`.
-  - **V3** reste source de migration pour modules non encore paritaires (menu/orders avancés, committees, hunts/battles/wifi/map-calendar/glossary/safety).
+  - **V3** est interne uniquement (bibliothèque d'implémentation via adapters), pas une surface de routes publiques.
 - Référence plan détaillé: `docs/APP_CONVERGENCE_MAP.md` (inventaire, routes audit, mismatch contrats, plan PR A/B/C).
+
+### Developer rules (convergence)
+- Ne jamais ajouter de nouveau screen user-visible sous `features/*` sans exposition via un adapter rebuild + `AppRoutes` rebuild.
+- Ne jamais ajouter de route deep-link publique en dehors de `rebuild/routing/deep_link_router.dart`.

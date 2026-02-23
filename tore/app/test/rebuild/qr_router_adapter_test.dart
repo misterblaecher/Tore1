@@ -9,4 +9,17 @@ void main() {
 
     expect(router.targetFor(const QrResolve(valid: true, type: 'order_client')), AppRoutes.orders);
   });
+
+  test('blocks legacy route strings from routeFront mapping', () {
+    final router = QrRouter();
+
+    expect(
+      router.targetFor(const QrResolve(valid: true, type: 'menu', routeFront: '/app_shell')),
+      AppRoutes.blocked,
+    );
+    expect(
+      router.targetFor(const QrResolve(valid: true, type: 'menu', routeFront: '/features/orders')),
+      AppRoutes.blocked,
+    );
+  });
 }

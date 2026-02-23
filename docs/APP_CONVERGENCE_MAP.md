@@ -3,6 +3,13 @@
 Date: 2026-02-23
 Scope: inventory + dedup pass only (no feature implementation)
 
+
+## PR status
+
+- PR-A: ✅ Completed (rebuild is the public runtime surface; legacy entry routes guarded).
+- PR-B: ✅ Completed (critical KEEP V3 flows now mounted through rebuild adapters with rebuild banners/guards).
+- PR-C: ✅ Completed (legacy exposure cleanup, stub removal, QR routing hardening, contract boundary alignment, and guard checks in verification scripts).
+
 ## 1) Inventory table (capabilities/screens/flows)
 
 | Capability / Screen / Flow | Current location(s) | Status | Notes (gating, backend, risks) |
