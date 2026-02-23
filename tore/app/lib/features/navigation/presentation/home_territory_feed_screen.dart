@@ -267,8 +267,8 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                   ),
                 if (!_loading && _bars.isEmpty)
                   const ToreEmptyState(
-                    title: 'Aucun bar pour l'instant',
-                    message: 'Reviens un peu plus tard pour découvrir les bars actifs.',
+                    title: "Aucun bar pour l'instant",
+                    message: "Reviens un peu plus tard pour découvrir les bars actifs.",
                   ),
                 if (kTrendingEnabled) ...[
                   const SizedBox(height: 12),
