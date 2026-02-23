@@ -133,7 +133,7 @@ class OrgaUrgencyActionsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(ToreTokens.s8),
             color: ToreTokens.surfaceAlt,
-            child: const Text('DEV payload preview:\n{"action":"pause_event","reason_code":"manual_override","reason_text":"..."}', style: ToreTypography.mono),
+            child: const Text('DEV payload preview (whitelist):\n{"action":"pause_event","reason_code":"manual_override"}', style: ToreTypography.mono),
           ),
         ]),
       );

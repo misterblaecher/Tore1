@@ -1,4 +1,5 @@
 import 'rebuild_types.dart';
+import 'safe_parsing.dart';
 
 class UserSnapshot {
   const UserSnapshot({
@@ -21,11 +22,19 @@ class UserSnapshot {
       };
 
   static UserSnapshot fromJson(Map<String, dynamic> map) => UserSnapshot(
-        roles: (map['roles'] as List<dynamic>).cast<String>().toSet(),
-        capabilities: (map['capabilities'] as List<dynamic>).cast<String>().toSet(),
-        globalModules: (map['globalModules'] as Map<String, dynamic>).map(
-          (k, v) => MapEntry(k, ModuleState.values.byName(v as String)),
+        roles: safeGetList(map, 'roles').map((e) => e.toString()).where((e) => e.isNotEmpty).toSet(),
+        capabilities: safeGetList(map, 'capabilities').map((e) => e.toString()).where((e) => e.isNotEmpty).toSet(),
+        globalModules: safeGetMap(map, 'globalModules', aliases: const ['global_modules']).map(
+          (k, v) => MapEntry(k, _moduleStateFrom(v)),
         ),
-        syncedAt: DateTime.parse(map['syncedAt'] as String),
+        syncedAt: tryParseDateTime(map['syncedAt'], fallback: DateTime.now()),
       );
+}
+
+ModuleState _moduleStateFrom(Object? value) {
+  final name = value?.toString() ?? '';
+  for (final state in ModuleState.values) {
+    if (state.name == name) return state;
+  }
+  return ModuleState.off;
 }

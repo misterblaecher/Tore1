@@ -8,6 +8,7 @@ import '../models/error_model.dart';
 import '../models/event_context.dart';
 import '../models/qr_resolve.dart';
 import '../models/rebuild_types.dart';
+import '../models/safe_parsing.dart';
 import '../models/snapshot.dart';
 import 'cache_store.dart';
 import 'client_log.dart';
@@ -71,9 +72,9 @@ class ApiClient {
     };
     final context = EventContext(
       eventId: eventId,
-      eventState: mapBackendStateAlias((rawJson['eventState'] ?? rawJson['event_state'] ?? 'RUNNING').toString()),
+      eventState: mapBackendStateAlias(safeGetString(rawJson, 'eventState', fallback: 'RUNNING', aliases: const ['event_state'])),
       moduleStates: states,
-      syncedAt: DateTime.tryParse((rawJson['lastUpdatedAt'] ?? DateTime.now().toIso8601String()).toString()) ?? DateTime.now(),
+      syncedAt: tryParseDateTime(rawJson['lastUpdatedAt'] ?? rawJson['last_updated_at'], fallback: DateTime.now()),
     );
     _logNormalized('/events/{id}/context', {'eventState': context.eventState.name});
     return context;
@@ -145,7 +146,7 @@ class ApiClient {
 
   Future<PagedResult<TickerItemDto>> fetchTicker(String eventId, {String? cursor, int limit = 30, required ConnectivityState network}) async {
     final json = await _cacheFirstGet(key: _cache.tickerKey(eventId), path: '/events/$eventId/ticker', query: {'cursor': cursor, 'limit': limit}, network: network);
-    return PagedResult(items: _items(json).map(TickerItemDto.fromJson).toList(), nextCursor: json['next_cursor']?.toString());
+    return PagedResult(items: _items(json).map(TickerItemDto.fromJson).toList(), nextCursor: _sanitizeCursor(json['next_cursor']));
   }
 
   Future<List<PolymarketDto>> fetchPolymarketGlobal({required ConnectivityState network}) async {
@@ -159,8 +160,13 @@ class ApiClient {
   }
 
   Future<EntryStatsDto> fetchEntryStats(String eventId, {required ConnectivityState network}) async {
-    final json = await _cacheFirstGet(key: 'entry_stats:$eventId:v1', path: '/partner/portal/orga/events/$eventId/entry/stats', network: network);
-    return EntryStatsDto.fromJson(json);
+    try {
+      final json = await _cacheFirstGet(key: 'entry_stats:$eventId:v1', path: '/partner/portal/orga/events/$eventId/entry/stats', network: network);
+      return EntryStatsDto.fromJson(json);
+    } catch (_) {
+      final fallback = await _cacheFirstGet(key: 'entry_stats:$eventId:v1', path: '/partner/portal/events/$eventId/entry/stats', network: network);
+      return EntryStatsDto.fromJson(fallback);
+    }
   }
 
   Future<Map<String, dynamic>?> fetchOrgaQrPack(String eventId, {required ConnectivityState network}) async {
@@ -177,7 +183,7 @@ class ApiClient {
 
   Future<PagedResult<OrderDto>> fetchOrdersLive(String eventId, {String? cursor, int limit = 25, required ConnectivityState network}) async {
     final json = await _cacheFirstGet(key: _cache.ordersKey('event', eventId), path: '/orders/live', query: {'event_id': eventId, 'cursor': cursor, 'limit': limit}, network: network);
-    return PagedResult(items: _items(json).map(OrderDto.fromJson).toList(), nextCursor: json['next_cursor']?.toString());
+    return PagedResult(items: _items(json).map(OrderDto.fromJson).toList(), nextCursor: _sanitizeCursor(json['next_cursor']));
   }
 
   Future<void> updateOrderStatus(String orderId, String status, {String? reason, required String idempotencyKey, required ConnectivityState network}) async {
@@ -277,8 +283,13 @@ class ApiClient {
   }
 
   List<Map<String, dynamic>> _items(Map<String, dynamic> map) {
-    final rows = (map['items'] ?? map['rows'] ?? map['events'] ?? map['orders'] ?? map['markets'] ?? <dynamic>[]) as List<dynamic>;
+    final rows = safeGetList(map, 'items', aliases: const ['rows', 'events', 'orders', 'markets']);
     return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
+  String? _sanitizeCursor(Object? cursor) {
+    final value = cursor?.toString().trim() ?? '';
+    return value.isEmpty ? null : value;
   }
 
   Map<String, dynamic> _asMap(dynamic value) {

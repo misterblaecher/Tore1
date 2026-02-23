@@ -1,4 +1,5 @@
 import 'rebuild_types.dart';
+import 'safe_parsing.dart';
 
 class EventContext {
   const EventContext({
@@ -21,12 +22,12 @@ class EventContext {
       };
 
   static EventContext fromJson(Map<String, dynamic> map) => EventContext(
-        eventId: map['eventId'] as String,
-        eventState: EventState.values.byName(map['eventState'] as String),
-        moduleStates: (map['moduleStates'] as Map<String, dynamic>).map(
-          (k, v) => MapEntry(k, ModuleState.values.byName(v as String)),
+        eventId: safeGetString(map, 'eventId', fallback: 'event_unknown', aliases: const ['event_id']),
+        eventState: mapBackendStateAlias(safeGetString(map, 'eventState', fallback: 'DRAFT', aliases: const ['event_state'])),
+        moduleStates: safeGetMap(map, 'moduleStates', aliases: const ['module_states']).map(
+          (k, v) => MapEntry(k, _moduleStateFrom(v)),
         ),
-        syncedAt: DateTime.parse(map['syncedAt'] as String),
+        syncedAt: tryParseDateTime(map['syncedAt'], fallback: DateTime.now()),
       );
 }
 
@@ -47,4 +48,12 @@ EventState mapBackendStateAlias(String raw) {
     default:
       return EventState.draft;
   }
+}
+
+ModuleState _moduleStateFrom(Object? value) {
+  final name = value?.toString() ?? '';
+  for (final state in ModuleState.values) {
+    if (state.name == name) return state;
+  }
+  return ModuleState.off;
 }
