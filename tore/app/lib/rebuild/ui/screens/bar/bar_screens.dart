@@ -12,9 +12,9 @@ class BarDashboardScreen extends StatelessWidget {
         title: 'Bar Dashboard',
         connectivity: network,
         scopeBadges: const ['BAR'],
-        body: const Column(children: [
-          ListTile(title: Text('Revenue today'), trailing: Text('€ 2,430', style: TextStyle(fontFamily: 'monospace'))),
-          ListTile(title: Text('Orders live'), trailing: Text('18'))
+        body: Column(children: [
+          ListTile(title: const Text('Revenue today'), trailing: Text('€ 2,430', style: ToreTypography.monoNumber(context))),
+          const ListTile(title: Text('Orders live'), trailing: Text('18'))
         ]),
       );
 }
@@ -23,18 +23,26 @@ class OrdersLiveScreen extends StatelessWidget {
   const OrdersLiveScreen({super.key, this.network = ConnectivityState.online});
   final ConnectivityState network;
   @override
-  Widget build(BuildContext context) => ScreenScaffold(
-        title: 'Orders Live',
-        connectivity: network,
-        scopeBadges: const ['BAR', 'LIVE'],
-        body: Column(children: [
-          for (final s in ['queued', 'mixing', 'served'])
-            ListTile(
-              title: Text('Order #${s.hashCode % 1000}'),
-              trailing: ToreBadge(label: s.toUpperCase(), color: s == 'served' ? Colors.green : ToreTokens.ruby),
-            ),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    const states = ['queued', 'mixing', 'served'];
+    return ScreenScaffold(
+      title: 'Orders Live',
+      connectivity: network,
+      scopeBadges: const ['BAR', 'LIVE'],
+      body: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: states.length,
+        itemBuilder: (_, i) {
+          final s = states[i];
+          return ListTile(
+            title: Text('Order #${s.hashCode % 1000}'),
+            trailing: ToreBadge(label: s.toUpperCase(), color: s == 'served' ? Colors.green : ToreTokens.ruby),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class FullMenuAdminScreen extends StatelessWidget {
@@ -61,7 +69,12 @@ class ZonesQrAdminScreen extends StatelessWidget {
         scopeBadges: const ['BAR', 'GUARDED'],
         body: zones.isEmpty
             ? const EmptyStateView(message: 'Aucune zone QR configurée.')
-            : Column(children: [for (final zone in zones) SwitchListTile(value: true, onChanged: (_) {}, title: Text('$zone enabled'))]),
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: zones.length,
+                itemBuilder: (_, i) => SwitchListTile(value: true, onChanged: (_) {}, title: Text('${zones[i]} enabled')),
+              ),
         footer: FilledButton.icon(onPressed: zones.isEmpty ? null : () {}, icon: const Icon(Icons.download), label: const Text('Export zones (stub)')),
       );
 }
@@ -74,6 +87,6 @@ class AnalyticsScreen extends StatelessWidget {
         title: 'Analytics',
         connectivity: network,
         scopeBadges: const ['BAR'],
-        body: Column(children: [const Text('Charts placeholder (no extra deps)'), Container(height: 120, color: ToreTokens.surfaceAlt), const SizedBox(height: 8), Container(height: 120, color: ToreTokens.surfaceAlt)]),
+        body: Column(children: [const Text('Charts placeholder (no extra deps)'), Container(height: 120, color: ToreTokens.surfaceAlt), const SizedBox(height: ToreTokens.s8), Container(height: 120, color: ToreTokens.surfaceAlt)]),
       );
 }

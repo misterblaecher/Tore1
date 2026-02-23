@@ -20,16 +20,17 @@ class OrgaEventControlHubScreen extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(ToreTokens.s12),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Entrées validées', style: TextStyle(fontSize: 16)),
-                    SizedBox(height: 4),
-                    Text('421', style: TextStyle(fontFamily: 'monospace', fontSize: 40, fontWeight: FontWeight.bold)),
+                    Text('Entrées validées', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: ToreTokens.s4),
+                    Text('421', style: ToreTypography.monoNumber(context, size: 40)),
                   ],
                 ),
               ),
             ),
+            const SizedBox(height: ToreTokens.s8),
             const ListTile(title: Text('System status'), subtitle: Text('All green')),
             SwitchListTile(value: true, onChanged: writeAllowed ? (_) {} : null, title: const Text('Module ENTRY enabled')),
             SwitchListTile(value: true, onChanged: writeAllowed ? (_) {} : null, title: const Text('Module MENU enabled')),
@@ -58,15 +59,20 @@ class EntryStaffScreen extends StatelessWidget {
             color: ToreTokens.surfaceAlt,
             child: const Center(child: Icon(Icons.qr_code_scanner, size: 52)),
           ),
-          const SizedBox(height: 8),
-          const Text('Counter: 244', style: TextStyle(fontSize: 24, fontFamily: 'monospace')),
-          const SizedBox(height: 8),
+          const SizedBox(height: ToreTokens.s8),
+          Text('Counter: 244', style: ToreTypography.monoNumber(context, size: 24)),
+          const SizedBox(height: ToreTokens.s8),
           const _EntryResultChip(status: 'OK', text: 'Entrée validée.'),
           const _EntryResultChip(status: 'DENIED', text: 'Accès refusé: billet déjà utilisé.'),
           const _EntryResultChip(status: 'ERROR', text: 'Lecture impossible: recommencez le scan.'),
-          const SizedBox(height: 8),
+          const SizedBox(height: ToreTokens.s8),
           const Text('Derniers 5 scans'),
-          ...List.generate(5, (i) => ListTile(title: Text('Scan #${i + 1}'), subtitle: const Text('local cache only'))),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: 5,
+            itemBuilder: (_, i) => ListTile(title: Text('Scan #${i + 1}'), subtitle: const Text('local cache only')),
+          ),
         ]),
       );
 }
@@ -95,9 +101,9 @@ class OrgaPolymarketAdminScreen extends StatelessWidget {
         scopeBadges: const ['ORGA', 'MARKET'],
         body: Column(children: [
           WriteGuardButton(network: network, onPressed: () => onSensitive('create_market'), label: 'Create'),
-          const SizedBox(height: 8),
+          const SizedBox(height: ToreTokens.s8),
           WriteGuardButton(network: network, onPressed: () => onSensitive('resolve_market'), label: 'Resolve'),
-          const SizedBox(height: 8),
+          const SizedBox(height: ToreTokens.s8),
           WriteGuardButton(network: network, onPressed: () => onSensitive('dispute_market'), label: 'Dispute'),
         ]),
       );
@@ -114,15 +120,15 @@ class OrgaUrgencyActionsScreen extends StatelessWidget {
         scopeBadges: const ['ORGA', 'URGENT'],
         body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           WriteGuardButton(network: network, onPressed: () => onSensitive('pause_event'), label: 'Pause event'),
-          const SizedBox(height: 8),
-          WriteGuardButton(network: network, onPressed: () => onSensitive('freeze_event'), label: 'Freeze event'),
-          const SizedBox(height: 8),
+          const SizedBox(height: ToreTokens.s8),
+          WriteGuardButton(network: network, onPressed: () => onSensitive('freeze_event'), label: 'Freeze event', semanticsLabel: 'FREEZE'),
+          const SizedBox(height: ToreTokens.s8),
           WriteGuardButton(network: network, onPressed: () => onSensitive('broadcast'), label: 'Broadcast message'),
-          const SizedBox(height: 12),
+          const SizedBox(height: ToreTokens.s12),
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(ToreTokens.s8),
             color: ToreTokens.surfaceAlt,
-            child: const Text('DEV payload preview:\n{"action":"pause_event","reason_code":"manual_override","reason_text":"..."}', style: TextStyle(fontFamily: 'monospace')),
+            child: const Text('DEV payload preview:\n{"action":"pause_event","reason_code":"manual_override","reason_text":"..."}', style: ToreTypography.mono),
           ),
         ]),
       );
@@ -141,10 +147,10 @@ class _EntryResultChip extends StatelessWidget {
       _ => Colors.red,
     };
     return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(ToreTokens.s12),
+      margin: const EdgeInsets.only(bottom: ToreTokens.s8),
       color: color.withOpacity(.18),
-      child: Row(children: [ToreBadge(label: status, color: color), const SizedBox(width: 8), Expanded(child: Text(text))]),
+      child: Row(children: [ToreBadge(label: status, color: color), const SizedBox(width: ToreTokens.s8), Expanded(child: Text(text))]),
     );
   }
 }

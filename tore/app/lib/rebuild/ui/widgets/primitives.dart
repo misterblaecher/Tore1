@@ -1,10 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/event_context.dart';
+import '../../models/qr_resolve.dart';
 import '../../models/rebuild_types.dart';
 import '../../models/snapshot.dart';
 import '../../services/network_state_resolver.dart';
 import '../theme/tore_theme.dart';
+
+class ToreMotion {
+  static Duration micro(BuildContext context) => _reduce(context) ? const Duration(milliseconds: 1) : const Duration(milliseconds: 150);
+  static Duration transition(BuildContext context) => _reduce(context) ? const Duration(milliseconds: 1) : const Duration(milliseconds: 220);
+
+  static bool _reduce(BuildContext context) => MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+}
+
+class ToreFeedback {
+  static void success(BuildContext context, String text) {
+    HapticFeedback.lightImpact();
+    _show(context, text, duration: const Duration(milliseconds: 1800));
+  }
+
+  static void warning(BuildContext context, String text) {
+    HapticFeedback.mediumImpact();
+    _show(context, text, duration: const Duration(milliseconds: 2200));
+  }
+
+  static void error(BuildContext context, String text) {
+    HapticFeedback.heavyImpact();
+    _show(context, text, duration: const Duration(milliseconds: 3400));
+  }
+
+  static void _show(BuildContext context, String text, {required Duration duration}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), duration: duration));
+  }
+}
 
 class HeaderCard extends StatelessWidget {
   const HeaderCard({super.key, required this.userSnapshot, required this.eventContext});
@@ -20,7 +50,7 @@ class HeaderCard extends StatelessWidget {
           Text('roles: ${userSnapshot?.roles.join(', ') ?? '-'}'),
           Text('caps: ${userSnapshot?.capabilities.join(', ') ?? '-'}'),
           Text('event: ${eventContext?.eventId ?? '-'} • ${eventContext?.eventState.name.toUpperCase() ?? 'DRAFT'}'),
-          Text('synced: ${eventContext?.syncedAt.toIso8601String() ?? 'never'}', style: const TextStyle(fontFamily: 'monospace')),
+          Text('synced: ${eventContext?.syncedAt.toIso8601String() ?? 'never'}', style: ToreTypography.mono),
         ]),
       ),
     );
@@ -33,10 +63,20 @@ class ToreBadge extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: ToreTokens.s8, vertical: ToreTokens.s4),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
-      child: Text(label, style: const TextStyle(fontSize: 11)),
+    return ValueListenableBuilder<bool>(
+      valueListenable: TorePreferences.highContrast,
+      builder: (context, highContrast, _) {
+        return Container(
+          constraints: const BoxConstraints(minHeight: 28),
+          padding: const EdgeInsets.symmetric(horizontal: ToreTokens.s8, vertical: ToreTokens.s4),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(999),
+            border: highContrast ? Border.all(color: Colors.white70, width: 1.4) : null,
+          ),
+          child: Text(label, style: const TextStyle(fontSize: 11)),
+        );
+      },
     );
   }
 }
@@ -49,12 +89,16 @@ class ModuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        title: Text(def.title),
-        subtitle: Text('${def.id} • ${state.name.toUpperCase()}'),
-        trailing: ToreBadge(label: def.scope.name.toUpperCase()),
-        onTap: onOpen,
+    return AnimatedScale(
+      scale: 1,
+      duration: ToreMotion.micro(context),
+      child: Card(
+        child: ListTile(
+          title: Text(def.title),
+          subtitle: Text('${def.id} • ${state.name.toUpperCase()}'),
+          trailing: ToreBadge(label: def.scope.name.toUpperCase()),
+          onTap: onOpen,
+        ),
       ),
     );
   }
@@ -89,21 +133,30 @@ class ScreenScaffold extends StatelessWidget {
             children: [for (final badge in scopeBadges) ToreBadge(label: badge)],
           ),
         ),
-      body,
+      AnimatedSwitcher(duration: ToreMotion.transition(context), child: body),
       if (footer != null) ...[
-        const SizedBox(height: ToreTokens.s12),
+        const SizedBox(height: ToreTokens.s16),
         footer!,
       ],
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(ToreTokens.s12),
-          children: children,
-        ),
-      ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: TorePreferences.highContrast,
+      builder: (context, highContrast, _) {
+        final textColor = highContrast ? Colors.white : null;
+        return Scaffold(
+          appBar: AppBar(title: Text(title)),
+          body: SafeArea(
+            child: DefaultTextStyle.merge(
+              style: TextStyle(color: textColor),
+              child: ListView(
+                padding: ToreTokens.pagePadding,
+                children: children,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -114,26 +167,34 @@ class NetworkBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state == ConnectivityState.online) return const SizedBox.shrink();
-    final offline = state == ConnectivityState.offline;
-    return Card(
-      color: offline ? Colors.red.withOpacity(0.18) : Colors.orange.withOpacity(0.18),
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s8),
-        child: Row(
-          children: [
-            Icon(offline ? Icons.cloud_off : Icons.network_check),
-            const SizedBox(width: ToreTokens.s8),
-            Expanded(
-              child: Text(
-                offline
-                    ? 'Vous êtes hors ligne. Les lectures restent disponibles via le cache, et les actions sont temporairement bloquées.'
-                    : 'Connexion dégradée. Les données proviennent du cache en priorité et les rafraîchissements sont ralentis.',
+    return ValueListenableBuilder<bool>(
+      valueListenable: TorePreferences.highContrast,
+      builder: (context, highContrast, _) {
+        if (state == ConnectivityState.online) return const SizedBox.shrink();
+        final offline = state == ConnectivityState.offline;
+        return Semantics(
+          label: offline ? 'État réseau hors ligne' : 'État réseau dégradé',
+          child: Card(
+            color: offline ? Colors.red.withOpacity(highContrast ? 0.28 : 0.18) : Colors.orange.withOpacity(highContrast ? 0.28 : 0.18),
+            child: Padding(
+              padding: const EdgeInsets.all(ToreTokens.s12),
+              child: Row(
+                children: [
+                  Icon(offline ? Icons.cloud_off : Icons.network_check),
+                  const SizedBox(width: ToreTokens.s8),
+                  Expanded(
+                    child: Text(
+                      offline
+                          ? resolveUiCopy('offline_write_blocked').message
+                          : 'Connexion dégradée. Cache prioritaire actif et rafraîchissement ralenti.',
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -160,20 +221,24 @@ class BlockedStateView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.block, size: 42),
-            const SizedBox(height: ToreTokens.s8),
-            Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
-            const SizedBox(height: ToreTokens.s8),
-            Text(message, textAlign: TextAlign.center),
-            if (ctaLabel != null && onTap != null) ...[
-              const SizedBox(height: ToreTokens.s12),
-              FilledButton(onPressed: onTap, child: Text(ctaLabel!)),
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child: AnimatedOpacity(
+          opacity: 1,
+          duration: ToreMotion.micro(context),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.block, size: 42),
+              const SizedBox(height: ToreTokens.s8),
+              Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+              const SizedBox(height: ToreTokens.s8),
+              Text(message, textAlign: TextAlign.center),
+              if (ctaLabel != null && onTap != null) ...[
+                const SizedBox(height: ToreTokens.s12),
+                FilledButton(onPressed: onTap, child: Text(ctaLabel!)),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -215,9 +280,7 @@ class _ConfirmDialogWithReasonState extends State<ConfirmDialogWithReason> {
         DropdownButtonFormField<String>(
           value: _selected,
           decoration: const InputDecoration(labelText: 'Motif'),
-          items: ConfirmDialogWithReason.reasonPresets
-              .map((reason) => DropdownMenuItem(value: reason, child: Text(reason)))
-              .toList(),
+          items: ConfirmDialogWithReason.reasonPresets.map((reason) => DropdownMenuItem(value: reason, child: Text(reason))).toList(),
           onChanged: (value) => setState(() => _selected = value ?? ''),
         ),
         const SizedBox(height: ToreTokens.s8),
@@ -271,7 +334,7 @@ class ErrorStateView extends StatelessWidget {
   Widget build(BuildContext context) => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 8),
+          const SizedBox(height: ToreTokens.s8),
           FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
         ]),
       );
@@ -295,22 +358,25 @@ class EmptyStateView extends StatelessWidget {
 }
 
 class WriteGuardButton extends StatelessWidget {
-  const WriteGuardButton({super.key, required this.network, required this.onPressed, required this.label});
+  const WriteGuardButton({super.key, required this.network, required this.onPressed, required this.label, this.semanticsLabel});
   final ConnectivityState network;
   final VoidCallback onPressed;
   final String label;
+  final String? semanticsLabel;
 
   @override
   Widget build(BuildContext context) {
     final resolver = NetworkStateResolver();
     final enabled = resolver.canWrite(network);
-    return FilledButton(
-      onPressed: enabled
-          ? onPressed
-          : () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Action indisponible hors ligne. Réessayez en ligne.')),
-              ),
-      child: Text(label),
+    return Semantics(
+      button: true,
+      label: semanticsLabel ?? label,
+      child: FilledButton(
+        onPressed: enabled
+            ? onPressed
+            : () => ToreFeedback.warning(context, resolveUiCopy('offline_write_blocked').message),
+        child: Text(label),
+      ),
     );
   }
 }
