@@ -61,11 +61,14 @@ void main() {
     expect(second.replayed, isTrue);
   });
 
-  test('QR error code mapping provides expected UX copy', () {
+  test('QR error code mapping provides stable code + copy prefix', () {
     final invalid = mapQrReasonToError('invalid_qr');
     final moduleOff = mapQrReasonToError('module_off');
 
-    expect(invalid.message, 'QR non reconnu.');
-    expect(moduleOff.message, 'Module indisponible.');
+    expect(invalid.code, 'qr_unknown');
+    expect(invalid.message, startsWith('Code non reconnu'));
+
+    expect(moduleOff.code, 'module_off');
+    expect(moduleOff.message, startsWith('Le module'));
   });
 }

@@ -36,6 +36,11 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    final shouldSkipAuth = err.requestOptions.extra['skipAuth'] == true;
+    final isUnauthorized = err.response?.statusCode == 401;
+    if (!shouldSkipAuth && isUnauthorized) {
+      await tokenStorage.clearAuthToken();
+    }
     handler.next(err);
   }
 }

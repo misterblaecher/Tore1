@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tore/api.dart';
 import 'package:tore/features/events/presentation/event_public_screen.dart';
+import 'package:tore/features/health/presentation/health_providers.dart';
 import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/state.dart';
-import 'package:tore/features/health/presentation/health_providers.dart';
 
 import 'support/test_network_fakes.dart';
 
@@ -37,7 +37,7 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('JOIN66'), findsOneWidget);
   });
 
@@ -54,7 +54,8 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.byType(EventPublicScreen), findsOneWidget);
   });
 }
