@@ -22,4 +22,17 @@ void main() {
     clock.now = clock.now.add(const Duration(milliseconds: 900));
     expect(suppression.shouldSuppress(hash: 'abc'), isFalse);
   });
+
+  test('shouldAllow mirrors shouldSuppress semantics', () {
+    final clock = _FakeClock(DateTime(2025, 1, 1, 12, 0, 0));
+    final suppression = ScanSuppression(cooldown: const Duration(milliseconds: 1200), clock: clock.call);
+
+    expect(suppression.shouldAllow(hash: 'abc'), isTrue);
+
+    clock.now = clock.now.add(const Duration(milliseconds: 400));
+    expect(suppression.shouldAllow(hash: 'abc'), isFalse);
+
+    clock.now = clock.now.add(const Duration(milliseconds: 900));
+    expect(suppression.shouldAllow(hash: 'abc'), isTrue);
+  });
 }

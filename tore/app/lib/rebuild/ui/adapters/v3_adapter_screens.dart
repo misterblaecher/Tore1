@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/menu_market/presentation/menu_screen.dart' as v3_menu;
 import '../../../features/orders/presentation/order_status_live_screen.dart' as v3_orders;
@@ -21,7 +22,7 @@ class RebuildMenuAdapterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        v3_menu.MenuScreen(eventId: eventId),
+        _EnsureRootProviderScope(child: v3_menu.MenuScreen(eventId: eventId)),
         Positioned(top: 0, left: 0, right: 0, child: NetworkBanner(state: network)),
         if (eventState != EventState.live)
           const Positioned.fill(
@@ -63,7 +64,7 @@ class RebuildOrdersAdapterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        v3_orders.OrderStatusLiveScreen(orderId: orderId),
+        _EnsureRootProviderScope(child: v3_orders.OrderStatusLiveScreen(orderId: orderId)),
         Positioned(top: 0, left: 0, right: 0, child: NetworkBanner(state: network)),
         if (eventState != EventState.live)
           const Positioned.fill(
@@ -108,5 +109,27 @@ class RebuildBarOrdersAdapterScreen extends StatelessWidget {
       orderId: orderId,
       eventState: eventState,
     );
+  }
+}
+
+class _EnsureRootProviderScope extends StatelessWidget {
+  const _EnsureRootProviderScope({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasScope = _hasRootProviderScope(context);
+    if (hasScope) return child;
+    return ProviderScope(child: child);
+  }
+
+  bool _hasRootProviderScope(BuildContext context) {
+    try {
+      ProviderScope.containerOf(context, listen: false);
+      return true;
+    } on StateError {
+      return false;
+    }
   }
 }
