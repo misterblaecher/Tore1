@@ -32,6 +32,7 @@ class DiagnosticsScreen extends StatefulWidget {
     required this.buildInfo,
     required this.remoteConfig,
     required this.onSimulatedNetworkChanged,
+    required this.onOpenUrl,
   });
 
   final ToreMode mode;
@@ -47,6 +48,7 @@ class DiagnosticsScreen extends StatefulWidget {
   final BuildInfo buildInfo;
   final RemoteConfigPayload remoteConfig;
   final ValueChanged<ConnectivityState> onSimulatedNetworkChanged;
+  final Future<void> Function(String url) onOpenUrl;
 
   @override
   State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
@@ -54,13 +56,21 @@ class DiagnosticsScreen extends StatefulWidget {
 
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   String _filter = '';
+  final _urlController = TextEditingController();
   Map<String, Duration?> _cache = const {};
   IdempotencyStats _idStats = const IdempotencyStats(count: 0);
 
   @override
   void initState() {
     super.initState();
+    _urlController.text = 'tore://event/${widget.eventContext?.eventId ?? 'event_42'}';
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -139,6 +149,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ...logs.take(80).map((e) => ListTile(title: Text(e.event), subtitle: Text('${e.ts.toIso8601String()}\n${scrubJsonMap(e.fields)}'))),
           const SizedBox(height: ToreTokens.s8),
           FilledButton(onPressed: _copyBuildInfo, child: const Text('Copy build info')),
+          TextField(controller: _urlController, decoration: const InputDecoration(labelText: 'Open URL in app', hintText: 'tore://event/event_42')),
+          FilledButton(onPressed: _openUrlInApp, child: const Text('Open URL')),
           FilledButton(onPressed: _copyTelemetry, child: const Text('Export telemetry (scrubbed)')),
           FilledButton(onPressed: _copyBlob, child: const Text('Copy diagnostics to clipboard')),
           if (!kReleaseMode) ...[
@@ -177,6 +189,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     await Clipboard.setData(ClipboardData(text: const JsonEncoder.withIndent('  ').convert(info)));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Build info copied.')));
+  }
+
+  Future<void> _openUrlInApp() async {
+    await widget.onOpenUrl(_urlController.text);
   }
 
   Future<void> _copyTelemetry() async {
