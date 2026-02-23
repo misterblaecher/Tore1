@@ -209,7 +209,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     SystemSound.play(SystemSoundType.click);
     _bannerColor = status == 'accepted' ? const Color(0xFF166534) : (status == 'pending' ? const Color(0xFF1D4ED8) : const Color(0xFFB91C1C));
     _banner = reason;
-    ref.read(entryUiStateProvider.notifier).push(_ScanResult(status: status, reason: reason, at: DateTime.now(), type: type));
+    ref.read(entryUiStateProvider.notifier).push(ScanResult(status: status, reason: reason, at: DateTime.now(), type: type));
     if (mounted) {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason), duration: const Duration(milliseconds: 700)));
@@ -240,38 +240,70 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
                 children: [
-                  Text('Event #${widget.eventId}'),
-                  TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))), icon: const Icon(Icons.keyboard), label: const Text('Entrer un code')),
-                  IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
+                  Expanded(
+                    child: Text(
+                      'Event #${widget.eventId}',
+                      softWrap: true,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))),
+                            icon: const Icon(Icons.keyboard),
+                            label: const Text('Entrer un code'),
+                          ),
+                          IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
               SwitchListTile(value: _manualMode, onChanged: (v) => setState(() => _manualMode = v), title: const Text('Mode manuel'), secondary: const Icon(Icons.touch_app)),
               Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _bannerColor, borderRadius: BorderRadius.circular(8)), width: double.infinity, child: Text(_banner)),
               Expanded(
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Text('ENTRÉES'),
-                  Text('${_pendingEstimate ? '~' : ''}$totalDisplay', style: const TextStyle(fontSize: 96, fontWeight: FontWeight.w900)),
-                  Text('Δ10m: $_delta10'),
-                  const SizedBox(height: 12),
-                  if (!_manualMode)
-                    ElevatedButton.icon(onPressed: net == NetworkState.online ? _openScanner : null, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCAN', style: TextStyle(fontSize: 24)))
-                  else ...[
-                    Wrap(spacing: 8, children: _reasonChips.map((r) => ChoiceChip(label: Text(r), selected: _manualReason == r, onSelected: (_) => setState(() => _manualReason = r))).toList()),
-                    TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Note (optionnel)')),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      FilledButton(onPressed: () => _manualIncrement(1), child: const Text('+1')),
-                      FilledButton(onPressed: () => _manualIncrement(5), child: const Text('+5')),
-                      FilledButton(onPressed: () => _manualIncrement(10), child: const Text('+10')),
-                      OutlinedButton(onPressed: () => _manualIncrement(-1), child: const Text('-1')),
+                child: SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 280),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Text('ENTRÉES'),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${_pendingEstimate ? '~' : ''}$totalDisplay',
+                          style: const TextStyle(fontSize: 96, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      Text('Δ10m: $_delta10'),
+                      const SizedBox(height: 12),
+                      if (!_manualMode)
+                        ElevatedButton.icon(onPressed: net == NetworkState.online ? _openScanner : null, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCAN', style: TextStyle(fontSize: 24)))
+                      else ...[
+                        Wrap(spacing: 8, children: _reasonChips.map((r) => ChoiceChip(label: Text(r), selected: _manualReason == r, onSelected: (_) => setState(() => _manualReason = r))).toList()),
+                        TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Note (optionnel)')),
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          FilledButton(onPressed: () => _manualIncrement(1), child: const Text('+1')),
+                          FilledButton(onPressed: () => _manualIncrement(5), child: const Text('+5')),
+                          FilledButton(onPressed: () => _manualIncrement(10), child: const Text('+10')),
+                          OutlinedButton(onPressed: () => _manualIncrement(-1), child: const Text('-1')),
+                        ]),
+                      ],
                     ]),
-                  ],
-                ]),
+                  ),
+                ),
               ),
               Wrap(
                 spacing: 12,
@@ -312,20 +344,20 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
 class EntryUiState {
   const EntryUiState({this.recent = const []});
-  final List<_ScanResult> recent;
-  EntryUiState copyWith({List<_ScanResult>? recent}) => EntryUiState(recent: recent ?? this.recent);
+  final List<ScanResult> recent;
+  EntryUiState copyWith({List<ScanResult>? recent}) => EntryUiState(recent: recent ?? this.recent);
 }
 
 class EntryUiStateNotifier extends StateNotifier<EntryUiState> {
   EntryUiStateNotifier() : super(const EntryUiState());
   static const int maxRecent = 8;
-  void push(_ScanResult result) => state = state.copyWith(recent: [result, ...state.recent].take(maxRecent).toList(growable: false));
+  void push(ScanResult result) => state = state.copyWith(recent: [result, ...state.recent].take(maxRecent).toList(growable: false));
 }
 
 final entryUiStateProvider = StateNotifierProvider<EntryUiStateNotifier, EntryUiState>((ref) => EntryUiStateNotifier());
 
-class _ScanResult {
-  _ScanResult({required this.status, required this.reason, required this.at, required this.type});
+class ScanResult {
+  ScanResult({required this.status, required this.reason, required this.at, required this.type});
   final String status;
   final String reason;
   final DateTime at;

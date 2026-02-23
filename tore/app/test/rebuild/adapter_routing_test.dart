@@ -40,5 +40,8 @@ void main() {
     );
     await tester.pump();
     expect(find.byType(RebuildBarOrdersAdapterScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }
