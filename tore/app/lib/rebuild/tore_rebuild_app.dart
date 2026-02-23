@@ -67,34 +67,47 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   }
 
   Future<void> _bootstrap() async {
-    setState(() => _loading = true);
+    if (mounted) setState(() => _loading = true);
     final cachedMe = await _cache.loadCachedUser();
     final cachedEvent = await _cache.loadCachedEvent('event_42');
     _userSnapshot = cachedMe;
     _eventContext = cachedEvent;
 
-    if (_networkStateResolver.canReadRemote(_network)) {
-      _userSnapshot = await _api.fetchMeSnapshot();
-      _eventContext = await _api.fetchEventContext('event_42', _defs);
-      await _cache.saveUser(_userSnapshot!);
-      await _cache.saveEvent(_eventContext!);
-      await _loadDomainData();
+    try {
+      if (_networkStateResolver.canReadRemote(_network)) {
+        _userSnapshot = await _api.fetchMeSnapshot();
+        _eventContext = await _api.fetchEventContext('event_42', _defs);
+        if (_userSnapshot != null) await _cache.saveUser(_userSnapshot!);
+        if (_eventContext != null) await _cache.saveEvent(_eventContext!);
+        await _loadDomainData();
+      }
+    } catch (_) {
+      await ClientLog.instance.log('boot.hydration_fallback', {'reason': 'remote_unavailable'});
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _loadDomainData() async {
-    _bars = await _api.fetchBars(network: _network);
-    _barEvents = await _api.fetchBarEvents('1', network: _network);
-    _menuItems = await _api.fetchMenu(eventId: '42', network: _network);
-    _wallet = await _api.fetchWallet(eventId: '42', network: _network);
-    _ticker = (await _api.fetchTicker('42', network: _network)).items;
-    _polyGlobal = await _api.fetchPolymarketGlobal(network: _network);
-    _polyEvent = await _api.fetchPolymarketEvent('42', network: _network);
-    _entryStats = await _api.fetchEntryStats('42', network: _network);
-    _orders = (await _api.fetchOrdersLive('42', network: _network)).items;
-    _zones = await _api.fetchZones('1', network: _network);
-    _orgaQrPack = await _api.fetchOrgaQrPack(_eventContext?.eventId ?? '42', network: _network);
+    _bars = await _safeLoad(() => _api.fetchBars(network: _network), const <BarDto>[]);
+    _barEvents = await _safeLoad(() => _api.fetchBarEvents('1', network: _network), const <EventDto>[]);
+    _menuItems = await _safeLoad(() => _api.fetchMenu(eventId: '42', network: _network), const <MenuItemDto>[]);
+    _wallet = await _safeLoad<WalletDto?>(() => _api.fetchWallet(eventId: '42', network: _network), null);
+    _ticker = await _safeLoad(() async => (await _api.fetchTicker('42', network: _network)).items, const <TickerItemDto>[]);
+    _polyGlobal = await _safeLoad(() => _api.fetchPolymarketGlobal(network: _network), const <PolymarketDto>[]);
+    _polyEvent = await _safeLoad(() => _api.fetchPolymarketEvent('42', network: _network), const <PolymarketDto>[]);
+    _entryStats = await _safeLoad(() => _api.fetchEntryStats('42', network: _network), const EntryStatsDto(approvedCount: 0, deniedCount: 0));
+    _orders = await _safeLoad(() async => (await _api.fetchOrdersLive('42', network: _network)).items, const <OrderDto>[]);
+    _zones = await _safeLoad(() => _api.fetchZones('1', network: _network), const <ZoneDto>[]);
+    _orgaQrPack = await _safeLoad<Map<String, dynamic>?>(() => _api.fetchOrgaQrPack(_eventContext?.eventId ?? '42', network: _network), null);
+  }
+
+  Future<T> _safeLoad<T>(Future<T> Function() loader, T fallback) async {
+    try {
+      return await loader();
+    } catch (_) {
+      return fallback;
+    }
   }
 
   ModuleState _effectiveState(String id) {
@@ -110,16 +123,21 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   bool _writeAllowed(String moduleId) => _networkStateResolver.canWrite(_network) && _effectiveState(moduleId) == ModuleState.on;
 
   Future<void> _resolveQrPayload(String payload) async {
-    final resolved = await _api.resolveQr(payload);
-    if (resolved.isError || !mounted) {
+    try {
+      final resolved = await _api.resolveQr(payload);
+      final route = _router.targetFor(resolved);
       if (!mounted) return;
-      final err = mapQrReasonToError(resolved.reason);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.message)));
-      return;
+      if (resolved.isError || route == AppRoutes.blocked) {
+        final err = resolveUiCopy(resolved.reason ?? 'qr_unknown');
+        Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': err.title, 'message': err.message, 'cta': err.ctaLabel});
+        return;
+      }
+      Navigator.pushNamed(context, route);
+    } catch (_) {
+      if (!mounted) return;
+      final err = resolveUiCopy('backend_down');
+      Navigator.pushNamed(context, AppRoutes.blocked, arguments: {'title': err.title, 'message': err.message, 'cta': err.ctaLabel});
     }
-    final route = _router.targetFor(resolved);
-    if (!mounted) return;
-    Navigator.pushNamed(context, route);
   }
 
   Future<void> _sensitiveWrite(String moduleId, String action) async {
@@ -194,7 +212,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       theme: ToreTheme.build(),
       initialRoute: AppRoutes.boot,
       routes: {
-        AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)),
+        AppRoutes.boot: (_) => _loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () { if (!mounted) return; setState(() => _consented = true); }),
         AppRoutes.home: (_) => HomeHubScreen(network: _network, cards: [HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext), ..._moduleCards(ToreMode.user)]),
         AppRoutes.scanner: (_) => QrScannerScreen(onResolve: _resolveQrPayload, network: _network),
         AppRoutes.bars: (_) => BarsScreen(network: _network, children: _bars.map((b) => ListTile(title: Text(b.name), subtitle: Text(b.city ?? b.id))).toList()),
@@ -215,28 +233,35 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.userHelp: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
         AppRoutes.orgaRunbook: (_) => RunbookScreen(onOpenUrgency: () => Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
         AppRoutes.orgaExports: (_) => OrgaExportsScreen(eventId: _eventContext?.eventId ?? '42', moduleStates: _eventContext?.moduleStates ?? const {}, backendPack: _orgaQrPack),
-        AppRoutes.devDiagnostics: (_) => DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, onSimulatedNetworkChanged: (state) => setState(() { _network = state; _networkTransitionAt = DateTime.now(); })),
+        AppRoutes.devDiagnostics: (_) => DiagnosticsScreen(mode: _mode, snapshot: _userSnapshot, eventContext: _eventContext, networkState: _network, networkTransitionAt: _networkTransitionAt, apiClient: _api, cacheStore: _cache, idempotencyStore: _writerStore, onSimulatedNetworkChanged: (state) { if (!mounted) return; setState(() { _network = state; _networkTransitionAt = DateTime.now(); }); }),
         AppRoutes.barDashboard: (_) => BarDashboardScreen(network: _network),
         AppRoutes.barOrders: (_) => OrdersLiveScreen(network: _network, rows: _orders.map((o) => ListTile(title: Text('Order ${o.id}'), trailing: Text(o.status))).toList()),
         AppRoutes.barMenu: (_) => FullMenuAdminScreen(network: _network),
         AppRoutes.barZones: (_) => ZonesQrAdminScreen(network: _network, zones: _zones.map((z) => z.name).toList()),
         AppRoutes.barAnalytics: (_) => AnalyticsScreen(network: _network),
-        AppRoutes.blocked: (_) => const ScreenScaffold(title: 'Blocked', scopeBadges: ['GUARD'], body: BlockedStateView(title: 'Accès indisponible', message: 'Ce module est OFF, en pause ou non autorisé pour votre mode actuel.')),
+        AppRoutes.blocked: (ctx) {
+          final args = ModalRoute.of(ctx)?.settings.arguments;
+          final mapped = args is Map<String, dynamic> ? args : const <String, dynamic>{};
+          final title = mapped['title']?.toString() ?? 'Accès indisponible';
+          final message = mapped['message']?.toString() ?? 'Ce module est OFF, en pause ou non autorisé pour votre mode actuel.';
+          final cta = mapped['cta']?.toString();
+          return ScreenScaffold(title: 'Blocked', scopeBadges: const ['GUARD'], body: BlockedStateView(title: title, message: message, ctaLabel: cta));
+        },
       },
       home: !_consented || _loading
-          ? (_loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () => setState(() => _consented = true)))
+          ? (_loading ? BootSplashScreen(network: _network, onLongPressDiagnostics: _openDiagnostics) : ConsentCharterScreen(onAccept: () { if (!mounted) return; setState(() => _consented = true); }))
           : Scaffold(
               appBar: AppBar(
                 title: const Text('TORÈ Night OS'),
                 actions: [
                   DropdownButton<ConnectivityState>(
                     value: _network,
-                    onChanged: (v) => setState(() { _network = v ?? _network; _networkTransitionAt = DateTime.now(); }),
+                    onChanged: (v) { if (!mounted) return; setState(() { _network = v ?? _network; _networkTransitionAt = DateTime.now(); }); },
                     items: ConnectivityState.values.map((e) => DropdownMenuItem(value: e, child: Text(e.name))).toList(),
                   ),
                   DropdownButton<ToreMode>(
                     value: _mode,
-                    onChanged: (v) => setState(() => _mode = v ?? _mode),
+                    onChanged: (v) { if (!mounted) return; setState(() => _mode = v ?? _mode); },
                     items: ToreMode.values.where((m) => _guards.modeAllowed(m, _userSnapshot)).map((e) => DropdownMenuItem(value: e, child: Text(e.name))).toList(),
                   ),
                 ],

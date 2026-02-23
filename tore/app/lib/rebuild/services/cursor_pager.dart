@@ -4,13 +4,17 @@ class CursorPager<T> {
   final Future<PagedChunk<T>> Function(String? cursor) loader;
   final List<T> items = <T>[];
   String? _nextCursor;
+  String? _lastCursorSeen;
+  bool _stopped = false;
   bool loading = false;
 
-  bool get hasMore => _nextCursor != null || items.isEmpty;
+  bool get hasMore => !_stopped && (_nextCursor != null || items.isEmpty);
 
   Future<void> loadFirst() async {
     items.clear();
     _nextCursor = null;
+    _lastCursorSeen = null;
+    _stopped = false;
     await loadMore();
   }
 
@@ -18,9 +22,17 @@ class CursorPager<T> {
     if (loading || (!hasMore && items.isNotEmpty)) return;
     loading = true;
     try {
-      final page = await loader(_nextCursor);
+      final currentCursor = _nextCursor;
+      final page = await loader(currentCursor);
       items.addAll(page.items);
-      _nextCursor = page.nextCursor;
+      final next = page.nextCursor?.trim();
+      if (next == null || next.isEmpty || next == currentCursor || next == _lastCursorSeen) {
+        _nextCursor = null;
+        _stopped = true;
+      } else {
+        _lastCursorSeen = currentCursor;
+        _nextCursor = next;
+      }
     } finally {
       loading = false;
     }

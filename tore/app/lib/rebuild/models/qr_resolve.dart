@@ -1,4 +1,5 @@
 import 'error_model.dart';
+import 'safe_parsing.dart';
 
 class QrResolve {
   const QrResolve({
@@ -19,10 +20,16 @@ class QrResolve {
 
   static QrResolve fromJson(Map<String, dynamic> json) => QrResolve(
         valid: json['valid'] == true,
-        type: (json['type'] as String?) ?? 'unknown',
-        eventId: json['event_id'] as int?,
-        routeFront: json['route_front'] as String?,
-        reason: json['reason'] as String?,
+        type: safeGetString(json, 'type', fallback: 'unknown'),
+        eventId: int.tryParse(safeGetString(json, 'event_id', aliases: const ['eventId'])),
+        routeFront: (() {
+          final route = safeGetString(json, 'route_front', aliases: const ['routeFront']);
+          return route.isEmpty ? null : route;
+        })(),
+        reason: (() {
+          final value = safeGetString(json, 'reason');
+          return value.isEmpty ? null : value;
+        })(),
       );
 }
 

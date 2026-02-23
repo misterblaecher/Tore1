@@ -2,9 +2,11 @@ import '../models/qr_resolve.dart';
 import 'app_routes.dart';
 
 class QrRouter {
-  String targetFor(QrResolve resolved) {
-    if (resolved.routeFront != null && resolved.routeFront!.isNotEmpty) {
-      return resolved.routeFront!;
+  String targetFor(QrResolve? resolved) {
+    if (resolved == null) return AppRoutes.blocked;
+    final routeFront = resolved.routeFront?.trim();
+    if (routeFront != null && routeFront.isNotEmpty) {
+      return routeFront.startsWith('/') ? routeFront : AppRoutes.blocked;
     }
 
     switch (resolved.type) {

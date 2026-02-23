@@ -67,7 +67,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter);
     final chips = {'', ...ClientLog.instance.eventTypes.toList()};
     final event = widget.eventContext;
-    final writeAllowed = event != null ? event.eventState == EventState.running && widget.networkState != ConnectivityState.offline : false;
+    final writeAllowed = event != null ? event.eventState == EventState.live && widget.networkState != ConnectivityState.offline : false;
 
     return ScreenScaffold(
       title: 'Diagnostics',
@@ -107,7 +107,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ]),
           Wrap(spacing: 6, children: chips.map((e) => ChoiceChip(label: Text(e.isEmpty ? 'all logs' : e), selected: _filter == e, onSelected: (_) => setState(() => _filter = e))).toList()),
           const SizedBox(height: ToreTokens.s8),
-          ...logs.take(80).map((e) => ListTile(title: Text(e.event), subtitle: Text('${e.ts.toIso8601String()}\n${e.fields}'))),
+          ...logs.take(80).map((e) => ListTile(title: Text(e.event), subtitle: Text('${e.ts.toIso8601String()}\n${scrubJsonMap(e.fields)}'))),
           const SizedBox(height: ToreTokens.s8),
           FilledButton(onPressed: _copyBlob, child: const Text('Copy diagnostics to clipboard')),
           if (!kReleaseMode) ...[
@@ -136,16 +136,25 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Widget _line(String k, String v) => Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('$k: $v'));
 
   Future<void> _copyBlob() async {
+    final scrubbedEvent = widget.eventContext?.eventId == null ? 'none' : scrubJsonMap({'user_id': widget.eventContext!.eventId})['user_id'];
     final blob = StringBuffer()
       ..writeln('mode=${widget.mode.name}')
       ..writeln('network=${widget.networkState.name}')
-      ..writeln('event=${widget.eventContext?.eventId ?? 'none'}')
+      ..writeln('event=$scrubbedEvent')
       ..writeln('roles=${widget.snapshot?.roles.join(',') ?? '-'}')
-      ..writeln('cache=$_cache')
-      ..writeln('errors=${widget.apiClient.recentErrorCodes()}');
+      ..writeln('cache=${scrubJsonMap(_cache.map((key, value) => MapEntry(key, value?.inMinutes.toString() ?? 'missing')))}')
+      ..writeln('errors=${widget.apiClient.recentErrorCodes()}')
+      ..writeln('logs=${logsBlob()}');
     await Clipboard.setData(ClipboardData(text: blob.toString()));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diagnostics copied.')));
+  }
+
+
+  String logsBlob() {
+    final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter).take(50);
+    final lines = logs.map((entry) => '${entry.ts.toIso8601String()} ${entry.event} ${scrubJsonMap(entry.fields)}');
+    return lines.join(' | ');
   }
 
   Future<void> _clearCaches() async {

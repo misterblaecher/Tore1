@@ -21,6 +21,7 @@ class OrgaExportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final links = _buildLinks();
+    final hasValidLinks = links.values.any(_isValidUrl);
     return ScreenScaffold(
       title: 'QR Pack & Exports',
       scopeBadges: const ['ORGA', 'EXPORTS'],
@@ -33,8 +34,9 @@ class OrgaExportsScreen extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('QR pack', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: ToreTokens.s8),
-                ...links.entries.map((e) => ListTile(title: Text(e.key), subtitle: Text(e.value), trailing: IconButton(onPressed: () => _openUrl(context, e.value), icon: const Icon(Icons.open_in_new)))),
-                FilledButton(onPressed: () => _copyLinks(context, links), child: const Text('Copy QR links')),
+                if (hasValidLinks) ...links.entries.map((e) => ListTile(title: Text(e.key), subtitle: Text(e.value), trailing: IconButton(onPressed: () => _openUrl(context, e.value), icon: const Icon(Icons.open_in_new)))),
+                if (hasValidLinks) FilledButton(onPressed: () => _copyLinks(context, links), child: const Text('Copy QR links')),
+                if (!hasValidLinks) const BlockedStateView(title: 'Export not available', message: 'Aucun lien export valide reçu du backend.'),
               ]),
             ),
           ),
@@ -63,10 +65,11 @@ class OrgaExportsScreen extends StatelessWidget {
 
   Widget _exportAction(BuildContext context, String label, String path) {
     final url = 'https://api.tore.app$path';
+    final valid = _isValidUrl(url);
     return ListTile(
       title: Text(label),
       subtitle: Text(url),
-      trailing: TextButton(onPressed: () => _openUrl(context, url), child: const Text('Open')),
+      trailing: valid ? TextButton(onPressed: () => _openUrl(context, url), child: const Text('Open')) : const Text('Unavailable'),
     );
   }
 
@@ -87,12 +90,24 @@ class OrgaExportsScreen extends StatelessWidget {
   }
 
   Future<void> _openUrl(BuildContext context, String value) async {
+    if (!_isValidUrl(value)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lien export invalide ou indisponible.')));
+      return;
+    }
     final uri = Uri.parse(value);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible d’ouvrir ce lien export.')));
+    }
+  }
+
+  bool _isValidUrl(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
   }
 
   void _copyLinks(BuildContext context, Map<String, String> links) {
-    final text = links.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+    final text = links.entries.where((e) => _isValidUrl(e.value)).map((e) => '${e.key}: ${e.value}').join('\n');
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('QR links copied.')));
   }
