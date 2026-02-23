@@ -18,6 +18,10 @@ class _MemoryPersistence implements IdempotencyPersistence {
       ..clear()
       ..addAll(data);
   }
+  @override
+  Future<void> clear() async {
+    _data.clear();
+  }
 }
 
 void main() {
@@ -32,7 +36,7 @@ void main() {
 
   test('module gating and deep-link guards enforce mode + OFF module blocking', () {
     final guards = RouteGuards();
-    const snapshot = UserSnapshot(
+    final snapshot = UserSnapshot(
       roles: {'USER'},
       capabilities: {'can_scan_qr'},
       globalModules: {'user_home': ModuleState.on},

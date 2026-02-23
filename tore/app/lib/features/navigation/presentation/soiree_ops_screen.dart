@@ -10,6 +10,7 @@ import '../../../api.dart';
 import '../../../core/qr/qr_parser.dart';
 import '../../../state.dart';
 import '../../../ui/app_design_system.dart';
+import '../../community/community_models.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
 
 class SoireeOpsScreen extends ConsumerStatefulWidget {
@@ -126,7 +127,7 @@ class _SoireeOpsScreenState extends ConsumerState<SoireeOpsScreen> {
               error: (_, __) => const AppCard(child: Text('Impossible de charger tes events.')),
               data: (items) => items.isEmpty
                   ? const AppCard(child: Text('Aucun event pour le moment.'))
-                  : Column(children: [for (final e in items) AppCard(child: ListTile(title: Text(e['name'].toString()), subtitle: Text((e['startAt'] ?? '').toString()), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SoireeEventDetailScreen(eventId: e['id'] as int, name: e['name'].toString())))))]),
+                  : Column(children: [for (final e in items) AppCard(child: ListTile(title: Text(e.name), subtitle: Text(e.startAt.toIso8601String()), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SoireeEventDetailScreen(eventId: e.id, name: e.name)))))])
             ),
           ] else ...[
             const SectionTitle('Scanner check-in'),
@@ -175,14 +176,11 @@ class SoireeEventDetailScreen extends StatelessWidget {
   }
 }
 
-final myEventsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final myEventsProvider = FutureProvider<List<MyEventSummary>>((ref) async {
   final payload = await ref.read(apiProvider).myEvents();
-  final out = <Map<String, dynamic>>[];
+  final out = <MyEventSummary>[];
   for (final bucket in ['LIVE', 'TODAY', 'UPCOMING', 'PAST']) {
-    final items = (payload[bucket] as List<dynamic>? ?? const []);
-    for (final i in items) {
-      out.add(Map<String, dynamic>.from(i as Map));
-    }
+    out.addAll(payload.buckets[bucket] ?? const <MyEventSummary>[]);
   }
   return out;
 });

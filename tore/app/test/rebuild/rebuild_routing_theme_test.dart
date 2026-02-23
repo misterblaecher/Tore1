@@ -10,7 +10,7 @@ import 'package:tore/rebuild/ui/theme/tore_theme.dart';
 void main() {
   test('route guard decisions by mode and route prefix', () {
     final guards = RouteGuards();
-    const snapshot = UserSnapshot(
+    final snapshot = UserSnapshot(
       roles: {'USER', 'ORGA'},
       capabilities: {'can_access_orga'},
       globalModules: {},
