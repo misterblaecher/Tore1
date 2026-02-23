@@ -8,7 +8,6 @@ import '../../../state.dart';
 import '../../../shared/widgets/ui_fallbacks.dart';
 import '../../../ui/app_design_system.dart';
 import '../../../core/auth/providers.dart';
-import '../../qr/presentation/qr_scanner_screen.dart';
 
 const _territoryFeedCacheKey = 'territory_feed_cache_v1';
 const bool kTrendingEnabled = true;
@@ -154,121 +153,145 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(authSessionProvider);
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    const fabClearance = 132.0;
+
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       body: SolarBackground(
         child: RefreshIndicator(
-        onRefresh: _loadFeed,
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          children: [
-            Row(
+          onRefresh: _loadFeed,
+          child: SafeArea(
+            bottom: false,
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md + fabClearance + bottomInset,
+              ),
               children: [
-                Image.asset('assets/branding/logo_minimal.png', width: 30, height: 30, errorBuilder: (_, __, ___) => const Icon(Icons.local_fire_department_outlined)),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('TORÈ', style: AppTextStyles.massiveTitle),
-                      Text('Liège · Territory Hub', style: AppTextStyles.muted),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: SolarPrimaryButton(
-                        onPressed: session.isGuest
-                            ? null
-                            : () => Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-                                ),
-                        icon: Icons.qr_code_scanner_outlined,
-                        label: "Scan",
+                Row(
+                  children: [
+                    Image.asset(
+                      'assets/branding/logo_minimal.png',
+                      width: 30,
+                      height: 30,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.local_fire_department_outlined),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('TORÈ', style: AppTextStyles.massiveTitle),
+                          Text('Liège · Territory Hub', style: AppTextStyles.muted),
+                        ],
                       ),
                     ),
-                  ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const SolarChip(label: 'Territoire Liège', color: AppColors.solarGold),
+                        const SizedBox(height: 6),
+                        Text(
+                          session.isGuest ? 'Exploration invitée' : 'Statut: connecté',
+                          style: AppTextStyles.muted,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+                if (_fromCache || _error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_error ?? 'Affichage depuis le cache local.', style: const TextStyle(color: AppColors.warning)),
+                  ),
+                const SizedBox(height: 16),
+                const SolarSectionTitle('Événements actifs'),
+                const SizedBox(height: 8),
+                if (_loading)
+                  const ToreLoadingSkeleton(lines: 4)
+                else
+                  for (final event in _events)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: AppColors.solarCardDecoration,
+                      child: InkWell(
+                        onTap: () {},
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(event.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                              const SizedBox(height: 6),
+                              Text(event.distanceLabel, style: AppTextStyles.muted),
+                              const SizedBox(height: 8),
+                              Wrap(spacing: 6, children: [for (final icon in event.modules) Icon(icon, size: 16, color: AppColors.solarGold)]),
+                              const SizedBox(height: 8),
+                              Text('${event.participants} présents', style: AppTextStyles.muted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                if (!_loading && _events.isEmpty)
+                  const ToreEmptyState(
+                    title: 'Territoire calme',
+                    message: "Aucun événement actif pour l'instant.",
+                  ),
+                const SizedBox(height: 16),
+                const SolarSectionTitle('Bars vivants'),
+                const SizedBox(height: 8),
+                for (final bar in _bars)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: AppColors.solarCardDecoration,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [Text(bar.name), Text(bar.distanceLabel, style: AppTextStyles.muted)],
+                          ),
+                        ),
+                        const SolarChip(label: 'Actif', color: AppColors.solarRedSoft),
+                      ],
+                    ),
+                  ),
+                if (!_loading && _bars.isEmpty)
+                  const ToreEmptyState(
+                    title: 'Aucun bar pour l'instant',
+                    message: 'Reviens un peu plus tard pour découvrir les bars actifs.',
+                  ),
+                if (kTrendingEnabled) ...[
+                  const SizedBox(height: 12),
+                  const SolarSectionTitle('Arènes actives'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: const [
+                      SolarChip(label: 'Arène centrale'),
+                      SolarChip(label: 'Territoire étudiant'),
+                      SolarChip(label: 'Polymarket chaud'),
+                    ],
+                  ),
+                ],
+                if (session.isGuest) ...[
+                  const SizedBox(height: 12),
+                  const AuthRequiredNotice(message: 'Le check-in, la création d\'event et les outils staff demandent un compte.'),
+                ],
               ],
             ),
-            if (_fromCache || _error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(_error ?? 'Affichage depuis le cache local.', style: const TextStyle(color: AppColors.warning)),
-              ),
-            const SizedBox(height: 16),
-            const SolarSectionTitle("Événements actifs"),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 172,
-              child: _loading
-                  ? const ToreLoadingSkeleton(lines: 4)
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _events.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
-                      itemBuilder: (context, index) {
-                        final event = _events[index];
-                        return Container(
-                          width: 230,
-                          padding: const EdgeInsets.all(AppSpacing.sm),
-                          decoration: AppColors.solarCardDecoration,
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(event.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                            const SizedBox(height: 6),
-                            Text(event.distanceLabel, style: AppTextStyles.muted),
-                            const Spacer(),
-                            Wrap(spacing: 6, children: [for (final icon in event.modules) Icon(icon, size: 16, color: AppColors.solarGold)]),
-                            const SizedBox(height: 8),
-                            Text('${event.participants} présents', style: AppTextStyles.muted),
-                          ]),
-                        );
-                      },
-                    ),
-            ),
-            if (!_loading && _events.isEmpty)
-              const ToreEmptyState(
-                title: 'Territoire calme',
-                message: "Aucun événement actif pour l'instant.",
-              ),
-            const SizedBox(height: 16),
-            const SolarSectionTitle("Bars vivants"),
-            const SizedBox(height: 8),
-            for (final bar in _bars)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: AppColors.solarCardDecoration,
-                child: Row(children: [
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(bar.name), Text(bar.distanceLabel, style: AppTextStyles.muted)])),
-                  const SolarChip(label: "Actif", color: AppColors.solarRedSoft),
-                ]),
-              ),
-            if (!_loading && _bars.isEmpty)
-              const ToreEmptyState(
-                title: 'Aucun bar pour l\'instant',
-                message: 'Reviens un peu plus tard pour découvrir les bars actifs.',
-              ),
-            if (kTrendingEnabled) ...[
-              const SizedBox(height: 12),
-              const SolarSectionTitle("Arènes actives"),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: const [
-                SolarChip(label: "Arène centrale"),
-                SolarChip(label: "Territoire étudiant"),
-                SolarChip(label: "Polymarket chaud"),
-              ]),
-            ],
-            if (session.isGuest) ...[
-              const SizedBox(height: 12),
-              const AuthRequiredNotice(message: 'Le check-in, la création d\'event et les outils staff demandent un compte.'),
-            ],
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
