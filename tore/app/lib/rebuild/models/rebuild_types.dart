@@ -4,6 +4,10 @@ enum ModuleState { on, off, frozen, readOnly }
 enum ScopeBadge { global, bar, event }
 enum ConnectivityState { online, degraded, offline }
 
+extension EventStateX on EventState {
+  bool get isLive => this == EventState.live;
+}
+
 class ModuleDefinition {
   const ModuleDefinition({
     required this.id,

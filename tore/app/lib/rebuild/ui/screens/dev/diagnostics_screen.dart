@@ -79,7 +79,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter);
     final chips = {'', ...ClientLog.instance.eventTypes.toList()};
     final event = widget.eventContext;
-    final writeAllowed = event != null ? event.eventState == EventState.live && widget.networkState != ConnectivityState.offline : false;
+    final writeAllowed = event != null ? event.eventState.isLive && widget.networkState != ConnectivityState.offline : false;
 
     return ScreenScaffold(
       title: 'Diagnostics',
@@ -160,7 +160,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Widget _section(String title, List<Widget> children) => Card(
         child: Padding(
           padding: const EdgeInsets.all(ToreTokens.s12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: ToreTokens.s6), ...children]),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: ToreTokens.s12), ...children]),
         ),
       );
 

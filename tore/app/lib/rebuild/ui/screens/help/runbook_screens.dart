@@ -76,7 +76,7 @@ class _Line extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: ToreTokens.s6),
+        padding: const EdgeInsets.only(bottom: ToreTokens.s8),
         child: Text(text),
       );
 }

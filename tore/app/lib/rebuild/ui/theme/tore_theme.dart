@@ -17,6 +17,8 @@ class ToreTokens {
   static const s16 = 16.0;
   static const s24 = 24.0;
 
+  // Spacing rhythm guardrail: use the canonical spacing scale {s8, s12, s16, s24}.
+  // Keep non-rhythm spacing out of screen/layout code to avoid token drift.
   static const EdgeInsets pagePadding = EdgeInsets.all(s16);
   static const EdgeInsets sectionPadding = EdgeInsets.symmetric(vertical: s12);
 }

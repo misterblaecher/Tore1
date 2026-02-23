@@ -191,7 +191,7 @@ class EventHubScreen extends StatelessWidget {
     super.key,
     required this.network,
     required this.modules,
-    this.eventState = EventState.running,
+    this.eventState = EventState.live,
     this.writeAllowedReason = 'Actions disponibles',
   });
   final ConnectivityState network;
@@ -202,14 +202,14 @@ class EventHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = {
-      EventState.running: 'LIVE',
+      EventState.live: 'LIVE',
       EventState.paused: 'PAUSED',
       EventState.readOnly: 'MENU_ONLY',
       EventState.ended: 'CLOSED',
       EventState.draft: 'DRAFT',
     };
     final stateLabel = labels[eventState] ?? 'LIVE';
-    final ctaEnabled = network != ConnectivityState.offline && eventState == EventState.running;
+    final ctaEnabled = network != ConnectivityState.offline && eventState.isLive;
     return ScreenScaffold(
       title: 'Event Hub',
       connectivity: network,
