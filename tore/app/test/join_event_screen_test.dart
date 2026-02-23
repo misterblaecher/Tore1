@@ -38,7 +38,14 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('JOIN66'), findsOneWidget);
+    final fieldFinder = find.byType(TextFormField).first;
+    final fieldWidget = tester.widget<TextFormField>(fieldFinder);
+    final controller = fieldWidget.controller;
+    if (controller != null) {
+      expect(controller.text, equals('JOIN66'));
+    } else {
+      expect(fieldWidget.initialValue, equals('JOIN66'));
+    }
   });
 
   testWidgets('autoJoinPublic redirects to EventPublicScreen', (tester) async {

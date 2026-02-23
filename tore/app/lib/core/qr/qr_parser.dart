@@ -111,6 +111,13 @@ class QrParser {
     final query = uri.queryParameters.map((key, value) => MapEntry(key.toLowerCase(), value));
     final host = uri.host.toLowerCase();
     final firstPathSegment = uri.pathSegments.isNotEmpty ? uri.pathSegments.first.toLowerCase() : '';
+
+    final isLegacyOpenWeb =
+        (uri.scheme == 'https' || uri.scheme == 'http') && host == 'app.tore.be' && firstPathSegment == 'open';
+    if (isLegacyOpenWeb) {
+      return _fromOpenQuery(raw, query, now);
+    }
+
     final target = host == 'app.tore.be' ? firstPathSegment : (host.isNotEmpty ? host : firstPathSegment);
     final type = _mapType(target, query['type']);
 
@@ -133,6 +140,24 @@ class QrParser {
       signature: query['sig'] ?? query['signature'] ?? query['jwt'],
       revokeToken: query['rid'] ?? query['revoke_id'],
       fields: query,
+    );
+  }
+
+  QrPayload _fromOpenQuery(String raw, Map<String, String> query, DateTime now) {
+    final type = _mapType('open', query['type']);
+    final id = query['id'] ?? query['eventid'] ?? query['event_id'];
+    final eventId = query['eventid'] ?? query['event_id'] ?? id;
+    final committeeId = query['committee_id'] ?? query['org_id'] ?? (type == QrType.orga ? id : null);
+
+    return QrPayload(
+      type: type,
+      raw: raw,
+      parsedAt: now,
+      eventId: _toInt(eventId),
+      committeeId: _toInt(committeeId),
+      tokenId: query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
+      fields: query,
+      reason: type == QrType.unknown ? 'format invalide' : null,
     );
   }
 
