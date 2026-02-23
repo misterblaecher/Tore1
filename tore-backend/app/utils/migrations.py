@@ -9,6 +9,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
 from db import engine
@@ -17,6 +18,7 @@ from models import AuthOtpCode
 _LOGGER = logging.getLogger(__name__)
 _MIGRATION_LOCK = threading.Lock()
 _MIGRATIONS_EXECUTED = False
+_OTP_SCHEMA_READY = False
 _RETRY_BACKOFF_SECONDS = (1, 2, 4, 8, 16)
 _TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
@@ -61,16 +63,28 @@ def _run_alembic_upgrade_head() -> None:
     command.upgrade(config, "head")
 
 
-def _apply_otp_migrations() -> None:
-    AuthOtpCode.__table__.create(bind=engine, checkfirst=True)
-    with engine.begin() as conn:
+def _otp_table_exists(engine_to_use: Engine) -> bool:
+    with engine_to_use.connect() as conn:
+        if engine_to_use.dialect.name == "postgresql":
+            exists = conn.execute(text("SELECT to_regclass('public.auth_otp_codes')")).scalar() is not None
+        else:
+            exists = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='auth_otp_codes'")
+            ).scalar() is not None
+    _LOGGER.info("otp.schema check auth_otp_codes exists=%s", exists)
+    return exists
+
+
+def ensure_otp_schema(engine_to_use: Engine) -> None:
+    AuthOtpCode.__table__.create(bind=engine_to_use, checkfirst=True)
+    with engine_to_use.begin() as conn:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_email_created_at ON auth_otp_codes (email, created_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_email_used_at ON auth_otp_codes (email, used_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_otp_expires_at ON auth_otp_codes (expires_at)"))
 
 
 def run_migrations_on_startup() -> None:
-    global _MIGRATIONS_EXECUTED
+    global _MIGRATIONS_EXECUTED, _OTP_SCHEMA_READY
 
     if not _env_bool("RUN_MIGRATIONS", default=True):
         _LOGGER.info("RUN_MIGRATIONS=0, skipping migrations")
@@ -88,10 +102,13 @@ def run_migrations_on_startup() -> None:
             for attempt, delay in enumerate(_RETRY_BACKOFF_SECONDS, start=1):
                 try:
                     _run_alembic_upgrade_head()
-                    _apply_otp_migrations()
+                    _otp_table_exists(engine)
+                    ensure_otp_schema(engine)
+                    _otp_table_exists(engine)
                     _LOGGER.info("Migrations applied successfully")
                     _LOGGER.info("OTP migrations applied (RUN_MIGRATIONS=1)")
                     _MIGRATIONS_EXECUTED = True
+                    _OTP_SCHEMA_READY = True
                     return
                 except Exception as exc:  # pragma: no cover - retry branch split for clarity
                     if not _is_connection_error(exc):
@@ -102,6 +119,11 @@ def run_migrations_on_startup() -> None:
                     time.sleep(delay)
         except Exception as exc:
             _LOGGER.error("Migration failed: %s", exc)
+            _OTP_SCHEMA_READY = False
             if fatal:
                 raise RuntimeError("Database migrations failed") from exc
             _LOGGER.warning("MIGRATIONS_FATAL=0, continuing startup despite migration failure")
+
+
+def otp_schema_ready() -> bool:
+    return _OTP_SCHEMA_READY

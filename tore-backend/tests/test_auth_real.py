@@ -288,8 +288,9 @@ def test_email_request_otp_dev_dry_run_when_smtp_fails(monkeypatch):
 def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
     monkeypatch.setenv("ENV", "DEV")
     monkeypatch.setenv("TORE_DEV_EXPOSE_MAGIC_TOKEN", "1")
-    rate_limit_service._SCOPE_LIMITS["auth_email_request_otp_email"] = (1, 60)
-    rate_limit_service._SCOPE_LIMITS["auth_email_request_otp_ip"] = (100, 60)
+    monkeypatch.setenv("TORE_EMAIL_OTP_RATE_LIMIT", "1")
+    monkeypatch.setenv("TORE_EMAIL_OTP_WINDOW_SECONDS", "60")
+    monkeypatch.setenv("TORE_AUTH_EMAIL_OTP_PER_IP_MAX", "100")
 
     client = TestClient(app)
     email = f"otp-limit-{now_utc().timestamp()}@example.com"
@@ -307,6 +308,33 @@ def test_email_request_otp_rate_limit_returns_retry_after_header(monkeypatch):
         "retry_after_seconds": int(retry_after_header),
     }
 
+
+
+
+def test_email_request_otp_rate_limit_uses_env_config(monkeypatch):
+    monkeypatch.setenv("ENV", "DEV")
+    monkeypatch.setenv("TORE_DEV_EXPOSE_MAGIC_TOKEN", "1")
+    monkeypatch.setenv("TORE_EMAIL_OTP_RATE_LIMIT", "1")
+    monkeypatch.setenv("TORE_EMAIL_OTP_WINDOW_SECONDS", "7")
+    monkeypatch.setenv("TORE_AUTH_EMAIL_OTP_PER_IP_MAX", "100")
+
+    client = TestClient(app)
+    email = f"otp-env-limit-{now_utc().timestamp()}@example.com"
+
+    first = client.post("/auth/email/request_otp", json={"email": email})
+    assert first.status_code == 200
+
+    second = client.post("/auth/email/request_otp", json={"email": email})
+    assert second.status_code == 429
+    assert second.headers.get("Retry-After") is not None
+    retry_after = int(second.headers["Retry-After"])
+    assert 1 <= retry_after <= 7
+    assert second.json() == {
+        "detail": {
+            "code": "rate_limited",
+            "retry_after_seconds": retry_after,
+        }
+    }
 
 def test_email_request_otp_invalid_email_returns_400():
     client = TestClient(app)

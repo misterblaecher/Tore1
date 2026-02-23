@@ -56,6 +56,20 @@ _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
 
 _lock = threading.Lock()
 _store: dict[str, Deque[float]] = defaultdict(deque)
+
+
+def _otp_scope_limit(scope: str) -> tuple[int, int] | None:
+    if scope == "auth_email_request_otp_email":
+        return (
+            int(os.getenv("TORE_EMAIL_OTP_RATE_LIMIT", os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_MAX", "3"))),
+            int(os.getenv("TORE_EMAIL_OTP_WINDOW_SECONDS", os.getenv("TORE_AUTH_EMAIL_OTP_PER_EMAIL_WINDOW_S", "60"))),
+        )
+    if scope == "auth_email_request_otp_ip":
+        return (
+            int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_IP_MAX", "15")),
+            int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_IP_WINDOW_S", "600")),
+        )
+    return None
 _metrics = {
     "requests_total": 0,
     "rate_limited_total": 0,
@@ -74,6 +88,9 @@ def enforce_rate_limit(scope: str, actor_key: str) -> None:
     key = f"{scope}:{actor_key}"
     now = time.monotonic()
     max_requests, window_s = _SCOPE_LIMITS.get(scope, (_RATE_LIMIT_MAX, _RATE_LIMIT_WINDOW_S))
+    otp_limit = _otp_scope_limit(scope)
+    if otp_limit is not None:
+        max_requests, window_s = otp_limit
     with _lock:
         _metrics["requests_total"] += 1
         q = _store[key]

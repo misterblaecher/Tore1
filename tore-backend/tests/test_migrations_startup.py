@@ -14,10 +14,12 @@ def test_run_migrations_calls_upgrade_when_enabled(monkeypatch):
         calls.append("upgrade")
 
     monkeypatch.setattr(migrations, "_run_alembic_upgrade_head", _fake_upgrade)
+    monkeypatch.setattr(migrations, "_otp_table_exists", lambda _engine: True)
+    monkeypatch.setattr(migrations, "ensure_otp_schema", lambda _engine: calls.append("ensure"))
 
     migrations.run_migrations_on_startup()
 
-    assert calls == ["upgrade"]
+    assert calls == ["upgrade", "ensure"]
 
 
 def test_run_migrations_skips_when_disabled(monkeypatch):
