@@ -11,4 +11,10 @@ class RouteGuards {
   }
 
   bool deepLinkAllowed(ModuleState state) => state != ModuleState.off;
+
+  bool routeAllowedForMode(String route, ToreMode mode) {
+    if (route.startsWith('/orga')) return mode == ToreMode.orga;
+    if (route.startsWith('/bar')) return mode == ToreMode.bar;
+    return mode == ToreMode.user || route == '/blocked';
+  }
 }
