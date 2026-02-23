@@ -209,7 +209,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     SystemSound.play(SystemSoundType.click);
     _bannerColor = status == 'accepted' ? const Color(0xFF166534) : (status == 'pending' ? const Color(0xFF1D4ED8) : const Color(0xFFB91C1C));
     _banner = reason;
-    ref.read(entryUiStateProvider.notifier).push(_ScanResult(status: status, reason: reason, at: DateTime.now(), type: type));
+    ref.read(entryUiStateProvider.notifier).push(ScanResult(status: status, reason: reason, at: DateTime.now(), type: type));
     if (mounted) {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason), duration: const Duration(milliseconds: 700)));
@@ -240,14 +240,35 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
                 children: [
-                  Text('Event #${widget.eventId}'),
-                  TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))), icon: const Icon(Icons.keyboard), label: const Text('Entrer un code')),
-                  IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
+                  Expanded(
+                    child: Text(
+                      'Event #${widget.eventId}',
+                      softWrap: true,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))),
+                            icon: const Icon(Icons.keyboard),
+                            label: const Text('Entrer un code'),
+                          ),
+                          IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
               SwitchListTile(value: _manualMode, onChanged: (v) => setState(() => _manualMode = v), title: const Text('Mode manuel'), secondary: const Icon(Icons.touch_app)),
@@ -312,20 +333,20 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
 class EntryUiState {
   const EntryUiState({this.recent = const []});
-  final List<_ScanResult> recent;
-  EntryUiState copyWith({List<_ScanResult>? recent}) => EntryUiState(recent: recent ?? this.recent);
+  final List<ScanResult> recent;
+  EntryUiState copyWith({List<ScanResult>? recent}) => EntryUiState(recent: recent ?? this.recent);
 }
 
 class EntryUiStateNotifier extends StateNotifier<EntryUiState> {
   EntryUiStateNotifier() : super(const EntryUiState());
   static const int maxRecent = 8;
-  void push(_ScanResult result) => state = state.copyWith(recent: [result, ...state.recent].take(maxRecent).toList(growable: false));
+  void push(ScanResult result) => state = state.copyWith(recent: [result, ...state.recent].take(maxRecent).toList(growable: false));
 }
 
 final entryUiStateProvider = StateNotifierProvider<EntryUiStateNotifier, EntryUiState>((ref) => EntryUiStateNotifier());
 
-class _ScanResult {
-  _ScanResult({required this.status, required this.reason, required this.at, required this.type});
+class ScanResult {
+  ScanResult({required this.status, required this.reason, required this.at, required this.type});
   final String status;
   final String reason;
   final DateTime at;
