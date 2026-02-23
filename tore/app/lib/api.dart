@@ -203,6 +203,39 @@ class Api {
   Future<Map<String, dynamic>> getMusic(int eventId) async =>
       Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/music')).data as Map);
 
+
+  Future<Map<String, dynamic>> getMusicPreEvent(int eventId) async =>
+      Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/music/pre_event')).data as Map);
+
+  Future<Map<String, dynamic>> suggestMusicPreEvent({
+    required int eventId,
+    required String provider,
+    required String externalUrl,
+    required String idempotencyKey,
+    String title = '',
+    String artist = '',
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/pre_event/suggest',
+      data: {'provider': provider, 'externalUrl': externalUrl, 'title': title, 'artist': artist},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> voteMusicPreEvent({
+    required int eventId,
+    required int suggestionId,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/events/$eventId/music/pre_event/vote',
+      data: {'suggestionId': suggestionId},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> voteMusic({
     required int eventId,
     required Map<String, dynamic> candidate,
@@ -255,7 +288,7 @@ class Api {
     String? reason,
   }) async {
     final res = await _client.dio.post(
-      '/events/$eventId/music/admin/force',
+      '/events/$eventId/music/force',
       data: {'candidate': candidate, if (reason != null) 'reason': reason},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
@@ -269,7 +302,7 @@ class Api {
     required String idempotencyKey,
   }) async {
     final res = await _client.dio.post(
-      '/events/$eventId/music/admin/round/start',
+      '/events/$eventId/music/rounds/start',
       data: {'durationSec': durationSec},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
@@ -281,7 +314,7 @@ class Api {
     required String idempotencyKey,
   }) async {
     final res = await _client.dio.post(
-      '/events/$eventId/music/admin/round/end',
+      '/events/$eventId/music/rounds/close',
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -294,7 +327,7 @@ class Api {
     String? reason,
   }) async {
     final res = await _client.dio.post(
-      '/events/$eventId/music/admin/now-playing',
+      '/events/$eventId/music/now_playing',
       data: {'candidate': candidate, if (reason != null) 'reason': reason},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
@@ -307,7 +340,7 @@ class Api {
     required String reason,
   }) async {
     final res = await _client.dio.post(
-      '/events/$eventId/music/admin/skip',
+      '/events/$eventId/music/skip_winner',
       data: {'reason': reason},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
