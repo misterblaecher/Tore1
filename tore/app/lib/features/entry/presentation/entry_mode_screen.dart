@@ -240,12 +240,16 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
-              Row(children: [
-                Text('Event #${widget.eventId}'),
-                const Spacer(),
-                TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))), icon: const Icon(Icons.keyboard), label: const Text('Entrer un code')),
-                IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
-              ]),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('Event #${widget.eventId}'),
+                  TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffBackupJoinScreen(prefillEventId: widget.eventId))), icon: const Icon(Icons.keyboard), label: const Text('Entrer un code')),
+                  IconButton(onPressed: _exportCsv, icon: const Icon(Icons.download)),
+                ],
+              ),
               SwitchListTile(value: _manualMode, onChanged: (v) => setState(() => _manualMode = v), title: const Text('Mode manuel'), secondary: const Icon(Icons.touch_app)),
               Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _bannerColor, borderRadius: BorderRadius.circular(8)), width: double.infinity, child: Text(_banner)),
               Expanded(
@@ -269,7 +273,16 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                   ],
                 ]),
               ),
-              Row(children: [Text('Status: ${net.name.toUpperCase()}'), const Spacer(), Text('Queue: ${pending.length}'), TextButton(onPressed: _syncPending, child: const Text('Sync now'))]),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('Status: ${net.name.toUpperCase()}'),
+                  Text('Queue: ${pending.length}'),
+                  TextButton(onPressed: _syncPending, child: const Text('Sync now')),
+                ],
+              ),
               Container(
                 color: const Color(0xFF111827),
                 padding: const EdgeInsets.all(8),
