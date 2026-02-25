@@ -54,6 +54,42 @@ Widget _wrapWithRootProviderScope(Widget child) {
 }
 
 void main() {
+  testWidgets('adapter screen does not add nested ProviderScope when one already exists', (tester) async {
+    await tester.pumpWidget(
+      _wrapWithRootProviderScope(
+        const RebuildMenuAdapterScreen(
+          network: ConnectivityState.online,
+          eventId: 42,
+          eventState: EventState.live,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(ProviderScope), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('adapter screen creates ProviderScope only when missing', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RebuildMenuAdapterScreen(
+          network: ConnectivityState.online,
+          eventId: 42,
+          eventState: EventState.live,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(ProviderScope), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('adapter screens render independently from app boot gating', (tester) async {
     await tester.pumpWidget(
       _wrapWithRootProviderScope(
