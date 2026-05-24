@@ -1,12 +1,12 @@
 import { motion } from "framer-motion";
-import { BarChart3, MapPin, Music2, Package, Dice5 } from "lucide-react";
+import { BarChart3, MapPin, Music2, Package, Dice5, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type ModuleKey = "music" | "bets" | "dashboard" | "map" | "inventory";
 
 const modules: Array<{
   key: ModuleKey;
-  icon: any;
+  icon: LucideIcon;
   title: string;
   description: string;
 }> = [

@@ -68,6 +68,15 @@ def _scope_event_id(battle: Battle) -> Optional[int]:
     return battle.event_id
 
 
+def _ensure_battles_enabled(db: Session, event_id: int) -> None:
+    try:
+        ensure_event_module_enabled(db, event_id, "battles_enabled")
+    except HTTPException as exc:
+        if exc.status_code == 412 and isinstance(exc.detail, dict) and exc.detail.get("reason") == "module_off":
+            raise HTTPException(status_code=409, detail=exc.detail) from exc
+        raise
+
+
 def _xor_cipher(value: str, key: str) -> str:
     raw = value.encode("utf-8")
     key_b = key.encode("utf-8")
@@ -90,7 +99,7 @@ def battles_create(payload: BattleCreateIn, identity=Depends(require_role("manag
     event_id = payload.event_id
     if event_id is not None:
         event = get_owned_event_or_403(db, event_id, identity["bar_id"])
-        ensure_event_module_enabled(db, event_id, "battles_enabled")
+        _ensure_battles_enabled(db, event_id)
         bar_id = event.bar_id
     elif bar_id != identity["bar_id"]:
         raise HTTPException(403, "Forbidden")
@@ -117,7 +126,7 @@ def battles_join(battle_id: int, payload: BattleJoinIn, user=Depends(_app_user),
     if not battle:
         raise HTTPException(404, "Battle not found")
     if battle.event_id:
-        ensure_event_module_enabled(db, battle.event_id, "battles_enabled")
+        _ensure_battles_enabled(db, battle.event_id)
     existing = db.query(BattleJoin).filter(BattleJoin.battle_id == battle_id, BattleJoin.user_id == user.id).first()
     if existing:
         return {"ok": True, "idempotent": True, "battle_id": battle_id}
@@ -132,7 +141,7 @@ def battles_submit(battle_id: int, payload: BattleSubmitIn, user=Depends(_app_us
     if not battle:
         raise HTTPException(404, "Battle not found")
     if battle.event_id:
-        ensure_event_module_enabled(db, battle.event_id, "battles_enabled")
+        _ensure_battles_enabled(db, battle.event_id)
     recent_submit_count = (
         db.query(func.count(BattleSubmit.id))
         .filter(BattleSubmit.battle_id == battle_id, BattleSubmit.actor_user_id == user.id, BattleSubmit.created_at >= now_utc() - timedelta(seconds=10))

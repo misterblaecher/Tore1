@@ -568,6 +568,7 @@ const Index = () => {
                 aria-disabled={Boolean(accountSuccess)}
                 onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault();
+                  const form = event.currentTarget;
                   if (accountLoading || accountSuccess) {
                     return;
                   }
@@ -584,7 +585,7 @@ const Index = () => {
                   }
 
                   const accountRequestUrl = `${API_URL.replace(/\/+$/, "")}/public/account-request`;
-                  const formData = new FormData(event.currentTarget);
+                  const formData = new FormData(form);
                   const role = String(formData.get("role") || "") as AccountRole;
                   const payload = {
                     name: String(formData.get("name") || "").trim(),
@@ -612,7 +613,7 @@ const Index = () => {
                       const successMessage = typeof json.id === "number" ? `Demande envoyée (ID ${json.id}).` : "Demande envoyée.";
                       setAccountSuccess(successMessage);
                       setAccountError(null);
-                      event.currentTarget.reset();
+                      form.reset();
                       setSelectedRole("");
                       setSelectedAccountMode("user");
                       toast({ title: "Demande envoyée", description: "Ta demande a bien été enregistrée.", duration: 3200 });

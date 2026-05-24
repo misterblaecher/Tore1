@@ -3969,14 +3969,18 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
 
     provider_key = (os.getenv("EMAIL_PROVIDER_API_KEY") or "").strip()
     smtp_host = (os.getenv("SMTP_HOST") or "").strip()
+    dev_mode = _otp_dev_mode_enabled() or _env_bool("ALLOW_DEV_OTP", False)
     if not provider_key and not smtp_host:
         if _otp_dry_run_enabled():
             logging.info("OTP_DEBUG email=%s code=%s", email, raw_code)
             return {"ok": True, "devToken": raw_code}
+        if dev_mode:
+            logging.info("DEV OTP for %s: %s", email, raw_code)
+            return {"ok": True, "sent": False, "otp_debug": raw_code, "reason": "dev_mode"}
         raise HTTPException(status_code=503, detail={"code": "email_provider_missing"})
 
     out: Dict[str, Any] = {"ok": True, "sent": True}
-    if _otp_dev_mode_enabled() or _env_bool("ALLOW_DEV_OTP", False):
+    if dev_mode:
         logging.info("DEV OTP for %s: %s", email, raw_code)
         out.update({"sent": False, "otp_debug": raw_code, "reason": "dev_mode"})
         return out

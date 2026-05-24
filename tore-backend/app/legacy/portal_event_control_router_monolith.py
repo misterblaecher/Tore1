@@ -818,9 +818,11 @@ def wallet_admin_topup(
         raise HTTPException(status_code=400, detail={"reason": "invalid_amount", "message": "amount must be >= 1"})
     reason_code = (payload.reason_code or "wallet_topup").strip()
     reason = (payload.reason_text or payload.note or payload.reason or "").strip()
+    if not reason and payload.amount_tickets is not None and payload.amount_cents is None:
+        reason = reason_code
     if not reason:
         raise HTTPException(status_code=422, detail={"reason": "missing_reason", "message": "reason_text required"})
-    idempotency_key = (idempotency_header or "").strip()
+    idempotency_key = (idempotency_header or payload.idempotency_key or payload.client_key or "").strip()
     if len(idempotency_key) < 1:
         raise HTTPException(status_code=400, detail={"reason": "missing_idempotency", "message": "Idempotency-Key header required"})
     enforce_rate_limit("wallet_topup", f"{identity['user_id']}:{idempotency_key}")

@@ -66,14 +66,17 @@ class QrParser {
     final trimmed = raw.trim();
     final now = DateTime.now();
     if (trimmed.isEmpty) {
-      return QrPayload(type: QrType.unknown, raw: trimmed, parsedAt: now, reason: 'format invalide');
+      return QrPayload(
+          type: QrType.unknown,
+          raw: trimmed,
+          parsedAt: now,
+          reason: 'format invalide');
     }
 
     final jsonPayload = _parseJson(trimmed);
     if (jsonPayload != null) {
       return _fromMap(trimmed, jsonPayload, now);
     }
-
 
     final colonMatch = RegExp(r'^([a-zA-Z_]+):(.*)$').firstMatch(trimmed);
     if (colonMatch != null) {
@@ -108,21 +111,33 @@ class QrParser {
   }
 
   QrPayload _fromUri(String raw, Uri uri, DateTime now) {
-    final query = uri.queryParameters.map((key, value) => MapEntry(key.toLowerCase(), value));
+    final query = uri.queryParameters
+        .map((key, value) => MapEntry(key.toLowerCase(), value));
     final host = uri.host.toLowerCase();
-    final firstPathSegment = uri.pathSegments.isNotEmpty ? uri.pathSegments.first.toLowerCase() : '';
+    final firstPathSegment =
+        uri.pathSegments.isNotEmpty ? uri.pathSegments.first.toLowerCase() : '';
 
-    final isLegacyOpenWeb =
-        (uri.scheme == 'https' || uri.scheme == 'http') && host == 'app.tore.be' && firstPathSegment == 'open';
-    if (isLegacyOpenWeb) {
+    final isLegacyOpenWeb = (uri.scheme == 'https' || uri.scheme == 'http') &&
+        host == 'app.tore.be' &&
+        firstPathSegment == 'open';
+    final isLegacyOpenApp =
+        uri.scheme == 'tore' && (host == 'open' || firstPathSegment == 'open');
+    if (isLegacyOpenWeb || isLegacyOpenApp) {
       return _fromOpenQuery(raw, query, now);
     }
 
-    final target = host == 'app.tore.be' ? firstPathSegment : (host.isNotEmpty ? host : firstPathSegment);
+    final target = host == 'app.tore.be'
+        ? firstPathSegment
+        : (host.isNotEmpty ? host : firstPathSegment);
     final type = _mapType(target, query['type']);
 
     if (type == QrType.unknown) {
-      return QrPayload(type: QrType.unknown, raw: raw, parsedAt: now, reason: 'format invalide', fields: query);
+      return QrPayload(
+          type: QrType.unknown,
+          raw: raw,
+          parsedAt: now,
+          reason: 'format invalide',
+          fields: query);
     }
 
     return QrPayload(
@@ -133,7 +148,8 @@ class QrParser {
       barId: _toInt(query['bar_id']),
       committeeId: _toInt(query['committee_id'] ?? query['org_id']),
       orderId: _toInt(query['order_id']),
-      tokenId: query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
+      tokenId:
+          query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
       battleId: _toInt(query['battle_id']),
       betId: _toInt(query['bet_id']),
       expiresAt: _parseDate(query['exp'] ?? query['expires_at']),
@@ -143,11 +159,14 @@ class QrParser {
     );
   }
 
-  QrPayload _fromOpenQuery(String raw, Map<String, String> query, DateTime now) {
+  QrPayload _fromOpenQuery(
+      String raw, Map<String, String> query, DateTime now) {
     final type = _mapType('open', query['type']);
     final id = query['id'] ?? query['eventid'] ?? query['event_id'];
     final eventId = query['eventid'] ?? query['event_id'] ?? id;
-    final committeeId = query['committee_id'] ?? query['org_id'] ?? (type == QrType.orga ? id : null);
+    final committeeId = query['committee_id'] ??
+        query['org_id'] ??
+        (type == QrType.orga ? id : null);
 
     return QrPayload(
       type: type,
@@ -155,14 +174,16 @@ class QrParser {
       parsedAt: now,
       eventId: _toInt(eventId),
       committeeId: _toInt(committeeId),
-      tokenId: query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
+      tokenId:
+          query['token'] ?? query['ot'] ?? query['token_id'] ?? query['code'],
       fields: query,
       reason: type == QrType.unknown ? 'format invalide' : null,
     );
   }
 
   QrPayload _fromMap(String raw, Map<String, dynamic> source, DateTime now) {
-    final mapped = source.map((key, value) => MapEntry(key.toLowerCase(), value?.toString() ?? ''));
+    final mapped = source.map(
+        (key, value) => MapEntry(key.toLowerCase(), value?.toString() ?? ''));
     final rawType = mapped['type'] ?? mapped['qr_type'] ?? mapped['kind'];
     final type = _mapType(rawType, rawType);
     return QrPayload(
@@ -173,7 +194,10 @@ class QrParser {
       barId: _toInt(mapped['bar_id']),
       committeeId: _toInt(mapped['committee_id'] ?? mapped['org_id']),
       orderId: _toInt(mapped['order_id']),
-      tokenId: mapped['token'] ?? mapped['ot'] ?? mapped['token_id'] ?? mapped['code'],
+      tokenId: mapped['token'] ??
+          mapped['ot'] ??
+          mapped['token_id'] ??
+          mapped['code'],
       battleId: _toInt(mapped['battle_id']),
       betId: _toInt(mapped['bet_id']),
       expiresAt: _parseDate(mapped['exp'] ?? mapped['expires_at']),
@@ -187,7 +211,8 @@ class QrParser {
   QrType _mapType(String? primary, String? fallback) {
     final first = (primary ?? '').toLowerCase().trim();
     final second = (fallback ?? '').toLowerCase().trim();
-    final normalized = (first.isEmpty || first == 'open' || first == 'qr') ? second : first;
+    final normalized =
+        (first.isEmpty || first == 'open' || first == 'qr') ? second : first;
     switch (normalized) {
       case 'join':
       case 'join_event':
@@ -266,9 +291,11 @@ class QrParser {
     final numeric = int.tryParse(value);
     if (numeric != null) {
       if (value.length >= 13) {
-        return DateTime.fromMillisecondsSinceEpoch(numeric, isUtc: true).toLocal();
+        return DateTime.fromMillisecondsSinceEpoch(numeric, isUtc: true)
+            .toLocal();
       }
-      return DateTime.fromMillisecondsSinceEpoch(numeric * 1000, isUtc: true).toLocal();
+      return DateTime.fromMillisecondsSinceEpoch(numeric * 1000, isUtc: true)
+          .toLocal();
     }
     return DateTime.tryParse(value)?.toLocal();
   }
