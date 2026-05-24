@@ -22,7 +22,10 @@ class MenuFavoritesController extends StateNotifier<Set<int>> {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is List) {
-        state = decoded.map((entry) => int.tryParse(entry.toString())).whereType<int>().toSet();
+        state = decoded
+            .map((entry) => int.tryParse(entry.toString()))
+            .whereType<int>()
+            .toSet();
       }
     } catch (_) {
       state = const <int>{};
@@ -42,6 +45,8 @@ class MenuFavoritesController extends StateNotifier<Set<int>> {
   }
 }
 
-final menuFavoritesProvider = StateNotifierProvider.family<MenuFavoritesController, Set<int>, int>((ref, eventId) {
+final menuFavoritesProvider =
+    StateNotifierProvider.family<MenuFavoritesController, Set<int>, int>(
+        (ref, eventId) {
   return MenuFavoritesController(eventId);
 });

@@ -20,7 +20,8 @@ class ToreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ToreTheme(themeMode);
-    final borderColor = focused ? ToreSemantic.accentPrimary : theme.cardBorderColor;
+    final borderColor =
+        focused ? ToreSemantic.accentPrimary : theme.cardBorderColor;
 
     return Container(
       decoration: BoxDecoration(
@@ -40,7 +41,7 @@ class ToreCard extends StatelessWidget {
               blurRadius: 18,
               spreadRadius: 0,
               offset: const Offset(0, 0),
-              color: ToreColors.rubyGlow.withOpacity(0.18),
+              color: ToreColors.rubyGlow.withValues(alpha: 0.18),
             ),
         ],
       ),

@@ -9,7 +9,8 @@ class AuthInterceptor extends Interceptor {
   AuthInterceptor(this.tokenStorage);
 
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  void onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
     if (options.extra['skipAuth'] == true) {
       handler.next(options);
       return;

@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum TickerFilter { all, prices, orders, gifts, alerts }
 
-final tickerFilterProvider = StateProvider.family<TickerFilter, int>((ref, eventId) => TickerFilter.all);
+final tickerFilterProvider =
+    StateProvider.family<TickerFilter, int>((ref, eventId) => TickerFilter.all);
 
 extension TickerFilterLabel on TickerFilter {
   String get label {

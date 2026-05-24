@@ -18,7 +18,8 @@ import '../domain/event_public_view.dart';
 import 'event_hub_screen.dart';
 
 class EventPublicScreen extends ConsumerStatefulWidget {
-  const EventPublicScreen({super.key, required this.eventId, this.autoJoin = false});
+  const EventPublicScreen(
+      {super.key, required this.eventId, this.autoJoin = false});
 
   final int eventId;
   final bool autoJoin;
@@ -39,7 +40,8 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
   String? _error;
   EventPublicView? _event;
 
-  String _idem() => 'join-public-${widget.eventId}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String _idem() =>
+      'join-public-${widget.eventId}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   @override
   void initState() {
@@ -65,7 +67,8 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
     }
   }
 
-  Future<bool> _ensureCharterAcceptance({required int eventId, required String version}) async {
+  Future<bool> _ensureCharterAcceptance(
+      {required int eventId, required String version}) async {
     final prefs = await SharedPreferences.getInstance();
     final key = 'charter_accepted_${eventId}_$version';
     if (prefs.getBool(key) == true) return true;
@@ -75,10 +78,15 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Charte de l’event'),
-        content: SingleChildScrollView(child: Text((charter['text'] ?? '').toString())),
+        content: SingleChildScrollView(
+            child: Text((charter['text'] ?? '').toString())),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Refuser')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Accepter')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Refuser')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Accepter')),
         ],
       ),
     );
@@ -93,8 +101,16 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
     final readOnly = isReadOnly(ref);
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
     final runtimeBlocked = (_event?.canJoin == false);
-    if (isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeBlocked)) {
-      setState(() => _error = writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: runtimeBlocked ? 'Inscriptions momentanément indisponibles.' : null));
+    if (isWriteBlocked(
+        readOnly: readOnly,
+        degradedBlocked: degradedBlocked,
+        runtimeBlocked: runtimeBlocked)) {
+      setState(() => _error = writeBlockedMessage(
+          readOnly: readOnly,
+          degradedBlocked: degradedBlocked,
+          runtimeReason: runtimeBlocked
+              ? 'Inscriptions momentanément indisponibles.'
+              : null));
       return;
     }
     setState(() {
@@ -102,11 +118,18 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
       _error = null;
     });
     try {
-      var payload = await ref.read(apiProvider).joinPublicEvent(eventId: widget.eventId, idempotencyKey: _idem());
+      var payload = await ref
+          .read(apiProvider)
+          .joinPublicEvent(eventId: widget.eventId, idempotencyKey: _idem());
       if (payload['charter_required'] == true) {
         final version = payload['charter_version']?.toString();
-        if (version != null && await _ensureCharterAcceptance(eventId: widget.eventId, version: version)) {
-          payload = await ref.read(apiProvider).joinPublicEvent(eventId: widget.eventId, idempotencyKey: _idem(), acceptedCharterVersion: version);
+        if (version != null &&
+            await _ensureCharterAcceptance(
+                eventId: widget.eventId, version: version)) {
+          payload = await ref.read(apiProvider).joinPublicEvent(
+              eventId: widget.eventId,
+              idempotencyKey: _idem(),
+              acceptedCharterVersion: version);
         } else {
           return;
         }
@@ -114,12 +137,22 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
       final eventPayload = Map<String, dynamic>.from(payload['event'] as Map);
       final modulesMapRaw = payload['modulesOn'];
       final modules = modulesMapRaw is Map
-          ? Map<String, bool>.from(modulesMapRaw.map((k, v) => MapEntry(k.toString(), v == true)))
-          : <String, bool>{for (final key in (_event?.modulesOn ?? const <String>[])) key: true};
-      final eventName = (eventPayload['name'] ?? _event?.name ?? 'Event').toString();
-      ref.read(appContextProvider.notifier).enterEvent(eventId: widget.eventId, eventName: eventName, activeEventModules: modules);
+          ? Map<String, bool>.from(
+              modulesMapRaw.map((k, v) => MapEntry(k.toString(), v == true)))
+          : <String, bool>{
+              for (final key in (_event?.modulesOn ?? const <String>[]))
+                key: true
+            };
+      final eventName =
+          (eventPayload['name'] ?? _event?.name ?? 'Event').toString();
+      ref.read(appContextProvider.notifier).enterEvent(
+          eventId: widget.eventId,
+          eventName: eventName,
+          activeEventModules: modules);
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: widget.eventId, eventName: eventName)));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+          builder: (_) =>
+              EventHubScreen(eventId: widget.eventId, eventName: eventName)));
     } on DioException catch (e) {
       setState(() => _error = e.response?.data.toString() ?? 'Join impossible');
     } finally {
@@ -127,21 +160,27 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
     }
   }
 
-
   Future<void> _shareEventLink() async {
     final share = await ref.read(apiProvider).getEventShareV1(widget.eventId);
     String? shortUrl;
     if (ref.read(networkStatusProvider) == NetworkState.online) {
       try {
-        final short = await ref.read(apiProvider).createShortlink(kind: 'event_share', eventId: widget.eventId, idempotencyKey: _idem());
+        final short = await ref.read(apiProvider).createShortlink(
+            kind: 'event_share',
+            eventId: widget.eventId,
+            idempotencyKey: _idem());
         shortUrl = (short['shortUrl'] ?? '').toString();
       } catch (_) {}
     }
     final eventCode = (share['event_code'] ?? '').toString();
     final builder = ShareIntentBuilder(ShareIntentInput(
       shortUrl: shortUrl,
-      openUrl: pickShareUrl(webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString()),
-      displaySuffix: eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null,
+      openUrl: pickShareUrl(
+          webUrl: (share['webUrl'] ?? '').toString(),
+          openUrl: (share['https_link'] ?? '').toString()),
+      displaySuffix: eventCode.length >= 4
+          ? eventCode.substring(eventCode.length - 4)
+          : null,
       copyValue: eventCode,
       copyHint: kShareFallbackHintOffline,
     ));
@@ -150,8 +189,12 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_error != null && _event == null) return Scaffold(appBar: AppBar(title: const Text('Event')), body: Center(child: Text(_error!)));
+    if (_loading)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_error != null && _event == null)
+      return Scaffold(
+          appBar: AppBar(title: const Text('Event')),
+          body: Center(child: Text(_error!)));
     final event = _event;
     if (event == null) return const SizedBox.shrink();
     return Scaffold(
@@ -164,7 +207,11 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
           Text('Host: ${event.hostName ?? '-'}'),
           Text('Lieu: ${event.venueName ?? '-'}'),
           Text('State: ${event.eventState}'),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
+          if (_error != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_error!,
+                    style: const TextStyle(color: Colors.redAccent))),
           const Spacer(),
           SizedBox(
             width: double.infinity,
@@ -183,7 +230,6 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
             ),
           ),
           const SizedBox(height: 8),
-
           FutureBuilder<Map<String, dynamic>>(
             future: ref.read(apiProvider).getEventShareV1(widget.eventId),
             builder: (context, snap) {
@@ -191,13 +237,17 @@ class _EventPublicScreenState extends ConsumerState<EventPublicScreen> {
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('Code (${_suffix(code)})'),
-                subtitle: const Text('Fallback manuel si ouverture lien échoue'),
+                subtitle:
+                    const Text('Fallback manuel si ouverture lien échoue'),
                 trailing: IconButton(
-                  onPressed: code.isEmpty ? null : () async {
-                    await Clipboard.setData(ClipboardData(text: code));
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copié')));
-                  },
+                  onPressed: code.isEmpty
+                      ? null
+                      : () async {
+                          await Clipboard.setData(ClipboardData(text: code));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Code copié')));
+                        },
                   icon: const Icon(Icons.copy_all_outlined),
                 ),
               );

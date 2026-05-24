@@ -5,7 +5,8 @@ void main() {
   const detector = CodeEntryDetector();
 
   test('detects open links', () {
-    final join = detector.detect('https://app.tore.be/open?type=join&code=ab-12 34');
+    final join =
+        detector.detect('https://app.tore.be/open?type=join&code=ab-12 34');
     expect(join.kind, CodeEntryKind.join);
     expect(join.code, 'AB1234');
 

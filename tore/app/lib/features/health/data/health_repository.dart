@@ -44,7 +44,10 @@ class HealthRepository {
     Duration connectTimeout = const Duration(seconds: 30),
     Duration receiveTimeout = const Duration(seconds: 45),
   }) async {
-    const backoffs = [Duration(milliseconds: 500), Duration(milliseconds: 1500)];
+    const backoffs = [
+      Duration(milliseconds: 500),
+      Duration(milliseconds: 1500)
+    ];
     final endpoints = ['/healthz', '/api/healthz'];
 
     Object? lastError;
@@ -71,7 +74,8 @@ class HealthRepository {
           final latency = DateTime.now().difference(started);
           final code = response.statusCode ?? 0;
           if (kDebugMode) {
-            debugPrint('[health] attempt=${attempt + 1} endpoint=$endpoint status=$code latencyMs=${latency.inMilliseconds}');
+            debugPrint(
+                '[health] attempt=${attempt + 1} endpoint=$endpoint status=$code latencyMs=${latency.inMilliseconds}');
           }
 
           if (code == 404 && !switchedEndpoint) {

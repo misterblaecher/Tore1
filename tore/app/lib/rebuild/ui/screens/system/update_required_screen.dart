@@ -26,17 +26,23 @@ class UpdateRequiredScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Card(
-            color: ToreTokens.warning.withOpacity(.15),
+            color: ToreTokens.warning.withValues(alpha: .15),
             child: Padding(
               padding: const EdgeInsets.all(ToreTokens.s12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(isOrga ? 'Writes blocked for operator safety.' : 'Read-only mode active for safety.', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                      isOrga
+                          ? 'Writes blocked for operator safety.'
+                          : 'Read-only mode active for safety.',
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: ToreTokens.s8),
                   Text(message),
                   const SizedBox(height: ToreTokens.s8),
-                  Text(blockedByVersion ? 'Please update to continue.' : 'Temporary freeze in progress.'),
+                  Text(blockedByVersion
+                      ? 'Please update to continue.'
+                      : 'Temporary freeze in progress.'),
                 ],
               ),
             ),
@@ -44,7 +50,8 @@ class UpdateRequiredScreen extends StatelessWidget {
           const SizedBox(height: ToreTokens.s12),
           const BlockedStateView(
             title: 'Client restricted',
-            message: 'This build can read but cannot perform writes until update/freeze is lifted.',
+            message:
+                'This build can read but cannot perform writes until update/freeze is lifted.',
           ),
         ],
       ),

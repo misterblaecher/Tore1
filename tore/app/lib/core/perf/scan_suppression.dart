@@ -11,12 +11,14 @@ class ScanSuppression {
   String? _lastHash;
   DateTime? _lastAt;
 
-  bool shouldAllow({required String hash, DateTime? now}) => !shouldSuppress(hash: hash, now: now);
+  bool shouldAllow({required String hash, DateTime? now}) =>
+      !shouldSuppress(hash: hash, now: now);
 
   bool shouldSuppress({required String hash, DateTime? now}) {
     final current = now ?? _clock();
     final isSame = _lastHash == hash;
-    final isCooldown = _lastAt != null && current.difference(_lastAt!) < cooldown;
+    final isCooldown =
+        _lastAt != null && current.difference(_lastAt!) < cooldown;
     final suppressed = isSame && isCooldown;
 
     if (!suppressed) {

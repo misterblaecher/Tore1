@@ -43,7 +43,8 @@ class QrStatusScreen extends StatelessWidget {
               ToreCTA(
                 label: 'Home',
                 style: ToreCTAStyle.secondary,
-                onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                onPressed: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
               ),
             ],
           ),

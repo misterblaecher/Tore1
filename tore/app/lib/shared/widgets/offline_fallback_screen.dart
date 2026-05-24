@@ -15,6 +15,7 @@ class OfflineFallbackScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return NetworkErrorFallback(title: title, message: message, onRetry: onRetry);
+    return NetworkErrorFallback(
+        title: title, message: message, onRetry: onRetry);
   }
 }

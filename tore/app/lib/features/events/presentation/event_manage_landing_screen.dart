@@ -19,10 +19,12 @@ class EventManageLandingScreen extends ConsumerStatefulWidget {
   final MyEventSummary event;
 
   @override
-  ConsumerState<EventManageLandingScreen> createState() => _EventManageLandingScreenState();
+  ConsumerState<EventManageLandingScreen> createState() =>
+      _EventManageLandingScreenState();
 }
 
-class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScreen> {
+class _EventManageLandingScreenState
+    extends ConsumerState<EventManageLandingScreen> {
   String _suffix(String code) {
     final clean = code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
     if (clean.isEmpty) return '—';
@@ -31,36 +33,45 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
 
   bool _loading = false;
 
-  String _idem(String action) => '$action-${widget.event.id}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String _idem(String action) =>
+      '$action-${widget.event.id}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   Future<void> _publish() async {
     if (!canWrite(ref, intent: WriteIntent.critical)) return;
     setState(() => _loading = true);
     try {
-      await ref.read(apiProvider).publishEventV1(eventId: widget.event.id, idempotencyKey: _idem('publish'));
+      await ref.read(apiProvider).publishEventV1(
+          eventId: widget.event.id, idempotencyKey: _idem('publish'));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event publié')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Event publié')));
       setState(() {});
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-
   Future<void> _shareEvent() async {
     final share = await ref.read(apiProvider).getEventShareV1(widget.event.id);
     String? shortUrl;
     if (ref.read(networkStatusProvider) == NetworkState.online) {
       try {
-        final short = await ref.read(apiProvider).createShortlink(kind: 'event_share', eventId: widget.event.id, idempotencyKey: _idem('shortlink'));
+        final short = await ref.read(apiProvider).createShortlink(
+            kind: 'event_share',
+            eventId: widget.event.id,
+            idempotencyKey: _idem('shortlink'));
         shortUrl = (short['shortUrl'] ?? '').toString();
       } catch (_) {}
     }
     final eventCode = (share['event_code'] ?? '').toString();
     final builder = ShareIntentBuilder(ShareIntentInput(
       shortUrl: shortUrl,
-      openUrl: pickShareUrl(webUrl: (share['webUrl'] ?? '').toString(), openUrl: (share['https_link'] ?? '').toString()),
-      displaySuffix: eventCode.length >= 4 ? eventCode.substring(eventCode.length - 4) : null,
+      openUrl: pickShareUrl(
+          webUrl: (share['webUrl'] ?? '').toString(),
+          openUrl: (share['https_link'] ?? '').toString()),
+      displaySuffix: eventCode.length >= 4
+          ? eventCode.substring(eventCode.length - 4)
+          : null,
       copyValue: eventCode,
       copyHint: kShareFallbackHintOffline,
     ));
@@ -68,7 +79,8 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
   }
 
   Future<void> _sharePack() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventSharePackScreen(eventId: widget.event.id)));
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => EventSharePackScreen(eventId: widget.event.id)));
   }
 
   @override
@@ -85,7 +97,8 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
               Card(
                 child: ListTile(
                   title: Text(widget.event.name),
-                  subtitle: Text('${widget.event.roleForMe} • ${widget.event.visibility} • ${snapshot?.runtimeState ?? widget.event.status}'),
+                  subtitle: Text(
+                      '${widget.event.roleForMe} • ${widget.event.visibility} • ${snapshot?.runtimeState ?? widget.event.status}'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -107,23 +120,27 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
                 icon: const Icon(Icons.share_outlined),
                 label: const Text('Partager'),
               ),
-
               FutureBuilder<Map<String, dynamic>>(
                 future: ref.read(apiProvider).getEventShareV1(widget.event.id),
                 builder: (context, codeSnap) {
-                  final eventCode = (codeSnap.data?['event_code'] ?? '').toString();
+                  final eventCode =
+                      (codeSnap.data?['event_code'] ?? '').toString();
                   final suffix = _suffix(eventCode);
                   return Card(
                     child: ListTile(
                       title: Text('Code ($suffix)'),
-                      subtitle: const Text('Fallback immédiat si le shortlink échoue'),
+                      subtitle: const Text(
+                          'Fallback immédiat si le shortlink échoue'),
                       trailing: IconButton(
                         onPressed: eventCode.isEmpty
                             ? null
                             : () async {
-                                await Clipboard.setData(ClipboardData(text: eventCode));
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copié')));
+                                await Clipboard.setData(
+                                    ClipboardData(text: eventCode));
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Code copié')));
                               },
                         icon: const Icon(Icons.copy_all_outlined),
                       ),
@@ -134,7 +151,8 @@ class _EventManageLandingScreenState extends ConsumerState<EventManageLandingScr
               const SizedBox(height: 8),
               if (snapshot != null) ...[
                 const SizedBox(height: 12),
-                Text('Staff invite actuel: ${snapshot.staffInviteCodeCurrent ?? '-'}'),
+                Text(
+                    'Staff invite actuel: ${snapshot.staffInviteCodeCurrent ?? '-'}'),
               ],
             ],
           );

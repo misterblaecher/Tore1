@@ -36,8 +36,12 @@ void main() {
     final interceptor = AuthInterceptor(storage);
 
     final requestOptions = RequestOptions(path: '/auth/me');
-    final response = Response(requestOptions: requestOptions, statusCode: 401, data: {'detail': 'Invalid token'});
-    final error = DioException(requestOptions: requestOptions, response: response);
+    final response = Response(
+        requestOptions: requestOptions,
+        statusCode: 401,
+        data: {'detail': 'Invalid token'});
+    final error =
+        DioException(requestOptions: requestOptions, response: response);
     final handler = _CompletingErrorHandler();
 
     interceptor.onError(error, handler);
@@ -50,9 +54,14 @@ void main() {
     final storage = _FakeTokenStorage();
     final interceptor = AuthInterceptor(storage);
 
-    final requestOptions = RequestOptions(path: '/healthz', extra: {'skipAuth': true});
-    final response = Response(requestOptions: requestOptions, statusCode: 401, data: {'detail': 'Invalid token'});
-    final error = DioException(requestOptions: requestOptions, response: response);
+    final requestOptions =
+        RequestOptions(path: '/healthz', extra: {'skipAuth': true});
+    final response = Response(
+        requestOptions: requestOptions,
+        statusCode: 401,
+        data: {'detail': 'Invalid token'});
+    final error =
+        DioException(requestOptions: requestOptions, response: response);
     final handler = _CompletingErrorHandler();
 
     interceptor.onError(error, handler);

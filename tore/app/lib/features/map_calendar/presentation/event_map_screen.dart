@@ -22,7 +22,8 @@ class EventMapScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Erreur carte: $e')),
         data: (result) {
           final payload = result.payload;
-          final nav = Map<String, dynamic>.from((payload['navettes'] as Map?) ?? const {});
+          final nav = Map<String, dynamic>.from(
+              (payload['navettes'] as Map?) ?? const {});
           final lat = (payload['lat'] as num?)?.toDouble();
           final lng = (payload['lng'] as num?)?.toDouble();
           final address = (payload['address'] ?? '').toString();
@@ -30,7 +31,9 @@ class EventMapScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (result.fromCache) const ServiceLimitedBanner(message: 'Mode lecture (cache 24h).'),
+              if (result.fromCache)
+                const ServiceLimitedBanner(
+                    message: 'Mode lecture (cache 24h).'),
               ToreCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,29 +43,53 @@ class EventMapScreen extends ConsumerWidget {
                     Text(address.isEmpty ? 'Adresse non renseignée' : address),
                     const SizedBox(height: 8),
                     Wrap(spacing: 8, runSpacing: 8, children: [
-                      ToreChip(label: payload['enabled'] == true ? 'ON' : 'OFF', variant: payload['enabled'] == true ? ToreChipVariant.live : ToreChipVariant.closed),
-                      if (lat != null && lng != null) ToreChip(label: 'GPS OK', variant: ToreChipVariant.live),
+                      ToreChip(
+                          label: payload['enabled'] == true ? 'ON' : 'OFF',
+                          variant: payload['enabled'] == true
+                              ? ToreChipVariant.live
+                              : ToreChipVariant.closed),
+                      if (lat != null && lng != null)
+                        ToreChip(
+                            label: 'GPS OK', variant: ToreChipVariant.live),
                     ]),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              _NavButton(label: 'Ouvrir Google Maps', onTap: () => _openGoogle(lat: lat, lng: lng, address: address)),
-              _NavButton(label: 'Ouvrir Apple Plans', onTap: () => _openApple(lat: lat, lng: lng, address: address)),
-              _NavButton(label: 'Ouvrir Waze', onTap: () => _openWaze(lat: lat, lng: lng, fallback: payload['wazeLink']?.toString(), address: address)),
+              _NavButton(
+                  label: 'Ouvrir Google Maps',
+                  onTap: () =>
+                      _openGoogle(lat: lat, lng: lng, address: address)),
+              _NavButton(
+                  label: 'Ouvrir Apple Plans',
+                  onTap: () =>
+                      _openApple(lat: lat, lng: lng, address: address)),
+              _NavButton(
+                  label: 'Ouvrir Waze',
+                  onTap: () => _openWaze(
+                      lat: lat,
+                      lng: lng,
+                      fallback: payload['wazeLink']?.toString(),
+                      address: address)),
               if ((payload['tecLink'] ?? '').toString().isNotEmpty)
-                _NavButton(label: 'Ouvrir TEC', onTap: () => _launch(payload['tecLink'].toString())),
+                _NavButton(
+                    label: 'Ouvrir TEC',
+                    onTap: () => _launch(payload['tecLink'].toString())),
               if (nav['enabled'] == true) ...[
                 const SizedBox(height: 12),
                 ToreCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Navettes', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const Text('Navettes',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 6),
-                      Text('Départ/retour: ${(nav['address'] ?? '—').toString()}'),
-                      Text('Dernier retour: ${(nav['lastReturnTime'] ?? '—').toString()}'),
-                      if ((nav['notes'] ?? '').toString().isNotEmpty) Text((nav['notes'] ?? '').toString()),
+                      Text(
+                          'Départ/retour: ${(nav['address'] ?? '—').toString()}'),
+                      Text(
+                          'Dernier retour: ${(nav['lastReturnTime'] ?? '—').toString()}'),
+                      if ((nav['notes'] ?? '').toString().isNotEmpty)
+                        Text((nav['notes'] ?? '').toString()),
                     ],
                   ),
                 ),
@@ -74,12 +101,16 @@ class EventMapScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openGoogle({double? lat, double? lng, required String address}) async {
-    final query = (lat != null && lng != null) ? '$lat,$lng' : Uri.encodeComponent(address);
+  Future<void> _openGoogle(
+      {double? lat, double? lng, required String address}) async {
+    final query = (lat != null && lng != null)
+        ? '$lat,$lng'
+        : Uri.encodeComponent(address);
     await _launch('https://www.google.com/maps/search/?api=1&query=$query');
   }
 
-  Future<void> _openApple({double? lat, double? lng, required String address}) async {
+  Future<void> _openApple(
+      {double? lat, double? lng, required String address}) async {
     if (lat != null && lng != null) {
       await _launch('http://maps.apple.com/?ll=$lat,$lng');
       return;
@@ -87,7 +118,11 @@ class EventMapScreen extends ConsumerWidget {
     await _launch('http://maps.apple.com/?q=${Uri.encodeComponent(address)}');
   }
 
-  Future<void> _openWaze({double? lat, double? lng, String? fallback, required String address}) async {
+  Future<void> _openWaze(
+      {double? lat,
+      double? lng,
+      String? fallback,
+      required String address}) async {
     if (fallback != null && fallback.isNotEmpty) {
       await _launch(fallback);
       return;

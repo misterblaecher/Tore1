@@ -23,7 +23,8 @@ class EventRankingFetchResult {
   final Map<String, dynamic> payload;
   final bool fromCache;
 
-  const EventRankingFetchResult({required this.payload, required this.fromCache});
+  const EventRankingFetchResult(
+      {required this.payload, required this.fromCache});
 }
 
 class CommitteeFetchResult {
@@ -44,7 +45,8 @@ class CalendarEventsFetchResult {
   final List<Map<String, dynamic>> items;
   final bool fromCache;
 
-  const CalendarEventsFetchResult({required this.items, required this.fromCache});
+  const CalendarEventsFetchResult(
+      {required this.items, required this.fromCache});
 }
 
 class Api {
@@ -52,7 +54,8 @@ class Api {
   final CacheStore _cache;
   final OrgaEventsCache _orgaEventsCache;
 
-  Api.fromClient(this._client, {CacheStore? cacheStore, OrgaEventsCache? orgaEventsCache})
+  Api.fromClient(this._client,
+      {CacheStore? cacheStore, OrgaEventsCache? orgaEventsCache})
       : _cache = cacheStore ?? CacheStore(),
         _orgaEventsCache = orgaEventsCache ?? OrgaEventsCache();
 
@@ -69,8 +72,8 @@ class Api {
       (await _client.dio.get('/bars/$barId/events')).data as List<dynamic>;
 
   // DEPRECATED legacy: préférer la version typée `myEvents()` plus bas.
-  Future<Map<String, dynamic>> myEventsRaw() async =>
-      Map<String, dynamic>.from((await _client.dio.get('/me/events')).data as Map);
+  Future<Map<String, dynamic>> myEventsRaw() async => Map<String, dynamic>.from(
+      (await _client.dio.get('/me/events')).data as Map);
 
   Future<Map<String, dynamic>> createSimpleEvent({
     required String name,
@@ -108,7 +111,8 @@ class Api {
       );
 
   Future<SafetyState> getSafetyState(int eventId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/safety/state')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/safety/state')).data as Map);
     return SafetyState.fromJson(data);
   }
 
@@ -138,15 +142,19 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<SafetyHistoryResponse> getSafetyHistory(int eventId, {int limit = 50}) async {
+  Future<SafetyHistoryResponse> getSafetyHistory(int eventId,
+      {int limit = 50}) async {
     final data = Map<String, dynamic>.from(
-      (await _client.dio.get('/events/$eventId/safety/history', queryParameters: {'limit': limit})).data as Map,
+      (await _client.dio.get('/events/$eventId/safety/history',
+              queryParameters: {'limit': limit}))
+          .data as Map,
     );
     return SafetyHistoryResponse.fromJson(data);
   }
 
   Future<ActiveHunt> getActiveHunt(int eventId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/hunts/active')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/hunts/active')).data as Map);
     return ActiveHunt.fromJson(data);
   }
 
@@ -162,11 +170,14 @@ class Api {
       data: {'checkpointId': checkpointId, 'token': token},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
-    return HuntClaimResponse.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return HuntClaimResponse.fromJson(
+        Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<HuntLeaderboard> getHuntLeaderboard(int eventId, int huntId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/hunts/$huntId/leaderboard')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/hunts/$huntId/leaderboard'))
+            .data as Map);
     return HuntLeaderboard.fromJson(data);
   }
 
@@ -181,31 +192,42 @@ class Api {
       data: {'victimUserId': victimUserId},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
-    return HuntStealResponse.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return HuntStealResponse.fromJson(
+        Map<String, dynamic>.from(res.data as Map));
   }
 
-
   Future<BattleStatePayload> getBattleState(int eventId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/battles/state')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/battles/state')).data as Map);
     return BattleStatePayload.fromJson(data);
   }
 
-  Future<Map<String, dynamic>> battleVote({required int eventId, required int roundId, required String choice, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/events/$eventId/battles/vote', data: {'roundId': roundId, 'choice': choice}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> battleVote(
+      {required int eventId,
+      required int roundId,
+      required String choice,
+      required String idempotencyKey}) async {
+    final res = await _client.dio.post('/events/$eventId/battles/vote',
+        data: {'roundId': roundId, 'choice': choice},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<BattleLeaderboard> getBattleLeaderboard(int eventId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/battles/leaderboard')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/events/$eventId/battles/leaderboard')).data
+            as Map);
     return BattleLeaderboard.fromJson(data);
   }
 
   Future<Map<String, dynamic>> getMusic(int eventId) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/music')).data as Map);
-
+      Map<String, dynamic>.from(
+          (await _client.dio.get('/events/$eventId/music')).data as Map);
 
   Future<Map<String, dynamic>> getMusicPreEvent(int eventId) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/music/pre_event')).data as Map);
+      Map<String, dynamic>.from(
+          (await _client.dio.get('/events/$eventId/music/pre_event')).data
+              as Map);
 
   Future<Map<String, dynamic>> suggestMusicPreEvent({
     required int eventId,
@@ -217,7 +239,12 @@ class Api {
   }) async {
     final res = await _client.dio.post(
       '/events/$eventId/music/pre_event/suggest',
-      data: {'provider': provider, 'externalUrl': externalUrl, 'title': title, 'artist': artist},
+      data: {
+        'provider': provider,
+        'externalUrl': externalUrl,
+        'title': title,
+        'artist': artist
+      },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -261,7 +288,8 @@ class Api {
       data: {
         'provider': provider,
         'externalUrl': externalUrl,
-        if (titleHint != null && titleHint.trim().isNotEmpty) 'titleHint': titleHint.trim(),
+        if (titleHint != null && titleHint.trim().isNotEmpty)
+          'titleHint': titleHint.trim(),
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
@@ -294,7 +322,6 @@ class Api {
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
-
 
   Future<Map<String, dynamic>> adminMusicRoundStart({
     required int eventId,
@@ -346,6 +373,7 @@ class Api {
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
+
   Future<Map<String, dynamic>> adminMusicClear({
     required int eventId,
     required String idempotencyKey,
@@ -359,11 +387,11 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-
   Future<EventPublicView> getEventPublic(int eventId) async {
     final cacheKey = 'event_public_$eventId';
     try {
-      final data = Map<String, dynamic>.from((await _client.dio.get('/events/$eventId/public')).data as Map);
+      final data = Map<String, dynamic>.from(
+          (await _client.dio.get('/events/$eventId/public')).data as Map);
       await _cache.setJson(cacheKey, data, ttl: const Duration(hours: 24));
       return EventPublicView.fromJson(data);
     } on DioException {
@@ -381,7 +409,8 @@ class Api {
     final res = await _client.dio.post(
       '/events/$eventId/join_public',
       data: {
-        if (acceptedCharterVersion != null) 'accepted_charter_version': acceptedCharterVersion,
+        if (acceptedCharterVersion != null)
+          'accepted_charter_version': acceptedCharterVersion,
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
@@ -396,9 +425,12 @@ class Api {
     final res = await _client.dio.post(
       '/events/$eventId/join',
       data: {
-        if (acceptedCharterVersion != null) 'accepted_charter_version': acceptedCharterVersion,
+        if (acceptedCharterVersion != null)
+          'accepted_charter_version': acceptedCharterVersion,
       },
-      options: idempotencyKey == null ? null : Options(headers: {'Idempotency-Key': idempotencyKey}),
+      options: idempotencyKey == null
+          ? null
+          : Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
@@ -412,9 +444,12 @@ class Api {
       '/events/join_by_code',
       data: {
         'code': code,
-        if (acceptedCharterVersion != null) 'accepted_charter_version': acceptedCharterVersion,
+        if (acceptedCharterVersion != null)
+          'accepted_charter_version': acceptedCharterVersion,
       },
-      options: idempotencyKey == null ? null : Options(headers: {'Idempotency-Key': idempotencyKey}),
+      options: idempotencyKey == null
+          ? null
+          : Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
@@ -424,18 +459,24 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-
-
   Future<Map<String, dynamic>> modulesState() async =>
-      Map<String, dynamic>.from((await _client.dio.get('/modules')).data as Map);
+      Map<String, dynamic>.from(
+          (await _client.dio.get('/modules')).data as Map);
 
   Future<List<GlossaryCommittee>> glossaryPublicCommittees() async {
-    final data = (await _client.dio.get('/glossary/committees')).data as List<dynamic>;
-    return data.whereType<Map>().map((row) => GlossaryCommittee.fromJson(Map<String, dynamic>.from(row))).toList(growable: false);
+    final data =
+        (await _client.dio.get('/glossary/committees')).data as List<dynamic>;
+    return data
+        .whereType<Map>()
+        .map(
+            (row) => GlossaryCommittee.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
   }
 
   Future<GlossarySettings> glossaryPublicSettings(int committeeId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/glossary/committees/$committeeId/settings')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/glossary/committees/$committeeId/settings'))
+            .data as Map);
     return GlossarySettings.fromJson(data);
   }
 
@@ -454,16 +495,23 @@ class Api {
       if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
       if (limit != null) 'limit': limit,
     };
-    final data = Map<String, dynamic>.from((await _client.dio.get('/glossary/committees/$committeeId/terms', queryParameters: params)).data as Map);
+    final data = Map<String, dynamic>.from((await _client.dio.get(
+            '/glossary/committees/$committeeId/terms',
+            queryParameters: params))
+        .data as Map);
     return GlossaryTermsPage.fromJson(data);
   }
 
   Future<GlossarySettings> committeeGlossarySettings(int committeeId) async {
-    final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/glossary/settings')).data as Map);
+    final data = Map<String, dynamic>.from(
+        (await _client.dio.get('/committees/$committeeId/glossary/settings'))
+            .data as Map);
     return GlossarySettings.fromJson(data);
   }
 
-  Future<Map<String, dynamic>> committeeSetGlossarySettings(int committeeId, bool publicEnabled, {required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> committeeSetGlossarySettings(
+      int committeeId, bool publicEnabled,
+      {required String idempotencyKey}) async {
     final res = await _client.dio.put(
       '/committees/$committeeId/glossary/settings',
       data: {'public_enabled': publicEnabled},
@@ -487,11 +535,16 @@ class Api {
       if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
       if (limit != null) 'limit': limit,
     };
-    final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/glossary/terms', queryParameters: params)).data as Map);
+    final data = Map<String, dynamic>.from((await _client.dio.get(
+            '/committees/$committeeId/glossary/terms',
+            queryParameters: params))
+        .data as Map);
     return GlossaryTermsPage.fromJson(data);
   }
 
-  Future<GlossaryTerm> committeeCreateGlossaryTerm(int committeeId, Map<String, dynamic> payload, {required String idempotencyKey}) async {
+  Future<GlossaryTerm> committeeCreateGlossaryTerm(
+      int committeeId, Map<String, dynamic> payload,
+      {required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/committees/$committeeId/glossary/terms',
       data: payload,
@@ -500,7 +553,9 @@ class Api {
     return GlossaryTerm.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
-  Future<GlossaryTerm> committeeUpdateGlossaryTerm(int committeeId, int termId, Map<String, dynamic> payloadPatch, {required String idempotencyKey}) async {
+  Future<GlossaryTerm> committeeUpdateGlossaryTerm(
+      int committeeId, int termId, Map<String, dynamic> payloadPatch,
+      {required String idempotencyKey}) async {
     final res = await _client.dio.put(
       '/committees/$committeeId/glossary/terms/$termId',
       data: payloadPatch,
@@ -509,7 +564,9 @@ class Api {
     return GlossaryTerm.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
-  Future<Map<String, dynamic>> committeeArchiveGlossaryTerm(int committeeId, int termId, {required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> committeeArchiveGlossaryTerm(
+      int committeeId, int termId,
+      {required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/committees/$committeeId/glossary/terms/$termId/archive',
       data: {'reason': 'archived_from_flutter'},
@@ -518,7 +575,9 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> committeeDeleteGlossaryTerm(int committeeId, int termId, String reason, {required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> committeeDeleteGlossaryTerm(
+      int committeeId, int termId, String reason,
+      {required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/committees/$committeeId/glossary/terms/$termId/delete',
       data: {'reason': reason},
@@ -531,31 +590,38 @@ class Api {
     const cacheKey = 'committees_list';
     try {
       final data = (await _client.dio.get('/committees')).data as List<dynamic>;
-      await _cache.setJson(cacheKey, {'items': data}, ttl: const Duration(days: 1));
+      await _cache.setJson(cacheKey, {'items': data},
+          ttl: const Duration(days: 1));
       return CommitteeFetchResult(payload: data, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
       final items = cached?['items'];
-      if (items is List<dynamic>) return CommitteeFetchResult(payload: items, fromCache: true);
+      if (items is List<dynamic>)
+        return CommitteeFetchResult(payload: items, fromCache: true);
       throw const OfflineNoCacheException('committees_list');
     }
   }
 
   Future<Map<String, dynamic>> committee(int committeeId) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId')).data as Map);
+      Map<String, dynamic>.from(
+          (await _client.dio.get('/committees/$committeeId')).data as Map);
 
   Future<List<dynamic>> committeeYears(int committeeId) async =>
-      (await _client.dio.get('/committees/$committeeId/years')).data as List<dynamic>;
+      (await _client.dio.get('/committees/$committeeId/years')).data
+          as List<dynamic>;
 
-  Future<CommitteeFetchResult> committeeMeWithCacheStatus(int committeeId) async {
+  Future<CommitteeFetchResult> committeeMeWithCacheStatus(
+      int committeeId) async {
     final cacheKey = 'committee_me_$committeeId';
     try {
-      final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/me')).data as Map);
+      final data = Map<String, dynamic>.from(
+          (await _client.dio.get('/committees/$committeeId/me')).data as Map);
       await _cache.setJson(cacheKey, data, ttl: const Duration(days: 1));
       return CommitteeFetchResult(payload: data, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
-      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      if (cached != null)
+        return CommitteeFetchResult(payload: cached, fromCache: true);
       throw const OfflineNoCacheException('committee_me');
     }
   }
@@ -574,18 +640,24 @@ class Api {
   }
 
   Future<Map<String, dynamic>> committeeMembers(int committeeId) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/members')).data as Map);
+      Map<String, dynamic>.from(
+          (await _client.dio.get('/committees/$committeeId/members')).data
+              as Map);
 
-
-  Future<Map<String, dynamic>> committeeSpaceFeedPosts({required int committeeId, String? cursor, int limit = 20}) async {
+  Future<Map<String, dynamic>> committeeSpaceFeedPosts(
+      {required int committeeId, String? cursor, int limit = 20}) async {
     final res = await _client.dio.get(
       '/committees/$committeeId/feed/posts',
-      queryParameters: {'limit': limit, if (cursor != null && cursor.isNotEmpty) 'cursor': cursor},
+      queryParameters: {
+        'limit': limit,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor
+      },
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> committeeSpaceCalendarItems({required int committeeId, String? month}) async {
+  Future<Map<String, dynamic>> committeeSpaceCalendarItems(
+      {required int committeeId, String? month}) async {
     final res = await _client.dio.get(
       '/committees/$committeeId/calendar/items',
       queryParameters: {if (month != null && month.isNotEmpty) 'month': month},
@@ -593,7 +665,8 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> committeeSpaceExpenses({required int committeeId, String? month}) async {
+  Future<Map<String, dynamic>> committeeSpaceExpenses(
+      {required int committeeId, String? month}) async {
     final res = await _client.dio.get(
       '/committees/$committeeId/expenses',
       queryParameters: {if (month != null && month.isNotEmpty) 'month': month},
@@ -650,13 +723,18 @@ class Api {
   }) async {
     final cacheKey = 'committee_forum_categories_${committeeId}_$yearId';
     try {
-      final data = (await _client.dio.get('/committees/$committeeId/forum/categories', queryParameters: {'year_id': yearId})).data as List<dynamic>;
-      await _cache.setJson(cacheKey, {'items': data}, ttl: const Duration(days: 7));
+      final data = (await _client.dio.get(
+              '/committees/$committeeId/forum/categories',
+              queryParameters: {'year_id': yearId}))
+          .data as List<dynamic>;
+      await _cache.setJson(cacheKey, {'items': data},
+          ttl: const Duration(days: 7));
       return CommitteeFetchResult(payload: data, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
       final items = cached?['items'];
-      if (items is List<dynamic>) return CommitteeFetchResult(payload: items, fromCache: true);
+      if (items is List<dynamic>)
+        return CommitteeFetchResult(payload: items, fromCache: true);
       throw const OfflineNoCacheException('committee_forum_categories');
     }
   }
@@ -668,12 +746,18 @@ class Api {
     String? cursor,
     int limit = 20,
   }) async {
-    final cacheKey = 'committee_forum_posts_${committeeId}_${yearId}_$categoryId';
+    final cacheKey =
+        'committee_forum_posts_${committeeId}_${yearId}_$categoryId';
     try {
       final data = Map<String, dynamic>.from(
         (await _client.dio.get(
           '/committees/$committeeId/forum/posts',
-          queryParameters: {'year_id': yearId, 'category_id': categoryId, if (cursor != null) 'cursor': cursor, 'limit': limit},
+          queryParameters: {
+            'year_id': yearId,
+            'category_id': categoryId,
+            if (cursor != null) 'cursor': cursor,
+            'limit': limit
+          },
         ))
             .data as Map,
       );
@@ -681,13 +765,17 @@ class Api {
       return CommitteeFetchResult(payload: data, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
-      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      if (cached != null)
+        return CommitteeFetchResult(payload: cached, fromCache: true);
       throw const OfflineNoCacheException('committee_forum_posts');
     }
   }
 
-  Future<Map<String, dynamic>> committeeForumPostDetail({required int committeeId, required int postId}) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/forum/posts/$postId')).data as Map);
+  Future<Map<String, dynamic>> committeeForumPostDetail(
+          {required int committeeId, required int postId}) async =>
+      Map<String, dynamic>.from((await _client.dio
+              .get('/committees/$committeeId/forum/posts/$postId'))
+          .data as Map);
 
   Future<Map<String, dynamic>> createCommitteeForumPost({
     required int committeeId,
@@ -699,7 +787,12 @@ class Api {
   }) async {
     final res = await _client.dio.post(
       '/committees/$committeeId/forum/posts',
-      data: {'yearId': yearId, 'categoryId': categoryId, 'title': title, 'body': body},
+      data: {
+        'yearId': yearId,
+        'categoryId': categoryId,
+        'title': title,
+        'body': body
+      },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -729,7 +822,11 @@ class Api {
   }) async {
     final res = await _client.dio.post(
       '/committees/$committeeId/forum/categories',
-      data: {'yearId': yearId, 'name': name, if (orderIndex != null) 'orderIndex': orderIndex},
+      data: {
+        'yearId': yearId,
+        'name': name,
+        if (orderIndex != null) 'orderIndex': orderIndex
+      },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -745,7 +842,8 @@ class Api {
   }) async {
     final res = await _client.dio.put(
       '/committees/$committeeId/forum/categories/$categoryId',
-      data: {'name': name, 'orderIndex': orderIndex, 'isArchived': isArchived}..removeWhere((key, value) => value == null),
+      data: {'name': name, 'orderIndex': orderIndex, 'isArchived': isArchived}
+        ..removeWhere((key, value) => value == null),
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -757,12 +855,16 @@ class Api {
   }) async {
     final cacheKey = 'committee_finances_ledger_${committeeId}_$yearId';
     try {
-      final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/finances/ledger', queryParameters: {'year_id': yearId})).data as Map);
+      final data = Map<String, dynamic>.from((await _client.dio.get(
+              '/committees/$committeeId/finances/ledger',
+              queryParameters: {'year_id': yearId}))
+          .data as Map);
       await _cache.setJson(cacheKey, data, ttl: const Duration(days: 3));
       return CommitteeFetchResult(payload: data, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
-      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      if (cached != null)
+        return CommitteeFetchResult(payload: cached, fromCache: true);
       throw const OfflineNoCacheException('committee_finances_ledger');
     }
   }
@@ -773,12 +875,16 @@ class Api {
   }) async {
     final cacheKey = 'committee_finances_summary_${committeeId}_$yearId';
     try {
-      final data = Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/finances/summary', queryParameters: {'year_id': yearId})).data as Map);
+      final data = Map<String, dynamic>.from((await _client.dio.get(
+              '/committees/$committeeId/finances/summary',
+              queryParameters: {'year_id': yearId}))
+          .data as Map);
       await _cache.setJson(cacheKey, data, ttl: const Duration(days: 3));
       return CommitteeFetchResult(payload: data, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
-      if (cached != null) return CommitteeFetchResult(payload: cached, fromCache: true);
+      if (cached != null)
+        return CommitteeFetchResult(payload: cached, fromCache: true);
       throw const OfflineNoCacheException('committee_finances_summary');
     }
   }
@@ -788,18 +894,27 @@ class Api {
     required Map<String, dynamic> body,
     required String idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/committees/$committeeId/finances/ledger', data: body, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    final res = await _client.dio.post(
+        '/committees/$committeeId/finances/ledger',
+        data: body,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  String committeeFinancesExportCsvUrl({required int committeeId, required int yearId}) =>
+  String committeeFinancesExportCsvUrl(
+          {required int committeeId, required int yearId}) =>
       '${_client.dio.options.baseUrl}/committees/$committeeId/finances/export.csv?year_id=$yearId';
 
-  String committeeFinancesSnapshotUrl({required int committeeId, required int yearId}) =>
+  String committeeFinancesSnapshotUrl(
+          {required int committeeId, required int yearId}) =>
       '${_client.dio.options.baseUrl}/committees/$committeeId/finances/snapshot.json?year_id=$yearId';
 
-  Future<Map<String, dynamic>> committeeBaptemeCampaign({required int committeeId, required int yearId}) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/bapteme/campaign', queryParameters: {'year_id': yearId})).data as Map);
+  Future<Map<String, dynamic>> committeeBaptemeCampaign(
+          {required int committeeId, required int yearId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get(
+              '/committees/$committeeId/bapteme/campaign',
+              queryParameters: {'year_id': yearId}))
+          .data as Map);
 
   Future<Map<String, dynamic>> createCommitteeBaptemeCampaign({
     required int committeeId,
@@ -807,7 +922,10 @@ class Api {
     required String name,
     required String idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/committees/$committeeId/bapteme/campaign', data: {'yearId': yearId, 'name': name}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    final res = await _client.dio.post(
+        '/committees/$committeeId/bapteme/campaign',
+        data: {'yearId': yearId, 'name': name},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -817,24 +935,37 @@ class Api {
     required String blueDisplayName,
     required String idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/committees/$committeeId/bapteme/invites', data: {'campaignId': campaignId, 'blueDisplayName': blueDisplayName}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    final res = await _client.dio.post(
+        '/committees/$committeeId/bapteme/invites',
+        data: {'campaignId': campaignId, 'blueDisplayName': blueDisplayName},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> committeeBaptemeInvites({required int committeeId, required int campaignId}) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/bapteme/invites', queryParameters: {'campaignId': campaignId})).data as Map);
+  Future<Map<String, dynamic>> committeeBaptemeInvites(
+          {required int committeeId, required int campaignId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get(
+              '/committees/$committeeId/bapteme/invites',
+              queryParameters: {'campaignId': campaignId}))
+          .data as Map);
 
   Future<Map<String, dynamic>> createCommitteeBaptemeSlot({
     required int committeeId,
     required Map<String, dynamic> body,
     required String idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/committees/$committeeId/bapteme/slots', data: body, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    final res = await _client.dio.post('/committees/$committeeId/bapteme/slots',
+        data: body,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> committeeBaptemeSlots({required int committeeId, required int campaignId}) async =>
-      Map<String, dynamic>.from((await _client.dio.get('/committees/$committeeId/bapteme/slots', queryParameters: {'campaignId': campaignId})).data as Map);
+  Future<Map<String, dynamic>> committeeBaptemeSlots(
+          {required int committeeId, required int campaignId}) async =>
+      Map<String, dynamic>.from((await _client.dio.get(
+              '/committees/$committeeId/bapteme/slots',
+              queryParameters: {'campaignId': campaignId}))
+          .data as Map);
 
   Future<Map<String, dynamic>> createCommitteeBaptemeAssignment({
     required int committeeId,
@@ -842,7 +973,10 @@ class Api {
     required int slotId,
     required String idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/committees/$committeeId/bapteme/assign', data: {'inviteId': inviteId, 'slotId': slotId}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    final res = await _client.dio.post(
+        '/committees/$committeeId/bapteme/assign',
+        data: {'inviteId': inviteId, 'slotId': slotId},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -854,14 +988,24 @@ class Api {
     required String note,
     required String idempotencyKey,
   }) async {
-    final res = await _client.dio.post('/committees/$committeeId/bapteme/incidents', data: {'campaignId': campaignId, 'inviteId': inviteId, 'type': type, 'note': note}..removeWhere((k, v) => v == null), options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+    final res = await _client.dio.post(
+        '/committees/$committeeId/bapteme/incidents',
+        data: {
+          'campaignId': campaignId,
+          'inviteId': inviteId,
+          'type': type,
+          'note': note
+        }..removeWhere((k, v) => v == null),
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  String committeeBaptemeInvitesExportUrl({required int committeeId, required int campaignId}) =>
+  String committeeBaptemeInvitesExportUrl(
+          {required int committeeId, required int campaignId}) =>
       '${_client.dio.options.baseUrl}/committees/$committeeId/bapteme/export_invites.csv?campaignId=$campaignId';
 
-  String committeeBaptemeSlotsExportUrl({required int committeeId, required int campaignId}) =>
+  String committeeBaptemeSlotsExportUrl(
+          {required int committeeId, required int campaignId}) =>
       '${_client.dio.options.baseUrl}/committees/$committeeId/bapteme/export_slots.csv?campaignId=$campaignId';
 
   Future<List<dynamic>> menu(int eventId) async {
@@ -898,16 +1042,23 @@ class Api {
         'to': keyTo,
         'scope': 'public',
       });
-      final raw = (Map<String, dynamic>.from(res.data as Map)['items'] as List<dynamic>? ?? const []);
-      final items = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      await _cache.setJson(cacheKey, {'items': items}, ttl: const Duration(days: 1));
+      final raw = (Map<String, dynamic>.from(res.data as Map)['items']
+              as List<dynamic>? ??
+          const []);
+      final items =
+          raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      await _cache.setJson(cacheKey, {'items': items},
+          ttl: const Duration(days: 1));
       return CalendarEventsFetchResult(items: items, fromCache: false);
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
       final items = cached?['items'];
       if (items is List) {
         return CalendarEventsFetchResult(
-          items: items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(),
+          items: items
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(),
           fromCache: true,
         );
       }
@@ -915,7 +1066,8 @@ class Api {
     }
   }
 
-  String getEventIcsUrl(int eventId) => '${_client.dio.options.baseUrl}/calendar/events/$eventId.ics';
+  String getEventIcsUrl(int eventId) =>
+      '${_client.dio.options.baseUrl}/calendar/events/$eventId.ics';
 
   Future<MenuFetchResult> menuWithCacheStatus(int eventId) async {
     final cacheKey = 'event_menu_$eventId';
@@ -953,7 +1105,8 @@ class Api {
     return res.data as List<dynamic>;
   }
 
-  Future<EventRankingFetchResult> eventRankingWithCacheStatus(int eventId) async {
+  Future<EventRankingFetchResult> eventRankingWithCacheStatus(
+      int eventId) async {
     final cacheKey = 'event_ranking_$eventId';
     try {
       final res = await _client.dio.get(
@@ -1015,7 +1168,8 @@ class Api {
         'user_id': userId,
         'payment_mode': paymentMode,
         'items': items,
-        if (zoneId != null && zoneId.isNotEmpty) 'zone_id': int.tryParse(zoneId),
+        if (zoneId != null && zoneId.isNotEmpty)
+          'zone_id': int.tryParse(zoneId),
         'idempotency_key': idempotencyKey,
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
@@ -1023,15 +1177,16 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-
-
-
   Future<Map<String, dynamic>> getOrder(int orderId) async {
     final res = await _client.dio.get('/orders/$orderId');
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> liveOrders({required int eventId, String? status, String? cursor, int limit = 40}) async {
+  Future<Map<String, dynamic>> liveOrders(
+      {required int eventId,
+      String? status,
+      String? cursor,
+      int limit = 40}) async {
     final res = await _client.dio.get(
       '/orders/live',
       queryParameters: {
@@ -1110,7 +1265,11 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> tickerFeed(int eventId, {String? cursor, String? since, List<String>? types, int limit = 50}) async {
+  Future<Map<String, dynamic>> tickerFeed(int eventId,
+      {String? cursor,
+      String? since,
+      List<String>? types,
+      int limit = 50}) async {
     final res = await _client.dio.get(
       '/events/$eventId/ticker',
       queryParameters: {
@@ -1195,7 +1354,8 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> walletLedger({String? cursor, int limit = 30}) async {
+  Future<Map<String, dynamic>> walletLedger(
+      {String? cursor, int limit = 30}) async {
     final res = await _client.dio.get(
       '/wallet/me/ledger',
       queryParameters: {
@@ -1284,8 +1444,6 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-
-
   Future<CursorPage<MarketLite>> fetchPolymarketMarkets({
     required String scope,
     int? eventId,
@@ -1296,7 +1454,9 @@ class Api {
   }) async {
     final endpoint = scope == 'global'
         ? '/polymarket/global'
-        : (scope == 'event' && eventId != null ? '/events/$eventId/polymarket' : '/polymarket/markets');
+        : (scope == 'event' && eventId != null
+            ? '/events/$eventId/polymarket'
+            : '/polymarket/markets');
     final params = scope == 'global'
         ? <String, dynamic>{
             'status': status,
@@ -1305,19 +1465,19 @@ class Api {
             'limit': limit,
           }
         : endpoint.startsWith('/events/')
-        ? <String, dynamic>{
-            'status': status,
-            'type': type,
-            if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
-            'limit': limit,
-          }
-        : <String, dynamic>{
-            'scope': scope,
-            if (eventId != null) 'event_id': eventId,
-            'status': status,
-            if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
-            'limit': limit,
-          };
+            ? <String, dynamic>{
+                'status': status,
+                'type': type,
+                if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+                'limit': limit,
+              }
+            : <String, dynamic>{
+                'scope': scope,
+                if (eventId != null) 'event_id': eventId,
+                'status': status,
+                if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+                'limit': limit,
+              };
     final res = await _client.dio.get(
       endpoint,
       queryParameters: params,
@@ -1326,10 +1486,12 @@ class Api {
     final items = ((data['items'] as List?) ?? const [])
         .map((e) => MarketLite.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
-    return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
+    return CursorPage(
+        items: items, nextCursor: data['next_cursor']?.toString());
   }
 
-  Future<MarketDetailResponse> fetchPolymarketMarket(int marketId, {String? cursor, int limit = 20}) async {
+  Future<MarketDetailResponse> fetchPolymarketMarket(int marketId,
+      {String? cursor, int limit = 20}) async {
     final res = await _client.dio.get(
       '/polymarket/markets/$marketId',
       queryParameters: {
@@ -1349,7 +1511,9 @@ class Api {
     required String idempotencyKey,
   }) async {
     final res = await _client.dio.post(
-      eventId == null ? '/polymarket/markets/$marketId/buy' : '/events/$eventId/polymarket/$marketId/buy',
+      eventId == null
+          ? '/polymarket/markets/$marketId/buy'
+          : '/events/$eventId/polymarket/$marketId/buy',
       data: {
         'side': side,
         'amountTickets': amountCents,
@@ -1365,10 +1529,15 @@ class Api {
     required String type,
     String? rules,
   }) async {
-    final idem = 'event-create-$eventId-${DateTime.now().millisecondsSinceEpoch}';
+    final idem =
+        'event-create-$eventId-${DateTime.now().millisecondsSinceEpoch}';
     final res = await _client.dio.post(
       '/events/$eventId/polymarket',
-      data: {'question': question, 'type': type, if (rules != null) 'rules': rules},
+      data: {
+        'question': question,
+        'type': type,
+        if (rules != null) 'rules': rules
+      },
       options: Options(headers: {'Idempotency-Key': idem}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -1380,7 +1549,8 @@ class Api {
     required String outcome,
     required String reason,
   }) async {
-    final idem = 'event-resolve-$eventId-$marketId-${DateTime.now().millisecondsSinceEpoch}';
+    final idem =
+        'event-resolve-$eventId-$marketId-${DateTime.now().millisecondsSinceEpoch}';
     final res = await _client.dio.post(
       '/events/$eventId/polymarket/$marketId/resolve',
       data: {'outcome': outcome, 'reason': reason},
@@ -1410,7 +1580,8 @@ class Api {
     final items = ((data['items'] as List?) ?? const [])
         .map((e) => PositionRow.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
-    return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
+    return CursorPage(
+        items: items, nextCursor: data['next_cursor']?.toString());
   }
 
   Future<CursorPage<TradeRow>> fetchMyHistory({
@@ -1429,13 +1600,16 @@ class Api {
     final items = ((data['items'] as List?) ?? const [])
         .map((e) => TradeRow.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
-    return CursorPage(items: items, nextCursor: data['next_cursor']?.toString());
+    return CursorPage(
+        items: items, nextCursor: data['next_cursor']?.toString());
   }
+
   Future<Map<String, dynamic>> eventWifiClaim({
     required int eventId,
     required String token,
   }) async {
-    final res = await _client.dio.get('/events/$eventId/wifi/claim', queryParameters: {'token': token});
+    final res = await _client.dio
+        .get('/events/$eventId/wifi/claim', queryParameters: {'token': token});
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -1460,7 +1634,8 @@ class Api {
         if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
         if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
         if (sort != null && sort.trim().isNotEmpty) 'sort': sort.trim(),
-        if (joinMode != null && joinMode.trim().isNotEmpty) 'join_mode': joinMode.trim(),
+        if (joinMode != null && joinMode.trim().isNotEmpty)
+          'join_mode': joinMode.trim(),
         if (cursor != null && cursor.trim().isNotEmpty) 'cursor': cursor.trim(),
         'limit': limit,
       },
@@ -1474,7 +1649,8 @@ class Api {
     return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  Future<Map<String, dynamic>> joinOrgaByCode({required String code, required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> joinOrgaByCode(
+      {required String code, required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/orgas/join_by_code',
       data: {'code': code},
@@ -1495,7 +1671,8 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> publishEventV1({required int eventId, required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> publishEventV1(
+      {required int eventId, required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/events/$eventId/publish',
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
@@ -1517,7 +1694,11 @@ class Api {
   }) async {
     final res = await _client.dio.post(
       '/events/$eventId/staff_invite_code',
-      data: {'role': role, 'expiresInHours': expiresInHours, if (label != null && label.isNotEmpty) 'label': label},
+      data: {
+        'role': role,
+        'expiresInHours': expiresInHours,
+        if (label != null && label.isNotEmpty) 'label': label
+      },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -1537,7 +1718,6 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-
   Future<Map<String, dynamic>> rotateStaffInviteV1({
     required int eventId,
     required String role,
@@ -1546,7 +1726,10 @@ class Api {
   }) async {
     final res = await _client.dio.post(
       '/events/$eventId/staff_invites/rotate',
-      data: {'role': role, if (expiresInMinutes != null) 'expiresInMinutes': expiresInMinutes},
+      data: {
+        'role': role,
+        if (expiresInMinutes != null) 'expiresInMinutes': expiresInMinutes
+      },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -1569,7 +1752,6 @@ class Api {
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
-
 
   Future<Map<String, dynamic>> joinStaffByBackupCodeV1({
     required int eventId,
@@ -1615,17 +1797,25 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> resolveOpenLink({required String type, String? code, int? id, int? eventId}) async {
-    final res = await _client.dio.get('/open', queryParameters: {'type': type, if (code != null) 'code': code, if (id != null) 'id': id, if (eventId != null) 'eventId': eventId});
+  Future<Map<String, dynamic>> resolveOpenLink(
+      {required String type, String? code, int? id, int? eventId}) async {
+    final res = await _client.dio.get('/open', queryParameters: {
+      'type': type,
+      if (code != null) 'code': code,
+      if (id != null) 'id': id,
+      if (eventId != null) 'eventId': eventId
+    });
     return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<Map<String, dynamic>> previewManualCode(String code) async {
-    final res = await _client.dio.get('/codes/preview', queryParameters: {'code': code});
+    final res = await _client.dio
+        .get('/codes/preview', queryParameters: {'code': code});
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> consumeManualCode({required String code, required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> consumeManualCode(
+      {required String code, required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/codes/consume',
       data: {'code': code},
@@ -1634,14 +1824,14 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-
   Future<MyEventsFetchResult> myEvents() async {
     const cacheKey = 'my_events_v1';
     try {
       final res = await _client.dio.get('/me/events');
       final payload = Map<String, dynamic>.from(res.data as Map);
       final nowIso = DateTime.now().toIso8601String();
-      await _cache.setJson(cacheKey, {'payload': payload, 'lastSyncAt': nowIso}, ttl: const Duration(hours: 24));
+      await _cache.setJson(cacheKey, {'payload': payload, 'lastSyncAt': nowIso},
+          ttl: const Duration(hours: 24));
       return MyEventsFetchResult(
         buckets: _decodeMyEventBuckets(payload),
         fromCache: false,
@@ -1650,8 +1840,10 @@ class Api {
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
       if (cached != null) {
-        final payload = Map<String, dynamic>.from((cached['payload'] as Map?) ?? const <String, dynamic>{});
-        final lastSyncAt = DateTime.tryParse((cached['lastSyncAt'] ?? '').toString());
+        final payload = Map<String, dynamic>.from(
+            (cached['payload'] as Map?) ?? const <String, dynamic>{});
+        final lastSyncAt =
+            DateTime.tryParse((cached['lastSyncAt'] ?? '').toString());
         return MyEventsFetchResult(
           buckets: _decodeMyEventBuckets(payload),
           fromCache: true,
@@ -1662,14 +1854,17 @@ class Api {
     }
   }
 
-  Future<OrgaEventsResult> listOrgaPrivateEvents(int orgId, {String? cursor}) async {
+  Future<OrgaEventsResult> listOrgaPrivateEvents(int orgId,
+      {String? cursor}) async {
     final cacheKey = _orgaEventsCache.privateKey(orgId);
     try {
-      final res = await _client.dio.get('/orgas/$orgId/events/private', queryParameters: {if (cursor != null) 'cursor': cursor});
+      final res = await _client.dio.get('/orgas/$orgId/events/private',
+          queryParameters: {if (cursor != null) 'cursor': cursor});
       final payload = Map<String, dynamic>.from(res.data as Map);
       await _orgaEventsCache.savePrivate(orgId, payload);
       final nowIso = DateTime.now().toUtc().toIso8601String();
-      await _cache.setJson(cacheKey, {'payload': payload, 'lastSyncAt': nowIso}, ttl: const Duration(hours: 24));
+      await _cache.setJson(cacheKey, {'payload': payload, 'lastSyncAt': nowIso},
+          ttl: const Duration(hours: 24));
       return OrgaEventsResult(
         buckets: _decodeMyEventBuckets(payload),
         nextCursor: payload['nextCursor']?.toString(),
@@ -1679,19 +1874,22 @@ class Api {
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
       if (cached != null) {
-        final payload = Map<String, dynamic>.from((cached['payload'] as Map?) ?? const <String, dynamic>{});
+        final payload = Map<String, dynamic>.from(
+            (cached['payload'] as Map?) ?? const <String, dynamic>{});
         return OrgaEventsResult(
           buckets: _decodeMyEventBuckets(payload),
           nextCursor: payload['nextCursor']?.toString(),
           isCached: true,
-          lastSyncAt: DateTime.tryParse((cached['lastSyncAt'] ?? '').toString()),
+          lastSyncAt:
+              DateTime.tryParse((cached['lastSyncAt'] ?? '').toString()),
         );
       }
       throw const OfflineNoCacheException('orga_private_events');
     }
   }
 
-  Future<Map<String, List<MyEventSummary>>> orgaPrivateEvents(int orgId, {String? cursor}) async {
+  Future<Map<String, List<MyEventSummary>>> orgaPrivateEvents(int orgId,
+      {String? cursor}) async {
     final result = await listOrgaPrivateEvents(orgId, cursor: cursor);
     return result.buckets;
   }
@@ -1701,12 +1899,16 @@ class Api {
     return ManageSnapshot.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
-  Map<String, List<MyEventSummary>> _decodeMyEventBuckets(Map<String, dynamic> payload) {
+  Map<String, List<MyEventSummary>> _decodeMyEventBuckets(
+      Map<String, dynamic> payload) {
     const keys = <String>['LIVE', 'TODAY', 'UPCOMING', 'PAST'];
     final out = <String, List<MyEventSummary>>{};
     for (final key in keys) {
       final raw = (payload[key] as List?) ?? const [];
-      out[key] = raw.whereType<Map>().map((e) => MyEventSummary.fromJson(Map<String, dynamic>.from(e))).toList();
+      out[key] = raw
+          .whereType<Map>()
+          .map((e) => MyEventSummary.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
     }
     return out;
   }
@@ -1719,26 +1921,43 @@ class Api {
       await _orgaEventsCache.savePublic(orgId, payload);
       final buckets = _decodeOrgaPublicBuckets(payload);
       final nowIso = DateTime.now().toUtc().toIso8601String();
-      await _cache.setJson(cacheKey, {'payload': {'items': payload['items'] ?? const []}, 'lastSyncAt': nowIso}, ttl: const Duration(hours: 24));
-      return OrgaEventsResult(buckets: buckets, nextCursor: null, isCached: false, lastSyncAt: DateTime.tryParse(nowIso));
+      await _cache.setJson(
+          cacheKey,
+          {
+            'payload': {'items': payload['items'] ?? const []},
+            'lastSyncAt': nowIso
+          },
+          ttl: const Duration(hours: 24));
+      return OrgaEventsResult(
+          buckets: buckets,
+          nextCursor: null,
+          isCached: false,
+          lastSyncAt: DateTime.tryParse(nowIso));
     } catch (_) {
       final cached = await _cache.getJson(cacheKey);
       if (cached != null) {
-        final payload = Map<String, dynamic>.from((cached['payload'] as Map?) ?? const <String, dynamic>{});
+        final payload = Map<String, dynamic>.from(
+            (cached['payload'] as Map?) ?? const <String, dynamic>{});
         return OrgaEventsResult(
           buckets: _decodeOrgaPublicBuckets(payload),
           nextCursor: null,
           isCached: true,
-          lastSyncAt: DateTime.tryParse((cached['lastSyncAt'] ?? '').toString()),
+          lastSyncAt:
+              DateTime.tryParse((cached['lastSyncAt'] ?? '').toString()),
         );
       }
       throw const OfflineNoCacheException('orga_public_events');
     }
   }
 
-
-  Map<String, List<MyEventSummary>> _decodeOrgaPublicBuckets(Map<String, dynamic> payload) {
-    final out = <String, List<MyEventSummary>>{'LIVE': [], 'TODAY': [], 'UPCOMING': [], 'PAST': []};
+  Map<String, List<MyEventSummary>> _decodeOrgaPublicBuckets(
+      Map<String, dynamic> payload) {
+    final out = <String, List<MyEventSummary>>{
+      'LIVE': [],
+      'TODAY': [],
+      'UPCOMING': [],
+      'PAST': []
+    };
     final items = (payload['items'] as List?) ?? const [];
     for (final raw in items.whereType<Map>()) {
       final row = Map<String, dynamic>.from(raw);
@@ -1764,10 +1983,17 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaCreateInvite({required int orgId, required String inviteType, int? expiresInHours, required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> orgaCreateInvite(
+      {required int orgId,
+      required String inviteType,
+      int? expiresInHours,
+      required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/orgas/$orgId/invites',
-      data: {'inviteType': inviteType, if (expiresInHours != null) 'expiresInHours': expiresInHours},
+      data: {
+        'inviteType': inviteType,
+        if (expiresInHours != null) 'expiresInHours': expiresInHours
+      },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
     return Map<String, dynamic>.from(res.data as Map);
@@ -1778,7 +2004,11 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaRevokeInvite({required int orgId, required int inviteId, required String reason, required String idempotencyKey}) async {
+  Future<Map<String, dynamic>> orgaRevokeInvite(
+      {required int orgId,
+      required int inviteId,
+      required String reason,
+      required String idempotencyKey}) async {
     final res = await _client.dio.post(
       '/orgas/$orgId/invites/$inviteId/revoke',
       data: {'reason': reason},
@@ -1787,8 +2017,11 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaJoinByInvite({required String code, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/join_by_invite', data: {'code': code}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaJoinByInvite(
+      {required String code, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/join_by_invite',
+        data: {'code': code},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -1802,13 +2035,17 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaJoin({required int orgId, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/join', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaJoin(
+      {required int orgId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/join',
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaLeave({required int orgId, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/leave', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaLeave(
+      {required int orgId, required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/leave',
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -1864,32 +2101,63 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaApproveMember({required int orgId, required String userId, required String idempotencyKey, String? reason}) async {
-    final res = await _client.dio.post('/orgas/$orgId/memberships/$userId/approve', data: {if (reason != null && reason.isNotEmpty) 'reason': reason}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaApproveMember(
+      {required int orgId,
+      required String userId,
+      required String idempotencyKey,
+      String? reason}) async {
+    final res = await _client.dio.post(
+        '/orgas/$orgId/memberships/$userId/approve',
+        data: {if (reason != null && reason.isNotEmpty) 'reason': reason},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> orgaRejectMember({required int orgId, required String userId, required String reason, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/memberships/$userId/reject', data: {'reason': reason}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> orgaRejectMember(
+      {required int orgId,
+      required String userId,
+      required String reason,
+      required String idempotencyKey}) async {
+    final res = await _client.dio.post(
+        '/orgas/$orgId/memberships/$userId/reject',
+        data: {'reason': reason},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> followOrga({required int orgId, required String idempotencyKey}) => orgaJoin(orgId: orgId, idempotencyKey: idempotencyKey);
+  Future<Map<String, dynamic>> followOrga(
+          {required int orgId, required String idempotencyKey}) =>
+      orgaJoin(orgId: orgId, idempotencyKey: idempotencyKey);
 
-  Future<Map<String, dynamic>> unfollowOrga({required int orgId, required String idempotencyKey}) => orgaLeave(orgId: orgId, idempotencyKey: idempotencyKey);
+  Future<Map<String, dynamic>> unfollowOrga(
+          {required int orgId, required String idempotencyKey}) =>
+      orgaLeave(orgId: orgId, idempotencyKey: idempotencyKey);
 
-  Future<Map<String, dynamic>> createOrgaPost({required int orgId, required String text, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/posts', data: {'text': text}, options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> createOrgaPost(
+      {required int orgId,
+      required String text,
+      required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/posts',
+        data: {'text': text},
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> pinOrgaPost({required int orgId, required int postId, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/posts/$postId/pin', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> pinOrgaPost(
+      {required int orgId,
+      required int postId,
+      required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/posts/$postId/pin',
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> deleteOrgaPost({required int orgId, required int postId, required String idempotencyKey}) async {
-    final res = await _client.dio.post('/orgas/$orgId/posts/$postId/delete', options: Options(headers: {'Idempotency-Key': idempotencyKey}));
+  Future<Map<String, dynamic>> deleteOrgaPost(
+      {required int orgId,
+      required int postId,
+      required String idempotencyKey}) async {
+    final res = await _client.dio.post('/orgas/$orgId/posts/$postId/delete',
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}));
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -1919,5 +2187,4 @@ class Api {
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
-
 }

@@ -20,9 +20,12 @@ class AppColors {
   static BoxDecoration get solarCardDecoration => BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentGold.withOpacity(0.22), width: 1),
+        border: Border.all(color: accentGold.withValues(alpha: 0.22), width: 1),
         boxShadow: [
-          BoxShadow(color: accentGold.withOpacity(0.12), blurRadius: 20, spreadRadius: 0.3),
+          BoxShadow(
+              color: accentGold.withValues(alpha: 0.12),
+              blurRadius: 20,
+              spreadRadius: 0.3),
         ],
       );
 
@@ -55,13 +58,20 @@ class AppRadii {
 }
 
 class AppTextStyles {
-  static const sectionTitle = TextStyle(fontSize: 18, fontWeight: FontWeight.w700);
-  static const massiveTitle = TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 0.4);
+  static const sectionTitle =
+      TextStyle(fontSize: 18, fontWeight: FontWeight.w700);
+  static const massiveTitle =
+      TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 0.4);
   static const muted = TextStyle(fontSize: 13, color: Colors.white70);
 }
 
 class PrimaryButton extends StatelessWidget {
-  const PrimaryButton({super.key, required this.label, required this.onPressed, this.icon, this.loading = false});
+  const PrimaryButton(
+      {super.key,
+      required this.label,
+      required this.onPressed,
+      this.icon,
+      this.loading = false});
 
   final String label;
   final VoidCallback? onPressed;
@@ -73,7 +83,10 @@ class PrimaryButton extends StatelessWidget {
     return FilledButton.icon(
       onPressed: loading ? null : onPressed,
       icon: loading
-          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2))
           : Icon(icon ?? Icons.arrow_forward),
       label: Text(label),
       style: FilledButton.styleFrom(
@@ -122,12 +135,18 @@ class ToreButton extends StatelessWidget {
         label: Text(label),
       );
     }
-    return PrimaryButton(label: label, onPressed: onPressed, icon: icon, loading: loading);
+    return PrimaryButton(
+        label: label, onPressed: onPressed, icon: icon, loading: loading);
   }
 }
 
 class SolarPrimaryButton extends StatelessWidget {
-  const SolarPrimaryButton({super.key, required this.label, required this.onPressed, this.icon, this.loading = false});
+  const SolarPrimaryButton(
+      {super.key,
+      required this.label,
+      required this.onPressed,
+      this.icon,
+      this.loading = false});
 
   final String label;
   final VoidCallback? onPressed;
@@ -136,12 +155,14 @@ class SolarPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PrimaryButton(label: label, onPressed: onPressed, icon: icon, loading: loading);
+    return PrimaryButton(
+        label: label, onPressed: onPressed, icon: icon, loading: loading);
   }
 }
 
 class SecondaryButton extends StatelessWidget {
-  const SecondaryButton({super.key, required this.label, required this.onPressed, this.icon});
+  const SecondaryButton(
+      {super.key, required this.label, required this.onPressed, this.icon});
 
   final String label;
   final VoidCallback? onPressed;
@@ -170,23 +191,31 @@ class AppCard extends StatelessWidget {
         side: const BorderSide(color: AppColors.cardBorder),
       ),
       color: AppColors.surface,
-      child: Padding(padding: const EdgeInsets.all(AppSpacing.md), child: child),
+      child:
+          Padding(padding: const EdgeInsets.all(AppSpacing.md), child: child),
     );
   }
 }
 
 class ToreCard extends StatelessWidget {
-  const ToreCard({super.key, required this.child, this.padding = const EdgeInsets.all(AppSpacing.md)});
+  const ToreCard(
+      {super.key,
+      required this.child,
+      this.padding = const EdgeInsets.all(AppSpacing.md)});
 
   final Widget child;
   final EdgeInsetsGeometry padding;
 
   @override
-  Widget build(BuildContext context) => SolarCard(padding: padding, child: child);
+  Widget build(BuildContext context) =>
+      SolarCard(padding: padding, child: child);
 }
 
 class SolarCard extends StatelessWidget {
-  const SolarCard({super.key, required this.child, this.padding = const EdgeInsets.all(AppSpacing.md)});
+  const SolarCard(
+      {super.key,
+      required this.child,
+      this.padding = const EdgeInsets.all(AppSpacing.md)});
 
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -219,7 +248,8 @@ class ToreSectionHeader extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => SolarSectionTitle(text, trailing: trailing);
+  Widget build(BuildContext context) =>
+      SolarSectionTitle(text, trailing: trailing);
 }
 
 class AppChip extends StatelessWidget {
@@ -260,7 +290,10 @@ class SolarSectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         children: [
-          Expanded(child: Text(text, style: AppTextStyles.sectionTitle.copyWith(fontSize: 20, fontWeight: FontWeight.w800))),
+          Expanded(
+              child: Text(text,
+                  style: AppTextStyles.sectionTitle
+                      .copyWith(fontSize: 20, fontWeight: FontWeight.w800))),
           if (trailing != null) trailing!,
         ],
       ),
@@ -305,12 +338,16 @@ class AuthRequiredNotice extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Connecte-toi pour continuer", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const Text("Connecte-toi pour continuer",
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
           const SizedBox(height: 6),
           Text(message, style: AppTextStyles.muted),
           if (onLogin != null) ...[
             const SizedBox(height: 10),
-            PrimaryButton(label: "Créer un compte / Se connecter", onPressed: onLogin, icon: Icons.lock_open),
+            PrimaryButton(
+                label: "Créer un compte / Se connecter",
+                onPressed: onLogin,
+                icon: Icons.lock_open),
           ],
         ],
       ),

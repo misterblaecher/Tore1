@@ -23,7 +23,8 @@ class QrScannerScreen extends ConsumerStatefulWidget {
 }
 
 class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
-  final MobileScannerController _controller = MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates, autoStart: true);
+  final MobileScannerController _controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates, autoStart: true);
   final ScanSuppression _suppression = ScanSuppression();
 
   bool _handling = false;
@@ -49,7 +50,8 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
   Future<void> _handleDetectedRaw(String raw) async {
     if (_handling || DateTime.now().isBefore(_scanLockUntil)) return;
-    if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now())) return;
+    if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now()))
+      return;
 
     HapticFeedback.selectionClick();
     setState(() {
@@ -69,10 +71,12 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     if (!_localValidate(payload)) return;
 
     setState(() => _handling = true);
+    final scannerContext = context;
     await _controller.stop();
+    if (!scannerContext.mounted) return;
 
     await ref.read(qrRouterServiceProvider).route(
-          context: context,
+          context: scannerContext,
           raw: raw,
           onOutcome: (outcome) => setState(() => _lastOutcome = outcome),
         );
@@ -86,7 +90,9 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   }
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {
-    final raw = capture.barcodes.map((b) => b.rawValue).firstWhere((v) => v != null && v.trim().isNotEmpty, orElse: () => null);
+    final raw = capture.barcodes.map((b) => b.rawValue).firstWhere(
+        (v) => v != null && v.trim().isNotEmpty,
+        orElse: () => null);
     if (raw == null) return;
     await _handleDetectedRaw(raw);
   }
@@ -97,15 +103,27 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
       context: context,
       isScrollControlled: true,
       builder: (context) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+        padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Entrer un code', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('Entrer un code',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            TextField(controller: controller, decoration: const InputDecoration(hintText: 'Code alphanumérique')),
+            TextField(
+                controller: controller,
+                decoration:
+                    const InputDecoration(hintText: 'Code alphanumérique')),
             const SizedBox(height: 12),
-            ToreButton.primary(label: 'Valider', icon: Icons.check, onPressed: () => Navigator.of(context).pop(controller.text.trim())),
+            ToreButton.primary(
+                label: 'Valider',
+                icon: Icons.check,
+                onPressed: () =>
+                    Navigator.of(context).pop(controller.text.trim())),
           ],
         ),
       ),
@@ -125,11 +143,16 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Aide scan', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+              const Text('Aide scan',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
               const SizedBox(height: AppSpacing.sm),
-              const Text('Centre le QR dans l\'anneau doré. Active la lampe si la scène est sombre.'),
+              const Text(
+                  'Centre le QR dans l\'anneau doré. Active la lampe si la scène est sombre.'),
               const SizedBox(height: AppSpacing.md),
-              ToreButton.primary(label: 'Réessayer', icon: Icons.refresh, onPressed: () => Navigator.of(context).pop()),
+              ToreButton.primary(
+                  label: 'Réessayer',
+                  icon: Icons.refresh,
+                  onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ),
@@ -160,18 +183,26 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.accentGold, width: 3),
-                  boxShadow: [BoxShadow(color: AppColors.accentGold.withOpacity(0.35 * ring), blurRadius: 26)],
+                  boxShadow: [
+                    BoxShadow(
+                        color:
+                            AppColors.accentGold.withValues(alpha: 0.35 * ring),
+                        blurRadius: 26)
+                  ],
                 ),
               ),
             ),
           ),
-          if (_detectedFlash) IgnorePointer(child: Container(color: const Color(0x44F4B400))),
+          if (_detectedFlash)
+            IgnorePointer(child: Container(color: const Color(0x44F4B400))),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  IconButton.filledTonal(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
+                  IconButton.filledTonal(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close)),
                   const Spacer(),
                   IconButton.filledTonal(
                     onPressed: () async {
@@ -205,9 +236,17 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
                   children: [
-                    Expanded(child: ToreButton.secondary(label: 'Code manuel', icon: Icons.keyboard, onPressed: _manualCodeEntry)),
+                    Expanded(
+                        child: ToreButton.secondary(
+                            label: 'Code manuel',
+                            icon: Icons.keyboard,
+                            onPressed: _manualCodeEntry)),
                     const SizedBox(width: 8),
-                    Expanded(child: ToreButton.secondary(label: 'Aide', icon: Icons.help_outline, onPressed: _openHelp)),
+                    Expanded(
+                        child: ToreButton.secondary(
+                            label: 'Aide',
+                            icon: Icons.help_outline,
+                            onPressed: _openHelp)),
                   ],
                 ),
               ),

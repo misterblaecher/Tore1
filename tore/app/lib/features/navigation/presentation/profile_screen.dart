@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_models.dart';
 import '../../../core/auth/providers.dart';
-import '../../../state.dart';
 import '../../../ui/app_design_system.dart';
 import '../../auth/presentation/complete_profile_screen.dart';
 import '../../../shared/widgets/require_auth_sheet.dart';
@@ -30,7 +29,8 @@ class ProfileScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const ToreSectionHeader('Invité'),
-                    Text('ID ${guestId.length > 14 ? guestId.substring(0, 14) : guestId}'),
+                    Text(
+                        'ID ${guestId.length > 14 ? guestId.substring(0, 14) : guestId}'),
                     const SizedBox(height: AppSpacing.md),
                     ToreButton.primary(
                       label: 'Se connecter',
@@ -44,7 +44,8 @@ class ProfileScreen extends ConsumerWidget {
               ToreButton.secondary(
                 label: 'Quitter invité',
                 icon: Icons.logout,
-                onPressed: () => ref.read(authSessionProvider.notifier).logout(),
+                onPressed: () =>
+                    ref.read(authSessionProvider.notifier).logout(),
               ),
             ],
           ),
@@ -63,7 +64,8 @@ class ProfileScreen extends ConsumerWidget {
             if (me.displayName.trim().isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const CompleteProfileScreen()),
                 );
               });
               return const SizedBox.shrink();
@@ -92,13 +94,21 @@ class _AuthedProfile extends ConsumerWidget {
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: AppColors.accentGold.withOpacity(0.35), blurRadius: 20)],
+                  boxShadow: [
+                    BoxShadow(
+                        color: AppColors.accentGold.withValues(alpha: 0.35),
+                        blurRadius: 20)
+                  ],
                 ),
                 child: CircleAvatar(
                   radius: 34,
-                  backgroundImage: (me.avatarUrl != null && me.avatarUrl!.isNotEmpty) ? NetworkImage(me.avatarUrl!) : null,
+                  backgroundImage:
+                      (me.avatarUrl != null && me.avatarUrl!.isNotEmpty)
+                          ? NetworkImage(me.avatarUrl!)
+                          : null,
                   child: (me.avatarUrl == null || me.avatarUrl!.isEmpty)
-                      ? Text(me.displayName.substring(0, 1).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w700))
+                      ? Text(me.displayName.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.w700))
                       : null,
                 ),
               ),
@@ -107,7 +117,8 @@ class _AuthedProfile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(me.displayName, style: Theme.of(context).textTheme.titleLarge),
+                    Text(me.displayName,
+                        style: Theme.of(context).textTheme.titleLarge),
                     if (me.bio.trim().isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xs),
@@ -129,19 +140,23 @@ class _AuthedProfile extends ConsumerWidget {
                 value: me.showAvatar,
                 title: const Text('Thème: halo avatar'),
                 subtitle: const Text('Option visuelle légère.'),
-                onChanged: (v) => ref.read(authRepositoryProvider).patchMe(showAvatar: v),
+                onChanged: (v) =>
+                    ref.read(authRepositoryProvider).patchMe(showAvatar: v),
               ),
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 value: me.showIdentityToStaff,
                 title: const Text('Confidentialité staff'),
-                onChanged: (v) => ref.read(authRepositoryProvider).patchMe(showIdentityToStaff: v),
+                onChanged: (v) => ref
+                    .read(authRepositoryProvider)
+                    .patchMe(showIdentityToStaff: v),
               ),
               const SizedBox(height: AppSpacing.sm),
               ToreButton.secondary(
                 label: 'Déconnexion',
                 icon: Icons.logout,
-                onPressed: () => ref.read(authSessionProvider.notifier).logout(),
+                onPressed: () =>
+                    ref.read(authSessionProvider.notifier).logout(),
               ),
             ],
           ),

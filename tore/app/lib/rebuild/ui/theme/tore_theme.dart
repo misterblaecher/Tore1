@@ -24,12 +24,16 @@ class ToreTokens {
 }
 
 class ToreTypography {
-  static const TextStyle title = TextStyle(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 0.1);
-  static const TextStyle section = TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.2);
+  static const TextStyle title =
+      TextStyle(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 0.1);
+  static const TextStyle section =
+      TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.2);
   static const TextStyle body = TextStyle(fontSize: 14, height: 1.3);
-  static const TextStyle mono = TextStyle(fontFamily: 'monospace', letterSpacing: 0.35);
+  static const TextStyle mono =
+      TextStyle(fontFamily: 'monospace', letterSpacing: 0.35);
 
-  static TextStyle monoNumber(BuildContext context, {double? size, FontWeight weight = FontWeight.w700}) {
+  static TextStyle monoNumber(BuildContext context,
+      {double? size, FontWeight weight = FontWeight.w700}) {
     return Theme.of(context).textTheme.bodyMedium!.merge(
           mono.copyWith(fontSize: size, fontWeight: weight),
         );

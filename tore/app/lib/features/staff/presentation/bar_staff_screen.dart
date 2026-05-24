@@ -17,7 +17,8 @@ class BarStaffScreen extends StatelessWidget {
             children: [
               const Icon(Icons.local_bar_outlined, size: 52),
               const SizedBox(height: 12),
-              Text('Staff Bar — Event #$eventId', style: Theme.of(context).textTheme.titleMedium),
+              Text('Staff Bar — Event #$eventId',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               const Text(
                 'Mode staff bar prêt pour les opérations live.',

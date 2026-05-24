@@ -113,7 +113,8 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
     if (eventId == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Check-in')),
-        body: const Center(child: Text('Sélectionne un event pour faire un check-in.')),
+        body: const Center(
+            child: Text('Sélectionne un event pour faire un check-in.')),
       );
     }
 
@@ -151,8 +152,14 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: SegmentedButton<int>(
               segments: const [
-                ButtonSegment(value: 0, label: Text('Scan QR'), icon: Icon(Icons.qr_code_scanner_outlined)),
-                ButtonSegment(value: 1, label: Text('Manuel'), icon: Icon(Icons.search_outlined)),
+                ButtonSegment(
+                    value: 0,
+                    label: Text('Scan QR'),
+                    icon: Icon(Icons.qr_code_scanner_outlined)),
+                ButtonSegment(
+                    value: 1,
+                    label: Text('Manuel'),
+                    icon: Icon(Icons.search_outlined)),
               ],
               selected: <int>{_tab},
               onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -177,7 +184,8 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
           controller: _qrCtrl,
           decoration: const InputDecoration(
             labelText: 'Contenu QR',
-            hintText: 'Colle ici la valeur du QR (URL / JSON / event:drink:qty)',
+            hintText:
+                'Colle ici la valeur du QR (URL / JSON / event:drink:qty)',
             border: OutlineInputBorder(),
           ),
           maxLines: 3,
@@ -199,16 +207,17 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
                     ? null
                     : () async {
                         final p = parsed;
-                        if (p == null) return;
 
                         if (_isDoubleScan(p)) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Double scan détecté (10s)')),
+                            const SnackBar(
+                                content: Text('Double scan détecté (10s)')),
                           );
                           return;
                         }
 
-                        await _submitCheckin(eventId: p.eventId, drinkId: p.drinkId, qty: p.qty);
+                        await _submitCheckin(
+                            eventId: p.eventId, drinkId: p.drinkId, qty: p.qty);
                       },
                 icon: const Icon(Icons.check_circle_outline),
                 label: const Text('Valider'),
@@ -231,7 +240,8 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Prévisualisation', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text('Prévisualisation',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text('Event: #${parsed.eventId}'),
                   Text('Drink: #${parsed.drinkId}'),
@@ -267,7 +277,7 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             DropdownButtonFormField<MenuDrinkMeta>(
-              value: _selected,
+              initialValue: _selected,
               decoration: const InputDecoration(
                 labelText: 'Boisson',
                 border: OutlineInputBorder(),
@@ -285,15 +295,18 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Text('Quantité', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text('Quantité',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 const Spacer(),
                 IconButton(
                   onPressed: _qty <= 1 ? null : () => setState(() => _qty -= 1),
                   icon: const Icon(Icons.remove_circle_outline),
                 ),
-                Text(_qty.toString(), style: Theme.of(context).textTheme.titleLarge),
+                Text(_qty.toString(),
+                    style: Theme.of(context).textTheme.titleLarge),
                 IconButton(
-                  onPressed: _qty >= 10 ? null : () => setState(() => _qty += 1),
+                  onPressed:
+                      _qty >= 10 ? null : () => setState(() => _qty += 1),
                   icon: const Icon(Icons.add_circle_outline),
                 ),
               ],
@@ -327,7 +340,8 @@ class _ParsedCheckin {
   final int drinkId;
   final int qty;
 
-  const _ParsedCheckin({required this.eventId, required this.drinkId, required this.qty});
+  const _ParsedCheckin(
+      {required this.eventId, required this.drinkId, required this.qty});
 
   static _ParsedCheckin? tryParse(String raw) {
     if (raw.isEmpty) return null;
@@ -346,9 +360,16 @@ class _ParsedCheckin {
     // 2) URL with query params
     final uri = Uri.tryParse(raw);
     if (uri != null && uri.queryParameters.isNotEmpty) {
-      final e = int.tryParse(uri.queryParameters['event_id'] ?? uri.queryParameters['eventId'] ?? '');
-      final d = int.tryParse(uri.queryParameters['drink_id'] ?? uri.queryParameters['drinkId'] ?? '');
-      final q = int.tryParse(uri.queryParameters['qty'] ?? uri.queryParameters['quantity'] ?? '1') ?? 1;
+      final e = int.tryParse(uri.queryParameters['event_id'] ??
+          uri.queryParameters['eventId'] ??
+          '');
+      final d = int.tryParse(uri.queryParameters['drink_id'] ??
+          uri.queryParameters['drinkId'] ??
+          '');
+      final q = int.tryParse(uri.queryParameters['qty'] ??
+              uri.queryParameters['quantity'] ??
+              '1') ??
+          1;
       if (e != null && d != null) {
         return _ParsedCheckin(eventId: e, drinkId: d, qty: q);
       }
@@ -366,7 +387,8 @@ class _ParsedCheckin {
       final e = findInt('event_id') ?? findInt('eventId');
       final d = findInt('drink_id') ?? findInt('drinkId');
       final q = findInt('qty') ?? findInt('quantity') ?? 1;
-      if (e != null && d != null) return _ParsedCheckin(eventId: e, drinkId: d, qty: q);
+      if (e != null && d != null)
+        return _ParsedCheckin(eventId: e, drinkId: d, qty: q);
     }
 
     return null;

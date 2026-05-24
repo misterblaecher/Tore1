@@ -21,9 +21,13 @@ class BattlesLeaderboardScreen extends ConsumerWidget {
             children: [
               Text(lb.rulesText),
               const SizedBox(height: 12),
-              ...lb.top3.map((r) => ListTile(title: Text('#${r.rank} ${r.name}'), trailing: Text('${r.score}'))),
+              ...lb.top3.map((r) => ListTile(
+                  title: Text('#${r.rank} ${r.name}'),
+                  trailing: Text('${r.score}'))),
               const Divider(),
-              ...lb.list.map((r) => ListTile(title: Text('#${r.rank} ${r.name}'), trailing: Text('${r.score}'))),
+              ...lb.list.map((r) => ListTile(
+                  title: Text('#${r.rank} ${r.name}'),
+                  trailing: Text('${r.score}'))),
             ],
           );
         },

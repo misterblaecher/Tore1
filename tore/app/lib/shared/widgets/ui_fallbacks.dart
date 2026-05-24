@@ -22,7 +22,10 @@ class ToreErrorState extends StatelessWidget {
               Text(message, textAlign: TextAlign.center),
               if (onRetry != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                ToreButton.primary(label: 'Réessayer', icon: Icons.refresh, onPressed: onRetry),
+                ToreButton.primary(
+                    label: 'Réessayer',
+                    icon: Icons.refresh,
+                    onPressed: onRetry),
               ],
             ],
           ),
@@ -47,11 +50,13 @@ class ToreEmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.auto_awesome_motion_outlined, color: AppColors.accentGold),
+              const Icon(Icons.auto_awesome_motion_outlined,
+                  color: AppColors.accentGold),
               const SizedBox(height: AppSpacing.sm),
               Text(title, style: AppTextStyles.sectionTitle),
               const SizedBox(height: AppSpacing.xs),
-              Text(message, textAlign: TextAlign.center, style: AppTextStyles.muted),
+              Text(message,
+                  textAlign: TextAlign.center, style: AppTextStyles.muted),
             ],
           ),
         ),

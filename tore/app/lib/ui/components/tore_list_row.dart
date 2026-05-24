@@ -30,9 +30,13 @@ class ToreListRow extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: ToreType.body.copyWith(fontWeight: FontWeight.w600)),
+                    Text(title,
+                        style: ToreType.body
+                            .copyWith(fontWeight: FontWeight.w600)),
                     if (subtitle != null)
-                      Text(subtitle!, style: ToreType.meta.copyWith(color: ToreSemantic.textMuted)),
+                      Text(subtitle!,
+                          style: ToreType.meta
+                              .copyWith(color: ToreSemantic.textMuted)),
                   ],
                 ),
               ),

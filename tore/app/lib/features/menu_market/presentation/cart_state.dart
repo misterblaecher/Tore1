@@ -43,8 +43,10 @@ class CartState {
 
   const CartState({this.lines = const []});
 
-  int get totalTickets => lines.fold(0, (sum, line) => sum + (line.ticketCost * line.qty));
-  int get totalFeesTickets => lines.fold(0, (sum, line) => sum + (line.feeTickets * line.qty));
+  int get totalTickets =>
+      lines.fold(0, (sum, line) => sum + (line.ticketCost * line.qty));
+  int get totalFeesTickets =>
+      lines.fold(0, (sum, line) => sum + (line.feeTickets * line.qty));
   int get totalEstimatedTickets => totalTickets + totalFeesTickets;
   int get totalItems => lines.fold(0, (sum, line) => sum + line.qty);
   bool get isEmpty => lines.isEmpty;
@@ -114,7 +116,8 @@ class CartController extends StateNotifier<CartState> {
   }
 
   void remove(int itemId) {
-    state = CartState(lines: state.lines.where((line) => line.itemId != itemId).toList());
+    state = CartState(
+        lines: state.lines.where((line) => line.itemId != itemId).toList());
   }
 
   void removeUnavailable() {
@@ -130,6 +133,8 @@ class CartController extends StateNotifier<CartState> {
   void clear() => state = const CartState();
 }
 
-final cartProvider = StateNotifierProvider.family<CartController, CartState, int>((ref, eventId) {
+final cartProvider =
+    StateNotifierProvider.family<CartController, CartState, int>(
+        (ref, eventId) {
   return CartController();
 });

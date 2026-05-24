@@ -68,7 +68,9 @@ class AppBootController extends StateNotifier<AppBootState> {
       final apiClient = ref.read(apiClientProvider);
 
       if (!result.isOnline) {
-        final canForceReadOnly = result.reachability == HealthReachability.offlineConfirmed && !apiClient.hasSuccessfulRequest;
+        final canForceReadOnly =
+            result.reachability == HealthReachability.offlineConfirmed &&
+                !apiClient.hasSuccessfulRequest;
         if (kDebugMode) {
           debugPrint(
             '[boot] health-check failed reachability=${result.reachability.name} attempts=${result.attempts} status=${result.statusCode}',
@@ -76,7 +78,8 @@ class AppBootController extends StateNotifier<AppBootState> {
         }
 
         if (canForceReadOnly) {
-          if (kDebugMode) debugPrint('[boot] offline confirmed -> read-only mode');
+          if (kDebugMode)
+            debugPrint('[boot] offline confirmed -> read-only mode');
           state = const AppBootState(
             bootStatus: BootStatus.bootOfflineReadOnly,
             status: AppBootStatus.ready,
@@ -106,7 +109,8 @@ class AppBootController extends StateNotifier<AppBootState> {
         final apiClient = ref.read(apiClientProvider);
         final isSocket = e is DioException && e.error is SocketException;
         if (isSocket && !apiClient.hasSuccessfulRequest) {
-          if (kDebugMode) debugPrint('[boot] socket offline confirmed -> read-only mode');
+          if (kDebugMode)
+            debugPrint('[boot] socket offline confirmed -> read-only mode');
           state = const AppBootState(
             bootStatus: BootStatus.bootOfflineReadOnly,
             status: AppBootStatus.ready,
@@ -114,7 +118,9 @@ class AppBootController extends StateNotifier<AppBootState> {
           return;
         }
 
-        if (kDebugMode) debugPrint('[boot] network issue but unconfirmed offline -> continue normal mode');
+        if (kDebugMode)
+          debugPrint(
+              '[boot] network issue but unconfirmed offline -> continue normal mode');
         state = AppBootState(
           bootStatus: BootStatus.bootOnline,
           status: AppBootStatus.ready,
@@ -142,12 +148,14 @@ class AppBootController extends StateNotifier<AppBootState> {
     if (error is DioException) {
       return error.error is! FormatException;
     }
-    if (error is ApiException) return error.statusCode == null || (error.statusCode ?? 0) >= 500;
+    if (error is ApiException)
+      return error.statusCode == null || (error.statusCode ?? 0) >= 500;
     return false;
   }
 }
 
-final appBootProvider = StateNotifierProvider<AppBootController, AppBootState>((ref) {
+final appBootProvider =
+    StateNotifierProvider<AppBootController, AppBootState>((ref) {
   return AppBootController(ref);
 });
 
@@ -161,7 +169,11 @@ final meProvider = FutureProvider<AppUser>((ref) async {
     throw ApiException('Connexion requise', statusCode: 401);
   }
   if (session.isGuest) {
-    final guestId = await ref.read(authRepositoryProvider).api.tokenStorage.readGuestDeviceId();
+    final guestId = await ref
+        .read(authRepositoryProvider)
+        .api
+        .tokenStorage
+        .readGuestDeviceId();
     return AppUser(
       id: guestId ?? 'guest',
       displayName: 'Invité',
@@ -180,7 +192,13 @@ final meProvider = FutureProvider<AppUser>((ref) async {
   try {
     final me = await auth.getMe();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('cached_me', jsonEncode(me.toPatchJson()..addAll({'id': me.id, 'account_mode': accountModeToJson(me.accountMode)})));
+    await prefs.setString(
+        'cached_me',
+        jsonEncode(me.toPatchJson()
+          ..addAll({
+            'id': me.id,
+            'account_mode': accountModeToJson(me.accountMode)
+          })));
     return me;
   } catch (e) {
     if (e is DioException || e is ApiException) {

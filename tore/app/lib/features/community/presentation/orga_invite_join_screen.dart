@@ -9,7 +9,8 @@ class OrgaInviteJoinScreen extends ConsumerStatefulWidget {
   final String code;
 
   @override
-  ConsumerState<OrgaInviteJoinScreen> createState() => _OrgaInviteJoinScreenState();
+  ConsumerState<OrgaInviteJoinScreen> createState() =>
+      _OrgaInviteJoinScreenState();
 }
 
 class _OrgaInviteJoinScreenState extends ConsumerState<OrgaInviteJoinScreen> {
@@ -30,7 +31,9 @@ class _OrgaInviteJoinScreenState extends ConsumerState<OrgaInviteJoinScreen> {
     });
     try {
       final code = _codeCtrl.text.trim();
-      final res = await ref.read(apiProvider).orgaJoinByInvite(code: code, idempotencyKey: 'orga-invite-$code');
+      final res = await ref
+          .read(apiProvider)
+          .orgaJoinByInvite(code: code, idempotencyKey: 'orga-invite-$code');
       setState(() => _message = 'Rejoint comme ${res['role'] ?? 'MEMBER'}');
     } catch (_) {
       setState(() => _message = 'Impossible de rejoindre via ce code.');
@@ -48,11 +51,16 @@ class _OrgaInviteJoinScreenState extends ConsumerState<OrgaInviteJoinScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(controller: _codeCtrl, decoration: const InputDecoration(labelText: 'Code invitation')),
+            TextField(
+                controller: _codeCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Code invitation')),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _loading ? null : _join,
-              child: _loading ? const CircularProgressIndicator.adaptive() : const Text('Rejoindre'),
+              child: _loading
+                  ? const CircularProgressIndicator.adaptive()
+                  : const Text('Rejoindre'),
             ),
             if (_message != null) ...[
               const SizedBox(height: 12),

@@ -4,7 +4,8 @@ DateTime tryParseDateTime(Object? value, {DateTime? fallback}) {
   return parsed ?? fallback ?? DateTime.fromMillisecondsSinceEpoch(0);
 }
 
-String safeGetString(Map<String, dynamic> map, String key, {String fallback = '', List<String> aliases = const <String>[]}) {
+String safeGetString(Map<String, dynamic> map, String key,
+    {String fallback = '', List<String> aliases = const <String>[]}) {
   for (final k in <String>[key, ...aliases]) {
     final value = map[k];
     if (value == null) continue;
@@ -14,7 +15,8 @@ String safeGetString(Map<String, dynamic> map, String key, {String fallback = ''
   return fallback;
 }
 
-int safeGetInt(Map<String, dynamic> map, String key, {int fallback = 0, List<String> aliases = const <String>[]}) {
+int safeGetInt(Map<String, dynamic> map, String key,
+    {int fallback = 0, List<String> aliases = const <String>[]}) {
   for (final k in <String>[key, ...aliases]) {
     final value = map[k];
     if (value is int) return value;
@@ -25,7 +27,9 @@ int safeGetInt(Map<String, dynamic> map, String key, {int fallback = 0, List<Str
   return fallback;
 }
 
-Map<String, dynamic> safeGetMap(Map<String, dynamic> map, String key, {Map<String, dynamic> fallback = const <String, dynamic>{}, List<String> aliases = const <String>[]}) {
+Map<String, dynamic> safeGetMap(Map<String, dynamic> map, String key,
+    {Map<String, dynamic> fallback = const <String, dynamic>{},
+    List<String> aliases = const <String>[]}) {
   for (final k in <String>[key, ...aliases]) {
     final value = map[k];
     if (value is Map<String, dynamic>) return value;
@@ -34,7 +38,9 @@ Map<String, dynamic> safeGetMap(Map<String, dynamic> map, String key, {Map<Strin
   return fallback;
 }
 
-List<dynamic> safeGetList(Map<String, dynamic> map, String key, {List<dynamic> fallback = const <dynamic>[], List<String> aliases = const <String>[]}) {
+List<dynamic> safeGetList(Map<String, dynamic> map, String key,
+    {List<dynamic> fallback = const <dynamic>[],
+    List<String> aliases = const <String>[]}) {
   for (final k in <String>[key, ...aliases]) {
     final value = map[k];
     if (value is List<dynamic>) return value;

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../api.dart';
 import '../../../core/network/network_state_provider.dart';
 import '../../../state.dart';
 import '../safety_cache.dart';
@@ -28,15 +27,20 @@ class SafetyHistoryData {
 
   factory SafetyHistoryData.fromJson(Map<String, dynamic> json) {
     final response = SafetyHistoryResponse.fromJson(json);
-    return SafetyHistoryData(items: response.items, buddyLastCheckin: response.buddyLastCheckin);
+    return SafetyHistoryData(
+        items: response.items, buddyLastCheckin: response.buddyLastCheckin);
   }
 
-  Map<String, dynamic> toJson() => SafetyHistoryResponse(items: items, buddyLastCheckin: buddyLastCheckin).toJson();
+  Map<String, dynamic> toJson() =>
+      SafetyHistoryResponse(items: items, buddyLastCheckin: buddyLastCheckin)
+          .toJson();
 }
 
-final _safetyCacheProvider = Provider<SafetyCacheStore>((_) => const SafetyCacheStore());
+final _safetyCacheProvider =
+    Provider<SafetyCacheStore>((_) => const SafetyCacheStore());
 
-final safetyStateProvider = StreamProvider.autoDispose.family<SafetyCached<SafetyState>, int>((ref, eventId) async* {
+final safetyStateProvider = StreamProvider.autoDispose
+    .family<SafetyCached<SafetyState>, int>((ref, eventId) async* {
   final api = ref.watch(apiProvider);
   final net = ref.watch(networkStatusProvider);
   final cache = ref.watch(_safetyCacheProvider);
@@ -45,7 +49,10 @@ final safetyStateProvider = StreamProvider.autoDispose.family<SafetyCached<Safet
   Future<SafetyCached<SafetyState>?> cached() async {
     final hit = await cache.read(key);
     if (hit == null) return null;
-    return SafetyCached(data: SafetyState.fromJson(hit.payload), cacheStatus: SafetyCacheStatus(isCached: true, lastSyncAt: hit.lastSyncAt));
+    return SafetyCached(
+        data: SafetyState.fromJson(hit.payload),
+        cacheStatus:
+            SafetyCacheStatus(isCached: true, lastSyncAt: hit.lastSyncAt));
   }
 
   if (net == NetworkState.offline) {
@@ -60,17 +67,21 @@ final safetyStateProvider = StreamProvider.autoDispose.family<SafetyCached<Safet
       await cache.write(key, state.toJson());
       yield SafetyCached(
         data: state,
-        cacheStatus: SafetyCacheStatus(isCached: false, lastSyncAt: DateTime.now().toUtc()),
+        cacheStatus: SafetyCacheStatus(
+            isCached: false, lastSyncAt: DateTime.now().toUtc()),
       );
     } catch (_) {
       final hit = await cached();
       if (hit != null) yield hit;
     }
-    await Future<void>.delayed(net == NetworkState.degraded ? const Duration(seconds: 10) : const Duration(seconds: 5));
+    await Future<void>.delayed(net == NetworkState.degraded
+        ? const Duration(seconds: 10)
+        : const Duration(seconds: 5));
   }
 });
 
-final safetyHistoryProvider = StreamProvider.autoDispose.family<SafetyCached<SafetyHistoryData>, int>((ref, eventId) async* {
+final safetyHistoryProvider = StreamProvider.autoDispose
+    .family<SafetyCached<SafetyHistoryData>, int>((ref, eventId) async* {
   final api = ref.watch(apiProvider);
   final net = ref.watch(networkStatusProvider);
   final cache = ref.watch(_safetyCacheProvider);
@@ -79,7 +90,10 @@ final safetyHistoryProvider = StreamProvider.autoDispose.family<SafetyCached<Saf
   Future<SafetyCached<SafetyHistoryData>?> cached() async {
     final hit = await cache.read(key);
     if (hit == null) return null;
-    return SafetyCached(data: SafetyHistoryData.fromJson(hit.payload), cacheStatus: SafetyCacheStatus(isCached: true, lastSyncAt: hit.lastSyncAt));
+    return SafetyCached(
+        data: SafetyHistoryData.fromJson(hit.payload),
+        cacheStatus:
+            SafetyCacheStatus(isCached: true, lastSyncAt: hit.lastSyncAt));
   }
 
   if (net == NetworkState.offline) {
@@ -90,11 +104,13 @@ final safetyHistoryProvider = StreamProvider.autoDispose.family<SafetyCached<Saf
 
   try {
     final response = await api.getSafetyHistory(eventId, limit: 50);
-    final data = SafetyHistoryData(items: response.items, buddyLastCheckin: response.buddyLastCheckin);
+    final data = SafetyHistoryData(
+        items: response.items, buddyLastCheckin: response.buddyLastCheckin);
     await cache.write(key, data.toJson());
     yield SafetyCached(
       data: data,
-      cacheStatus: SafetyCacheStatus(isCached: false, lastSyncAt: DateTime.now().toUtc()),
+      cacheStatus: SafetyCacheStatus(
+          isCached: false, lastSyncAt: DateTime.now().toUtc()),
     );
   } catch (_) {
     final hit = await cached();

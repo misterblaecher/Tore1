@@ -11,7 +11,6 @@ import '../../menu_market/presentation/menu_screen.dart';
 import 'event_polymarket_screen.dart';
 import 'event_ranking_screen.dart';
 import '../../navigation/presentation/ticker_screen.dart';
-import '../../qr/presentation/module_unavailable_screen.dart';
 import '../../wallet/presentation/wallet_screen.dart';
 import '../../hunt/presentation/hunt_screen.dart';
 import '../../battles/presentation/battles_screen.dart';
@@ -21,7 +20,8 @@ import 'active_event_context_provider.dart';
 import '../../map_calendar/presentation/event_map_screen.dart';
 
 class EventHubScreen extends ConsumerWidget {
-  const EventHubScreen({super.key, required this.eventId, required this.eventName});
+  const EventHubScreen(
+      {super.key, required this.eventId, required this.eventName});
 
   final int eventId;
   final String eventName;
@@ -31,19 +31,32 @@ class EventHubScreen extends ConsumerWidget {
     final contextAsync = ref.watch(activeEventContextProvider);
     final eventCtx = contextAsync.valueOrNull;
     final rawState = (eventCtx?.eventState ?? 'RUNNING').toUpperCase();
-    final state = rawState == 'LIVE' ? 'RUNNING' : rawState == 'PAUSE' ? 'PAUSED' : rawState == 'CLOSED' ? 'ENDED' : rawState;
+    final state = rawState == 'LIVE'
+        ? 'RUNNING'
+        : rawState == 'PAUSE'
+            ? 'PAUSED'
+            : rawState == 'CLOSED'
+                ? 'ENDED'
+                : rawState;
     final title = eventCtx?.eventName ?? eventName;
     final modules = eventCtx?.modulesOn ?? const <String, bool>{};
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      prefetchEventEssentials(read: ref.read, refresh: ref.refresh, eventId: eventId, modulesOn: modules);
+      prefetchEventEssentials(
+          read: ref.read,
+          refresh: ref.refresh,
+          eventId: eventId,
+          modulesOn: modules);
     });
 
     final readOnly = isReadOnly(ref);
     final network = ref.watch(networkStatusProvider);
     final degradedBlocked = network == NetworkState.degraded;
     final runtimeBlocked = isWriteBlockedByEventState(state);
-    final globalBlocked = isWriteBlocked(readOnly: readOnly, runtimeBlocked: runtimeBlocked, degradedBlocked: degradedBlocked);
+    final globalBlocked = isWriteBlocked(
+        readOnly: readOnly,
+        runtimeBlocked: runtimeBlocked,
+        degradedBlocked: degradedBlocked);
     final eventReason = eventWriteBlockedReason(state);
 
     return Scaffold(
@@ -52,7 +65,9 @@ class EventHubScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: () => ref.read(activeEventContextProvider.notifier).refresh(force: true),
+            onPressed: () => ref
+                .read(activeEventContextProvider.notifier)
+                .refresh(force: true),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -71,7 +86,11 @@ class EventHubScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: ServiceLimitedBanner(
-                message: eventReason ?? writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: state),
+                message: eventReason ??
+                    writeBlockedMessage(
+                        readOnly: readOnly,
+                        degradedBlocked: degradedBlocked,
+                        runtimeState: state),
               ),
             ),
           ..._moduleCards(context, modules, eventId),
@@ -80,7 +99,8 @@ class EventHubScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _moduleCards(BuildContext context, Map<String, bool> modulesOn, int eventId) {
+  List<Widget> _moduleCards(
+      BuildContext context, Map<String, bool> modulesOn, int eventId) {
     final modules = [
       _module(
         key: 'menu',
@@ -118,11 +138,37 @@ class EventHubScreen extends ConsumerWidget {
         icon: Icons.leaderboard_outlined,
         builder: (_) => EventRankingScreen(eventId: eventId),
       ),
-      _module(key: 'hunt', title: 'Hunt', subtitle: 'Chasse QR', icon: Icons.map_outlined, builder: (_) => HuntScreen(eventId: eventId)),
-      _module(key: 'battles', title: 'Battles', subtitle: 'Affonds en direct', icon: Icons.sports_mma_outlined, builder: (_) => BattlesScreen(eventId: eventId)),
-      _module(key: 'music_vote', aliases: const ['music', 'vote'], title: 'Musique', subtitle: 'Pré-event + live rounds', icon: Icons.music_note_outlined, builder: (_) => MusicVoteScreen(eventId: eventId)),
-      _module(key: 'safety', title: 'Safe Kit', subtitle: 'Buddy, check-ins et alerte ORGA', icon: Icons.health_and_safety_outlined, builder: (_) => SafetyScreen(eventId: eventId)),
-      _module(key: 'map', title: 'Carte', subtitle: 'Lieu, trajets & navettes', icon: Icons.map_outlined, builder: (_) => EventMapScreen(eventId: eventId)),
+      _module(
+          key: 'hunt',
+          title: 'Hunt',
+          subtitle: 'Chasse QR',
+          icon: Icons.map_outlined,
+          builder: (_) => HuntScreen(eventId: eventId)),
+      _module(
+          key: 'battles',
+          title: 'Battles',
+          subtitle: 'Affonds en direct',
+          icon: Icons.sports_mma_outlined,
+          builder: (_) => BattlesScreen(eventId: eventId)),
+      _module(
+          key: 'music_vote',
+          aliases: const ['music', 'vote'],
+          title: 'Musique',
+          subtitle: 'Pré-event + live rounds',
+          icon: Icons.music_note_outlined,
+          builder: (_) => MusicVoteScreen(eventId: eventId)),
+      _module(
+          key: 'safety',
+          title: 'Safe Kit',
+          subtitle: 'Buddy, check-ins et alerte ORGA',
+          icon: Icons.health_and_safety_outlined,
+          builder: (_) => SafetyScreen(eventId: eventId)),
+      _module(
+          key: 'map',
+          title: 'Carte',
+          subtitle: 'Lieu, trajets & navettes',
+          icon: Icons.map_outlined,
+          builder: (_) => EventMapScreen(eventId: eventId)),
       _module(
         key: 'broadcast',
         title: 'Broadcast',
@@ -132,7 +178,8 @@ class EventHubScreen extends ConsumerWidget {
       ),
     ];
 
-    final enabled = modules.where((module) => module.isEnabled(modulesOn)).toList();
+    final enabled =
+        modules.where((module) => module.isEnabled(modulesOn)).toList();
     if (enabled.isEmpty) {
       return const [
         Padding(
@@ -148,7 +195,8 @@ class EventHubScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: module.builder)),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: module.builder)),
               child: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -160,9 +208,12 @@ class EventHubScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(module.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text(module.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
                             const SizedBox(height: 3),
-                            Text(module.subtitle, style: Theme.of(context).textTheme.bodySmall),
+                            Text(module.subtitle,
+                                style: Theme.of(context).textTheme.bodySmall),
                           ],
                         ),
                       ),
@@ -185,26 +236,13 @@ class EventHubScreen extends ConsumerWidget {
     required IconData icon,
     required WidgetBuilder builder,
   }) {
-    return _HubModule(key: key, aliases: aliases, title: title, subtitle: subtitle, icon: icon, builder: builder);
-  }
-
-  _HubModule _moduleUnavailable({
-    required String key,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-  }) {
-    return _module(
-      key: key,
-      title: title,
-      subtitle: subtitle,
-      icon: icon,
-      builder: (_) => ModuleUnavailableScreen(
+    return _HubModule(
+        key: key,
+        aliases: aliases,
         title: title,
-        message: 'Module activé mais pas encore dispo dans cette build',
-        reasonCode: 'module_not_implemented',
-      ),
-    );
+        subtitle: subtitle,
+        icon: icon,
+        builder: builder);
   }
 
   String? _stateBanner(String state) {
@@ -241,11 +279,14 @@ class _Header extends StatelessWidget {
       children: [
         Chip(
           label: Text(label),
-          backgroundColor: blocked ? Colors.orange.shade100 : Colors.green.shade100,
+          backgroundColor:
+              blocked ? Colors.orange.shade100 : Colors.green.shade100,
         ),
         const SizedBox(width: 8),
         if (lastUpdatedAt != null)
-          Text('Maj ${TimeOfDay.fromDateTime(lastUpdatedAt!.toLocal()).format(context)}', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+              'Maj ${TimeOfDay.fromDateTime(lastUpdatedAt!.toLocal()).format(context)}',
+              style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }

@@ -7,7 +7,6 @@ import 'package:tore/features/community/community_models.dart';
 import 'package:tore/features/community/data/community_explorer_cache.dart';
 import 'package:tore/features/events/presentation/create_event_wizard_screen.dart';
 import 'package:tore/features/qr/presentation/code_entry_sheet.dart';
-import 'package:tore/features/qr/presentation/join_event_screen.dart';
 import 'package:tore/state.dart';
 
 import 'orga_detail_screen.dart';
@@ -19,7 +18,8 @@ class CommunityScreen extends ConsumerStatefulWidget {
   ConsumerState<CommunityScreen> createState() => _CommunityScreenState();
 }
 
-class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTickerProviderStateMixin {
+class _CommunityScreenState extends ConsumerState<CommunityScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   final TextEditingController _search = TextEditingController();
   final TextEditingController _joinCode = TextEditingController();
@@ -54,7 +54,8 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
     super.dispose();
   }
 
-  String _idem() => 'orga-join-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String _idem() =>
+      'orga-join-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   Map<String, String> _params({String? cursor}) => {
         if (_search.text.trim().isNotEmpty) 'q': _search.text.trim(),
@@ -65,7 +66,8 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
         'limit': '20',
       };
 
-  Future<void> _loadExplorer({required bool reset, bool fromRetry = false}) async {
+  Future<void> _loadExplorer(
+      {required bool reset, bool fromRetry = false}) async {
     final api = ref.read(apiProvider);
     final cursor = reset ? null : _nextCursor;
     if (reset) {
@@ -76,7 +78,8 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
       final cache = await _cache.read(_params());
       if (cache.payload != null) {
         final cachedItems = ((cache.payload!['items'] as List?) ?? const [])
-            .map((e) => OrgaSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+            .map((e) =>
+                OrgaSummary.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
         setState(() {
           _items = cachedItems;
@@ -101,7 +104,8 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
       final networkItems = ((res['items'] as List?) ?? const [])
           .map((e) => OrgaSummary.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
-      final next = res['nextCursor']?.toString() ?? res['next_cursor']?.toString();
+      final next =
+          res['nextCursor']?.toString() ?? res['next_cursor']?.toString();
       final updated = reset ? networkItems : [..._items, ...networkItems];
       if (mounted) {
         setState(() {
@@ -113,32 +117,39 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
         });
       }
       if (reset) {
-        await _cache.save(_params(), {'items': networkItems.map((e) => {
-          'id': e.id,
-          'name': e.name,
-          'city': e.city,
-          'type': e.type,
-          'joinMode': e.joinMode,
-          'followersCount': e.followersCount,
-          'lastActiveAt': e.lastActiveAt?.toIso8601String(),
-        }).toList(), 'nextCursor': next});
+        await _cache.save(_params(), {
+          'items': networkItems
+              .map((e) => {
+                    'id': e.id,
+                    'name': e.name,
+                    'city': e.city,
+                    'type': e.type,
+                    'joinMode': e.joinMode,
+                    'followersCount': e.followersCount,
+                    'lastActiveAt': e.lastActiveAt?.toIso8601String(),
+                  })
+              .toList(),
+          'nextCursor': next
+        });
       }
     } catch (_) {
       if (mounted && (_items.isEmpty || fromRetry)) {
         setState(() => _error = 'Mode lecture (cache)');
       }
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _loadingMore = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+        });
+      }
     }
   }
 
   void _onSearchChanged(String _) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: communityExplorerDebounceMs), () => _loadExplorer(reset: true));
+    _debounce = Timer(const Duration(milliseconds: communityExplorerDebounceMs),
+        () => _loadExplorer(reset: true));
   }
 
   String _ago(DateTime? dt) {
@@ -162,7 +173,8 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
     final api = ref.read(apiProvider);
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+        onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
         icon: const Icon(Icons.add),
         label: const Text('+ Créer'),
       ),
@@ -175,7 +187,9 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
             label: const Text('Entrer un code'),
           ),
         ],
-        bottom: TabBar(controller: _tabs, tabs: const [Tab(text: 'Explorer'), Tab(text: 'Mes Orgas')]),
+        bottom: TabBar(
+            controller: _tabs,
+            tabs: const [Tab(text: 'Explorer'), Tab(text: 'Mes Orgas')]),
       ),
       body: TabBarView(
         controller: _tabs,
@@ -202,7 +216,13 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
               ),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final item in const {'all': 'Tous', 'comite': 'Comité', 'bar': 'Bar', 'asso': 'Asso', 'autre': 'Autre'}.entries)
+                for (final item in const {
+                  'all': 'Tous',
+                  'comite': 'Comité',
+                  'bar': 'Bar',
+                  'asso': 'Asso',
+                  'autre': 'Autre'
+                }.entries)
                   ChoiceChip(
                     label: Text(item.value),
                     selected: _type == item.key,
@@ -214,37 +234,52 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
               ]),
               const SizedBox(height: 8),
               Wrap(spacing: 8, children: [
-                ChoiceChip(label: const Text('Récent'), selected: _sort == 'recent', onSelected: (_) {
-                  setState(() => _sort = 'recent');
-                  _loadExplorer(reset: true);
-                }),
-                ChoiceChip(label: const Text('Populaire'), selected: _sort == 'popular', onSelected: (_) {
-                  setState(() => _sort = 'popular');
-                  _loadExplorer(reset: true);
-                }),
+                ChoiceChip(
+                    label: const Text('Récent'),
+                    selected: _sort == 'recent',
+                    onSelected: (_) {
+                      setState(() => _sort = 'recent');
+                      _loadExplorer(reset: true);
+                    }),
+                ChoiceChip(
+                    label: const Text('Populaire'),
+                    selected: _sort == 'popular',
+                    onSelected: (_) {
+                      setState(() => _sort = 'popular');
+                      _loadExplorer(reset: true);
+                    }),
               ]),
               const SizedBox(height: 8),
-              TextField(controller: _city, onSubmitted: (_) => _loadExplorer(reset: true), decoration: const InputDecoration(hintText: 'Ville (optionnel)')),
+              TextField(
+                  controller: _city,
+                  onSubmitted: (_) => _loadExplorer(reset: true),
+                  decoration:
+                      const InputDecoration(hintText: 'Ville (optionnel)')),
               const SizedBox(height: 8),
               if (_isCached)
                 Container(
                   padding: const EdgeInsets.all(8),
-                  color: Colors.amber.withOpacity(0.2),
-                  child: Text('CACHE • ${_lastSyncAt != null ? _lastSyncAt!.toLocal().toString().substring(0, 16) : ''}'),
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  child: Text(
+                      'CACHE • ${_lastSyncAt != null ? _lastSyncAt!.toLocal().toString().substring(0, 16) : ''}'),
                 ),
               if (_error != null)
                 ListTile(
                   title: Text(_error!),
                   subtitle: const Text('Mode lecture (cache)'),
-                  trailing: TextButton(onPressed: () => _loadExplorer(reset: true, fromRetry: true), child: const Text('Retry')),
+                  trailing: TextButton(
+                      onPressed: () =>
+                          _loadExplorer(reset: true, fromRetry: true),
+                      child: const Text('Retry')),
                 ),
               FilledButton.icon(
                 onPressed: () async {
                   final code = _joinCode.text.trim();
                   if (code.isEmpty) return;
                   await api.joinOrgaByCode(code: code, idempotencyKey: _idem());
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Orga rejointe')));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Orga rejointe')));
                     _tabs.animateTo(1);
                   }
                 },
@@ -252,7 +287,10 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
                 label: const Text('Join by code'),
               ),
               const SizedBox(height: 6),
-              TextField(controller: _joinCode, decoration: const InputDecoration(hintText: 'Code invitation')),
+              TextField(
+                  controller: _joinCode,
+                  decoration:
+                      const InputDecoration(hintText: 'Code invitation')),
               const SizedBox(height: 12),
               if (_loading) const Center(child: CircularProgressIndicator()),
               if (!_loading && _items.isEmpty)
@@ -275,26 +313,33 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
                 Card(
                   child: ListTile(
                     title: Text(item.name),
-                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(item.city ?? '-'),
-                      Wrap(spacing: 6, children: [
-                        Chip(label: Text(item.type ?? '-')),
-                        Chip(label: Text(item.joinMode)),
-                      ]),
-                      Text('${item.followersCount} suivent ${_ago(item.lastActiveAt)}'.trim()),
-                    ]),
+                    subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.city ?? '-'),
+                          Wrap(spacing: 6, children: [
+                            Chip(label: Text(item.type ?? '-')),
+                            Chip(label: Text(item.joinMode)),
+                          ]),
+                          Text(
+                              '${item.followersCount} suivent ${_ago(item.lastActiveAt)}'
+                                  .trim()),
+                        ]),
                     trailing: FilledButton(
                       onPressed: null,
-                      child: Text(orgaPrimaryCtaLabel(joinMode: parseOrgaJoinMode(item.joinMode))),
+                      child: Text(orgaPrimaryCtaLabel(
+                          joinMode: parseOrgaJoinMode(item.joinMode))),
                     ),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaDetailScreen(orgId: item.id))),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => OrgaDetailScreen(orgId: item.id))),
                   ),
                 ),
               if (_nextCursor != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: OutlinedButton(
-                    onPressed: _loadingMore ? null : () => _loadExplorer(reset: false),
+                    onPressed:
+                        _loadingMore ? null : () => _loadExplorer(reset: false),
                     child: Text(_loadingMore ? 'Chargement…' : 'Charger plus'),
                   ),
                 ),
@@ -310,12 +355,18 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> with SingleTi
                   for (final item in items)
                     Card(
                       child: ListTile(
-                        title: Text((item['orga']?['name'] ?? 'Orga').toString()),
-                        subtitle: Text('Rôle: ${item['role']} • Status: ${item['status']}'),
+                        title:
+                            Text((item['orga']?['name'] ?? 'Orga').toString()),
+                        subtitle: Text(
+                            'Rôle: ${item['role']} • Status: ${item['status']}'),
                         onTap: () {
-                          final orgId = ((item['orga']?['id'] as num?) ?? 0).toInt();
+                          final orgId =
+                              ((item['orga']?['id'] as num?) ?? 0).toInt();
                           if (orgId <= 0) return;
-                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaDetailScreen(orgId: orgId, myRole: (item['role'] ?? '').toString())));
+                          Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => OrgaDetailScreen(
+                                  orgId: orgId,
+                                  myRole: (item['role'] ?? '').toString())));
                         },
                       ),
                     ),

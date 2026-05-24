@@ -36,7 +36,9 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
       _error = null;
     });
     try {
-      final out = await ref.read(authRepositoryProvider).requestEmailOtp(_emailCtrl.text.trim());
+      final out = await ref
+          .read(authRepositoryProvider)
+          .requestEmailOtp(_emailCtrl.text.trim());
       if (!mounted) return;
       setState(() {
         _requested = true;
@@ -78,9 +80,9 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
     });
     try {
       await ref.read(authSessionProvider.notifier).loginWithEmail(
-        email: _emailCtrl.text.trim(),
-        token: EmailToken.normalize(_tokenCtrl.text),
-      );
+            email: _emailCtrl.text.trim(),
+            token: EmailToken.normalize(_tokenCtrl.text),
+          );
       if (mounted) Navigator.of(context).pop();
     } on EmailAuthException catch (e) {
       if (!mounted) return;
@@ -132,50 +134,80 @@ class _EmailAuthScreenState extends ConsumerState<EmailAuthScreen> {
         children: [
           const SectionTitle('Connexion email'),
           AppCard(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              TextField(controller: _emailCtrl, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
-              const SizedBox(height: AppSpacing.sm),
-              PrimaryButton(
-                label: _requested ? (_cooldown > 0 ? 'Renvoyer (${_cooldown}s)' : 'Renvoyer un code') : 'Recevoir un code',
-                icon: Icons.mail_outline,
-                loading: _loading,
-                onPressed: _loading || _cooldown > 0 || ref.watch(networkStatusProvider) != NetworkState.online ? null : _requestCode,
-              ),
-              if (_devToken != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12)),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text('Code DEV: $_devToken', style: const TextStyle(color: Colors.deepOrange))),
-                      IconButton(
-                        onPressed: () async {
-                            final devToken = _devToken;
-                            if (devToken != null && devToken.isNotEmpty) {
-                              await Clipboard.setData(ClipboardData(text: devToken));
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Code copié')),
-                              );
-                            }
-                          },
-                        icon: const Icon(Icons.copy),
-                      ),
-                    ],
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email')),
+                  const SizedBox(height: AppSpacing.sm),
+                  PrimaryButton(
+                    label: _requested
+                        ? (_cooldown > 0
+                            ? 'Renvoyer (${_cooldown}s)'
+                            : 'Renvoyer un code')
+                        : 'Recevoir un code',
+                    icon: Icons.mail_outline,
+                    loading: _loading,
+                    onPressed: _loading ||
+                            _cooldown > 0 ||
+                            ref.watch(networkStatusProvider) !=
+                                NetworkState.online
+                        ? null
+                        : _requestCode,
                   ),
-                ),
-              ],
-              if (_requested) ...[
-                const SizedBox(height: AppSpacing.md),
-                TextField(controller: _tokenCtrl, keyboardType: TextInputType.number, maxLength: 6, decoration: const InputDecoration(labelText: 'Code 6 chiffres')),
-                PrimaryButton(label: 'Valider', icon: Icons.verified_outlined, loading: _loading, onPressed: _verify),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-              ],
-            ]),
+                  if (_devToken != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        children: [
+                          Expanded(
+                              child: Text('Code DEV: $_devToken',
+                                  style: const TextStyle(
+                                      color: Colors.deepOrange))),
+                          IconButton(
+                            onPressed: () async {
+                              final devToken = _devToken;
+                              if (devToken != null && devToken.isNotEmpty) {
+                                await Clipboard.setData(
+                                    ClipboardData(text: devToken));
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Code copié')),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.copy),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_requested) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                        controller: _tokenCtrl,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        decoration: const InputDecoration(
+                            labelText: 'Code 6 chiffres')),
+                    PrimaryButton(
+                        label: 'Valider',
+                        icon: Icons.verified_outlined,
+                        loading: _loading,
+                        onPressed: _verify),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_error!,
+                        style: const TextStyle(color: Colors.redAccent)),
+                  ],
+                ]),
           ),
         ],
       ),

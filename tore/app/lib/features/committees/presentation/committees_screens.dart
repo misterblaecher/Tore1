@@ -12,7 +12,8 @@ class CommitteesListScreen extends ConsumerStatefulWidget {
   const CommitteesListScreen({super.key});
 
   @override
-  ConsumerState<CommitteesListScreen> createState() => _CommitteesListScreenState();
+  ConsumerState<CommitteesListScreen> createState() =>
+      _CommitteesListScreenState();
 }
 
 class _CommitteesListScreenState extends ConsumerState<CommitteesListScreen> {
@@ -23,13 +24,15 @@ class _CommitteesListScreenState extends ConsumerState<CommitteesListScreen> {
       body: FutureBuilder(
         future: ref.read(apiProvider).committeesWithCacheStatus(),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final result = snap.data!;
           final items = (result.payload as List<dynamic>);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (result.fromCache) const _ReadOnlyBanner(label: 'Mode lecture (cache)'),
+              if (result.fromCache)
+                const _ReadOnlyBanner(label: 'Mode lecture (cache)'),
               const SizedBox(height: 8),
               for (final row in items)
                 Card(
@@ -37,7 +40,9 @@ class _CommitteesListScreenState extends ConsumerState<CommitteesListScreen> {
                     title: Text((row as Map)['name']?.toString() ?? '-'),
                     subtitle: Text(row['descriptionPublic']?.toString() ?? ''),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteePublicScreen(committeeId: row['id'] as int))),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => CommitteePublicScreen(
+                            committeeId: row['id'] as int))),
                   ),
                 ),
             ],
@@ -57,17 +62,23 @@ class CommitteePublicScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Comité public')),
       body: FutureBuilder(
-        future: Future.wait([ref.read(apiProvider).committee(committeeId), ref.read(apiProvider).committeeMeWithCacheStatus(committeeId)]),
+        future: Future.wait([
+          ref.read(apiProvider).committee(committeeId),
+          ref.read(apiProvider).committeeMeWithCacheStatus(committeeId)
+        ]),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final data = snap.data!;
           final committee = data[0] as Map<String, dynamic>;
-          final me = (data[1] as CommitteeFetchResult).payload as Map<String, dynamic>;
+          final me =
+              (data[1] as CommitteeFetchResult).payload as Map<String, dynamic>;
           final isMember = me['isMember'] == true;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(committee['name']?.toString() ?? '', style: Theme.of(context).textTheme.headlineSmall),
+              Text(committee['name']?.toString() ?? '',
+                  style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(committee['descriptionPublic']?.toString() ?? ''),
               const SizedBox(height: 8),
@@ -75,12 +86,16 @@ class CommitteePublicScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               if (!isMember)
                 FilledButton(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeJoinScreen(committeeId: committeeId))),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          CommitteeJoinScreen(committeeId: committeeId))),
                   child: const Text('Join committee'),
                 )
               else
                 FilledButton(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeHomeScreen(committeeId: committeeId))),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          CommitteeHomeScreen(committeeId: committeeId))),
                   child: const Text('Ouvrir espace privé'),
                 ),
             ],
@@ -96,7 +111,8 @@ class CommitteeJoinScreen extends ConsumerStatefulWidget {
   final int committeeId;
 
   @override
-  ConsumerState<CommitteeJoinScreen> createState() => _CommitteeJoinScreenState();
+  ConsumerState<CommitteeJoinScreen> createState() =>
+      _CommitteeJoinScreenState();
 }
 
 class _CommitteeJoinScreenState extends ConsumerState<CommitteeJoinScreen> {
@@ -113,9 +129,17 @@ class _CommitteeJoinScreenState extends ConsumerState<CommitteeJoinScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (writeBlocked) const _ReadOnlyBanner(label: 'Writes désactivés (offline/degraded)'),
-          TextField(controller: _code, decoration: const InputDecoration(labelText: 'Code secret')),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: Colors.red))),
+          if (writeBlocked)
+            const _ReadOnlyBanner(
+                label: 'Writes désactivés (offline/degraded)'),
+          TextField(
+              controller: _code,
+              decoration: const InputDecoration(labelText: 'Code secret')),
+          if (_error != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child:
+                    Text(_error!, style: const TextStyle(color: Colors.red))),
           const SizedBox(height: 10),
           FilledButton(
             onPressed: writeBlocked || _loading
@@ -129,9 +153,13 @@ class _CommitteeJoinScreenState extends ConsumerState<CommitteeJoinScreen> {
                       await ref.read(apiProvider).committeeJoinByCode(
                             committeeId: widget.committeeId,
                             code: _code.text.trim(),
-                            idempotencyKey: 'committee-join-${DateTime.now().millisecondsSinceEpoch}',
+                            idempotencyKey:
+                                'committee-join-${DateTime.now().millisecondsSinceEpoch}',
                           );
-                      if (context.mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => CommitteeHomeScreen(committeeId: widget.committeeId)));
+                      if (context.mounted)
+                        Navigator.of(context).pushReplacement(MaterialPageRoute(
+                            builder: (_) => CommitteeHomeScreen(
+                                committeeId: widget.committeeId)));
                     } catch (e) {
                       setState(() => _error = e.toString());
                     } finally {
@@ -162,21 +190,27 @@ class CommitteeHomeScreen extends ConsumerWidget {
           ref.read(apiProvider).modulesState(),
         ]),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final meResult = snap.data![0] as CommitteeFetchResult;
           final me = meResult.payload as Map<String, dynamic>;
-          final perms = (me['permissions'] as Map?)?.cast<String, dynamic>() ?? const {};
+          final perms =
+              (me['permissions'] as Map?)?.cast<String, dynamic>() ?? const {};
           final committee = snap.data![2] as Map<String, dynamic>;
           final modules = snap.data![3] as Map<String, dynamic>;
           final committeeModuleOn = modules['committee_os'] == true;
           final glossaryModuleOn = modules['folklore_glossary'] == true;
-          final settingsAsync = glossaryModuleOn ? ref.watch(committeeGlossarySettingsProvider(committeeId)) : null;
-          final role = (me['membership']?['role'] ?? '').toString().toUpperCase();
+          final settingsAsync = glossaryModuleOn
+              ? ref.watch(committeeGlossarySettingsProvider(committeeId))
+              : null;
+          final role =
+              (me['membership']?['role'] ?? '').toString().toUpperCase();
           final canModerateGlossary = ['MOD', 'ADMIN', 'OWNER'].contains(role);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (meResult.fromCache) const _ReadOnlyBanner(label: 'Mode lecture (cache)'),
+              if (meResult.fromCache)
+                const _ReadOnlyBanner(label: 'Mode lecture (cache)'),
               Text('Role: ${me['membership']?['role'] ?? 'VISITOR'}'),
               const SizedBox(height: 8),
               ListTile(
@@ -187,8 +221,10 @@ class CommitteeHomeScreen extends ConsumerWidget {
                   builder: (_) => CommitteeForumScreen(
                     committeeId: committeeId,
                     committeeName: committee['name']?.toString() ?? 'Comité',
-                    canAdminCategories: me['membership']?['role'] == 'ADMIN' || me['membership']?['role'] == 'OWNER',
-                    canModerate: ['MOD', 'ADMIN', 'OWNER'].contains(me['membership']?['role']),
+                    canAdminCategories: me['membership']?['role'] == 'ADMIN' ||
+                        me['membership']?['role'] == 'OWNER',
+                    canModerate: ['MOD', 'ADMIN', 'OWNER']
+                        .contains(me['membership']?['role']),
                   ),
                 )),
               ),
@@ -203,10 +239,12 @@ class CommitteeHomeScreen extends ConsumerWidget {
                           title: const Text('Glossaire'),
                           subtitle: const Text('Voir les termes du comité'),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                          onTap: () =>
+                              Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) => GlossaryTermsScreen(
                               committeeId: committeeId,
-                              committeeName: committee['name']?.toString() ?? 'Comité',
+                              committeeName:
+                                  committee['name']?.toString() ?? 'Comité',
                               isPublicScope: true,
                             ),
                           )),
@@ -214,12 +252,15 @@ class CommitteeHomeScreen extends ConsumerWidget {
                       if (canModerateGlossary)
                         ListTile(
                           title: const Text('Gérer Glossaire'),
-                          subtitle: const Text('Toggle public + créer/éditer/archiver/delete'),
+                          subtitle: const Text(
+                              'Toggle public + créer/éditer/archiver/delete'),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                          onTap: () =>
+                              Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) => CommitteeGlossaryAdminScreen(
                               committeeId: committeeId,
-                              committeeName: committee['name']?.toString() ?? 'Comité',
+                              committeeName:
+                                  committee['name']?.toString() ?? 'Comité',
                             ),
                           )),
                         ),
@@ -230,26 +271,39 @@ class CommitteeHomeScreen extends ConsumerWidget {
                 title: const Text('Espace comité'),
                 subtitle: const Text('Feed · Calendrier · Dépenses (V1)'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeSpaceScreen(committeeId: committeeId, canManage: ['MOD', 'ADMIN', 'OWNER'].contains(role)))),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => CommitteeSpaceScreen(
+                        committeeId: committeeId,
+                        canManage: ['MOD', 'ADMIN', 'OWNER'].contains(role)))),
               ),
               ListTile(
                 title: const Text('Finances'),
-                subtitle: Text(perms['can_manage_finances'] == true ? 'Ledger + exports + ajout entrées' : 'Ledger + exports (lecture)'),
+                subtitle: Text(perms['can_manage_finances'] == true
+                    ? 'Ledger + exports + ajout entrées'
+                    : 'Ledger + exports (lecture)'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeFinancesScreen(committeeId: committeeId, canManageFinances: me['canManageFinances'] == true))),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => CommitteeFinancesScreen(
+                        committeeId: committeeId,
+                        canManageFinances: me['canManageFinances'] == true))),
               ),
               if (me['canManageBapteme'] == true)
                 ListTile(
                   title: const Text('Baptême'),
-                  subtitle: const Text('Campagnes, invités, créneaux, incidents'),
+                  subtitle:
+                      const Text('Campagnes, invités, créneaux, incidents'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeBaptemeScreen(committeeId: committeeId))),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          CommitteeBaptemeScreen(committeeId: committeeId))),
                 ),
               if (perms['can_manage_members'] == true)
                 ListTile(
                   title: const Text('Members (admin)'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommitteeMembersScreen(committeeId: committeeId))),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          CommitteeMembersScreen(committeeId: committeeId))),
                 ),
             ],
           );
@@ -260,14 +314,20 @@ class CommitteeHomeScreen extends ConsumerWidget {
 }
 
 class CommitteeForumScreen extends ConsumerStatefulWidget {
-  const CommitteeForumScreen({super.key, required this.committeeId, required this.committeeName, required this.canModerate, required this.canAdminCategories});
+  const CommitteeForumScreen(
+      {super.key,
+      required this.committeeId,
+      required this.committeeName,
+      required this.canModerate,
+      required this.canAdminCategories});
   final int committeeId;
   final String committeeName;
   final bool canModerate;
   final bool canAdminCategories;
 
   @override
-  ConsumerState<CommitteeForumScreen> createState() => _CommitteeForumScreenState();
+  ConsumerState<CommitteeForumScreen> createState() =>
+      _CommitteeForumScreenState();
 }
 
 class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
@@ -285,7 +345,9 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
           if (widget.canAdminCategories && _yearId != null)
             IconButton(
               icon: const Icon(Icons.settings),
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CategoriesAdminScreen(committeeId: widget.committeeId, yearId: _yearId!))),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => CategoriesAdminScreen(
+                      committeeId: widget.committeeId, yearId: _yearId!))),
             ),
         ],
       ),
@@ -296,7 +358,10 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
                 final created = await showModalBottomSheet<bool>(
                   context: context,
                   isScrollControlled: true,
-                  builder: (_) => NewPostSheet(committeeId: widget.committeeId, yearId: _yearId!, categoryId: _categoryId!),
+                  builder: (_) => NewPostSheet(
+                      committeeId: widget.committeeId,
+                      yearId: _yearId!,
+                      categoryId: _categoryId!),
                 );
                 if (created == true) setState(() {});
               },
@@ -304,23 +369,41 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
         icon: const Icon(Icons.add),
       ),
       body: FutureBuilder(
-        future: Future.wait([ref.read(apiProvider).committeeYears(widget.committeeId), if (_yearId != null) ref.read(apiProvider).committeeForumCategoriesWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!)]),
+        future: Future.wait([
+          ref.read(apiProvider).committeeYears(widget.committeeId),
+          if (_yearId != null)
+            ref.read(apiProvider).committeeForumCategoriesWithCacheStatus(
+                committeeId: widget.committeeId, yearId: _yearId!)
+        ]),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final years = snap.data![0] as List<dynamic>;
-          _yearId ??= (years.cast<Map>().firstWhere((e) => e['isActive'] == true, orElse: () => years.first as Map)['id'] as int);
+          _yearId ??= (years.cast<Map>().firstWhere(
+              (e) => e['isActive'] == true,
+              orElse: () => years.first as Map)['id'] as int);
           return FutureBuilder(
-            future: ref.read(apiProvider).committeeForumCategoriesWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!),
+            future: ref
+                .read(apiProvider)
+                .committeeForumCategoriesWithCacheStatus(
+                    committeeId: widget.committeeId, yearId: _yearId!),
             builder: (context, catSnap) {
-              if (!catSnap.hasData) return const Center(child: CircularProgressIndicator());
+              if (!catSnap.hasData)
+                return const Center(child: CircularProgressIndicator());
               final catResult = catSnap.data!;
-              final categories = (catResult.payload as List<dynamic>).cast<Map>();
-              if (categories.isNotEmpty && !_hasCategory(categories, _categoryId)) {
+              final categories =
+                  (catResult.payload as List<dynamic>).cast<Map>();
+              if (categories.isNotEmpty &&
+                  !_hasCategory(categories, _categoryId)) {
                 _categoryId = categories.first['id'] as int;
               }
               return Column(
                 children: [
-                  if (catResult.fromCache || writeBlocked) const Padding(padding: EdgeInsets.all(8), child: _ReadOnlyBanner(label: 'Mode lecture (offline/degraded/cache)')),
+                  if (catResult.fromCache || writeBlocked)
+                    const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: _ReadOnlyBanner(
+                            label: 'Mode lecture (offline/degraded/cache)')),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
@@ -329,7 +412,13 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
                         const SizedBox(width: 8),
                         DropdownButton<int>(
                           value: _yearId,
-                          items: [for (final y in years.cast<Map>()) DropdownMenuItem<int>(value: y['id'] as int, child: Text((y['yearLabel'] ?? '').toString()))],
+                          items: [
+                            for (final y in years.cast<Map>())
+                              DropdownMenuItem<int>(
+                                  value: y['id'] as int,
+                                  child:
+                                      Text((y['yearLabel'] ?? '').toString()))
+                          ],
                           onChanged: (v) => setState(() {
                             _yearId = v;
                             _categoryId = null;
@@ -349,7 +438,8 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
                             child: ChoiceChip(
                               label: Text(c['name'].toString()),
                               selected: _categoryId == c['id'],
-                              onSelected: (_) => setState(() => _categoryId = c['id'] as int),
+                              onSelected: (_) =>
+                                  setState(() => _categoryId = c['id'] as int),
                             ),
                           ),
                       ],
@@ -359,19 +449,39 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
                     child: _categoryId == null
                         ? const Center(child: Text('Aucune catégorie'))
                         : FutureBuilder(
-                            future: ref.read(apiProvider).committeeForumPostsWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!, categoryId: _categoryId!),
+                            future: ref
+                                .read(apiProvider)
+                                .committeeForumPostsWithCacheStatus(
+                                    committeeId: widget.committeeId,
+                                    yearId: _yearId!,
+                                    categoryId: _categoryId!),
                             builder: (context, postSnap) {
-                              if (!postSnap.hasData) return const Center(child: CircularProgressIndicator());
-                              final payload = (postSnap.data!.payload as Map<String, dynamic>);
-                              final items = (payload['items'] as List<dynamic>).cast<Map>();
+                              if (!postSnap.hasData)
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              final payload = (postSnap.data!.payload
+                                  as Map<String, dynamic>);
+                              final items = (payload['items'] as List<dynamic>)
+                                  .cast<Map>();
                               return ListView(
                                 children: [
                                   for (final p in items)
                                     ListTile(
-                                      title: Text(p['title'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      subtitle: Text('${p['createdByDisplayName']} · ${p['body'].toString()}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      trailing: Wrap(spacing: 4, children: [if (p['isPinned'] == true) const Chip(label: Text('PIN')), if (p['isLocked'] == true) const Chip(label: Text('LOCK'))]),
-                                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                                      title: Text(p['title'].toString(),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis),
+                                      subtitle: Text(
+                                          '${p['createdByDisplayName']} · ${p['body'].toString()}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis),
+                                      trailing: Wrap(spacing: 4, children: [
+                                        if (p['isPinned'] == true)
+                                          const Chip(label: Text('PIN')),
+                                        if (p['isLocked'] == true)
+                                          const Chip(label: Text('LOCK'))
+                                      ]),
+                                      onTap: () => Navigator.of(context)
+                                          .push(MaterialPageRoute(
                                         builder: (_) => PostDetailScreen(
                                           committeeId: widget.committeeId,
                                           postId: p['id'] as int,
@@ -394,12 +504,16 @@ class _CommitteeForumScreenState extends ConsumerState<CommitteeForumScreen> {
     );
   }
 
-  bool _hasCategory(List<Map> categories, int? id) => categories.any((c) => c['id'] == id);
+  bool _hasCategory(List<Map> categories, int? id) =>
+      categories.any((c) => c['id'] == id);
 }
 
-
 class NewPostSheet extends ConsumerStatefulWidget {
-  const NewPostSheet({super.key, required this.committeeId, required this.yearId, required this.categoryId});
+  const NewPostSheet(
+      {super.key,
+      required this.committeeId,
+      required this.yearId,
+      required this.categoryId});
   final int committeeId;
   final int yearId;
   final int categoryId;
@@ -416,12 +530,21 @@ class _NewPostSheetState extends ConsumerState<NewPostSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Titre')),
-          TextField(controller: _body, maxLines: 5, decoration: const InputDecoration(labelText: 'Message')),
+          TextField(
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Titre')),
+          TextField(
+              controller: _body,
+              maxLines: 5,
+              decoration: const InputDecoration(labelText: 'Message')),
           const SizedBox(height: 10),
           FilledButton(
             onPressed: _loading
@@ -434,7 +557,8 @@ class _NewPostSheetState extends ConsumerState<NewPostSheet> {
                           categoryId: widget.categoryId,
                           title: _title.text.trim(),
                           body: _body.text.trim(),
-                          idempotencyKey: 'forum-post-${DateTime.now().millisecondsSinceEpoch}',
+                          idempotencyKey:
+                              'forum-post-${DateTime.now().millisecondsSinceEpoch}',
                         );
                     if (context.mounted) Navigator.of(context).pop(true);
                   },
@@ -447,7 +571,12 @@ class _NewPostSheetState extends ConsumerState<NewPostSheet> {
 }
 
 class PostDetailScreen extends ConsumerStatefulWidget {
-  const PostDetailScreen({super.key, required this.committeeId, required this.postId, required this.canModerate, required this.writeBlocked});
+  const PostDetailScreen(
+      {super.key,
+      required this.committeeId,
+      required this.postId,
+      required this.canModerate,
+      required this.writeBlocked});
   final int committeeId;
   final int postId;
   final bool canModerate;
@@ -476,14 +605,17 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         ],
       ),
       body: FutureBuilder(
-        future: ref.read(apiProvider).committeeForumPostDetail(committeeId: widget.committeeId, postId: widget.postId),
+        future: ref.read(apiProvider).committeeForumPostDetail(
+            committeeId: widget.committeeId, postId: widget.postId),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final post = snap.data!;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(post['title'].toString(), style: Theme.of(context).textTheme.headlineSmall),
+              Text(post['title'].toString(),
+                  style: Theme.of(context).textTheme.headlineSmall),
               Text('${post['createdByDisplayName']} · ${post['createdAt']}'),
               const SizedBox(height: 12),
               Text(post['body'].toString()),
@@ -497,7 +629,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   Future<void> _moderate(String action) async {
     final reason = await _askReason(context);
     if (reason == null || reason.trim().isEmpty) return;
-    final detail = await ref.read(apiProvider).committeeForumPostDetail(committeeId: widget.committeeId, postId: widget.postId);
+    final detail = await ref.read(apiProvider).committeeForumPostDetail(
+        committeeId: widget.committeeId, postId: widget.postId);
     Map<String, dynamic> body;
     if (action == 'pin') {
       body = {'pinned': !(detail['isPinned'] == true), 'reason': reason};
@@ -511,7 +644,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           postId: widget.postId,
           action: action,
           body: body,
-          idempotencyKey: 'forum-mod-$action-${DateTime.now().millisecondsSinceEpoch}',
+          idempotencyKey:
+              'forum-mod-$action-${DateTime.now().millisecondsSinceEpoch}',
         );
     if (mounted) setState(() {});
   }
@@ -524,8 +658,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         title: const Text('Reason'),
         content: TextField(controller: ctrl),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('OK')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('OK')),
         ],
       ),
     );
@@ -533,18 +670,21 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
 }
 
 class CategoriesAdminScreen extends ConsumerStatefulWidget {
-  const CategoriesAdminScreen({super.key, required this.committeeId, required this.yearId});
+  const CategoriesAdminScreen(
+      {super.key, required this.committeeId, required this.yearId});
   final int committeeId;
   final int yearId;
 
   @override
-  ConsumerState<CategoriesAdminScreen> createState() => _CategoriesAdminScreenState();
+  ConsumerState<CategoriesAdminScreen> createState() =>
+      _CategoriesAdminScreenState();
 }
 
 class _CategoriesAdminScreenState extends ConsumerState<CategoriesAdminScreen> {
   @override
   Widget build(BuildContext context) {
-    final writeBlocked = isReadOnly(ref) || ref.watch(networkStatusProvider) != NetworkState.online;
+    final writeBlocked = isReadOnly(ref) ||
+        ref.watch(networkStatusProvider) != NetworkState.online;
     return Scaffold(
       appBar: AppBar(title: const Text('Admin catégories')),
       floatingActionButton: FloatingActionButton(
@@ -557,7 +697,14 @@ class _CategoriesAdminScreenState extends ConsumerState<CategoriesAdminScreen> {
                   builder: (ctx) => AlertDialog(
                     title: const Text('Nouvelle catégorie'),
                     content: TextField(controller: ctrl),
-                    actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Créer'))],
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Annuler')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+                          child: const Text('Créer'))
+                    ],
                   ),
                 );
                 if (name != null && name.isNotEmpty) {
@@ -565,7 +712,8 @@ class _CategoriesAdminScreenState extends ConsumerState<CategoriesAdminScreen> {
                         committeeId: widget.committeeId,
                         yearId: widget.yearId,
                         name: name,
-                        idempotencyKey: 'forum-cat-create-${DateTime.now().millisecondsSinceEpoch}',
+                        idempotencyKey:
+                            'forum-cat-create-${DateTime.now().millisecondsSinceEpoch}',
                       );
                   setState(() {});
                 }
@@ -573,14 +721,17 @@ class _CategoriesAdminScreenState extends ConsumerState<CategoriesAdminScreen> {
         child: const Icon(Icons.add),
       ),
       body: FutureBuilder(
-        future: ref.read(apiProvider).committeeForumCategoriesWithCacheStatus(committeeId: widget.committeeId, yearId: widget.yearId),
+        future: ref.read(apiProvider).committeeForumCategoriesWithCacheStatus(
+            committeeId: widget.committeeId, yearId: widget.yearId),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final items = (snap.data!.payload as List<dynamic>).cast<Map>();
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (writeBlocked) const _ReadOnlyBanner(label: 'Writes désactivés'),
+              if (writeBlocked)
+                const _ReadOnlyBanner(label: 'Writes désactivés'),
               for (final row in items)
                 ListTile(
                   title: Text(row['name'].toString()),
@@ -593,11 +744,16 @@ class _CategoriesAdminScreenState extends ConsumerState<CategoriesAdminScreen> {
                         onPressed: writeBlocked
                             ? null
                             : () async {
-                                await ref.read(apiProvider).updateCommitteeForumCategory(
+                                await ref
+                                    .read(apiProvider)
+                                    .updateCommitteeForumCategory(
                                       committeeId: widget.committeeId,
                                       categoryId: row['id'] as int,
-                                      orderIndex: ((row['orderIndex'] as int) - 1).clamp(0, 999),
-                                      idempotencyKey: 'forum-cat-up-${DateTime.now().millisecondsSinceEpoch}',
+                                      orderIndex:
+                                          ((row['orderIndex'] as int) - 1)
+                                              .clamp(0, 999),
+                                      idempotencyKey:
+                                          'forum-cat-up-${DateTime.now().millisecondsSinceEpoch}',
                                     );
                                 setState(() {});
                               },
@@ -607,11 +763,14 @@ class _CategoriesAdminScreenState extends ConsumerState<CategoriesAdminScreen> {
                         onChanged: writeBlocked
                             ? null
                             : (v) async {
-                                await ref.read(apiProvider).updateCommitteeForumCategory(
+                                await ref
+                                    .read(apiProvider)
+                                    .updateCommitteeForumCategory(
                                       committeeId: widget.committeeId,
                                       categoryId: row['id'] as int,
                                       isArchived: v,
-                                      idempotencyKey: 'forum-cat-arch-${DateTime.now().millisecondsSinceEpoch}',
+                                      idempotencyKey:
+                                          'forum-cat-arch-${DateTime.now().millisecondsSinceEpoch}',
                                     );
                                 setState(() {});
                               },
@@ -632,34 +791,42 @@ class CommitteeMembersScreen extends ConsumerStatefulWidget {
   final int committeeId;
 
   @override
-  ConsumerState<CommitteeMembersScreen> createState() => _CommitteeMembersScreenState();
+  ConsumerState<CommitteeMembersScreen> createState() =>
+      _CommitteeMembersScreenState();
 }
 
-class _CommitteeMembersScreenState extends ConsumerState<CommitteeMembersScreen> {
+class _CommitteeMembersScreenState
+    extends ConsumerState<CommitteeMembersScreen> {
   Future<void> _invite() async {
     await ref.read(apiProvider).createCommitteeInviteCode(
           committeeId: widget.committeeId,
           usesLeft: 5,
-          idempotencyKey: 'committee-invite-${DateTime.now().millisecondsSinceEpoch}',
+          idempotencyKey:
+              'committee-invite-${DateTime.now().millisecondsSinceEpoch}',
         );
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final writeBlocked = isReadOnly(ref) || ref.watch(networkStatusProvider) != NetworkState.online;
+    final writeBlocked = isReadOnly(ref) ||
+        ref.watch(networkStatusProvider) != NetworkState.online;
     return Scaffold(
       appBar: AppBar(title: const Text('Members')),
       body: FutureBuilder(
         future: ref.read(apiProvider).committeeMembers(widget.committeeId),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData)
+            return const Center(child: CircularProgressIndicator());
           final items = (snap.data!['items'] as List<dynamic>);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (writeBlocked) const _ReadOnlyBanner(label: 'Writes désactivés'),
-              FilledButton(onPressed: writeBlocked ? null : _invite, child: const Text('Créer invite code')),
+              if (writeBlocked)
+                const _ReadOnlyBanner(label: 'Writes désactivés'),
+              FilledButton(
+                  onPressed: writeBlocked ? null : _invite,
+                  child: const Text('Créer invite code')),
               const SizedBox(height: 8),
               for (final row in items)
                 Card(
@@ -672,19 +839,25 @@ class _CommitteeMembersScreenState extends ConsumerState<CommitteeMembersScreen>
                           : (value) async {
                               final reason = 'admin update';
                               if (value == 'revoke') {
-                                await ref.read(apiProvider).revokeCommitteeMember(
+                                await ref
+                                    .read(apiProvider)
+                                    .revokeCommitteeMember(
                                       committeeId: widget.committeeId,
                                       userId: row['userId'].toString(),
                                       reason: reason,
-                                      idempotencyKey: 'committee-revoke-${DateTime.now().millisecondsSinceEpoch}',
+                                      idempotencyKey:
+                                          'committee-revoke-${DateTime.now().millisecondsSinceEpoch}',
                                     );
                               } else {
-                                await ref.read(apiProvider).setCommitteeMemberRole(
+                                await ref
+                                    .read(apiProvider)
+                                    .setCommitteeMemberRole(
                                       committeeId: widget.committeeId,
                                       userId: row['userId'].toString(),
                                       role: value,
                                       reason: reason,
-                                      idempotencyKey: 'committee-role-${DateTime.now().millisecondsSinceEpoch}',
+                                      idempotencyKey:
+                                          'committee-role-${DateTime.now().millisecondsSinceEpoch}',
                                     );
                               }
                               setState(() {});
@@ -692,7 +865,8 @@ class _CommitteeMembersScreenState extends ConsumerState<CommitteeMembersScreen>
                       itemBuilder: (_) => const [
                         PopupMenuItem(value: 'ADMIN', child: Text('Set ADMIN')),
                         PopupMenuItem(value: 'MOD', child: Text('Set MOD')),
-                        PopupMenuItem(value: 'MEMBER', child: Text('Set MEMBER')),
+                        PopupMenuItem(
+                            value: 'MEMBER', child: Text('Set MEMBER')),
                         PopupMenuItem(value: 'revoke', child: Text('Revoke')),
                       ],
                     ),
@@ -706,22 +880,25 @@ class _CommitteeMembersScreenState extends ConsumerState<CommitteeMembersScreen>
   }
 }
 
-
 class CommitteeFinancesScreen extends ConsumerStatefulWidget {
-  const CommitteeFinancesScreen({super.key, required this.committeeId, required this.canManageFinances});
+  const CommitteeFinancesScreen(
+      {super.key, required this.committeeId, required this.canManageFinances});
   final int committeeId;
   final bool canManageFinances;
 
   @override
-  ConsumerState<CommitteeFinancesScreen> createState() => _CommitteeFinancesScreenState();
+  ConsumerState<CommitteeFinancesScreen> createState() =>
+      _CommitteeFinancesScreenState();
 }
 
-class _CommitteeFinancesScreenState extends ConsumerState<CommitteeFinancesScreen> {
+class _CommitteeFinancesScreenState
+    extends ConsumerState<CommitteeFinancesScreen> {
   int? _yearId;
 
   @override
   Widget build(BuildContext context) {
-    final readOnly = isReadOnly(ref) || ref.watch(networkStatusProvider) != NetworkState.online;
+    final readOnly = isReadOnly(ref) ||
+        ref.watch(networkStatusProvider) != NetworkState.online;
     return Scaffold(
       appBar: AppBar(title: const Text('Finances comité')),
       floatingActionButton: widget.canManageFinances
@@ -732,7 +909,8 @@ class _CommitteeFinancesScreenState extends ConsumerState<CommitteeFinancesScree
                       await showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
-                        builder: (_) => _AddLedgerEntrySheet(committeeId: widget.committeeId, yearId: _yearId!),
+                        builder: (_) => _AddLedgerEntrySheet(
+                            committeeId: widget.committeeId, yearId: _yearId!),
                       );
                       setState(() {});
                     },
@@ -743,41 +921,75 @@ class _CommitteeFinancesScreenState extends ConsumerState<CommitteeFinancesScree
       body: FutureBuilder(
         future: ref.read(apiProvider).committeeYears(widget.committeeId),
         builder: (context, yearsSnap) {
-          if (!yearsSnap.hasData) return const Center(child: CircularProgressIndicator());
-          final years = (yearsSnap.data! as List).cast<Map>();
-          _yearId ??= (years.firstWhere((y) => y['isActive'] == true, orElse: () => years.first)['id'] as int);
+          if (!yearsSnap.hasData)
+            return const Center(child: CircularProgressIndicator());
+          final years = (yearsSnap.data!).cast<Map>();
+          _yearId ??= (years.firstWhere((y) => y['isActive'] == true,
+              orElse: () => years.first)['id'] as int);
           return FutureBuilder(
             future: Future.wait([
-              ref.read(apiProvider).committeeFinancesSummaryWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!),
-              ref.read(apiProvider).committeeFinancesLedgerWithCacheStatus(committeeId: widget.committeeId, yearId: _yearId!),
+              ref.read(apiProvider).committeeFinancesSummaryWithCacheStatus(
+                  committeeId: widget.committeeId, yearId: _yearId!),
+              ref.read(apiProvider).committeeFinancesLedgerWithCacheStatus(
+                  committeeId: widget.committeeId, yearId: _yearId!),
             ]),
             builder: (context, snap) {
-              if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final summaryRes = snap.data![0] as CommitteeFetchResult;
-              final ledgerRes = snap.data![1] as CommitteeFetchResult;
+              if (!snap.hasData)
+                return const Center(child: CircularProgressIndicator());
+              final summaryRes = snap.data![0];
+              final ledgerRes = snap.data![1];
               final summary = (summaryRes.payload as Map<String, dynamic>);
-              final ledgerItems = ((ledgerRes.payload as Map<String, dynamic>)['items'] as List<dynamic>? ?? const []);
+              final ledgerItems = ((ledgerRes.payload
+                      as Map<String, dynamic>)['items'] as List<dynamic>? ??
+                  const []);
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (summaryRes.fromCache || ledgerRes.fromCache || readOnly) const _ReadOnlyBanner(label: 'Mode lecture (offline/degraded/cache)'),
-                  Wrap(spacing: 8, children: years.map((y) => ChoiceChip(label: Text(y['yearLabel'].toString()), selected: _yearId == y['id'], onSelected: (_) => setState(() => _yearId = y['id'] as int))).toList()),
+                  if (summaryRes.fromCache || ledgerRes.fromCache || readOnly)
+                    const _ReadOnlyBanner(
+                        label: 'Mode lecture (offline/degraded/cache)'),
+                  Wrap(
+                      spacing: 8,
+                      children: years
+                          .map((y) => ChoiceChip(
+                              label: Text(y['yearLabel'].toString()),
+                              selected: _yearId == y['id'],
+                              onSelected: (_) =>
+                                  setState(() => _yearId = y['id'] as int)))
+                          .toList()),
                   const SizedBox(height: 8),
-                  Text('Income: ${summary['incomeCents'] ?? 0}c · Expense: ${summary['expenseCents'] ?? 0}c · Net: ${summary['netCents'] ?? 0}c'),
+                  Text(
+                      'Income: ${summary['incomeCents'] ?? 0}c · Expense: ${summary['expenseCents'] ?? 0}c · Net: ${summary['netCents'] ?? 0}c'),
                   const SizedBox(height: 8),
-                  Text('Exports', style: Theme.of(context).textTheme.titleMedium),
-                  SelectableText(ref.read(apiProvider).committeeFinancesExportCsvUrl(committeeId: widget.committeeId, yearId: _yearId!)),
-                  SelectableText(ref.read(apiProvider).committeeFinancesSnapshotUrl(committeeId: widget.committeeId, yearId: _yearId!)),
+                  Text('Exports',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  SelectableText(ref
+                      .read(apiProvider)
+                      .committeeFinancesExportCsvUrl(
+                          committeeId: widget.committeeId, yearId: _yearId!)),
+                  SelectableText(ref
+                      .read(apiProvider)
+                      .committeeFinancesSnapshotUrl(
+                          committeeId: widget.committeeId, yearId: _yearId!)),
                   const Divider(),
-                  Text('Par catégorie', style: Theme.of(context).textTheme.titleMedium),
-                  for (final e in (summary['byCategory'] as Map<String, dynamic>? ?? const {}).entries)
-                    ListTile(title: Text(e.key), subtitle: Text('in ${(e.value['incomeCents'] ?? 0)} · out ${(e.value['expenseCents'] ?? 0)}')),
+                  Text('Par catégorie',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  for (final e
+                      in (summary['byCategory'] as Map<String, dynamic>? ??
+                              const {})
+                          .entries)
+                    ListTile(
+                        title: Text(e.key),
+                        subtitle: Text(
+                            'in ${(e.value['incomeCents'] ?? 0)} · out ${(e.value['expenseCents'] ?? 0)}')),
                   const Divider(),
-                  Text('Ledger', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Ledger',
+                      style: Theme.of(context).textTheme.titleMedium),
                   for (final row in ledgerItems)
                     ListTile(
                       dense: true,
-                      title: Text('${row['occurredAt']} · ${row['category']} · ${row['amountCents']}c'),
+                      title: Text(
+                          '${row['occurredAt']} · ${row['category']} · ${row['amountCents']}c'),
                       subtitle: Text('${row['type']} · ${row['note'] ?? ''}'),
                     ),
                 ],
@@ -796,7 +1008,8 @@ class _AddLedgerEntrySheet extends ConsumerStatefulWidget {
   final int yearId;
 
   @override
-  ConsumerState<_AddLedgerEntrySheet> createState() => _AddLedgerEntrySheetState();
+  ConsumerState<_AddLedgerEntrySheet> createState() =>
+      _AddLedgerEntrySheetState();
 }
 
 class _AddLedgerEntrySheetState extends ConsumerState<_AddLedgerEntrySheet> {
@@ -808,14 +1021,31 @@ class _AddLedgerEntrySheetState extends ConsumerState<_AddLedgerEntrySheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(value: _type, items: const [DropdownMenuItem(value: 'EXPENSE', child: Text('EXPENSE')), DropdownMenuItem(value: 'INCOME', child: Text('INCOME'))], onChanged: (v) => setState(() => _type = v ?? 'EXPENSE')),
-          TextField(controller: _amount, decoration: const InputDecoration(labelText: 'Amount (cents)'), keyboardType: TextInputType.number),
-          TextField(controller: _category, decoration: const InputDecoration(labelText: 'Category')),
-          TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note')),
+          DropdownButtonFormField<String>(
+              initialValue: _type,
+              items: const [
+                DropdownMenuItem(value: 'EXPENSE', child: Text('EXPENSE')),
+                DropdownMenuItem(value: 'INCOME', child: Text('INCOME'))
+              ],
+              onChanged: (v) => setState(() => _type = v ?? 'EXPENSE')),
+          TextField(
+              controller: _amount,
+              decoration: const InputDecoration(labelText: 'Amount (cents)'),
+              keyboardType: TextInputType.number),
+          TextField(
+              controller: _category,
+              decoration: const InputDecoration(labelText: 'Category')),
+          TextField(
+              controller: _note,
+              decoration: const InputDecoration(labelText: 'Note')),
           const SizedBox(height: 8),
           FilledButton(
             onPressed: () async {
@@ -827,12 +1057,14 @@ class _AddLedgerEntrySheetState extends ConsumerState<_AddLedgerEntrySheet> {
                       'amountCents': int.tryParse(_amount.text) ?? 0,
                       'currency': 'EUR',
                       'category': _category.text,
-                      'occurredAt': DateTime.now().toIso8601String().substring(0, 10),
+                      'occurredAt':
+                          DateTime.now().toIso8601String().substring(0, 10),
                       'note': _note.text,
                     },
-                    idempotencyKey: 'committee-finance-${DateTime.now().millisecondsSinceEpoch}',
+                    idempotencyKey:
+                        'committee-finance-${DateTime.now().millisecondsSinceEpoch}',
                   );
-              if (mounted) Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Save'),
           ),
@@ -847,10 +1079,12 @@ class CommitteeBaptemeScreen extends ConsumerStatefulWidget {
   final int committeeId;
 
   @override
-  ConsumerState<CommitteeBaptemeScreen> createState() => _CommitteeBaptemeScreenState();
+  ConsumerState<CommitteeBaptemeScreen> createState() =>
+      _CommitteeBaptemeScreenState();
 }
 
-class _CommitteeBaptemeScreenState extends ConsumerState<CommitteeBaptemeScreen> {
+class _CommitteeBaptemeScreenState
+    extends ConsumerState<CommitteeBaptemeScreen> {
   int? _yearId;
   int? _campaignId;
   final _campaignName = TextEditingController();
@@ -858,51 +1092,111 @@ class _CommitteeBaptemeScreenState extends ConsumerState<CommitteeBaptemeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final readOnly = isReadOnly(ref) || ref.watch(networkStatusProvider) != NetworkState.online;
+    final readOnly = isReadOnly(ref) ||
+        ref.watch(networkStatusProvider) != NetworkState.online;
     return Scaffold(
       appBar: AppBar(title: const Text('Baptême (admin)')),
       body: FutureBuilder(
         future: ref.read(apiProvider).committeeYears(widget.committeeId),
         builder: (context, yearsSnap) {
-          if (!yearsSnap.hasData) return const Center(child: CircularProgressIndicator());
-          final years = (yearsSnap.data! as List).cast<Map>();
-          _yearId ??= (years.firstWhere((y) => y['isActive'] == true, orElse: () => years.first)['id'] as int);
+          if (!yearsSnap.hasData)
+            return const Center(child: CircularProgressIndicator());
+          final years = (yearsSnap.data!).cast<Map>();
+          _yearId ??= (years.firstWhere((y) => y['isActive'] == true,
+              orElse: () => years.first)['id'] as int);
           return FutureBuilder(
-            future: ref.read(apiProvider).committeeBaptemeCampaign(committeeId: widget.committeeId, yearId: _yearId!),
+            future: ref.read(apiProvider).committeeBaptemeCampaign(
+                committeeId: widget.committeeId, yearId: _yearId!),
             builder: (context, campSnap) {
-              if (!campSnap.hasData) return const Center(child: CircularProgressIndicator());
-              final campaign = (campSnap.data!['campaign'] as Map<String, dynamic>?);
+              if (!campSnap.hasData)
+                return const Center(child: CircularProgressIndicator());
+              final campaign =
+                  (campSnap.data!['campaign'] as Map<String, dynamic>?);
               _campaignId = campaign?['id'] as int?;
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (readOnly) const _ReadOnlyBanner(label: 'Mode lecture (offline/degraded/cache)'),
-                  TextField(controller: _campaignName, decoration: const InputDecoration(labelText: 'Nom campagne')),
-                  FilledButton(onPressed: readOnly ? null : () async {
-                    final created = await ref.read(apiProvider).createCommitteeBaptemeCampaign(committeeId: widget.committeeId, yearId: _yearId!, name: _campaignName.text, idempotencyKey: 'bap-campaign-${DateTime.now().millisecondsSinceEpoch}');
-                    _campaignId = created['id'] as int;
-                    setState(() {});
-                  }, child: const Text('Créer campagne')),
+                  if (readOnly)
+                    const _ReadOnlyBanner(
+                        label: 'Mode lecture (offline/degraded/cache)'),
+                  TextField(
+                      controller: _campaignName,
+                      decoration:
+                          const InputDecoration(labelText: 'Nom campagne')),
+                  FilledButton(
+                      onPressed: readOnly
+                          ? null
+                          : () async {
+                              final created = await ref
+                                  .read(apiProvider)
+                                  .createCommitteeBaptemeCampaign(
+                                      committeeId: widget.committeeId,
+                                      yearId: _yearId!,
+                                      name: _campaignName.text,
+                                      idempotencyKey:
+                                          'bap-campaign-${DateTime.now().millisecondsSinceEpoch}');
+                              _campaignId = created['id'] as int;
+                              setState(() {});
+                            },
+                      child: const Text('Créer campagne')),
                   if (_campaignId != null) ...[
                     const SizedBox(height: 8),
                     Text('Campaign #$_campaignId'),
-                    TextField(controller: _inviteName, decoration: const InputDecoration(labelText: 'Blue name')),
-                    FilledButton(onPressed: readOnly ? null : () async {
-                      final invite = await ref.read(apiProvider).createCommitteeBaptemeInvite(committeeId: widget.committeeId, campaignId: _campaignId!, blueDisplayName: _inviteName.text, idempotencyKey: 'bap-invite-${DateTime.now().millisecondsSinceEpoch}');
-                      await Clipboard.setData(ClipboardData(text: invite['inviteCode'].toString()));
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invite code copié: ${invite['inviteCode']}')));
-                      setState(() {});
-                    }, child: const Text('Créer invite')),
+                    TextField(
+                        controller: _inviteName,
+                        decoration:
+                            const InputDecoration(labelText: 'Blue name')),
+                    FilledButton(
+                        onPressed: readOnly
+                            ? null
+                            : () async {
+                                final invite = await ref
+                                    .read(apiProvider)
+                                    .createCommitteeBaptemeInvite(
+                                        committeeId: widget.committeeId,
+                                        campaignId: _campaignId!,
+                                        blueDisplayName: _inviteName.text,
+                                        idempotencyKey:
+                                            'bap-invite-${DateTime.now().millisecondsSinceEpoch}');
+                                await Clipboard.setData(ClipboardData(
+                                    text: invite['inviteCode'].toString()));
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(
+                                              'Invite code copié: ${invite['inviteCode']}')));
+                                }
+                                setState(() {});
+                              },
+                        child: const Text('Créer invite')),
                     FutureBuilder(
-                      future: ref.read(apiProvider).committeeBaptemeInvites(committeeId: widget.committeeId, campaignId: _campaignId!),
+                      future: ref.read(apiProvider).committeeBaptemeInvites(
+                          committeeId: widget.committeeId,
+                          campaignId: _campaignId!),
                       builder: (context, invitesSnap) {
-                        if (!invitesSnap.hasData) return const SizedBox.shrink();
-                        final invites = (invitesSnap.data!['items'] as List<dynamic>);
-                        return Column(children: [for (final i in invites) ListTile(title: Text(i['blueDisplayName'].toString()), subtitle: Text('${i['status']} · ${i['inviteCode']}'))]);
+                        if (!invitesSnap.hasData)
+                          return const SizedBox.shrink();
+                        final invites =
+                            (invitesSnap.data!['items'] as List<dynamic>);
+                        return Column(children: [
+                          for (final i in invites)
+                            ListTile(
+                                title: Text(i['blueDisplayName'].toString()),
+                                subtitle:
+                                    Text('${i['status']} · ${i['inviteCode']}'))
+                        ]);
                       },
                     ),
-                    SelectableText(ref.read(apiProvider).committeeBaptemeInvitesExportUrl(committeeId: widget.committeeId, campaignId: _campaignId!)),
-                    SelectableText(ref.read(apiProvider).committeeBaptemeSlotsExportUrl(committeeId: widget.committeeId, campaignId: _campaignId!)),
+                    SelectableText(ref
+                        .read(apiProvider)
+                        .committeeBaptemeInvitesExportUrl(
+                            committeeId: widget.committeeId,
+                            campaignId: _campaignId!)),
+                    SelectableText(ref
+                        .read(apiProvider)
+                        .committeeBaptemeSlotsExportUrl(
+                            committeeId: widget.committeeId,
+                            campaignId: _campaignId!)),
                   ],
                 ],
               );
@@ -914,10 +1208,9 @@ class _CommitteeBaptemeScreenState extends ConsumerState<CommitteeBaptemeScreen>
   }
 }
 
-
-
 class CommitteeSpaceScreen extends ConsumerWidget {
-  const CommitteeSpaceScreen({super.key, required this.committeeId, required this.canManage});
+  const CommitteeSpaceScreen(
+      {super.key, required this.committeeId, required this.canManage});
   final int committeeId;
   final bool canManage;
 
@@ -928,11 +1221,16 @@ class CommitteeSpaceScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Espace comité'),
-          bottom: const TabBar(tabs: [Tab(text: 'Feed'), Tab(text: 'Calendrier'), Tab(text: 'Dépenses')]),
+          bottom: const TabBar(tabs: [
+            Tab(text: 'Feed'),
+            Tab(text: 'Calendrier'),
+            Tab(text: 'Dépenses')
+          ]),
         ),
         body: TabBarView(
           children: [
-            _CommitteeSpaceFeedTab(committeeId: committeeId, canManage: canManage),
+            _CommitteeSpaceFeedTab(
+                committeeId: committeeId, canManage: canManage),
             _CommitteeSpaceCalendarTab(committeeId: committeeId),
             _CommitteeSpaceExpensesTab(committeeId: committeeId),
           ],
@@ -943,33 +1241,44 @@ class CommitteeSpaceScreen extends ConsumerWidget {
 }
 
 class _CommitteeSpaceFeedTab extends ConsumerWidget {
-  const _CommitteeSpaceFeedTab({required this.committeeId, required this.canManage});
+  const _CommitteeSpaceFeedTab(
+      {required this.committeeId, required this.canManage});
   final int committeeId;
   final bool canManage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FutureBuilder(
-      future: ref.read(apiProvider).committeeSpaceFeedPosts(committeeId: committeeId),
+      future: ref
+          .read(apiProvider)
+          .committeeSpaceFeedPosts(committeeId: committeeId),
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) return const Center(child: Text('Impossible de charger le feed.'));
+        if (!snap.hasData)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError)
+          return const Center(child: Text('Impossible de charger le feed.'));
         final items = ((snap.data!['items'] as List?) ?? const []).cast<Map>();
         if (items.isEmpty) {
           return const Center(child: Text('Aucun post pour le moment.'));
         }
         return RefreshIndicator(
-          onRefresh: () async => ref.read(apiProvider).committeeSpaceFeedPosts(committeeId: committeeId),
+          onRefresh: () async => ref
+              .read(apiProvider)
+              .committeeSpaceFeedPosts(committeeId: committeeId),
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
-              if (!canManage) const _ReadOnlyBanner(label: 'Lecture seule: création réservée MOD/ADMIN/OWNER'),
+              if (!canManage)
+                const _ReadOnlyBanner(
+                    label: 'Lecture seule: création réservée MOD/ADMIN/OWNER'),
               for (final row in items)
                 Card(
                   child: ListTile(
                     title: Text((row['title'] ?? '').toString()),
                     subtitle: Text((row['body'] ?? '').toString()),
-                    trailing: row['isPinned'] == true ? const Icon(Icons.push_pin, size: 18) : null,
+                    trailing: row['isPinned'] == true
+                        ? const Icon(Icons.push_pin, size: 18)
+                        : null,
                   ),
                 ),
             ],
@@ -988,12 +1297,19 @@ class _CommitteeSpaceCalendarTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final month = DateTime.now().toIso8601String().substring(0, 7);
     return FutureBuilder(
-      future: ref.read(apiProvider).committeeSpaceCalendarItems(committeeId: committeeId, month: month),
+      future: ref
+          .read(apiProvider)
+          .committeeSpaceCalendarItems(committeeId: committeeId, month: month),
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) return const Center(child: Text('Impossible de charger le calendrier.'));
+        if (!snap.hasData)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError)
+          return const Center(
+              child: Text('Impossible de charger le calendrier.'));
         final items = ((snap.data!['items'] as List?) ?? const []).cast<Map>();
-        if (items.isEmpty) return const Center(child: Text('Aucun élément calendrier ce mois-ci.'));
+        if (items.isEmpty)
+          return const Center(
+              child: Text('Aucun élément calendrier ce mois-ci.'));
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
@@ -1002,7 +1318,8 @@ class _CommitteeSpaceCalendarTab extends ConsumerWidget {
                 child: ListTile(
                   leading: const Icon(Icons.event_note_outlined),
                   title: Text((row['title'] ?? '').toString()),
-                  subtitle: Text('${row['date'] ?? ''}${(row['location'] ?? '').toString().isEmpty ? '' : ' · ${row['location']}'}'),
+                  subtitle: Text(
+                      '${row['date'] ?? ''}${(row['location'] ?? '').toString().isEmpty ? '' : ' · ${row['location']}'}'),
                 ),
               ),
           ],
@@ -1020,13 +1337,20 @@ class _CommitteeSpaceExpensesTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final month = DateTime.now().toIso8601String().substring(0, 7);
     return FutureBuilder(
-      future: ref.read(apiProvider).committeeSpaceExpenses(committeeId: committeeId, month: month),
+      future: ref
+          .read(apiProvider)
+          .committeeSpaceExpenses(committeeId: committeeId, month: month),
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) return const Center(child: Text('Impossible de charger les dépenses.'));
+        if (!snap.hasData)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError)
+          return const Center(
+              child: Text('Impossible de charger les dépenses.'));
         final items = ((snap.data!['items'] as List?) ?? const []).cast<Map>();
-        final totals = Map<String, dynamic>.from((snap.data!['totalsByCategory'] as Map?) ?? const {});
-        if (items.isEmpty) return const Center(child: Text('Aucune dépense sur la période.'));
+        final totals = Map<String, dynamic>.from(
+            (snap.data!['totalsByCategory'] as Map?) ?? const {});
+        if (items.isEmpty)
+          return const Center(child: Text('Aucune dépense sur la période.'));
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
@@ -1034,7 +1358,9 @@ class _CommitteeSpaceExpensesTab extends ConsumerWidget {
               Card(
                 child: ListTile(
                   title: const Text('Totaux par catégorie'),
-                  subtitle: Text(totals.entries.map((e) => '${e.key}: ${e.value}').join(' · ')),
+                  subtitle: Text(totals.entries
+                      .map((e) => '${e.key}: ${e.value}')
+                      .join(' · ')),
                 ),
               ),
             for (final row in items)
@@ -1042,7 +1368,8 @@ class _CommitteeSpaceExpensesTab extends ConsumerWidget {
                 child: ListTile(
                   leading: const Icon(Icons.receipt_long_outlined),
                   title: Text((row['label'] ?? '').toString()),
-                  subtitle: Text('${row['category'] ?? '-'} · ${row['date'] ?? '-'}'),
+                  subtitle:
+                      Text('${row['category'] ?? '-'} · ${row['date'] ?? '-'}'),
                   trailing: Text('${row['amountCents'] ?? 0}c'),
                 ),
               ),
@@ -1061,7 +1388,8 @@ class _ReadOnlyBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+          color: Colors.amber.shade100, borderRadius: BorderRadius.circular(8)),
       child: Text(label),
     );
   }

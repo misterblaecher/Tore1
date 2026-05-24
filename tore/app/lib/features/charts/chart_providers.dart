@@ -11,8 +11,8 @@ final chartsRepositoryProvider = Provider<ChartsRepository>((ref) {
   return ChartsRepository(api);
 });
 
-final eventMenuDrinksProvider =
-    FutureProvider.autoDispose.family<List<MenuDrinkMeta>, int>((ref, eventId) async {
+final eventMenuDrinksProvider = FutureProvider.autoDispose
+    .family<List<MenuDrinkMeta>, int>((ref, eventId) async {
   final link = ref.keepAlive();
   Timer(const Duration(minutes: 2), link.close);
 
@@ -25,7 +25,8 @@ class DrinkHistoryArgs {
   final int drinkId;
   final String range;
 
-  const DrinkHistoryArgs({required this.eventId, required this.drinkId, this.range = '24h'});
+  const DrinkHistoryArgs(
+      {required this.eventId, required this.drinkId, this.range = '24h'});
 
   @override
   bool operator ==(Object other) =>
@@ -38,17 +39,18 @@ class DrinkHistoryArgs {
   int get hashCode => Object.hash(eventId, drinkId, range);
 }
 
-final drinkHistoryProvider =
-    FutureProvider.autoDispose.family<List<PricePoint>, DrinkHistoryArgs>((ref, args) async {
+final drinkHistoryProvider = FutureProvider.autoDispose
+    .family<List<PricePoint>, DrinkHistoryArgs>((ref, args) async {
   final link = ref.keepAlive();
   Timer(const Duration(minutes: 2), link.close);
 
   final repo = ref.watch(chartsRepositoryProvider);
-  return repo.fetchHistory(eventId: args.eventId, drinkId: args.drinkId, range: args.range);
+  return repo.fetchHistory(
+      eventId: args.eventId, drinkId: args.drinkId, range: args.range);
 });
 
-final topMoversProvider =
-    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, int>((ref, eventId) async {
+final topMoversProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>((ref, eventId) async {
   final link = ref.keepAlive();
   Timer(const Duration(minutes: 1), link.close);
 

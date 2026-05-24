@@ -26,7 +26,8 @@ class _MenuItemDetailSheetState extends State<MenuItemDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final name = (widget.item['name'] ?? 'Article').toString();
-    final desc = (widget.item['description'] ?? widget.item['type'] ?? '').toString();
+    final desc =
+        (widget.item['description'] ?? widget.item['type'] ?? '').toString();
     final imageUrl = widget.item['image_url']?.toString();
     final tickets = ((widget.item['ticket_cost'] as num?)?.toInt()) ?? 1;
     final lastPriceChange = widget.item['price_change_pct']?.toString();
@@ -64,7 +65,8 @@ class _MenuItemDetailSheetState extends State<MenuItemDetailSheet> {
                     ),
                   const SizedBox(height: 6),
                   Text('Prix: 🎟️ $tickets'),
-                  if (lastPriceChange != null) Text('Dernière variation: $lastPriceChange'),
+                  if (lastPriceChange != null)
+                    Text('Dernière variation: $lastPriceChange'),
                   if (stockState == MenuItemStockState.out)
                     const Padding(
                       padding: EdgeInsets.only(top: 6),

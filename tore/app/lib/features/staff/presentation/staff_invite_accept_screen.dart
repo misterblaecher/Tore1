@@ -6,16 +6,19 @@ import '../../../core/network/error_mapper.dart';
 import 'staff_providers.dart';
 
 class StaffInviteAcceptScreen extends ConsumerStatefulWidget {
-  const StaffInviteAcceptScreen({super.key, required this.eventId, required this.token});
+  const StaffInviteAcceptScreen(
+      {super.key, required this.eventId, required this.token});
 
   final int eventId;
   final String token;
 
   @override
-  ConsumerState<StaffInviteAcceptScreen> createState() => _StaffInviteAcceptScreenState();
+  ConsumerState<StaffInviteAcceptScreen> createState() =>
+      _StaffInviteAcceptScreenState();
 }
 
-class _StaffInviteAcceptScreenState extends ConsumerState<StaffInviteAcceptScreen> {
+class _StaffInviteAcceptScreenState
+    extends ConsumerState<StaffInviteAcceptScreen> {
   bool _loading = false;
   String? _error;
 
@@ -93,7 +96,8 @@ class _StaffInviteAcceptScreenState extends ConsumerState<StaffInviteAcceptScree
               child: ElevatedButton.icon(
                 onPressed: _loading ? null : _acceptInvite,
                 icon: const Icon(Icons.check_circle_outline),
-                label: Text(_loading ? 'Activation...' : 'Accepter l\'accès ENTRY'),
+                label: Text(
+                    _loading ? 'Activation...' : 'Accepter l\'accès ENTRY'),
               ),
             ),
             const SizedBox(height: 12),

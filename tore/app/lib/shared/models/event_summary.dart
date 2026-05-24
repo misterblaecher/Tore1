@@ -28,7 +28,8 @@ class EventSummary {
   factory EventSummary.fromJson(Map<String, dynamic> json) {
     final startRaw = json['startAt'] ?? json['starts_at'] ?? json['startsAt'];
     final endRaw = json['endAt'] ?? json['ends_at'] ?? json['endsAt'];
-    final startAt = _parseDateTime(startRaw) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final startAt =
+        _parseDateTime(startRaw) ?? DateTime.fromMillisecondsSinceEpoch(0);
     final endAt = _parseDateTime(endRaw) ?? startAt;
 
     final statusRaw = (json['status'] ?? '').toString().toUpperCase();
@@ -52,7 +53,9 @@ class EventSummary {
 
   bool isToday({DateTime? now}) {
     final localNow = now ?? DateTime.now();
-    return startAt.year == localNow.year && startAt.month == localNow.month && startAt.day == localNow.day;
+    return startAt.year == localNow.year &&
+        startAt.month == localNow.month &&
+        startAt.day == localNow.day;
   }
 
   static DateTime? _parseDateTime(dynamic raw) {
@@ -83,7 +86,8 @@ class EventSummary {
     }
   }
 
-  static BarEventStatus _statusFromClock({required DateTime startAt, required DateTime endAt}) {
+  static BarEventStatus _statusFromClock(
+      {required DateTime startAt, required DateTime endAt}) {
     final now = DateTime.now();
     if (!startAt.isAfter(now) && !endAt.isBefore(now)) {
       return BarEventStatus.live;

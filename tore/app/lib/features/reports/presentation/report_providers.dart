@@ -16,7 +16,8 @@ final eventCostServiceProvider = Provider<EventCostService>((ref) {
   return EventCostService(client.dio);
 });
 
-final eventReportProvider = FutureProvider.family<EventReportFetchResult, int>((ref, eventId) async {
+final eventReportProvider =
+    FutureProvider.family<EventReportFetchResult, int>((ref, eventId) async {
   final service = ref.watch(eventReportServiceProvider);
   return service.fetchReport(eventId);
 });

@@ -17,12 +17,15 @@ class TickerScreen extends ConsumerWidget {
     final ctx = ref.watch(appContextProvider);
     final eventId = ctx.activeEventId;
     if (eventId == null) {
-      return const Scaffold(body: Center(child: Text('Sélectionne un event pour voir le ticker.')));
+      return const Scaffold(
+          body:
+              Center(child: Text('Sélectionne un event pour voir le ticker.')));
     }
 
     final configAsync = ref.watch(eventConfigProvider(eventId));
     final tickerEnabled = configAsync.maybeWhen(
-      data: (cfg) => cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
+      data: (cfg) =>
+          cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
       orElse: () => true,
     );
     if (!tickerEnabled) {
@@ -49,7 +52,9 @@ class TickerScreen extends ConsumerWidget {
         case TickerFilter.gifts:
           return item.type == 'gift';
         case TickerFilter.alerts:
-          return item.severity == 'warning' || item.severity == 'error' || item.type == 'broadcast';
+          return item.severity == 'warning' ||
+              item.severity == 'error' ||
+              item.type == 'broadcast';
       }
     }).toList();
 
@@ -58,13 +63,15 @@ class TickerScreen extends ConsumerWidget {
         title: const Text('Ticker'),
         actions: [
           IconButton(
-            onPressed: () => ref.read(tickerControllerProvider(eventId).notifier).refresh(),
+            onPressed: () =>
+                ref.read(tickerControllerProvider(eventId).notifier).refresh(),
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(tickerControllerProvider(eventId).notifier).refresh(),
+        onRefresh: () =>
+            ref.read(tickerControllerProvider(eventId).notifier).refresh(),
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
@@ -79,14 +86,18 @@ class TickerScreen extends ConsumerWidget {
                   return ChoiceChip(
                     selected: filter == selectedFilter,
                     label: Text(filter.label),
-                    onSelected: (_) => ref.read(tickerFilterProvider(eventId).notifier).state = filter,
+                    onSelected: (_) => ref
+                        .read(tickerFilterProvider(eventId).notifier)
+                        .state = filter,
                   );
                 },
               ),
             ),
             const SizedBox(height: 8),
             if (network == NetworkState.offline)
-              Text('Offline • cache local${state.lastSyncAt != null ? ' • sync ${state.lastSyncAt}' : ''}', style: const TextStyle(color: Colors.orange)),
+              Text(
+                  'Offline • cache local${state.lastSyncAt != null ? ' • sync ${state.lastSyncAt}' : ''}',
+                  style: const TextStyle(color: Colors.orange)),
             if (state.loading && state.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 100),
@@ -124,11 +135,26 @@ class _TickerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (title, subtitle, icon) = switch (item.payload) {
-      BroadcastTickerPayload p => ('Broadcast', p.message, Icons.campaign_outlined),
-      GiftTickerPayload p => ('Gift', '${p.fromLabel} sent ${p.amount} tickets to ${p.toLabel}', Icons.card_giftcard),
-      PriceTickerPayload p => ('Price', '${p.drinkName} ${p.direction == 'up' ? '↑' : '↓'} ${p.fromPrice}→${p.toPrice}', Icons.show_chart),
-      OrderTickerPayload p => ('Order ${p.status}', '#${p.orderId} • ${p.totalTickets} tickets', Icons.receipt_long),
-      _ => ('Ticker', item.type, Icons.bolt),
+      BroadcastTickerPayload p => (
+          'Broadcast',
+          p.message,
+          Icons.campaign_outlined
+        ),
+      GiftTickerPayload p => (
+          'Gift',
+          '${p.fromLabel} sent ${p.amount} tickets to ${p.toLabel}',
+          Icons.card_giftcard
+        ),
+      PriceTickerPayload p => (
+          'Price',
+          '${p.drinkName} ${p.direction == 'up' ? '↑' : '↓'} ${p.fromPrice}→${p.toPrice}',
+          Icons.show_chart
+        ),
+      OrderTickerPayload p => (
+          'Order ${p.status}',
+          '#${p.orderId} • ${p.totalTickets} tickets',
+          Icons.receipt_long
+        ),
     };
 
     return Card(
@@ -137,7 +163,8 @@ class _TickerTile extends StatelessWidget {
         leading: Icon(icon, size: 18),
         title: Text(title),
         subtitle: Text(subtitle),
-        trailing: Text(item.ts.toLocal().toString().substring(11, 19), style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+        trailing: Text(item.ts.toLocal().toString().substring(11, 19),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
       ),
     );
   }

@@ -30,7 +30,7 @@ class PerfOverlay extends ConsumerWidget {
             margin: const EdgeInsets.only(top: 8, right: 8),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.58),
+              color: Colors.black.withValues(alpha: 0.58),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.white24),
             ),

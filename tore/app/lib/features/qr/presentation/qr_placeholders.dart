@@ -74,6 +74,7 @@ class StaffEntryPlaceholder extends StatelessWidget {
     );
   }
 }
+
 class _PlaceholderScaffold extends StatelessWidget {
   const _PlaceholderScaffold({required this.title, required this.eventId});
 

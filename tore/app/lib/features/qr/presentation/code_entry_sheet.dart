@@ -28,9 +28,9 @@ bool previewNeedsLogin(Map<String, dynamic> preview, {required bool isAuthed}) {
   return (preview['actionHint'] ?? '') == 'LOGIN_REQUIRED' && !isAuthed;
 }
 
-
 String formatSuffix(String? code) {
-  final raw = (code ?? '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+  final raw =
+      (code ?? '').replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
   if (raw.isEmpty) return '—';
   if (raw.length <= 6) return raw;
   return '…${raw.substring(raw.length - 6)}';
@@ -65,7 +65,8 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
   bool _submitting = false;
   List<String> _history = const [];
 
-  String _idem() => 'code-consume-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String _idem() =>
+      'code-consume-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   @override
   void initState() {
@@ -88,7 +89,9 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
   Future<void> _pushHistory(String code) async {
     final suffix = code.length <= 4 ? code : code.substring(code.length - 4);
     final prefs = await SharedPreferences.getInstance();
-    final next = [suffix, ..._history.where((e) => e != suffix)].take(5).toList(growable: false);
+    final next = [suffix, ..._history.where((e) => e != suffix)]
+        .take(5)
+        .toList(growable: false);
     await prefs.setStringList(_historyKey, next);
     if (mounted) setState(() => _history = next);
   }
@@ -113,7 +116,6 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
     _analyze();
   }
 
-
   Future<void> _copyPreviewCode() async {
     final preview = _preview;
     if (preview == null) return;
@@ -123,7 +125,8 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
     ));
     final message = await builder.copyCodeOrHint();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _continue() async {
@@ -133,12 +136,15 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
       _submitting = true;
       _status = 'pending';
     });
+    final navigator = Navigator.of(context);
     try {
       var preview = await ref.read(apiProvider).previewManualCode(code);
       if (mounted) setState(() => _preview = preview);
       final auth = ref.read(authSessionProvider);
       if (previewNeedsLogin(preview, isAuthed: auth.isAuthed)) {
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
+        if (!navigator.mounted) return;
+        await navigator
+            .push(MaterialPageRoute(builder: (_) => const EmailAuthScreen()));
         await ref.read(authSessionProvider.notifier).refreshSession();
         preview = await ref.read(apiProvider).previewManualCode(code);
         if (mounted) setState(() => _preview = preview);
@@ -146,14 +152,17 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
 
       final id = previewPublicEventId(preview);
       if (id != null) {
-        if (mounted && id != null) {
-          Navigator.of(context).pop();
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventPublicScreen(eventId: id, autoJoin: true)));
+        if (navigator.mounted) {
+          navigator.pop();
+          navigator.push(MaterialPageRoute(
+              builder: (_) => EventPublicScreen(eventId: id, autoJoin: true)));
           return;
         }
       }
 
-      final consumed = await ref.read(apiProvider).consumeManualCode(code: code, idempotencyKey: _idem());
+      final consumed = await ref
+          .read(apiProvider)
+          .consumeManualCode(code: code, idempotencyKey: _idem());
       final status = (consumed['status'] ?? 'pending').toString();
       setState(() => _status = status);
       await _pushHistory(code);
@@ -164,22 +173,25 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
     }
   }
 
-
   Future<void> _shareResolvedLink() async {
     final resolved = _resolved;
     if (resolved == null) return;
     String url = resolved.source?.toString() ?? '';
-    if (resolved.kind == CodeEntryKind.event && resolved.eventId != null && ref.read(networkStatusProvider) == NetworkState.online) {
+    if (resolved.kind == CodeEntryKind.event &&
+        resolved.eventId != null &&
+        ref.read(networkStatusProvider) == NetworkState.online) {
       try {
         final short = await ref.read(apiProvider).createShortlink(
-          kind: 'event_share',
-          eventId: resolved.eventId,
-          idempotencyKey: _idem(),
-        );
-        url = pickShareUrl(shortUrl: (short['shortUrl'] ?? '').toString(), webUrl: url);
+              kind: 'event_share',
+              eventId: resolved.eventId,
+              idempotencyKey: _idem(),
+            );
+        url = pickShareUrl(
+            shortUrl: (short['shortUrl'] ?? '').toString(), webUrl: url);
       } catch (_) {}
     }
-    final builder = ShareIntentBuilder(ShareIntentInput(openUrl: url, copyHint: kShareFallbackHintOffline));
+    final builder = ShareIntentBuilder(
+        ShareIntentInput(openUrl: url, copyHint: kShareFallbackHintOffline));
     if (builder.primaryShareUrl.isEmpty) return;
     await Share.share(builder.shareText, subject: 'Lien TORÈ');
   }
@@ -197,31 +209,43 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
           const SizedBox(height: 8),
           TextField(
             controller: _ctrl,
-            decoration: const InputDecoration(hintText: 'Code ou lien tore://open?...'),
+            decoration:
+                const InputDecoration(hintText: 'Code ou lien tore://open?...'),
             autofocus: true,
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              OutlinedButton.icon(onPressed: _pasteClipboard, icon: const Icon(Icons.content_paste_outlined), label: const Text('Coller')),
+              OutlinedButton.icon(
+                  onPressed: _pasteClipboard,
+                  icon: const Icon(Icons.content_paste_outlined),
+                  label: const Text('Coller')),
               const Spacer(),
               FilledButton(onPressed: _analyze, child: const Text('Analyser')),
             ],
           ),
           if (_clipboardSuggestion != null) ...[
             const SizedBox(height: 8),
-            TextButton.icon(onPressed: _pasteClipboard, icon: const Icon(Icons.auto_awesome), label: Text('Coller "$_clipboardSuggestion"')),
+            TextButton.icon(
+                onPressed: _pasteClipboard,
+                icon: const Icon(Icons.auto_awesome),
+                label: Text('Coller "$_clipboardSuggestion"')),
           ],
           if (_resolved?.isKnown == true && _resolved?.source != null) ...[
             const SizedBox(height: 8),
-            OutlinedButton.icon(onPressed: _shareResolvedLink, icon: const Icon(Icons.share_outlined), label: const Text('Partager ce lien')),
+            OutlinedButton.icon(
+                onPressed: _shareResolvedLink,
+                icon: const Icon(Icons.share_outlined),
+                label: const Text('Partager ce lien')),
           ],
           if (_history.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: _history
-                  .map((suffix) => ActionChip(label: Text('••••$suffix'), onPressed: () => _ctrl.text = suffix))
+                  .map((suffix) => ActionChip(
+                      label: Text('••••$suffix'),
+                      onPressed: () => _ctrl.text = suffix))
                   .toList(growable: false),
             ),
           ],
@@ -229,20 +253,27 @@ class _CodeEntrySheetState extends ConsumerState<CodeEntrySheet> {
           OutlinedButton.icon(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen()));
+              Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const QrScannerScreen()));
             },
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('Scanner un QR'),
           ),
           const SizedBox(height: 8),
-          FilledButton(onPressed: _submitting ? null : _continue, child: Text(_submitting ? 'Traitement…' : 'Continuer')),
-
+          FilledButton(
+              onPressed: _submitting ? null : _continue,
+              child: Text(_submitting ? 'Traitement…' : 'Continuer')),
           if (_preview != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: Text('Code: ${formatSuffix((_preview?['displaySuffix'] ?? _preview?['normalizedCode']).toString())}')),
-                IconButton(onPressed: _copyPreviewCode, icon: const Icon(Icons.copy_all_outlined), tooltip: 'Copier code'),
+                Expanded(
+                    child: Text(
+                        'Code: ${formatSuffix((_preview?['displaySuffix'] ?? _preview?['normalizedCode']).toString())}')),
+                IconButton(
+                    onPressed: _copyPreviewCode,
+                    icon: const Icon(Icons.copy_all_outlined),
+                    tooltip: 'Copier code'),
               ],
             ),
           ],

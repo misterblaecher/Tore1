@@ -34,7 +34,8 @@ class EventDto {
 }
 
 class MenuItemDto {
-  const MenuItemDto({required this.id, required this.name, required this.price});
+  const MenuItemDto(
+      {required this.id, required this.name, required this.price});
 
   final String id;
   final String name;
@@ -43,7 +44,9 @@ class MenuItemDto {
   factory MenuItemDto.fromJson(Map<String, dynamic> json) => MenuItemDto(
         id: (json['id'] ?? '').toString(),
         name: (json['name'] ?? json['label'] ?? 'Item').toString(),
-        price: (json['price'] as num?)?.toDouble() ?? (json['price_cents'] as num?)?.toDouble() ?? 0,
+        price: (json['price'] as num?)?.toDouble() ??
+            (json['price_cents'] as num?)?.toDouble() ??
+            0,
       );
 }
 
@@ -54,16 +57,23 @@ class WalletDto {
   final List<WalletTxDto> timeline;
 
   factory WalletDto.fromJson(Map<String, dynamic> json) {
-    final entries = (json['entries'] ?? json['rows'] ?? json['items'] ?? <dynamic>[]) as List<dynamic>;
+    final entries = (json['entries'] ??
+        json['rows'] ??
+        json['items'] ??
+        <dynamic>[]) as List<dynamic>;
     return WalletDto(
       balance: (json['balance'] as num?)?.toDouble() ?? 0,
-      timeline: entries.whereType<Map<String, dynamic>>().map(WalletTxDto.fromJson).toList(),
+      timeline: entries
+          .whereType<Map<String, dynamic>>()
+          .map(WalletTxDto.fromJson)
+          .toList(),
     );
   }
 }
 
 class WalletTxDto {
-  const WalletTxDto({required this.id, required this.type, required this.delta});
+  const WalletTxDto(
+      {required this.id, required this.type, required this.delta});
 
   final String id;
   final String type;
@@ -96,7 +106,9 @@ class PolymarketDto {
   final String id;
   final String title;
 
-  factory PolymarketDto.fromJson(Map<String, dynamic> json) => PolymarketDto(id: (json['id'] ?? '').toString(), title: (json['title'] ?? json['question'] ?? '').toString());
+  factory PolymarketDto.fromJson(Map<String, dynamic> json) => PolymarketDto(
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? json['question'] ?? '').toString());
 }
 
 class EntryStatsDto {
@@ -106,8 +118,12 @@ class EntryStatsDto {
   final int deniedCount;
 
   factory EntryStatsDto.fromJson(Map<String, dynamic> json) => EntryStatsDto(
-        approvedCount: (json['approved_count'] as num?)?.toInt() ?? (json['approved'] as num?)?.toInt() ?? 0,
-        deniedCount: (json['denied_count'] as num?)?.toInt() ?? (json['denied'] as num?)?.toInt() ?? 0,
+        approvedCount: (json['approved_count'] as num?)?.toInt() ??
+            (json['approved'] as num?)?.toInt() ??
+            0,
+        deniedCount: (json['denied_count'] as num?)?.toInt() ??
+            (json['denied'] as num?)?.toInt() ??
+            0,
       );
 }
 
@@ -117,7 +133,9 @@ class OrderDto {
   final String id;
   final String status;
 
-  factory OrderDto.fromJson(Map<String, dynamic> json) => OrderDto(id: (json['id'] ?? '').toString(), status: (json['status'] ?? 'NEW').toString());
+  factory OrderDto.fromJson(Map<String, dynamic> json) => OrderDto(
+      id: (json['id'] ?? '').toString(),
+      status: (json['status'] ?? 'NEW').toString());
 }
 
 class ZoneDto {

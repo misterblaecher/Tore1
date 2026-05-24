@@ -61,30 +61,43 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Spacer(),
-                    Text('TORÈ', style: Theme.of(context).textTheme.headlineMedium, textAlign: TextAlign.center),
+                    Text('TORÈ',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                        textAlign: TextAlign.center),
                     const SizedBox(height: 12),
-                    const Text('Choisis une méthode de connexion.', textAlign: TextAlign.center),
+                    const Text('Choisis une méthode de connexion.',
+                        textAlign: TextAlign.center),
                     const Spacer(),
                     if (_error != null) ...[
-                      Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+                      Text(_error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.redAccent)),
                       const SizedBox(height: 8),
                     ],
                     FilledButton(
                       onPressed: _loadingGuest ? null : _continueGuest,
                       child: _loadingGuest
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))
                           : const Text('Continuer en invité'),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton(
                       onPressed: _loadingGoogle ? null : _continueGoogle,
                       child: _loadingGoogle
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))
                           : const Text('Continuer avec Google'),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
+                      onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const EmailAuthScreen())),
                       child: const Text('Continuer par Email (OTP)'),
                     ),
                     const SizedBox(height: 10),

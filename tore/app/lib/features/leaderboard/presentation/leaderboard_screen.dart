@@ -40,10 +40,10 @@ class LeaderboardScreen extends ConsumerWidget {
               final r = Map<String, dynamic>.from(rows[i] as Map);
 
               final rank = (r['rank'] as num?)?.toInt() ?? (i + 1);
-              final name = (r['display_name'] ?? r['user_id'] ?? '—')
-                  .toString();
-              final score = (r['score'] ?? r['points'] ?? r['total'] ?? 0)
-                  .toString();
+              final name =
+                  (r['display_name'] ?? r['user_id'] ?? '—').toString();
+              final score =
+                  (r['score'] ?? r['points'] ?? r['total'] ?? 0).toString();
 
               return ListTile(
                 leading: CircleAvatar(child: Text('$rank')),

@@ -33,12 +33,17 @@ class ClaimResultSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text(title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             Text(subtitle),
             if (result != null) ...[
               const SizedBox(height: 12),
-              Text('Score total: ${result!.totalScore}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text('Score total: ${result!.totalScore}',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
             ],
             const SizedBox(height: 16),
             ToreCTA(label: 'OK', onPressed: () => Navigator.of(context).pop()),

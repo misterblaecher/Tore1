@@ -16,7 +16,8 @@ class TokenStorage {
     }
   }
 
-  Future<void> writeTokens({required String accessToken, required String refreshToken}) async {
+  Future<void> writeTokens(
+      {required String accessToken, required String refreshToken}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_accessKey, accessToken);
     await prefs.setString(_refreshKey, refreshToken);
@@ -29,7 +30,9 @@ class TokenStorage {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_accessKey);
     if (AppConfig.enableAuthLogs) {
-      debugPrint(token == null ? '📭 ACCESS TOKEN READ: null' : '📬 ACCESS TOKEN READ: ${token.substring(0, 8)}...');
+      debugPrint(token == null
+          ? '📭 ACCESS TOKEN READ: null'
+          : '📬 ACCESS TOKEN READ: ${token.substring(0, 8)}...');
     }
     return token;
   }

@@ -10,27 +10,30 @@ import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import 'event_hub_screen.dart';
 
-
-(String hostType, String? hostId) resolveCreateEventHostPrefill({Map<String, dynamic>? prefillOrga, int? prefillHostOrgaId}) {
-  final prefillId = prefillHostOrgaId?.toString() ?? prefillOrga?['id']?.toString();
+(String hostType, String? hostId) resolveCreateEventHostPrefill(
+    {Map<String, dynamic>? prefillOrga, int? prefillHostOrgaId}) {
+  final prefillId =
+      prefillHostOrgaId?.toString() ?? prefillOrga?['id']?.toString();
   if (prefillId != null && prefillId.isNotEmpty) {
     return ('orga', prefillId);
   }
   return ('user', null);
 }
 
-
 class CreateEventWizardScreen extends ConsumerStatefulWidget {
-  const CreateEventWizardScreen({super.key, this.prefillOrga, this.prefillHostOrgaId});
+  const CreateEventWizardScreen(
+      {super.key, this.prefillOrga, this.prefillHostOrgaId});
 
   final Map<String, dynamic>? prefillOrga;
   final int? prefillHostOrgaId;
 
   @override
-  ConsumerState<CreateEventWizardScreen> createState() => _CreateEventWizardScreenState();
+  ConsumerState<CreateEventWizardScreen> createState() =>
+      _CreateEventWizardScreenState();
 }
 
-class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScreen> {
+class _CreateEventWizardScreenState
+    extends ConsumerState<CreateEventWizardScreen> {
   int _step = 0;
   bool _loading = false;
   bool _publishNow = true;
@@ -40,8 +43,8 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
   final _name = TextEditingController();
   final _venueName = TextEditingController();
   final _venueAddress = TextEditingController();
-  DateTime _start = DateTime.now().add(const Duration(hours: 2));
-  DateTime _end = DateTime.now().add(const Duration(hours: 6));
+  final DateTime _start = DateTime.now().add(const Duration(hours: 2));
+  final DateTime _end = DateTime.now().add(const Duration(hours: 6));
   String _visibility = 'PUBLIC';
   final Map<String, bool> _modulesOn = {
     'entry': true,
@@ -60,7 +63,8 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
   Map<String, dynamic>? _share;
   int? _eventId;
 
-  String _idem(String prefix) => '$prefix-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(10000)}';
+  String _idem(String prefix) =>
+      '$prefix-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(10000)}';
 
   @override
   void initState() {
@@ -81,7 +85,9 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
     if (!mounted) return;
     setState(() {
       _myOrgas = orgs;
-      final prefill = resolveCreateEventHostPrefill(prefillOrga: widget.prefillOrga, prefillHostOrgaId: widget.prefillHostOrgaId);
+      final prefill = resolveCreateEventHostPrefill(
+          prefillOrga: widget.prefillOrga,
+          prefillHostOrgaId: widget.prefillHostOrgaId);
       _hostType = prefill.$1;
       _hostId = prefill.$2;
     });
@@ -90,7 +96,10 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
   Future<void> _submit() async {
     final blocked = !canWrite(ref, intent: WriteIntent.critical);
     if (blocked) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(writeDisabledReason(ref, intent: WriteIntent.critical) ?? 'Writes bloqués')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              writeDisabledReason(ref, intent: WriteIntent.critical) ??
+                  'Writes bloqués')));
       return;
     }
     setState(() => _loading = true);
@@ -105,7 +114,10 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
           'visibility': _visibility,
           'host_type': _hostType,
           if (_hostId != null) 'host_id': _hostId,
-          'venue': {'name': _venueName.text.trim(), 'address': _venueAddress.text.trim()},
+          'venue': {
+            'name': _venueName.text.trim(),
+            'address': _venueAddress.text.trim()
+          },
           'modulesOn': _modulesOn,
           'rulesFlags': {},
         },
@@ -113,7 +125,8 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
       final id = (created['event_id'] as num?)?.toInt();
       if (id == null) throw Exception('missing event id');
       if (_publishNow) {
-        await api.publishEventV1(eventId: id, idempotencyKey: _idem('event-publish'));
+        await api.publishEventV1(
+            eventId: id, idempotencyKey: _idem('event-publish'));
       }
       final share = await api.getEventShareV1(id);
       if (!mounted) return;
@@ -122,10 +135,13 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
         _share = share;
         _step = 5;
       });
-      ref.read(appContextProvider.notifier).enterEvent(eventId: id, eventName: _name.text.trim());
+      ref
+          .read(appContextProvider.notifier)
+          .enterEvent(eventId: id, eventName: _name.text.trim());
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Création impossible: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Création impossible: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -134,11 +150,13 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Créer un event')), 
+      appBar: AppBar(title: const Text('Créer un event')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ToreChip(label: 'Étape ${(_step + 1).clamp(1, 6)}/6', variant: ToreChipVariant.live),
+          ToreChip(
+              label: 'Étape ${(_step + 1).clamp(1, 6)}/6',
+              variant: ToreChipVariant.live),
           const SizedBox(height: 12),
           if (_step == 0) _stepHost(),
           if (_step == 1) _stepInfos(),
@@ -150,12 +168,24 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
           if (_step < 5)
             Row(
               children: [
-                Expanded(child: ToreCTA(label: 'Retour', style: ToreCTAStyle.secondary, onPressed: _step > 0 ? () => setState(() => _step -= 1) : null)),
+                Expanded(
+                    child: ToreCTA(
+                        label: 'Retour',
+                        style: ToreCTAStyle.secondary,
+                        onPressed: _step > 0
+                            ? () => setState(() => _step -= 1)
+                            : null)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: ToreCTA(
-                    label: _step == 4 ? (_loading ? 'Création...' : 'Créer & continuer') : 'Suivant',
-                    onPressed: _loading ? null : (_step == 4 ? _submit : () => setState(() => _step += 1)),
+                    label: _step == 4
+                        ? (_loading ? 'Création...' : 'Créer & continuer')
+                        : 'Suivant',
+                    onPressed: _loading
+                        ? null
+                        : (_step == 4
+                            ? _submit
+                            : () => setState(() => _step += 1)),
                   ),
                 ),
               ],
@@ -167,33 +197,62 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
 
   Widget _stepHost() => ToreCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Créer pour', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('Créer pour',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          RadioListTile<String>(value: 'user', groupValue: _hostType, onChanged: (v) => setState(() { _hostType = v ?? 'user'; _hostId = null; }), title: const Text('Moi')),
-          if (_myOrgas.isNotEmpty)
-            ..._myOrgas.map((orga) => RadioListTile<String>(
-                  value: 'orga:${orga['orga']?['id'] ?? ''}',
-                  groupValue: _hostType == 'orga' ? 'orga:${_hostId ?? ''}' : _hostType,
-                  onChanged: (_) => setState(() { _hostType = 'orga'; _hostId = (orga['orga']?['id'] ?? '').toString(); }),
-                  title: Text((orga['orga']?['name'] ?? 'Orga').toString()),
-                  subtitle: Text('Rôle ${(orga['role'] ?? '').toString()}'),
-                )),
+          RadioGroup<String>(
+            groupValue:
+                _hostType == 'orga' ? 'orga:${_hostId ?? ''}' : _hostType,
+            onChanged: (value) => setState(() {
+              if (value == null || value == 'user') {
+                _hostType = 'user';
+                _hostId = null;
+                return;
+              }
+              _hostType = 'orga';
+              _hostId = value.substring('orga:'.length);
+            }),
+            child: Column(
+              children: [
+                const RadioListTile<String>(value: 'user', title: Text('Moi')),
+                if (_myOrgas.isNotEmpty)
+                  ..._myOrgas.map((orga) => RadioListTile<String>(
+                        value: 'orga:${orga['orga']?['id'] ?? ''}',
+                        title:
+                            Text((orga['orga']?['name'] ?? 'Orga').toString()),
+                        subtitle:
+                            Text('Rôle ${(orga['role'] ?? '').toString()}'),
+                      )),
+              ],
+            ),
+          ),
         ]),
       );
 
   Widget _stepInfos() => ToreCard(
         child: Column(children: [
-          TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nom event')),
-          TextField(controller: _venueName, decoration: const InputDecoration(labelText: 'Lieu')),
-          TextField(controller: _venueAddress, decoration: const InputDecoration(labelText: 'Adresse')),
+          TextField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: 'Nom event')),
+          TextField(
+              controller: _venueName,
+              decoration: const InputDecoration(labelText: 'Lieu')),
+          TextField(
+              controller: _venueAddress,
+              decoration: const InputDecoration(labelText: 'Adresse')),
         ]),
       );
 
   Widget _stepVisibility() => ToreCard(
-        child: Column(children: [
-          RadioListTile<String>(value: 'PUBLIC', groupValue: _visibility, onChanged: (v) => setState(() => _visibility = v ?? 'PUBLIC'), title: const Text('Public')),
-          RadioListTile<String>(value: 'PRIVATE', groupValue: _visibility, onChanged: (v) => setState(() => _visibility = v ?? 'PRIVATE'), title: const Text('Privé (lien + QR)')),
-        ]),
+        child: RadioGroup<String>(
+          groupValue: _visibility,
+          onChanged: (value) => setState(() => _visibility = value ?? 'PUBLIC'),
+          child: const Column(children: [
+            RadioListTile<String>(value: 'PUBLIC', title: Text('Public')),
+            RadioListTile<String>(
+                value: 'PRIVATE', title: Text('Privé (lien + QR)')),
+          ]),
+        ),
       );
 
   Widget _stepModules() => ToreCard(
@@ -234,7 +293,8 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
             final link = (share['https_link'] ?? '').toString();
             await Clipboard.setData(ClipboardData(text: link));
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lien copié')));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('Lien copié')));
           },
         ),
         const SizedBox(height: 8),
@@ -244,9 +304,14 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
           onPressed: _eventId == null
               ? null
               : () async {
-                  final invite = await ref.read(apiProvider).createStaffInviteCodeV1(eventId: _eventId!, idempotencyKey: _idem('staff-invite'));
+                  final invite = await ref
+                      .read(apiProvider)
+                      .createStaffInviteCodeV1(
+                          eventId: _eventId!,
+                          idempotencyKey: _idem('staff-invite'));
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Code staff ${invite['code']}')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Code staff ${invite['code']}')));
                 },
         ),
         const SizedBox(height: 8),
@@ -255,7 +320,9 @@ class _CreateEventWizardScreenState extends ConsumerState<CreateEventWizardScree
           style: ToreCTAStyle.secondary,
           onPressed: _eventId == null
               ? null
-              : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: _eventId!, eventName: _name.text.trim()))),
+              : () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => EventHubScreen(
+                      eventId: _eventId!, eventName: _name.text.trim()))),
         ),
       ]),
     );

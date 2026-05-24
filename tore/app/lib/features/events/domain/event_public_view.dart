@@ -30,11 +30,17 @@ class EventPublicView {
   final String? venueName;
 
   factory EventPublicView.fromJson(Map<String, dynamic> json) {
-    final host = Map<String, dynamic>.from((json['host'] as Map?) ?? const <String, dynamic>{});
-    final links = Map<String, dynamic>.from((json['links'] as Map?) ?? const <String, dynamic>{});
-    final flags = Map<String, dynamic>.from((json['flags'] as Map?) ?? const <String, dynamic>{});
-    final venue = Map<String, dynamic>.from((json['venue'] as Map?) ?? const <String, dynamic>{});
-    final modules = (json['modulesOn'] as List?)?.map((e) => e.toString()).toList() ?? const <String>[];
+    final host = Map<String, dynamic>.from(
+        (json['host'] as Map?) ?? const <String, dynamic>{});
+    final links = Map<String, dynamic>.from(
+        (json['links'] as Map?) ?? const <String, dynamic>{});
+    final flags = Map<String, dynamic>.from(
+        (json['flags'] as Map?) ?? const <String, dynamic>{});
+    final venue = Map<String, dynamic>.from(
+        (json['venue'] as Map?) ?? const <String, dynamic>{});
+    final modules =
+        (json['modulesOn'] as List?)?.map((e) => e.toString()).toList() ??
+            const <String>[];
     return EventPublicView(
       id: (json['id'] as num?)?.toInt() ?? 0,
       name: (json['name'] ?? '').toString(),

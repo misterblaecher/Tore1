@@ -49,44 +49,54 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   }
 
   Future<void> _setBuddy() async {
-    final eventState = ref.read(activeEventContextProvider).valueOrNull?.eventState;
-    final blocked = writeDisabledReason(ref, intent: WriteIntent.critical, runtimeState: eventState);
+    final eventState =
+        ref.read(activeEventContextProvider).valueOrNull?.eventState;
+    final blocked = writeDisabledReason(ref,
+        intent: WriteIntent.critical, runtimeState: eventState);
     if (blocked != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(blocked)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(blocked)));
       return;
     }
 
     final buddyUserId = _buddyController.text.trim();
     if (buddyUserId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entre un ID buddy.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Entre un ID buddy.')));
       return;
     }
 
     setState(() => _buddyBusy = true);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(apiProvider).setSafetyBuddy(
             eventId: widget.eventId,
             buddyUserId: buddyUserId,
             idempotencyKey: _idempotencyKey('buddy'),
           );
+      if (!messenger.mounted) return;
       HapticFeedback.mediumImpact();
       setState(() => _optimisticBuddyId = buddyUserId);
       ref.invalidate(safetyStateProvider(widget.eventId));
       ref.invalidate(safetyHistoryProvider(widget.eventId));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buddy défini ✅')));
+      messenger.showSnackBar(const SnackBar(content: Text('Buddy défini ✅')));
     } on DioException catch (e) {
+      if (!messenger.mounted) return;
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.message(e))));
+      messenger.showSnackBar(SnackBar(content: Text(ErrorMapper.message(e))));
     } finally {
       if (mounted) setState(() => _buddyBusy = false);
     }
   }
 
   Future<void> _checkin(String type) async {
-    final eventState = ref.read(activeEventContextProvider).valueOrNull?.eventState;
-    final blocked = writeDisabledReason(ref, intent: WriteIntent.critical, runtimeState: eventState);
+    final eventState =
+        ref.read(activeEventContextProvider).valueOrNull?.eventState;
+    final blocked = writeDisabledReason(ref,
+        intent: WriteIntent.critical, runtimeState: eventState);
     if (blocked != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(blocked)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(blocked)));
       return;
     }
 
@@ -98,27 +108,36 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
         _okBusy = true;
       }
     });
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(apiProvider).safetyCheckin(
             eventId: widget.eventId,
             type: type,
             idempotencyKey: _idempotencyKey(type.toLowerCase()),
           );
+      if (!messenger.mounted) return;
       HapticFeedback.lightImpact();
-      setState(() => _optimisticMyLastCheckin = SafetyHistoryItem(type: type, createdAt: DateTime.now().toUtc()));
+      setState(() => _optimisticMyLastCheckin =
+          SafetyHistoryItem(type: type, createdAt: DateTime.now().toUtc()));
       ref.invalidate(safetyStateProvider(widget.eventId));
       ref.invalidate(safetyHistoryProvider(widget.eventId));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(type == 'OK' ? 'Check-in OK envoyé ✅' : 'Alerte PANIC envoyée 🚨')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(type == 'OK'
+              ? 'Check-in OK envoyé ✅'
+              : 'Alerte PANIC envoyée 🚨')));
     } on DioException catch (e) {
+      if (!messenger.mounted) return;
       HapticFeedback.heavyImpact();
       final runtime = ErrorMapper.runtimeBlockedMessage(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(runtime ?? ErrorMapper.message(e))));
+      messenger.showSnackBar(
+          SnackBar(content: Text(runtime ?? ErrorMapper.message(e))));
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _okBusy = false;
-        _panicBusy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _okBusy = false;
+          _panicBusy = false;
+        });
+      }
     }
   }
 
@@ -129,8 +148,12 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
         title: const Text('JE VEUX PARTIR'),
         content: const Text('Tu veux prévenir l’orga ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Confirmer')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirmer')),
         ],
       ),
     );
@@ -141,9 +164,11 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
 
   Future<void> _callOrga(String number) async {
     final uri = Uri(scheme: 'tel', path: number);
+    final messenger = ScaffoldMessenger.of(context);
     if (!await launchUrl(uri)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible d’ouvrir le téléphone.')));
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Impossible d’ouvrir le téléphone.')));
     }
   }
 
@@ -183,7 +208,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
               child: ServiceLimitedBanner(message: blockedReason),
             ),
           ToreCard(
-            header: const Text('Contacts ORGA', style: TextStyle(fontWeight: FontWeight.w700)),
+            header: const Text('Contacts ORGA',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             child: stateAsync.when(
               data: (data) {
                 final phone = data.data.orgaPhone;
@@ -191,62 +217,94 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ToreListRow(
-                      title: phone == null || phone.isEmpty ? 'Numéro indisponible' : phone,
-                      subtitle: data.data.messageHint ?? 'Aucun message particulier.',
-                      trailing: phone == null || phone.isEmpty ? null : const Icon(Icons.call_outlined),
-                      onTap: phone == null || phone.isEmpty ? null : () => _callOrga(phone),
+                      title: phone == null || phone.isEmpty
+                          ? 'Numéro indisponible'
+                          : phone,
+                      subtitle:
+                          data.data.messageHint ?? 'Aucun message particulier.',
+                      trailing: phone == null || phone.isEmpty
+                          ? null
+                          : const Icon(Icons.call_outlined),
+                      onTap: phone == null || phone.isEmpty
+                          ? null
+                          : () => _callOrga(phone),
                     ),
                   ],
                 );
               },
-              loading: () => const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()),
-              error: (_, __) => const Text('Impossible de charger les contacts ORGA.'),
+              loading: () => const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator()),
+              error: (_, __) =>
+                  const Text('Impossible de charger les contacts ORGA.'),
             ),
           ),
           const SizedBox(height: 12),
           ToreCard(
-            header: const Text('Buddy', style: TextStyle(fontWeight: FontWeight.w700)),
+            header: const Text('Buddy',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             child: stateAsync.when(
               data: (stateData) {
                 final buddy = _optimisticBuddyId ?? stateData.data.myBuddy?.id;
-                final buddyLabel = stateData.data.myBuddy?.displayNameMasked ?? buddy ?? 'Aucun buddy';
+                final buddyLabel = stateData.data.myBuddy?.displayNameMasked ??
+                    buddy ??
+                    'Aucun buddy';
                 final buddyLast = stateData.data.buddyLastCheckin;
-                final myLast = _optimisticMyLastCheckin ?? stateData.data.myLastCheckin;
+                final myLast =
+                    _optimisticMyLastCheckin ?? stateData.data.myLastCheckin;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        ToreChip(label: stateData.data.enabled ? 'Actif' : 'Désactivé', variant: stateData.data.enabled ? ToreChipVariant.ok : ToreChipVariant.warn),
+                        ToreChip(
+                            label:
+                                stateData.data.enabled ? 'Actif' : 'Désactivé',
+                            variant: stateData.data.enabled
+                                ? ToreChipVariant.ok
+                                : ToreChipVariant.warn),
                         const SizedBox(width: 8),
                         Expanded(child: Text('Mon buddy: $buddyLabel')),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('Mon dernier check-in: ${myLast == null ? '—' : '${myLast.type} · ${_relative(myLast.createdAt)}'}'),
+                    Text(
+                        'Mon dernier check-in: ${myLast == null ? '—' : '${myLast.type} · ${_relative(myLast.createdAt)}'}'),
                     const SizedBox(height: 4),
-                    Text('Dernier check-in buddy: ${buddyLast == null ? '—' : '${buddyLast.type} · ${_relative(buddyLast.createdAt)}'}'),
+                    Text(
+                        'Dernier check-in buddy: ${buddyLast == null ? '—' : '${buddyLast.type} · ${_relative(buddyLast.createdAt)}'}'),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _buddyController,
-                      decoration: const InputDecoration(labelText: 'Entrer l’ID buddy'),
+                      decoration:
+                          const InputDecoration(labelText: 'Entrer l’ID buddy'),
                       textInputAction: TextInputAction.done,
                     ),
                     const SizedBox(height: 8),
-                    ToreCTA(label: 'Définir buddy', onPressed: _buddyBusy ? null : _setBuddy, busy: _buddyBusy),
+                    ToreCTA(
+                        label: 'Définir buddy',
+                        onPressed: _buddyBusy ? null : _setBuddy,
+                        busy: _buddyBusy),
                   ],
                 );
               },
-              loading: () => const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()),
-              error: (_, __) => const Text('Impossible de charger les infos buddy.'),
+              loading: () => const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator()),
+              error: (_, __) =>
+                  const Text('Impossible de charger les infos buddy.'),
             ),
           ),
           const SizedBox(height: 12),
           ToreCard(
-            header: const Text('Actions rapides', style: TextStyle(fontWeight: FontWeight.w700)),
+            header: const Text('Actions rapides',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             child: Column(
               children: [
-                ToreCTA(label: 'JE VAIS BIEN', onPressed: _okBusy ? null : () => _checkin('OK'), busy: _okBusy),
+                ToreCTA(
+                    label: 'JE VAIS BIEN',
+                    onPressed: _okBusy ? null : () => _checkin('OK'),
+                    busy: _okBusy),
                 const SizedBox(height: 8),
                 ToreCTA(
                   label: 'JE VEUX PARTIR',
@@ -259,12 +317,15 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           ),
           const SizedBox(height: 12),
           ToreCard(
-            header: const Text('Historique', style: TextStyle(fontWeight: FontWeight.w700)),
+            header: const Text('Historique',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             child: historyAsync.when(
               data: (data) {
                 final base = data.data.items.take(10).toList(growable: true);
                 final optimistic = _optimisticMyLastCheckin;
-                if (optimistic != null && (base.isEmpty || base.first.createdAt != optimistic.createdAt)) {
+                if (optimistic != null &&
+                    (base.isEmpty ||
+                        base.first.createdAt != optimistic.createdAt)) {
                   base.insert(0, optimistic);
                 }
                 final items = base.take(10).toList(growable: false);
@@ -285,7 +346,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                               subtitle: _relative(item.createdAt),
                               trailing: ToreChip(
                                 label: item.type,
-                                variant: item.type == 'PANIC' ? ToreChipVariant.bad : ToreChipVariant.ok,
+                                variant: item.type == 'PANIC'
+                                    ? ToreChipVariant.bad
+                                    : ToreChipVariant.ok,
                               ),
                             ),
                             if (index < items.length - 1) const ToreDivider(),
@@ -304,8 +367,11 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                   ],
                 );
               },
-              loading: () => const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()),
-              error: (_, __) => const Text('Impossible de charger l’historique.'),
+              loading: () => const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator()),
+              error: (_, __) =>
+                  const Text('Impossible de charger l’historique.'),
             ),
           ),
         ],

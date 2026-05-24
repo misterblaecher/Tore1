@@ -41,7 +41,8 @@ void main() {
   });
 
   test('wizard prefill host orga selection transition', () {
-    final noPrefill = resolveCreateEventHostPrefill(prefillOrga: null, prefillHostOrgaId: null);
+    final noPrefill = resolveCreateEventHostPrefill(
+        prefillOrga: null, prefillHostOrgaId: null);
     expect(noPrefill.$1, 'user');
     expect(noPrefill.$2, isNull);
 

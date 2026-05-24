@@ -13,7 +13,14 @@ import '../network/token_storage.dart';
 import 'auth_models.dart';
 import 'auth_repository.dart';
 
-enum AuthStatus { unknown, loading, guest, authenticated, unauthenticated, bootstrapError }
+enum AuthStatus {
+  unknown,
+  loading,
+  guest,
+  authenticated,
+  unauthenticated,
+  bootstrapError
+}
 
 class AuthSessionState {
   final AuthStatus status;
@@ -21,15 +28,20 @@ class AuthSessionState {
   final String? message;
   final bool isOfflineError;
 
-  const AuthSessionState._(this.status, {this.user, this.message, this.isOfflineError = false});
+  const AuthSessionState._(this.status,
+      {this.user, this.message, this.isOfflineError = false});
 
   const AuthSessionState.unknown() : this._(AuthStatus.unknown);
   const AuthSessionState.loading() : this._(AuthStatus.loading);
   const AuthSessionState.guest() : this._(AuthStatus.guest);
-  const AuthSessionState.unauthenticated({String? message}) : this._(AuthStatus.unauthenticated, message: message);
-  const AuthSessionState.authenticated(AppUser? user) : this._(AuthStatus.authenticated, user: user);
-  const AuthSessionState.bootstrapError(String message, {bool isOfflineError = false})
-    : this._(AuthStatus.bootstrapError, message: message, isOfflineError: isOfflineError);
+  const AuthSessionState.unauthenticated({String? message})
+      : this._(AuthStatus.unauthenticated, message: message);
+  const AuthSessionState.authenticated(AppUser? user)
+      : this._(AuthStatus.authenticated, user: user);
+  const AuthSessionState.bootstrapError(String message,
+      {bool isOfflineError = false})
+      : this._(AuthStatus.bootstrapError,
+            message: message, isOfflineError: isOfflineError);
 
   bool get isGuest => status == AuthStatus.guest;
   bool get isAuthed => status == AuthStatus.authenticated;
@@ -58,15 +70,17 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
       final guestMode = await _storage.readGuestModeEnabled();
 
       if (token == null || token.isEmpty) {
-        debugPrint('[auth][bootstrap] no token -> ${guestMode ? 'guest mode' : 'unauthenticated'}');
-        state = guestMode ? const AuthSessionState.guest() : const AuthSessionState.unauthenticated();
+        debugPrint(
+            '[auth][bootstrap] no token -> ${guestMode ? 'guest mode' : 'unauthenticated'}');
+        state = guestMode
+            ? const AuthSessionState.guest()
+            : const AuthSessionState.unauthenticated();
         return;
       }
 
       debugPrint('[auth][bootstrap] token found -> /auth/me');
-      final me = await _repo
-          .tryMe()
-          .timeout(const Duration(seconds: 9), onTimeout: () => throw TimeoutException('auth bootstrap timeout'));
+      final me = await _repo.tryMe().timeout(const Duration(seconds: 9),
+          onTimeout: () => throw TimeoutException('auth bootstrap timeout'));
       if (me == null) {
         debugPrint('[auth][bootstrap] /auth/me unauthenticated');
         state = const AuthSessionState.unauthenticated();
@@ -76,10 +90,11 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
       }
     } on TimeoutException {
       debugPrint('[auth][bootstrap] timeout');
-      state = const AuthSessionState.bootstrapError('Connexion impossible. Vérifie ton réseau.', isOfflineError: true);
+      state = const AuthSessionState.bootstrapError(
+          'Connexion impossible. Vérifie ton réseau.',
+          isOfflineError: true);
     } on DioException catch (e) {
-      final networkError =
-          e.type == DioExceptionType.connectionTimeout ||
+      final networkError = e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.sendTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError;
@@ -92,10 +107,12 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
       final message = networkError
           ? 'Connexion impossible. Vérifie ton réseau.'
           : 'Session indisponible. Réessaie.';
-      state = AuthSessionState.bootstrapError(message, isOfflineError: networkError);
+      state = AuthSessionState.bootstrapError(message,
+          isOfflineError: networkError);
     } catch (err) {
       debugPrint('[auth][bootstrap] fail $err');
-      state = const AuthSessionState.bootstrapError('Session indisponible. Réessaie.');
+      state = const AuthSessionState.bootstrapError(
+          'Session indisponible. Réessaie.');
     }
   }
 
@@ -108,7 +125,9 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
       data: {'display_name': 'Invité'},
       options: Options(extra: {'skipAuth': true}),
     );
-    final data = (response.data is Map) ? (response.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final data = (response.data is Map)
+        ? (response.data as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
     final token = (data['token'] ?? data['access_token'] ?? '').toString();
     if (token.isEmpty) {
       throw Exception('Réponse /auth/guest invalide (token manquant).');
@@ -120,7 +139,8 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     state = const AuthSessionState.guest();
   }
 
-  Future<void> loginWithEmail({required String email, required String token}) async {
+  Future<void> loginWithEmail(
+      {required String email, required String token}) async {
     final tokens = await _repo.verifyEmailOtp(email: email, code: token);
     await _completeLogin(tokens);
   }
@@ -139,7 +159,6 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     final tokens = await _repo.loginWithGoogle(idToken);
     await _completeLogin(tokens);
   }
-
 
   Future<void> refreshSession() async {
     await bootstrap();
@@ -160,11 +179,13 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
     if (guestId != null && guestId.isNotEmpty) {
       await _storage.writeGuestDeviceId(guestId);
     }
-    state = const AuthSessionState.unauthenticated(message: 'Session expirée. Connecte-toi à nouveau.');
+    state = const AuthSessionState.unauthenticated(
+        message: 'Session expirée. Connecte-toi à nouveau.');
   }
 
   Future<void> _completeLogin(AuthTokens tokens) async {
-    await _storage.writeTokens(accessToken: tokens.accessToken, refreshToken: tokens.refreshToken);
+    await _storage.writeTokens(
+        accessToken: tokens.accessToken, refreshToken: tokens.refreshToken);
     await _storage.writeGuestModeEnabled(false);
     final me = await _repo.tryMe();
     state = AuthSessionState.authenticated(me);
@@ -183,6 +204,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
   }
 }
 
-final authSessionProvider = StateNotifierProvider<AuthSessionNotifier, AuthSessionState>((ref) {
+final authSessionProvider =
+    StateNotifierProvider<AuthSessionNotifier, AuthSessionState>((ref) {
   return AuthSessionNotifier(ref);
 });

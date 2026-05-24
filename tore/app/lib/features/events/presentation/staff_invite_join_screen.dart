@@ -16,7 +16,8 @@ class StaffInviteJoinScreen extends ConsumerStatefulWidget {
   final String code;
 
   @override
-  ConsumerState<StaffInviteJoinScreen> createState() => _StaffInviteJoinScreenState();
+  ConsumerState<StaffInviteJoinScreen> createState() =>
+      _StaffInviteJoinScreenState();
 }
 
 class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
@@ -26,7 +27,8 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
   String _role = 'HELPER';
   String _eventName = 'Événement';
 
-  String _idem(String action) => '$action-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String _idem(String action) =>
+      '$action-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   @override
   void initState() {
@@ -37,14 +39,19 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final open = await ref.read(apiProvider).resolveOpenLink(type: 'staff_invite', code: widget.code);
-      final target = Map<String, dynamic>.from((open['target'] as Map?) ?? const <String, dynamic>{});
+      final open = await ref
+          .read(apiProvider)
+          .resolveOpenLink(type: 'staff_invite', code: widget.code);
+      final target = Map<String, dynamic>.from(
+          (open['target'] as Map?) ?? const <String, dynamic>{});
       final eventId = (target['event_id'] as num?)?.toInt();
       final role = (target['role'] ?? 'HELPER').toString().toUpperCase();
       String eventName = 'Événement';
       if (eventId != null) {
-        final sharePack = await ref.read(apiProvider).getEventSharePackV1(eventId);
-        final event = Map<String, dynamic>.from((sharePack['event'] as Map?) ?? const <String, dynamic>{});
+        final sharePack =
+            await ref.read(apiProvider).getEventSharePackV1(eventId);
+        final event = Map<String, dynamic>.from(
+            (sharePack['event'] as Map?) ?? const <String, dynamic>{});
         eventName = (event['name'] ?? 'Événement').toString();
       }
       if (mounted) {
@@ -66,7 +73,10 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
     if (eventId == null || !canWrite(ref, intent: WriteIntent.critical)) return;
     setState(() => _joining = true);
     try {
-      final result = await ref.read(apiProvider).joinStaffByInviteV1(eventId: eventId, code: widget.code, idempotencyKey: _idem('staff-join'));
+      final result = await ref.read(apiProvider).joinStaffByInviteV1(
+          eventId: eventId,
+          code: widget.code,
+          idempotencyKey: _idem('staff-join'));
       final role = (result['role'] ?? _role).toString().toUpperCase();
       ref.read(staffSessionProvider.notifier).establish(
             eventId: eventId,
@@ -75,11 +85,13 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
                 : role == 'MANAGER'
                     ? StaffSessionRole.manager
                     : StaffSessionRole.entry,
-            expiresAt: DateTime.tryParse((result['expiresAt'] ?? '').toString()),
+            expiresAt:
+                DateTime.tryParse((result['expiresAt'] ?? '').toString()),
           );
       if (!mounted) return;
       if (role == 'ENTRY') {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => EntryStaffScreen(eventId: eventId)));
+        Navigator.of(context).pushReplacement(MaterialPageRoute(
+            builder: (_) => EntryStaffScreen(eventId: eventId)));
       } else if (role == 'MANAGER') {
         final now = DateTime.now();
         final event = MyEventSummary(
@@ -98,9 +110,13 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
           canManage: true,
           joined: true,
         );
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => EventManageLandingScreen(event: event)));
+        Navigator.of(context).pushReplacement(MaterialPageRoute(
+            builder: (_) => EventManageLandingScreen(event: event)));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(role == 'BAR' ? 'Bar staff prêt (BAR MODE portail)' : 'Helper staff prêt')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(role == 'BAR'
+                ? 'Bar staff prêt (BAR MODE portail)'
+                : 'Helper staff prêt')));
       }
     } finally {
       if (mounted) setState(() => _joining = false);
@@ -118,7 +134,8 @@ class _StaffInviteJoinScreenState extends ConsumerState<StaffInviteJoinScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_eventName, style: Theme.of(context).textTheme.titleLarge),
+                  Text(_eventName,
+                      style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
                   Text('Rôle: $_role'),
                   const SizedBox(height: 8),

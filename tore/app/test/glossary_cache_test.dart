@@ -21,7 +21,10 @@ void main() {
   });
 
   test('expired cache is stale', () async {
-    final old = DateTime.now().toUtc().subtract(const Duration(days: 8)).toIso8601String();
+    final old = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 8))
+        .toIso8601String();
     SharedPreferences.setMockInitialValues({
       'glossary_public_settings_9': jsonEncode({
         'payload': {'publicEnabled': true, 'availableTags': []},

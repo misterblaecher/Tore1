@@ -11,7 +11,8 @@ final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
   return EventsRepository(client.dio, cache);
 });
 
-final eventsFutureProvider = FutureProvider.family<List<Event>, int>((ref, barId) async {
+final eventsFutureProvider =
+    FutureProvider.family<List<Event>, int>((ref, barId) async {
   final repo = ref.watch(eventsRepositoryProvider);
   return repo.fetchEvents(barId);
 });

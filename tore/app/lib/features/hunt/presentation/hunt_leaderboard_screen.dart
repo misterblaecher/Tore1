@@ -9,22 +9,27 @@ import 'package:tore/ui/components/components.dart';
 import '../../../state.dart';
 
 class HuntLeaderboardScreen extends ConsumerStatefulWidget {
-  const HuntLeaderboardScreen({super.key, required this.eventId, required this.huntId});
+  const HuntLeaderboardScreen(
+      {super.key, required this.eventId, required this.huntId});
   final int eventId;
   final int huntId;
 
   @override
-  ConsumerState<HuntLeaderboardScreen> createState() => _HuntLeaderboardScreenState();
+  ConsumerState<HuntLeaderboardScreen> createState() =>
+      _HuntLeaderboardScreenState();
 }
 
 class _HuntLeaderboardScreenState extends ConsumerState<HuntLeaderboardScreen> {
   final Set<String> _pendingSteal = <String>{};
 
   Future<void> _steal(String victimUserId, String victimName) async {
-    final runtimeState = ref.read(activeEventContextProvider).valueOrNull?.eventState;
-    final blockedReason = writeDisabledReason(ref, intent: WriteIntent.critical, runtimeState: runtimeState);
+    final runtimeState =
+        ref.read(activeEventContextProvider).valueOrNull?.eventState;
+    final blockedReason = writeDisabledReason(ref,
+        intent: WriteIntent.critical, runtimeState: runtimeState);
     if (blockedReason != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(blockedReason)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(blockedReason)));
       return;
     }
 
@@ -34,8 +39,12 @@ class _HuntLeaderboardScreenState extends ConsumerState<HuntLeaderboardScreen> {
         title: const Text('Confirmer Steal'),
         content: Text('Voler des points à $victimName ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annuler')),
-          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Steal')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Steal')),
         ],
       ),
     );
@@ -47,17 +56,27 @@ class _HuntLeaderboardScreenState extends ConsumerState<HuntLeaderboardScreen> {
             eventId: widget.eventId,
             huntId: widget.huntId,
             victimUserId: victimUserId,
-            idempotencyKey: 'hunt-steal-${widget.eventId}-${widget.huntId}-$victimUserId-${DateTime.now().millisecondsSinceEpoch}',
+            idempotencyKey:
+                'hunt-steal-${widget.eventId}-${widget.huntId}-$victimUserId-${DateTime.now().millisecondsSinceEpoch}',
           );
       if (!mounted) return;
-      final message = res.ok ? 'Steal réussi: +${res.amount}' : _stealErrorLabel(res.result);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-      ref.invalidate(huntLeaderboardProvider(HuntLeaderboardKey(eventId: widget.eventId, huntId: widget.huntId)));
+      final message = res.ok
+          ? 'Steal réussi: +${res.amount}'
+          : _stealErrorLabel(res.result);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      ref.invalidate(huntLeaderboardProvider(
+          HuntLeaderboardKey(eventId: widget.eventId, huntId: widget.huntId)));
       ref.invalidate(activeHuntProvider(widget.eventId));
     } on DioException catch (e) {
       if (!mounted) return;
-      final reason = (e.response?.data is Map) ? ((e.response?.data as Map)['detail']?['reason'] ?? (e.response?.data as Map)['reason']) : null;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Steal impossible: ${reason ?? e.response?.statusCode ?? e.message}')));
+      final reason = (e.response?.data is Map)
+          ? ((e.response?.data as Map)['detail']?['reason'] ??
+              (e.response?.data as Map)['reason'])
+          : null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Steal impossible: ${reason ?? e.response?.statusCode ?? e.message}')));
     } finally {
       if (mounted) setState(() => _pendingSteal.remove(victimUserId));
     }
@@ -77,7 +96,8 @@ class _HuntLeaderboardScreenState extends ConsumerState<HuntLeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(userIdProvider);
-    final async = ref.watch(huntLeaderboardProvider(HuntLeaderboardKey(eventId: widget.eventId, huntId: widget.huntId)));
+    final async = ref.watch(huntLeaderboardProvider(
+        HuntLeaderboardKey(eventId: widget.eventId, huntId: widget.huntId)));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Hunt Leaderboard')),
@@ -89,27 +109,53 @@ class _HuntLeaderboardScreenState extends ConsumerState<HuntLeaderboardScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (cached.fromCache) const Padding(padding: EdgeInsets.only(bottom: 8), child: ToreChip(label: 'Mode lecture (cache)', variant: ToreChipVariant.warn)),
+              if (cached.fromCache)
+                const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: ToreChip(
+                        label: 'Mode lecture (cache)',
+                        variant: ToreChipVariant.warn)),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: lb.top3.map((row) => SizedBox(width: 180, child: ToreCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('#${row.rank} ${row.name}', style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text('Score ${row.score}')])))).toList(),
+                children: lb.top3
+                    .map((row) => SizedBox(
+                        width: 180,
+                        child: ToreCard(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Text('#${row.rank} ${row.name}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text('Score ${row.score}')
+                            ]))))
+                    .toList(),
               ),
               const SizedBox(height: 12),
               const ToreDivider(),
               ...lb.list.map((row) {
                 final isMe = me == row.userId;
-                final disabled = isMe || cached.fromCache || _pendingSteal.contains(row.userId);
+                final disabled = isMe ||
+                    cached.fromCache ||
+                    _pendingSteal.contains(row.userId);
                 return Container(
-                  color: isMe ? Colors.amber.withOpacity(0.12) : null,
+                  color: isMe ? Colors.amber.withValues(alpha: 0.12) : null,
                   child: ToreListRow(
                     title: '#${row.rank} ${row.name}',
-                    subtitle: 'Score ${row.score}${row.private ? ' · privé' : ''}',
+                    subtitle:
+                        'Score ${row.score}${row.private ? ' · privé' : ''}',
                     trailing: isMe
-                        ? const ToreChip(label: 'ME', variant: ToreChipVariant.info)
+                        ? const ToreChip(
+                            label: 'ME', variant: ToreChipVariant.info)
                         : TextButton(
-                            onPressed: disabled ? null : () => _steal(row.userId, row.name),
-                            child: _pendingSteal.contains(row.userId) ? const Text('...') : const Text('Steal'),
+                            onPressed: disabled
+                                ? null
+                                : () => _steal(row.userId, row.name),
+                            child: _pendingSteal.contains(row.userId)
+                                ? const Text('...')
+                                : const Text('Steal'),
                           ),
                   ),
                 );

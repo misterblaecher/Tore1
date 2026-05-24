@@ -11,7 +11,8 @@ class CacheStore {
   static const _eventPrefix = 'tore_rebuild_event_ctx_v1_';
 
   String barsKey() => 'bars:v1';
-  String barEventsKey(String barId, String filter) => 'bar_events:$barId:v1:$filter';
+  String barEventsKey(String barId, String filter) =>
+      'bar_events:$barId:v1:$filter';
   String menuKey(String scope, String id) => 'menu:$scope:$id:v1';
   String walletKey(String scope, String id) => 'wallet:$scope:$id:v1';
   String tickerKey(String eventId) => 'ticker:$eventId:v1';
@@ -39,7 +40,8 @@ class CacheStore {
 
   Future<void> saveEvent(EventContext context) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_eventPrefix${context.eventId}', jsonEncode(context.toJson()));
+    await prefs.setString(
+        '$_eventPrefix${context.eventId}', jsonEncode(context.toJson()));
   }
 
   Future<void> saveJson(String key, Map<String, dynamic> payload) async {
@@ -49,7 +51,8 @@ class CacheStore {
       'payload': payload,
     };
     await prefs.setString(key, jsonEncode(wire));
-    await ClientLog.instance.log('cache.write', {'key': key, 'size_bytes': jsonEncode(wire).length});
+    await ClientLog.instance.log(
+        'cache.write', {'key': key, 'size_bytes': jsonEncode(wire).length});
   }
 
   Future<CachePayload?> loadJson(String key, {Duration? ttl}) async {
@@ -58,11 +61,17 @@ class CacheStore {
     if (raw == null) return null;
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     final ts = (decoded['timestamp'] as num?)?.toInt() ?? 0;
-    final payload = (decoded['payload'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    final age = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+    final payload = (decoded['payload'] as Map?)?.cast<String, dynamic>() ??
+        <String, dynamic>{};
+    final age =
+        DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
     final stale = ttl != null && age > ttl;
-    await ClientLog.instance.log('cache.read', {'key': key, 'age_ms': age.inMilliseconds, 'stale': stale});
-    return CachePayload(payload: payload, isStale: stale, cachedAt: DateTime.fromMillisecondsSinceEpoch(ts));
+    await ClientLog.instance.log('cache.read',
+        {'key': key, 'age_ms': age.inMilliseconds, 'stale': stale});
+    return CachePayload(
+        payload: payload,
+        isStale: stale,
+        cachedAt: DateTime.fromMillisecondsSinceEpoch(ts));
   }
 
   Future<Map<String, Duration?>> cacheStatusSummary() async {
@@ -84,15 +93,27 @@ class CacheStore {
       }
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       final ts = (decoded['timestamp'] as num?)?.toInt() ?? 0;
-      out[row.key] = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+      out[row.key] =
+          DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
     }
     return out;
   }
 
   Future<void> clearDomainCaches() async {
     final prefs = await SharedPreferences.getInstance();
-    final prefixes = ['bars:', 'bar_events:', 'menu:', 'wallet:', 'ticker:', 'orders:', 'zones:'];
-    final toDelete = prefs.getKeys().where((k) => prefixes.any((p) => k.startsWith(p))).toList();
+    final prefixes = [
+      'bars:',
+      'bar_events:',
+      'menu:',
+      'wallet:',
+      'ticker:',
+      'orders:',
+      'zones:'
+    ];
+    final toDelete = prefs
+        .getKeys()
+        .where((k) => prefixes.any((p) => k.startsWith(p)))
+        .toList();
     for (final key in toDelete) {
       await prefs.remove(key);
     }
@@ -100,7 +121,8 @@ class CacheStore {
 }
 
 class CachePayload {
-  const CachePayload({required this.payload, required this.isStale, required this.cachedAt});
+  const CachePayload(
+      {required this.payload, required this.isStale, required this.cachedAt});
 
   final Map<String, dynamic> payload;
   final bool isStale;

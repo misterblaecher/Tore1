@@ -13,7 +13,8 @@ import '../../../shared/widgets/service_limited_banner.dart';
 import 'order_status_live_screen.dart';
 
 class OrderQrScreen extends ConsumerStatefulWidget {
-  const OrderQrScreen({super.key, required this.orderId, this.estimatedTickets});
+  const OrderQrScreen(
+      {super.key, required this.orderId, this.estimatedTickets});
 
   final int orderId;
   final int? estimatedTickets;
@@ -53,11 +54,17 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
     try {
       final api = ref.read(apiProvider);
       final requestKey = 'order-qr-${widget.orderId}';
-      final payload = await api.issueOrderClientQr(orderId: widget.orderId, idempotencyKey: requestKey);
+      final payload = await api.issueOrderClientQr(
+          orderId: widget.orderId, idempotencyKey: requestKey);
       final raw = (payload['qr_raw'] ?? '').toString();
-      final expires = DateTime.tryParse((payload['expires_at'] ?? '').toString())?.toLocal();
-      final ttl = payload['ttl_seconds'] is num ? (payload['ttl_seconds'] as num).toInt() : null;
-      final expiresAt = expires ?? DateTime.now().add(Duration(seconds: ttl ?? 90));
+      final expires =
+          DateTime.tryParse((payload['expires_at'] ?? '').toString())
+              ?.toLocal();
+      final ttl = payload['ttl_seconds'] is num
+          ? (payload['ttl_seconds'] as num).toInt()
+          : null;
+      final expiresAt =
+          expires ?? DateTime.now().add(Duration(seconds: ttl ?? 90));
       _startCountdown(raw, expiresAt);
     } catch (e) {
       final mapped = _mapError(e);
@@ -108,7 +115,10 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
 
   int get _cooldownLeft {
     if (_rateLimitedUntil == null) return 0;
-    return _rateLimitedUntil!.difference(DateTime.now()).inSeconds.clamp(0, 120);
+    return _rateLimitedUntil!
+        .difference(DateTime.now())
+        .inSeconds
+        .clamp(0, 120);
   }
 
   String _mapError(Object e) {
@@ -140,8 +150,12 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
     if (reason == 'event_paused' || reason == 'module_off') {
       return 'Service en pause.';
     }
-    if (reason == 'read_only' || reason == 'frozen' || reason == 'closed' || reason == 'event_closed') {
-      return writeBlockedReasonMessage(normalizeRuntimeBlockReason(reason: reason));
+    if (reason == 'read_only' ||
+        reason == 'frozen' ||
+        reason == 'closed' ||
+        reason == 'event_closed') {
+      return writeBlockedReasonMessage(
+          normalizeRuntimeBlockReason(reason: reason));
     }
     if (reason == 'revoked') {
       return 'Service indisponible pour le moment.';
@@ -193,7 +207,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
             Text(
               'Commande #${widget.orderId}',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withOpacity(0.8)),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
             ),
             const SizedBox(height: 12),
             if (widget.estimatedTickets != null)
@@ -231,7 +245,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF111827),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: accent.withOpacity(0.55)),
+                border: Border.all(color: accent.withValues(alpha: 0.55)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -252,13 +266,15 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
               Text(
                 'Expire à ${_expiresAt!.hour.toString().padLeft(2, '0')}:${_expiresAt!.minute.toString().padLeft(2, '0')}:${_expiresAt!.second.toString().padLeft(2, '0')}',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12),
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
               ),
             ],
             if (_error != null) ...[
               const SizedBox(height: 10),
               _runtimeReason != null
-                  ? ServiceLimitedBanner(message: writeBlockedReasonMessage(_runtimeReason))
+                  ? ServiceLimitedBanner(
+                      message: writeBlockedReasonMessage(_runtimeReason))
                   : Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -269,7 +285,6 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
                     ),
             ],
             const SizedBox(height: 12),
-
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _qrRaw == null
@@ -285,11 +300,12 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
               icon: const Icon(Icons.copy_all_outlined),
               label: const Text('Copier le deeplink'),
             ),
-
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => OrderStatusLiveScreen(orderId: widget.orderId)),
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          OrderStatusLiveScreen(orderId: widget.orderId)),
                 );
               },
               icon: const Icon(Icons.track_changes_outlined),
@@ -298,7 +314,9 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
             ElevatedButton.icon(
               onPressed: (_loading || _isRateLimited) ? null : () => _issueQr(),
               icon: const Icon(Icons.refresh),
-              label: Text(_isRateLimited ? 'Réessaie dans ${_cooldownLeft}s' : 'Regénérer'),
+              label: Text(_isRateLimited
+                  ? 'Réessaie dans ${_cooldownLeft}s'
+                  : 'Regénérer'),
             ),
             const SizedBox(height: 8),
           ],

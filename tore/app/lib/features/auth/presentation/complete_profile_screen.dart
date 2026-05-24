@@ -8,7 +8,8 @@ class CompleteProfileScreen extends ConsumerStatefulWidget {
   const CompleteProfileScreen({super.key});
 
   @override
-  ConsumerState<CompleteProfileScreen> createState() => _CompleteProfileScreenState();
+  ConsumerState<CompleteProfileScreen> createState() =>
+      _CompleteProfileScreenState();
 }
 
 class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
@@ -27,11 +28,13 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
       _error = null;
     });
     try {
-      await ref.read(authRepositoryProvider).patchMe(displayName: _displayCtrl.text.trim(), bio: _bioCtrl.text.trim());
+      await ref.read(authRepositoryProvider).patchMe(
+          displayName: _displayCtrl.text.trim(), bio: _bioCtrl.text.trim());
       ref.invalidate(meProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
-      if (mounted) setState(() => _error = 'Impossible de sauvegarder. Réessaie.');
+      if (mounted)
+        setState(() => _error = 'Impossible de sauvegarder. Réessaie.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -49,12 +52,27 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
           AppCard(
             child: Column(
               children: [
-                TextField(controller: _displayCtrl, enabled: !_loading, decoration: const InputDecoration(labelText: 'Pseudo *')),
+                TextField(
+                    controller: _displayCtrl,
+                    enabled: !_loading,
+                    decoration: const InputDecoration(labelText: 'Pseudo *')),
                 const SizedBox(height: AppSpacing.sm),
-                TextField(controller: _bioCtrl, enabled: !_loading, maxLines: 3, decoration: const InputDecoration(labelText: 'Bio (optionnel)')),
+                TextField(
+                    controller: _bioCtrl,
+                    enabled: !_loading,
+                    maxLines: 3,
+                    decoration:
+                        const InputDecoration(labelText: 'Bio (optionnel)')),
                 const SizedBox(height: AppSpacing.md),
-                PrimaryButton(label: _loading ? 'Sauvegarde...' : 'Continuer', onPressed: _loading ? null : _submit, loading: _loading),
-                if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
+                PrimaryButton(
+                    label: _loading ? 'Sauvegarde...' : 'Continuer',
+                    onPressed: _loading ? null : _submit,
+                    loading: _loading),
+                if (_error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(_error!,
+                          style: const TextStyle(color: Colors.redAccent))),
               ],
             ),
           ),

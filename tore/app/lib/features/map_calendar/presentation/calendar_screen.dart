@@ -23,7 +23,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   Widget build(BuildContext context) {
     final asyncEvents = ref.watch(calendarEventsProvider(_range));
     final hasPublicJoinable = asyncEvents.maybeWhen(
-      data: (result) => result.items.any((item) => (item['visibility'] ?? 'PUBLIC').toString().toUpperCase() == 'PUBLIC'),
+      data: (result) => result.items.any((item) =>
+          (item['visibility'] ?? 'PUBLIC').toString().toUpperCase() ==
+          'PUBLIC'),
       orElse: () => true,
     );
 
@@ -46,9 +48,21 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             child: Wrap(
               spacing: 8,
               children: [
-                ChoiceChip(label: const Text('Aujourd’hui'), selected: _range == CalendarRange.today, onSelected: (_) => setState(() => _range = CalendarRange.today)),
-                ChoiceChip(label: const Text('Semaine'), selected: _range == CalendarRange.week, onSelected: (_) => setState(() => _range = CalendarRange.week)),
-                ChoiceChip(label: const Text('Mois'), selected: _range == CalendarRange.month, onSelected: (_) => setState(() => _range = CalendarRange.month)),
+                ChoiceChip(
+                    label: const Text('Aujourd’hui'),
+                    selected: _range == CalendarRange.today,
+                    onSelected: (_) =>
+                        setState(() => _range = CalendarRange.today)),
+                ChoiceChip(
+                    label: const Text('Semaine'),
+                    selected: _range == CalendarRange.week,
+                    onSelected: (_) =>
+                        setState(() => _range = CalendarRange.week)),
+                ChoiceChip(
+                    label: const Text('Mois'),
+                    selected: _range == CalendarRange.month,
+                    onSelected: (_) =>
+                        setState(() => _range = CalendarRange.month)),
               ],
             ),
           ),
@@ -63,18 +77,24 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   itemBuilder: (_, index) {
                     final item = result.items[index];
                     final eventId = int.tryParse('${item['id']}');
-                    final start = DateTime.tryParse((item['startAt'] ?? '').toString());
-                    final end = DateTime.tryParse((item['endAt'] ?? '').toString());
-                    final dateLabel = '${start != null ? TimeOfDay.fromDateTime(start).format(context) : '--'} - ${end != null ? TimeOfDay.fromDateTime(end).format(context) : '--'}';
+                    final start =
+                        DateTime.tryParse((item['startAt'] ?? '').toString());
+                    final end =
+                        DateTime.tryParse((item['endAt'] ?? '').toString());
+                    final dateLabel =
+                        '${start != null ? TimeOfDay.fromDateTime(start).format(context) : '--'} - ${end != null ? TimeOfDay.fromDateTime(end).format(context) : '--'}';
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: ToreCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text((item['name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text((item['name'] ?? '').toString(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
                             const SizedBox(height: 4),
-                            Text('$dateLabel · ${(item['barName'] ?? 'Bar').toString()}'),
+                            Text(
+                                '$dateLabel · ${(item['barName'] ?? 'Bar').toString()}'),
                             const SizedBox(height: 8),
                             Wrap(
                               spacing: 8,
@@ -83,8 +103,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                   onPressed: eventId == null
                                       ? null
                                       : () async {
-                                          final url = ref.read(apiProvider).getEventIcsUrl(eventId);
-                                          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                                          final url = ref
+                                              .read(apiProvider)
+                                              .getEventIcsUrl(eventId);
+                                          await launchUrl(Uri.parse(url),
+                                              mode: LaunchMode
+                                                  .externalApplication);
                                         },
                                   child: const Text('Ajouter au calendrier'),
                                 ),
@@ -92,29 +116,60 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                   onPressed: eventId == null
                                       ? null
                                       : () async {
-                                          final isPublic = (item['visibility'] ?? 'PUBLIC').toString().toUpperCase() == 'PUBLIC';
+                                          final isPublic =
+                                              (item['visibility'] ?? 'PUBLIC')
+                                                      .toString()
+                                                      .toUpperCase() ==
+                                                  'PUBLIC';
                                           if (isPublic) {
                                             try {
-                                              final share = await ref.read(apiProvider).getEventShareV1(eventId);
-                                              final deepLink = (share['deeplink'] ?? '').toString();
-                                              final webUrl = (share['webUrl'] ?? share['https_link'] ?? '').toString();
-                                              if (deepLink.isNotEmpty && await canLaunchUrl(Uri.parse(deepLink))) {
-                                                await launchUrl(Uri.parse(deepLink), mode: LaunchMode.externalApplication);
+                                              final share = await ref
+                                                  .read(apiProvider)
+                                                  .getEventShareV1(eventId);
+                                              final deepLink =
+                                                  (share['deeplink'] ?? '')
+                                                      .toString();
+                                              final webUrl = (share['webUrl'] ??
+                                                      share['https_link'] ??
+                                                      '')
+                                                  .toString();
+                                              if (deepLink.isNotEmpty &&
+                                                  await canLaunchUrl(
+                                                      Uri.parse(deepLink))) {
+                                                await launchUrl(
+                                                    Uri.parse(deepLink),
+                                                    mode: LaunchMode
+                                                        .externalApplication);
                                                 return;
                                               }
                                               if (webUrl.isNotEmpty) {
-                                                await launchUrl(Uri.parse(webUrl), mode: LaunchMode.externalApplication);
+                                                await launchUrl(
+                                                    Uri.parse(webUrl),
+                                                    mode: LaunchMode
+                                                        .externalApplication);
                                                 return;
                                               }
                                             } catch (_) {
                                               // fallback in-app join below
                                             }
                                             if (!context.mounted) return;
-                                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventPublicScreen(eventId: eventId)));
+                                            Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        EventPublicScreen(
+                                                            eventId: eventId)));
                                             return;
                                           }
                                           if (!context.mounted) return;
-                                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: eventId, eventName: (item['name'] ?? '').toString())));
+                                          Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      EventHubScreen(
+                                                          eventId: eventId,
+                                                          eventName: (item[
+                                                                      'name'] ??
+                                                                  '')
+                                                              .toString())));
                                         },
                                   child: const Text('Ouvrir'),
                                 ),

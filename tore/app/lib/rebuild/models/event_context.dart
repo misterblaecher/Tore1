@@ -22,9 +22,13 @@ class EventContext {
       };
 
   static EventContext fromJson(Map<String, dynamic> map) => EventContext(
-        eventId: safeGetString(map, 'eventId', fallback: 'event_unknown', aliases: const ['event_id']),
-        eventState: mapBackendStateAlias(safeGetString(map, 'eventState', fallback: 'DRAFT', aliases: const ['event_state'])),
-        moduleStates: safeGetMap(map, 'moduleStates', aliases: const ['module_states']).map(
+        eventId: safeGetString(map, 'eventId',
+            fallback: 'event_unknown', aliases: const ['event_id']),
+        eventState: mapBackendStateAlias(safeGetString(map, 'eventState',
+            fallback: 'DRAFT', aliases: const ['event_state'])),
+        moduleStates:
+            safeGetMap(map, 'moduleStates', aliases: const ['module_states'])
+                .map(
           (k, v) => MapEntry(k, _moduleStateFrom(v)),
         ),
         syncedAt: tryParseDateTime(map['syncedAt'], fallback: DateTime.now()),

@@ -15,7 +15,8 @@ class OrderStatusLiveScreen extends ConsumerStatefulWidget {
   final int orderId;
 
   @override
-  ConsumerState<OrderStatusLiveScreen> createState() => _OrderStatusLiveScreenState();
+  ConsumerState<OrderStatusLiveScreen> createState() =>
+      _OrderStatusLiveScreenState();
 }
 
 class _OrderStatusLiveScreenState extends ConsumerState<OrderStatusLiveScreen> {
@@ -28,7 +29,8 @@ class _OrderStatusLiveScreenState extends ConsumerState<OrderStatusLiveScreen> {
   void initState() {
     super.initState();
     unawaited(_load());
-    _pollTimer = Timer.periodic(const Duration(seconds: 6), (_) => _load(silent: true));
+    _pollTimer =
+        Timer.periodic(const Duration(seconds: 6), (_) => _load(silent: true));
   }
 
   @override
@@ -77,13 +79,15 @@ class _OrderStatusLiveScreenState extends ConsumerState<OrderStatusLiveScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Commande #${widget.orderId}', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Commande #${widget.orderId}',
+                      style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
                   ToreChip(label: alias, variant: _chipVariant(status)),
                   if (_order != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
-                      child: Text('Total: ${_order!['total_cents'] ?? 0} cents'),
+                      child:
+                          Text('Total: ${_order!['total_cents'] ?? 0} cents'),
                     ),
                 ],
               ),

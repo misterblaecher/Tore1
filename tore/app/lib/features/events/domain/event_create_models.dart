@@ -27,6 +27,8 @@ class CreateWizardState {
   final int step;
   final bool publishNow;
 
-  CreateWizardState next() => CreateWizardState(step: step + 1, publishNow: publishNow);
-  CreateWizardState prev() => CreateWizardState(step: step > 0 ? step - 1 : 0, publishNow: publishNow);
+  CreateWizardState next() =>
+      CreateWizardState(step: step + 1, publishNow: publishNow);
+  CreateWizardState prev() =>
+      CreateWizardState(step: step > 0 ? step - 1 : 0, publishNow: publishNow);
 }

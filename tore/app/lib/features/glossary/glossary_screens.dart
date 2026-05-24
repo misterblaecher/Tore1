@@ -25,10 +25,14 @@ class _GlossaryHomeScreenState extends ConsumerState<GlossaryHomeScreen> {
   Widget build(BuildContext context) {
     final moduleOn = ref.watch(glossaryModuleProvider);
     return moduleOn.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(body: Center(child: Text('Module indisponible'))),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (_, __) =>
+          const Scaffold(body: Center(child: Text('Module indisponible'))),
       data: (enabled) {
-        if (!enabled) return const Scaffold(body: Center(child: Text('Glossaire indisponible')));
+        if (!enabled)
+          return const Scaffold(
+              body: Center(child: Text('Glossaire indisponible')));
         final committeesAsync = ref.watch(glossaryPublicCommitteesProvider);
         return Scaffold(
           appBar: AppBar(title: const Text('Glossaire folklore')),
@@ -36,14 +40,22 @@ class _GlossaryHomeScreenState extends ConsumerState<GlossaryHomeScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Erreur: $e')),
             data: (data) {
-              final items = data.data.where((c) => c.name.toLowerCase().contains(_search.toLowerCase())).toList(growable: false);
+              final items = data.data
+                  .where((c) =>
+                      c.name.toLowerCase().contains(_search.toLowerCase()))
+                  .toList(growable: false);
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  TextField(decoration: const InputDecoration(labelText: 'Rechercher un comité'), onChanged: (v) => setState(() => _search = v)),
+                  TextField(
+                      decoration: const InputDecoration(
+                          labelText: 'Rechercher un comité'),
+                      onChanged: (v) => setState(() => _search = v)),
                   const SizedBox(height: 8),
                   if (data.cacheStatus.isCached)
-                    Text('Offline cache • Dernière sync: ${data.cacheStatus.lastSyncAt?.toLocal().toString() ?? '-'}', style: const TextStyle(color: Colors.orange)),
+                    Text(
+                        'Offline cache • Dernière sync: ${data.cacheStatus.lastSyncAt?.toLocal().toString() ?? '-'}',
+                        style: const TextStyle(color: Colors.orange)),
                   for (final c in items)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -52,7 +64,12 @@ class _GlossaryHomeScreenState extends ConsumerState<GlossaryHomeScreen> {
                           title: c.name,
                           subtitle: c.shortName ?? 'Comité',
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GlossaryTermsScreen(committeeId: c.id, committeeName: c.name, isPublicScope: true))),
+                          onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => GlossaryTermsScreen(
+                                      committeeId: c.id,
+                                      committeeName: c.name,
+                                      isPublicScope: true))),
                         ),
                       ),
                     ),
@@ -67,14 +84,19 @@ class _GlossaryHomeScreenState extends ConsumerState<GlossaryHomeScreen> {
 }
 
 class GlossaryTermsScreen extends ConsumerStatefulWidget {
-  const GlossaryTermsScreen({super.key, required this.committeeId, required this.committeeName, required this.isPublicScope});
+  const GlossaryTermsScreen(
+      {super.key,
+      required this.committeeId,
+      required this.committeeName,
+      required this.isPublicScope});
 
   final int committeeId;
   final String committeeName;
   final bool isPublicScope;
 
   @override
-  ConsumerState<GlossaryTermsScreen> createState() => _GlossaryTermsScreenState();
+  ConsumerState<GlossaryTermsScreen> createState() =>
+      _GlossaryTermsScreenState();
 }
 
 class _GlossaryTermsScreenState extends ConsumerState<GlossaryTermsScreen> {
@@ -86,13 +108,21 @@ class _GlossaryTermsScreenState extends ConsumerState<GlossaryTermsScreen> {
     final module = ref.watch(glossaryModuleProvider);
     final enabled = module.maybeWhen(data: (v) => v, orElse: () => false);
     if (!enabled) {
-      return Scaffold(appBar: AppBar(title: Text(widget.committeeName)), body: const Center(child: Text('Glossaire indisponible')));
+      return Scaffold(
+          appBar: AppBar(title: Text(widget.committeeName)),
+          body: const Center(child: Text('Glossaire indisponible')));
     }
-    final filters = GlossaryFilters(query: _query.isEmpty ? null : _query, tags: _tags.toList(growable: false));
-    final settingsAsync = widget.isPublicScope ? ref.watch(glossaryPublicSettingsProvider(widget.committeeId)) : ref.watch(committeeGlossarySettingsProvider(widget.committeeId));
+    final filters = GlossaryFilters(
+        query: _query.isEmpty ? null : _query,
+        tags: _tags.toList(growable: false));
+    final settingsAsync = widget.isPublicScope
+        ? ref.watch(glossaryPublicSettingsProvider(widget.committeeId))
+        : ref.watch(committeeGlossarySettingsProvider(widget.committeeId));
     final termsAsync = widget.isPublicScope
-        ? ref.watch(glossaryPublicTermsProvider((committeeId: widget.committeeId, filters: filters)))
-        : ref.watch(committeeGlossaryTermsProvider((committeeId: widget.committeeId, filters: filters)));
+        ? ref.watch(glossaryPublicTermsProvider(
+            (committeeId: widget.committeeId, filters: filters)))
+        : ref.watch(committeeGlossaryTermsProvider(
+            (committeeId: widget.committeeId, filters: filters)));
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.committeeName)),
@@ -100,7 +130,10 @@ class _GlossaryTermsScreenState extends ConsumerState<GlossaryTermsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: TextField(decoration: const InputDecoration(labelText: 'Recherche terme/définition'), onChanged: (v) => setState(() => _query = v)),
+            child: TextField(
+                decoration: const InputDecoration(
+                    labelText: 'Recherche terme/définition'),
+                onChanged: (v) => setState(() => _query = v)),
           ),
           settingsAsync.when(
             loading: () => const SizedBox.shrink(),
@@ -139,7 +172,8 @@ class _GlossaryTermsScreenState extends ConsumerState<GlossaryTermsScreen> {
                 children: [
                   if (data.cacheStatus.isCached)
                     ToreCard(
-                      child: Text('Offline cache • Dernière sync ${data.cacheStatus.lastSyncAt?.toLocal().toString() ?? '-'}'),
+                      child: Text(
+                          'Offline cache • Dernière sync ${data.cacheStatus.lastSyncAt?.toLocal().toString() ?? '-'}'),
                     ),
                   for (final term in data.data.items)
                     Padding(
@@ -148,8 +182,15 @@ class _GlossaryTermsScreenState extends ConsumerState<GlossaryTermsScreen> {
                         child: ToreListRow(
                           title: term.term,
                           subtitle: term.definition,
-                          trailing: term.isOfficial ? const ToreChip(label: 'Officiel', variant: ToreChipVariant.live) : null,
-                          onTap: () => showModalBottomSheet<void>(context: context, builder: (_) => TermDetailBottomSheet(term: term)),
+                          trailing: term.isOfficial
+                              ? const ToreChip(
+                                  label: 'Officiel',
+                                  variant: ToreChipVariant.live)
+                              : null,
+                          onTap: () => showModalBottomSheet<void>(
+                              context: context,
+                              builder: (_) =>
+                                  TermDetailBottomSheet(term: term)),
                         ),
                       ),
                     ),
@@ -185,10 +226,18 @@ class TermDetailBottomSheet extends StatelessWidget {
               Text('Exemple: ${term.examples!}'),
             ],
             const SizedBox(height: 8),
-            Wrap(spacing: 6, children: [for (final t in term.tags) ToreChip(label: t, variant: ToreChipVariant.info)]),
-            if (term.isOfficial) const Padding(padding: EdgeInsets.only(top: 8), child: ToreChip(label: 'Officiel', variant: ToreChipVariant.live)),
+            Wrap(spacing: 6, children: [
+              for (final t in term.tags)
+                ToreChip(label: t, variant: ToreChipVariant.info)
+            ]),
+            if (term.isOfficial)
+              const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: ToreChip(
+                      label: 'Officiel', variant: ToreChipVariant.live)),
             const SizedBox(height: 8),
-            Text('Maj: ${term.updatedAt.toLocal()}', style: Theme.of(context).textTheme.bodySmall),
+            Text('Maj: ${term.updatedAt.toLocal()}',
+                style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),
@@ -197,7 +246,8 @@ class TermDetailBottomSheet extends StatelessWidget {
 }
 
 class CommitteeGlossaryAdminScreen extends ConsumerWidget {
-  const CommitteeGlossaryAdminScreen({super.key, required this.committeeId, required this.committeeName});
+  const CommitteeGlossaryAdminScreen(
+      {super.key, required this.committeeId, required this.committeeName});
   final int committeeId;
   final String committeeName;
 
@@ -206,10 +256,14 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
     final module = ref.watch(glossaryModuleProvider);
     final enabled = module.maybeWhen(data: (v) => v, orElse: () => false);
     if (!enabled) {
-      return Scaffold(appBar: AppBar(title: Text('$committeeName · Gérer Glossaire')), body: const Center(child: Text('Glossaire indisponible')));
+      return Scaffold(
+          appBar: AppBar(title: Text('$committeeName · Gérer Glossaire')),
+          body: const Center(child: Text('Glossaire indisponible')));
     }
-    final settingsAsync = ref.watch(committeeGlossarySettingsProvider(committeeId));
-    final termsAsync = ref.watch(committeeGlossaryTermsProvider((committeeId: committeeId, filters: const GlossaryFilters())));
+    final settingsAsync =
+        ref.watch(committeeGlossarySettingsProvider(committeeId));
+    final termsAsync = ref.watch(committeeGlossaryTermsProvider(
+        (committeeId: committeeId, filters: const GlossaryFilters())));
     final canWriteNow = canWrite(ref, intent: WriteIntent.critical);
     final reason = writeDisabledReason(ref, intent: WriteIntent.critical);
 
@@ -219,12 +273,17 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
         width: 180,
         child: ToreCTA(
           label: 'Nouveau terme',
-        onPressed: !canWriteNow
-            ? null
-            : () async {
-                final ok = await showModalBottomSheet<bool>(context: context, isScrollControlled: true, builder: (_) => GlossaryTermEditorSheet(committeeId: committeeId));
-                if (ok == true) invalidateGlossaryAfterWrite(ref, committeeId);
-              },
+          onPressed: !canWriteNow
+              ? null
+              : () async {
+                  final ok = await showModalBottomSheet<bool>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) =>
+                          GlossaryTermEditorSheet(committeeId: committeeId));
+                  if (ok == true)
+                    invalidateGlossaryAfterWrite(ref, committeeId);
+                },
         ),
       ),
       body: ListView(
@@ -241,7 +300,10 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
               onChanged: !canWriteNow
                   ? null
                   : (v) async {
-                      await ref.read(apiProvider).committeeSetGlossarySettings(committeeId, v, idempotencyKey: 'g-set-${DateTime.now().millisecondsSinceEpoch}');
+                      await ref.read(apiProvider).committeeSetGlossarySettings(
+                          committeeId, v,
+                          idempotencyKey:
+                              'g-set-${DateTime.now().millisecondsSinceEpoch}');
                       invalidateGlossaryAfterWrite(ref, committeeId);
                     },
             ),
@@ -259,10 +321,19 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
                         ToreListRow(
                           title: '${term.term} (${term.status})',
                           subtitle: term.definition,
-                          trailing: term.isOfficial ? const ToreChip(label: 'Officiel', variant: ToreChipVariant.live) : null,
+                          trailing: term.isOfficial
+                              ? const ToreChip(
+                                  label: 'Officiel',
+                                  variant: ToreChipVariant.live)
+                              : null,
                           onTap: () async {
-                            final ok = await showModalBottomSheet<bool>(context: context, isScrollControlled: true, builder: (_) => GlossaryTermEditorSheet(committeeId: committeeId, term: term));
-                            if (ok == true) invalidateGlossaryAfterWrite(ref, committeeId);
+                            final ok = await showModalBottomSheet<bool>(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (_) => GlossaryTermEditorSheet(
+                                    committeeId: committeeId, term: term));
+                            if (ok == true)
+                              invalidateGlossaryAfterWrite(ref, committeeId);
                           },
                         ),
                         Row(
@@ -272,8 +343,14 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
                               onPressed: !canWriteNow
                                   ? null
                                   : () async {
-                                      await ref.read(apiProvider).committeeArchiveGlossaryTerm(committeeId, term.id, idempotencyKey: 'g-arch-${DateTime.now().millisecondsSinceEpoch}');
-                                      invalidateGlossaryAfterWrite(ref, committeeId);
+                                      await ref
+                                          .read(apiProvider)
+                                          .committeeArchiveGlossaryTerm(
+                                              committeeId, term.id,
+                                              idempotencyKey:
+                                                  'g-arch-${DateTime.now().millisecondsSinceEpoch}');
+                                      invalidateGlossaryAfterWrite(
+                                          ref, committeeId);
                                     },
                               child: const Text('Archiver'),
                             ),
@@ -281,18 +358,40 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
                               onPressed: !canWriteNow
                                   ? null
                                   : () async {
-                                      final reasonCtrl = TextEditingController();
+                                      final reasonCtrl =
+                                          TextEditingController();
                                       final ok = await showDialog<bool>(
                                         context: context,
                                         builder: (_) => AlertDialog(
-                                          title: const Text('Supprimer le terme'),
-                                          content: TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Raison')),
-                                          actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete'))],
+                                          title:
+                                              const Text('Supprimer le terme'),
+                                          content: TextField(
+                                              controller: reasonCtrl,
+                                              decoration: const InputDecoration(
+                                                  labelText: 'Raison')),
+                                          actions: [
+                                            TextButton(
+                                                onPressed: () => Navigator.pop(
+                                                    context, false),
+                                                child: const Text('Annuler')),
+                                            FilledButton(
+                                                onPressed: () => Navigator.pop(
+                                                    context, true),
+                                                child: const Text('Delete'))
+                                          ],
                                         ),
                                       );
                                       if (ok == true) {
-                                        await ref.read(apiProvider).committeeDeleteGlossaryTerm(committeeId, term.id, reasonCtrl.text.trim(), idempotencyKey: 'g-del-${DateTime.now().millisecondsSinceEpoch}');
-                                        invalidateGlossaryAfterWrite(ref, committeeId);
+                                        await ref
+                                            .read(apiProvider)
+                                            .committeeDeleteGlossaryTerm(
+                                                committeeId,
+                                                term.id,
+                                                reasonCtrl.text.trim(),
+                                                idempotencyKey:
+                                                    'g-del-${DateTime.now().millisecondsSinceEpoch}');
+                                        invalidateGlossaryAfterWrite(
+                                            ref, committeeId);
                                       }
                                     },
                               child: const Text('Delete'),
@@ -312,16 +411,19 @@ class CommitteeGlossaryAdminScreen extends ConsumerWidget {
 }
 
 class GlossaryTermEditorSheet extends ConsumerStatefulWidget {
-  const GlossaryTermEditorSheet({super.key, required this.committeeId, this.term});
+  const GlossaryTermEditorSheet(
+      {super.key, required this.committeeId, this.term});
 
   final int committeeId;
   final GlossaryTerm? term;
 
   @override
-  ConsumerState<GlossaryTermEditorSheet> createState() => _GlossaryTermEditorSheetState();
+  ConsumerState<GlossaryTermEditorSheet> createState() =>
+      _GlossaryTermEditorSheetState();
 }
 
-class _GlossaryTermEditorSheetState extends ConsumerState<GlossaryTermEditorSheet> {
+class _GlossaryTermEditorSheetState
+    extends ConsumerState<GlossaryTermEditorSheet> {
   late final TextEditingController _termCtrl;
   late final TextEditingController _definitionCtrl;
   late final TextEditingController _examplesCtrl;
@@ -335,10 +437,12 @@ class _GlossaryTermEditorSheetState extends ConsumerState<GlossaryTermEditorShee
   void initState() {
     super.initState();
     _termCtrl = TextEditingController(text: widget.term?.term ?? '');
-    _definitionCtrl = TextEditingController(text: widget.term?.definition ?? '');
+    _definitionCtrl =
+        TextEditingController(text: widget.term?.definition ?? '');
     _examplesCtrl = TextEditingController(text: widget.term?.examples ?? '');
     _tagsCtrl = TextEditingController(text: widget.term?.tags.join(','));
-    _yearCtrl = TextEditingController(text: widget.term?.yearId?.toString() ?? '');
+    _yearCtrl =
+        TextEditingController(text: widget.term?.yearId?.toString() ?? '');
     _isOfficial = widget.term?.isOfficial ?? false;
   }
 
@@ -347,28 +451,52 @@ class _GlossaryTermEditorSheetState extends ConsumerState<GlossaryTermEditorShee
     final canWriteNow = canWrite(ref, intent: WriteIntent.critical);
     final reason = writeDisabledReason(ref, intent: WriteIntent.critical);
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(widget.term == null ? 'Nouveau terme' : 'Éditer terme'),
-            TextField(controller: _termCtrl, decoration: const InputDecoration(labelText: 'Terme *')),
-            TextField(controller: _definitionCtrl, decoration: const InputDecoration(labelText: 'Définition *'), maxLines: 3),
-            TextField(controller: _examplesCtrl, decoration: const InputDecoration(labelText: 'Exemples')),
-            TextField(controller: _tagsCtrl, decoration: const InputDecoration(labelText: 'Tags (virgule)')),
-            TextField(controller: _yearCtrl, decoration: const InputDecoration(labelText: 'YearId (optionnel)'), keyboardType: TextInputType.number),
-            SwitchListTile(value: _isOfficial, onChanged: (v) => setState(() => _isOfficial = v), title: const Text('Officiel')),
-            if (!canWriteNow && reason != null) Text(reason, style: const TextStyle(color: Colors.orange)),
-            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+            TextField(
+                controller: _termCtrl,
+                decoration: const InputDecoration(labelText: 'Terme *')),
+            TextField(
+                controller: _definitionCtrl,
+                decoration: const InputDecoration(labelText: 'Définition *'),
+                maxLines: 3),
+            TextField(
+                controller: _examplesCtrl,
+                decoration: const InputDecoration(labelText: 'Exemples')),
+            TextField(
+                controller: _tagsCtrl,
+                decoration: const InputDecoration(labelText: 'Tags (virgule)')),
+            TextField(
+                controller: _yearCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'YearId (optionnel)'),
+                keyboardType: TextInputType.number),
+            SwitchListTile(
+                value: _isOfficial,
+                onChanged: (v) => setState(() => _isOfficial = v),
+                title: const Text('Officiel')),
+            if (!canWriteNow && reason != null)
+              Text(reason, style: const TextStyle(color: Colors.orange)),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 8),
             ToreCTA(
               label: _loading ? '...' : 'Save',
               onPressed: !canWriteNow || _loading
                   ? null
                   : () async {
-                      if (_termCtrl.text.trim().isEmpty || _definitionCtrl.text.trim().isEmpty) {
-                        setState(() => _error = 'Terme et définition sont requis');
+                      if (_termCtrl.text.trim().isEmpty ||
+                          _definitionCtrl.text.trim().isEmpty) {
+                        setState(
+                            () => _error = 'Terme et définition sont requis');
                         return;
                       }
                       setState(() {
@@ -378,16 +506,28 @@ class _GlossaryTermEditorSheetState extends ConsumerState<GlossaryTermEditorShee
                       final payload = {
                         'term': _termCtrl.text.trim(),
                         'definition': _definitionCtrl.text.trim(),
-                        'examples': _examplesCtrl.text.trim().isEmpty ? null : _examplesCtrl.text.trim(),
-                        'tags': _tagsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(growable: false),
+                        'examples': _examplesCtrl.text.trim().isEmpty
+                            ? null
+                            : _examplesCtrl.text.trim(),
+                        'tags': _tagsCtrl.text
+                            .split(',')
+                            .map((e) => e.trim())
+                            .where((e) => e.isNotEmpty)
+                            .toList(growable: false),
                         'isOfficial': _isOfficial,
                         'yearId': int.tryParse(_yearCtrl.text.trim()),
                       };
                       try {
                         if (widget.term == null) {
-                          await ref.read(apiProvider).committeeCreateGlossaryTerm(widget.committeeId, payload, idempotencyKey: 'g-create-${DateTime.now().millisecondsSinceEpoch}');
+                          await ref.read(apiProvider).committeeCreateGlossaryTerm(
+                              widget.committeeId, payload,
+                              idempotencyKey:
+                                  'g-create-${DateTime.now().millisecondsSinceEpoch}');
                         } else {
-                          await ref.read(apiProvider).committeeUpdateGlossaryTerm(widget.committeeId, widget.term!.id, payload, idempotencyKey: 'g-upd-${DateTime.now().millisecondsSinceEpoch}');
+                          await ref.read(apiProvider).committeeUpdateGlossaryTerm(
+                              widget.committeeId, widget.term!.id, payload,
+                              idempotencyKey:
+                                  'g-upd-${DateTime.now().millisecondsSinceEpoch}');
                         }
                         if (context.mounted) Navigator.of(context).pop(true);
                       } catch (e) {

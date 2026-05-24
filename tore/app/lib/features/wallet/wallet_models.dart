@@ -29,7 +29,9 @@ class WalletHistoryEntry {
     }
     final type = (m['type'] ?? m['kind'] ?? 'unknown').toString();
     final deltaRaw = m['delta'] ?? m['amount'] ?? m['change'] ?? 0;
-    final delta = (deltaRaw is num) ? deltaRaw.toInt() : int.tryParse(deltaRaw.toString()) ?? 0;
+    final delta = (deltaRaw is num)
+        ? deltaRaw.toInt()
+        : int.tryParse(deltaRaw.toString()) ?? 0;
     final balRaw = m['balance_after'] ?? m['balance'] ?? m['after'];
     final balanceAfter = (balRaw is num)
         ? balRaw.toInt()

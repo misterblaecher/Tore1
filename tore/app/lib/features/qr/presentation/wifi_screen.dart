@@ -19,7 +19,9 @@ class _WifiScreenState extends ConsumerState<WifiScreen> {
   @override
   void initState() {
     super.initState();
-    _future = ref.read(apiProvider).eventWifiClaim(eventId: widget.eventId, token: widget.token);
+    _future = ref
+        .read(apiProvider)
+        .eventWifiClaim(eventId: widget.eventId, token: widget.token);
   }
 
   @override
@@ -39,11 +41,13 @@ class _WifiScreenState extends ConsumerState<WifiScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('SSID: ${data['ssid'] ?? ''}', style: Theme.of(context).textTheme.titleLarge),
+              Text('SSID: ${data['ssid'] ?? ''}',
+                  style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
               SelectableText('Password: ${data['password'] ?? ''}'),
               const SizedBox(height: 8),
-              if ((data['instructions'] ?? '').toString().isNotEmpty) Text((data['instructions'] ?? '').toString()),
+              if ((data['instructions'] ?? '').toString().isNotEmpty)
+                Text((data['instructions'] ?? '').toString()),
               const SizedBox(height: 8),
               Text('Expires: ${(data['expiresAt'] ?? '').toString()}'),
             ],

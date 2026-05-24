@@ -3,10 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state.dart';
 import '../shared/widgets/app_background.dart';
-import '../shared/widgets/trading_card.dart';
-import '../shared/widgets/price_text.dart';
-import '../theme/tore_button.dart';
-import '../theme/tore_colors.dart';
 
 class AdminPricesScreen extends ConsumerStatefulWidget {
   const AdminPricesScreen({

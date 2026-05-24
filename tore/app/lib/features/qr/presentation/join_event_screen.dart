@@ -29,8 +29,6 @@ class JoinEventScreen extends ConsumerStatefulWidget {
   ConsumerState<JoinEventScreen> createState() => _JoinEventScreenState();
 }
 
-enum _JoinUiErrorKind { expired, revoked, invalid, unknown }
-
 String mapJoinErrorReasonToUiState(String? reason) {
   switch (reason) {
     case 'invalid_code':
@@ -53,7 +51,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
   bool _loadingPreview = false;
   bool _joining = false;
   String? _error;
-  _JoinUiErrorKind? _errorKind;
   Map<String, dynamic>? _resolved;
 
   @override
@@ -96,7 +93,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
     setState(() {
       _loadingPreview = true;
       _error = null;
-      _errorKind = null;
     });
     try {
       final event = await ref.read(apiProvider).event(eventId);
@@ -113,7 +109,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
       final mapped = _joinErrorDisplay(e);
       setState(() {
         _error = mapped.message;
-        _errorKind = mapped.kind;
       });
     } finally {
       if (mounted) setState(() => _loadingPreview = false);
@@ -142,7 +137,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
     if (blockedReason != null) {
       setState(() {
         _error = blockedReason;
-        _errorKind = _JoinUiErrorKind.unknown;
       });
       return;
     }
@@ -150,7 +144,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
     setState(() {
       _joining = true;
       _error = null;
-      _errorKind = null;
     });
     try {
       final payload = await ref.read(apiProvider).joinEventByCode(
@@ -219,13 +212,11 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
       final mapped = _joinErrorDisplay(e);
       setState(() {
         _error = mapped.message;
-        _errorKind = mapped.kind;
       });
     } catch (e) {
       final mapped = _joinErrorDisplay(e);
       setState(() {
         _error = mapped.message;
-        _errorKind = mapped.kind;
       });
     } finally {
       if (mounted) setState(() => _joining = false);
@@ -255,7 +246,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
     setState(() {
       _joining = true;
       _error = null;
-      _errorKind = null;
     });
     try {
       String? acceptedVersion;
@@ -292,7 +282,6 @@ class _JoinEventScreenState extends ConsumerState<JoinEventScreen>
       final mapped = _joinErrorDisplay(e);
       setState(() {
         _error = mapped.message;
-        _errorKind = mapped.kind;
       });
     } finally {
       if (mounted) setState(() => _joining = false);
@@ -485,10 +474,9 @@ class _CharterSheetState extends State<_CharterSheet> {
 }
 
 class _JoinErrorDisplay {
-  const _JoinErrorDisplay({required this.message, required this.kind});
+  const _JoinErrorDisplay({required this.message});
 
   final String message;
-  final _JoinUiErrorKind kind;
 }
 
 _JoinErrorDisplay _joinErrorDisplay(Object error) {
@@ -498,33 +486,25 @@ _JoinErrorDisplay _joinErrorDisplay(Object error) {
         : null;
     if (reason == 'charter_acceptance_required') {
       return const _JoinErrorDisplay(
-          message: 'Tu dois accepter la charte avant de rejoindre.',
-          kind: _JoinUiErrorKind.unknown);
+          message: 'Tu dois accepter la charte avant de rejoindre.');
     }
     if (reason == 'closed' ||
         reason == 'frozen' ||
         reason == 'runtime_blocked') {
       return const _JoinErrorDisplay(
-          message: 'Action indisponible temporairement pour cet event.',
-          kind: _JoinUiErrorKind.unknown);
+          message: 'Action indisponible temporairement pour cet event.');
     }
     switch (mapJoinErrorReasonToUiState(reason)) {
       case 'invalid':
-        return const _JoinErrorDisplay(
-            message: 'Code invalide.', kind: _JoinUiErrorKind.invalid);
+        return const _JoinErrorDisplay(message: 'Code invalide.');
       case 'expired':
-        return const _JoinErrorDisplay(
-            message: 'Code expiré.', kind: _JoinUiErrorKind.expired);
+        return const _JoinErrorDisplay(message: 'Code expiré.');
       case 'revoked':
-        return const _JoinErrorDisplay(
-            message: 'Code révoqué.', kind: _JoinUiErrorKind.revoked);
+        return const _JoinErrorDisplay(message: 'Code révoqué.');
       default:
         return const _JoinErrorDisplay(
-            message: 'Impossible de rejoindre cet event.',
-            kind: _JoinUiErrorKind.unknown);
+            message: 'Impossible de rejoindre cet event.');
     }
   }
-  return const _JoinErrorDisplay(
-      message: 'Impossible de rejoindre cet event.',
-      kind: _JoinUiErrorKind.unknown);
+  return const _JoinErrorDisplay(message: 'Impossible de rejoindre cet event.');
 }

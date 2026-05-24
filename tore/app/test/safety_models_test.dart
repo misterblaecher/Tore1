@@ -9,7 +9,10 @@ void main() {
       'messageHint': 'Reste avec ton buddy',
       'myBuddy': {'userId': 'u-buddy', 'displayNameMasked': 'B***'},
       'myLastCheckin': {'type': 'OK', 'createdAt': '2026-01-01T10:00:00Z'},
-      'buddyLastCheckin': {'type': 'PANIC', 'createdAt': '2026-01-01T10:05:00Z'},
+      'buddyLastCheckin': {
+        'type': 'PANIC',
+        'createdAt': '2026-01-01T10:05:00Z'
+      },
     });
 
     expect(model.enabled, isTrue);
@@ -25,7 +28,11 @@ void main() {
         {'id': 1, 'type': 'OK', 'createdAt': '2026-01-01T10:00:00Z'},
         {'id': 2, 'type': 'PANIC', 'createdAt': '2026-01-01T10:05:00Z'},
       ],
-      'buddyLastCheckin': {'userId': 'u-buddy', 'type': 'OK', 'createdAt': '2026-01-01T10:07:00Z'},
+      'buddyLastCheckin': {
+        'userId': 'u-buddy',
+        'type': 'OK',
+        'createdAt': '2026-01-01T10:07:00Z'
+      },
     });
 
     expect(response.items.length, 2);

@@ -34,6 +34,7 @@ class MarketRepository {
       'gift_to_user_id': giftToUserId,
     };
 
-    await tracer.timeAsync(PerfMetricKey.orderCreate, () => api.dio.post(ApiEndpoints.orders, data: payload));
+    await tracer.timeAsync(PerfMetricKey.orderCreate,
+        () => api.dio.post(ApiEndpoints.orders, data: payload));
   }
 }

@@ -4,13 +4,13 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../api.dart';
 import '../../core/network/network_state_provider.dart';
 import '../../state.dart';
 import 'hunt_models.dart';
 
 class HuntCached<T> {
-  const HuntCached({required this.data, required this.fromCache, this.lastSyncAt});
+  const HuntCached(
+      {required this.data, required this.fromCache, this.lastSyncAt});
   final T data;
   final bool fromCache;
   final DateTime? lastSyncAt;
@@ -44,9 +44,11 @@ class HuntCacheStore {
   }
 }
 
-final huntCacheStoreProvider = Provider<HuntCacheStore>((_) => HuntCacheStore());
+final huntCacheStoreProvider =
+    Provider<HuntCacheStore>((_) => HuntCacheStore());
 
-final activeHuntProvider = StreamProvider.autoDispose.family<HuntCached<ActiveHunt>, int>((ref, eventId) async* {
+final activeHuntProvider = StreamProvider.autoDispose
+    .family<HuntCached<ActiveHunt>, int>((ref, eventId) async* {
   final api = ref.watch(apiProvider);
   final cache = ref.watch(huntCacheStoreProvider);
   final network = ref.watch(networkStatusProvider);
@@ -73,12 +75,15 @@ final activeHuntProvider = StreamProvider.autoDispose.family<HuntCached<ActiveHu
     try {
       final data = await api.getActiveHunt(eventId);
       await cache.write(key, data.toJson());
-      yield HuntCached(data: data, fromCache: false, lastSyncAt: DateTime.now());
+      yield HuntCached(
+          data: data, fromCache: false, lastSyncAt: DateTime.now());
     } catch (_) {
       final cached = await loadCache();
       if (cached != null) yield cached;
     }
-    await Future<void>.delayed(network == NetworkState.degraded ? const Duration(seconds: 5) : const Duration(seconds: 2));
+    await Future<void>.delayed(network == NetworkState.degraded
+        ? const Duration(seconds: 5)
+        : const Duration(seconds: 2));
   }
 });
 
@@ -88,7 +93,9 @@ class HuntLeaderboardKey {
   final int huntId;
 }
 
-final huntLeaderboardProvider = StreamProvider.autoDispose.family<HuntCached<HuntLeaderboard>, HuntLeaderboardKey>((ref, keyData) async* {
+final huntLeaderboardProvider = StreamProvider.autoDispose
+    .family<HuntCached<HuntLeaderboard>, HuntLeaderboardKey>(
+        (ref, keyData) async* {
   final api = ref.watch(apiProvider);
   final cache = ref.watch(huntCacheStoreProvider);
   final network = ref.watch(networkStatusProvider);
@@ -113,13 +120,17 @@ final huntLeaderboardProvider = StreamProvider.autoDispose.family<HuntCached<Hun
 
   while (true) {
     try {
-      final data = await api.getHuntLeaderboard(keyData.eventId, keyData.huntId);
+      final data =
+          await api.getHuntLeaderboard(keyData.eventId, keyData.huntId);
       await cache.write(key, data.toJson());
-      yield HuntCached(data: data, fromCache: false, lastSyncAt: DateTime.now());
+      yield HuntCached(
+          data: data, fromCache: false, lastSyncAt: DateTime.now());
     } catch (_) {
       final cached = await loadCache();
       if (cached != null) yield cached;
     }
-    await Future<void>.delayed(network == NetworkState.degraded ? const Duration(seconds: 10) : const Duration(seconds: 5));
+    await Future<void>.delayed(network == NetworkState.degraded
+        ? const Duration(seconds: 10)
+        : const Duration(seconds: 5));
   }
 });

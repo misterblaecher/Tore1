@@ -26,7 +26,10 @@ class CursorPager<T> {
       final page = await loader(currentCursor);
       items.addAll(page.items);
       final next = page.nextCursor?.trim();
-      if (next == null || next.isEmpty || next == currentCursor || next == _lastCursorSeen) {
+      if (next == null ||
+          next.isEmpty ||
+          next == currentCursor ||
+          next == _lastCursorSeen) {
         _nextCursor = null;
         _stopped = true;
       } else {

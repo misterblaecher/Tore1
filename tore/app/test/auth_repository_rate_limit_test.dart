@@ -16,7 +16,9 @@ void main() {
               response: Response(
                 requestOptions: options,
                 statusCode: 429,
-                headers: Headers.fromMap({'retry-after': ['21']}),
+                headers: Headers.fromMap({
+                  'retry-after': ['21']
+                }),
                 data: {
                   'detail': 'Too many requests',
                   'retry_after_seconds': 21,

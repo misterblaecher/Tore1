@@ -1,2 +1,2 @@
-﻿// Test template désactivé (projet personnalisé)
+// Test template désactivé (projet personnalisé)
 void main() {}

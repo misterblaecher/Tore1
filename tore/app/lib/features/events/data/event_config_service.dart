@@ -33,7 +33,8 @@ class EventConfigService {
     }
   }
 
-  Future<EventConfig> patchEventConfig(int eventId, Map<String, dynamic> payload) async {
+  Future<EventConfig> patchEventConfig(
+      int eventId, Map<String, dynamic> payload) async {
     final res = await _dio.patch('/events/$eventId/config', data: payload);
     return EventConfig.fromJson(Map<String, dynamic>.from(res.data as Map));
   }

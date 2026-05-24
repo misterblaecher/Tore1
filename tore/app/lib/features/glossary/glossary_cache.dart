@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CacheStatus {
-  const CacheStatus({required this.isCached, this.lastSyncAt, required this.isStale});
+  const CacheStatus(
+      {required this.isCached, this.lastSyncAt, required this.isStale});
 
   final bool isCached;
   final DateTime? lastSyncAt;
@@ -22,11 +23,15 @@ class GlossaryCacheStore {
 
   static const Duration ttl = Duration(days: 7);
 
-  String publicTermsKey(int committeeId, Map<String, dynamic> filters) => 'glossary_public_terms_${committeeId}_${_hashFilters(filters)}';
-  String privateTermsKey(int committeeId, Map<String, dynamic> filters) => 'glossary_private_terms_${committeeId}_${_hashFilters(filters)}';
+  String publicTermsKey(int committeeId, Map<String, dynamic> filters) =>
+      'glossary_public_terms_${committeeId}_${_hashFilters(filters)}';
+  String privateTermsKey(int committeeId, Map<String, dynamic> filters) =>
+      'glossary_private_terms_${committeeId}_${_hashFilters(filters)}';
 
-  static String publicSettingsKey(int committeeId) => 'glossary_public_settings_$committeeId';
-  static String privateSettingsKey(int committeeId) => 'glossary_private_settings_$committeeId';
+  static String publicSettingsKey(int committeeId) =>
+      'glossary_public_settings_$committeeId';
+  static String privateSettingsKey(int committeeId) =>
+      'glossary_private_settings_$committeeId';
   static const String publicCommitteesKey = 'glossary_committees_public';
 
   Future<void> write(String key, Map<String, dynamic> payload) async {
@@ -34,7 +39,11 @@ class GlossaryCacheStore {
     final now = DateTime.now().toUtc();
     await prefs.setString(
       key,
-      jsonEncode({'payload': payload, 'lastSyncAt': now.toIso8601String(), 'ttlSeconds': ttl.inSeconds}),
+      jsonEncode({
+        'payload': payload,
+        'lastSyncAt': now.toIso8601String(),
+        'ttlSeconds': ttl.inSeconds
+      }),
     );
   }
 
@@ -45,11 +54,14 @@ class GlossaryCacheStore {
     final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
     final payload = decoded['payload'];
     if (payload is! Map) return null;
-    final lastSyncAt = DateTime.tryParse((decoded['lastSyncAt'] ?? '').toString())?.toUtc();
-    final stale = lastSyncAt == null || DateTime.now().toUtc().isAfter(lastSyncAt.add(ttl));
+    final lastSyncAt =
+        DateTime.tryParse((decoded['lastSyncAt'] ?? '').toString())?.toUtc();
+    final stale = lastSyncAt == null ||
+        DateTime.now().toUtc().isAfter(lastSyncAt.add(ttl));
     return GlossaryCacheEntry(
       payload: Map<String, dynamic>.from(payload),
-      status: CacheStatus(isCached: true, lastSyncAt: lastSyncAt, isStale: stale),
+      status:
+          CacheStatus(isCached: true, lastSyncAt: lastSyncAt, isStale: stale),
     );
   }
 

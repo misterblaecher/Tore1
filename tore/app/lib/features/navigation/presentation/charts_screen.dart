@@ -91,7 +91,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
               value: _miniGraphs,
               onChanged: (v) => setState(() => _miniGraphs = v),
               title: const Text('Mini-graphs'),
-              subtitle: const Text('Affiche une sparkline par boisson (plus d’appels réseau).'),
+              subtitle: const Text(
+                  'Affiche une sparkline par boisson (plus d’appels réseau).'),
             ),
             const SizedBox(height: 10),
 
@@ -107,14 +108,17 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Top movers', style: TextStyle(fontWeight: FontWeight.w700)),
+                        const Text('Top movers',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: items.take(6).map((m) {
-                            final name = (m['name'] ?? m['drink_name'] ?? '').toString();
-                            final pct = m['pct'] ?? m['change_pct'] ?? m['change'] ?? 0;
+                            final name =
+                                (m['name'] ?? m['drink_name'] ?? '').toString();
+                            final pct =
+                                m['pct'] ?? m['change_pct'] ?? m['change'] ?? 0;
                             return Chip(
                               label: Text('$name ${pct.toString()}%'),
                             );
@@ -130,7 +134,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
             const SizedBox(height: 12),
 
             drinksAsync.when(
-              loading: () => const Center(child: Padding(
+              loading: () => const Center(
+                  child: Padding(
                 padding: EdgeInsets.only(top: 40),
                 child: CircularProgressIndicator(),
               )),
@@ -141,7 +146,9 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
               data: (drinks) {
                 final filtered = _query.isEmpty
                     ? drinks
-                    : drinks.where((d) => d.name.toLowerCase().contains(_query)).toList();
+                    : drinks
+                        .where((d) => d.name.toLowerCase().contains(_query))
+                        .toList();
 
                 if (filtered.isEmpty) {
                   return const Padding(
@@ -151,11 +158,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 }
 
                 return Column(
-                  children: filtered.map((drink) => _DrinkRow(
-                    drink: drink,
-                    eventId: eventId,
-                    showSparkline: _miniGraphs,
-                  )).toList(),
+                  children: filtered
+                      .map((drink) => _DrinkRow(
+                            drink: drink,
+                            eventId: eventId,
+                            showSparkline: _miniGraphs,
+                          ))
+                      .toList(),
                 );
               },
             ),
@@ -188,7 +197,8 @@ class _DrinkRow extends ConsumerWidget {
     Widget? trailing;
     if (showSparkline) {
       final histAsync = ref.watch(
-        drinkHistoryProvider(DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
+        drinkHistoryProvider(
+            DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
       );
       trailing = histAsync.maybeWhen(
         data: (points) {

@@ -28,7 +28,8 @@ class ToreTheme {
           side: BorderSide(color: ToreColors.border),
         ),
       ),
-      dividerTheme: DividerThemeData(color: ToreColors.border.withOpacity(0.6)),
+      dividerTheme:
+          DividerThemeData(color: ToreColors.border.withValues(alpha: 0.6)),
       listTileTheme: const ListTileThemeData(
         iconColor: ToreColors.subtext,
         textColor: ToreColors.text,

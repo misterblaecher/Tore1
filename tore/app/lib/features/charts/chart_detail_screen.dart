@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_context/app_context.dart';
 import '../../core/network/error_mapper.dart';
-import '../../state.dart';
 import '../../shared/widgets/sparkline.dart';
 import 'chart_models.dart';
 import 'chart_providers.dart';
@@ -22,12 +21,14 @@ class DrinkChartDetailScreen extends ConsumerWidget {
     if (eventId == null) {
       return Scaffold(
         appBar: AppBar(title: Text(drink.name)),
-        body: const Center(child: Text('Sélectionne un event pour voir les graphiques.')),
+        body: const Center(
+            child: Text('Sélectionne un event pour voir les graphiques.')),
       );
     }
 
     final historyAsync = ref.watch(
-      drinkHistoryProvider(DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
+      drinkHistoryProvider(
+          DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
     );
 
     return Scaffold(
@@ -39,7 +40,8 @@ class DrinkChartDetailScreen extends ConsumerWidget {
           error: (e, _) => _ErrorState(
             message: ErrorMapper.message(e),
             onRetry: () => ref.invalidate(
-              drinkHistoryProvider(DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
+              drinkHistoryProvider(
+                  DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
             ),
           ),
           data: (points) {
@@ -72,7 +74,8 @@ class DrinkChartDetailScreen extends ConsumerWidget {
                       child: _StatCard(
                         title: 'Actuel',
                         value: '${_eur(current)} €',
-                        subtitle: '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+                        subtitle:
+                            '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
                       ),
                     ),
                   ],
@@ -84,7 +87,8 @@ class DrinkChartDetailScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('Courbe (24h)', style: TextStyle(fontWeight: FontWeight.w700)),
+                        const Text('Courbe (24h)',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 10),
                         SizedBox(
                           height: 180,
@@ -93,8 +97,12 @@ class DrinkChartDetailScreen extends ConsumerWidget {
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            Expanded(child: Text('Min: ${minV.toStringAsFixed(2)} €')),
-                            Expanded(child: Text('Max: ${maxV.toStringAsFixed(2)} €', textAlign: TextAlign.end)),
+                            Expanded(
+                                child:
+                                    Text('Min: ${minV.toStringAsFixed(2)} €')),
+                            Expanded(
+                                child: Text('Max: ${maxV.toStringAsFixed(2)} €',
+                                    textAlign: TextAlign.end)),
                           ],
                         ),
                       ],
@@ -114,7 +122,8 @@ class DrinkChartDetailScreen extends ConsumerWidget {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () => ref.invalidate(
-                      drinkHistoryProvider(DrinkHistoryArgs(eventId: eventId, drinkId: drink.drinkId)),
+                      drinkHistoryProvider(DrinkHistoryArgs(
+                          eventId: eventId, drinkId: drink.drinkId)),
                     ),
                     icon: const Icon(Icons.refresh),
                     label: const Text('Rafraîchir'),
@@ -153,7 +162,8 @@ class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final String subtitle;
-  const _StatCard({required this.title, required this.value, required this.subtitle});
+  const _StatCard(
+      {required this.title, required this.value, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +195,8 @@ class _LineChart extends StatelessWidget {
       return const Center(child: Text('Pas assez de données'));
     }
     return CustomPaint(
-      painter: _LineChartPainter(values: values, color: Theme.of(context).colorScheme.primary),
+      painter: _LineChartPainter(
+          values: values, color: Theme.of(context).colorScheme.primary),
       size: Size.infinite,
     );
   }
@@ -204,7 +215,7 @@ class _LineChartPainter extends CustomPainter {
     final range = (maxV - minV).abs() < 1e-9 ? 1.0 : (maxV - minV);
 
     final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.07)
+      ..color = Colors.white.withValues(alpha: 0.07)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 

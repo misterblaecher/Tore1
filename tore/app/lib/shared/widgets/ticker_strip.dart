@@ -25,9 +25,9 @@ class TickerStrip extends StatelessWidget {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: it.color.withOpacity(0.14),
+              color: it.color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: it.color.withOpacity(0.35)),
+              border: Border.all(color: it.color.withValues(alpha: 0.35)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

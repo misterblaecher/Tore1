@@ -9,7 +9,8 @@ final staffServiceProvider = Provider<StaffService>((ref) {
   return StaffService(client.dio);
 });
 
-final eventStaffProvider = FutureProvider.family<List<EventStaffMember>, int>((ref, eventId) async {
+final eventStaffProvider =
+    FutureProvider.family<List<EventStaffMember>, int>((ref, eventId) async {
   final service = ref.watch(staffServiceProvider);
   return service.listStaff(eventId: eventId);
 });
@@ -50,6 +51,7 @@ class StaffSessionNotifier extends StateNotifier<StaffSession?> {
   void clear() => state = null;
 }
 
-final staffSessionProvider = StateNotifierProvider<StaffSessionNotifier, StaffSession?>((ref) {
+final staffSessionProvider =
+    StateNotifierProvider<StaffSessionNotifier, StaffSession?>((ref) {
   return StaffSessionNotifier();
 });

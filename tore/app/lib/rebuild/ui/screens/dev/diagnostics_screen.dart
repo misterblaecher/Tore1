@@ -63,7 +63,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   void initState() {
     super.initState();
-    _urlController.text = 'tore://event/${widget.eventContext?.eventId ?? 'event_42'}';
+    _urlController.text =
+        'tore://event/${widget.eventContext?.eventId ?? 'event_42'}';
     _refresh();
   }
 
@@ -86,10 +87,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter);
-    final chips = {'', ...ClientLog.instance.eventTypes.toList()};
+    final logs =
+        ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter);
+    final chips = {'', ...ClientLog.instance.eventTypes};
     final event = widget.eventContext;
-    final writeAllowed = event != null ? event.eventState.isLive && widget.networkState != ConnectivityState.offline : false;
+    final writeAllowed = event != null
+        ? event.eventState.isLive &&
+            widget.networkState != ConnectivityState.offline
+        : false;
 
     return ScreenScaffold(
       title: 'Diagnostics',
@@ -100,8 +105,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Environment'),
-            subtitle: Text('Current channel: ${appEnvironmentLabel(widget.environment)}'),
-            trailing: ToreBadge(label: appEnvironmentLabel(widget.environment), color: widget.environmentColor),
+            subtitle: Text(
+                'Current channel: ${appEnvironmentLabel(widget.environment)}'),
+            trailing: ToreBadge(
+                label: appEnvironmentLabel(widget.environment),
+                color: widget.environmentColor),
           ),
           _section('Build info', [
             _line('Flavor', kReleaseMode ? 'release' : 'dev'),
@@ -113,52 +121,92 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ]),
           _section('Remote config', [
             _line('source', widget.remoteConfig.source),
-            _line('disable_writes_global', widget.remoteConfig.disableWritesGlobal ? 'true' : 'false'),
-            _line('diagnostics_enabled', widget.remoteConfig.diagnosticsEnabled ? 'true' : 'false'),
-            _line('min_supported_build', '${widget.remoteConfig.minSupportedBuild ?? '-'}'),
-            _line('min_supported_version', widget.remoteConfig.minSupportedVersion ?? '-'),
-            _line('fetched_at', widget.remoteConfig.fetchedAt.toIso8601String()),
+            _line('disable_writes_global',
+                widget.remoteConfig.disableWritesGlobal ? 'true' : 'false'),
+            _line('diagnostics_enabled',
+                widget.remoteConfig.diagnosticsEnabled ? 'true' : 'false'),
+            _line('min_supported_build',
+                '${widget.remoteConfig.minSupportedBuild ?? '-'}'),
+            _line('min_supported_version',
+                widget.remoteConfig.minSupportedVersion ?? '-'),
+            _line(
+                'fetched_at', widget.remoteConfig.fetchedAt.toIso8601String()),
           ]),
           _section('Snapshot', [
             _line('Roles', widget.snapshot?.roles.join(', ') ?? '-'),
-            _line('Capabilities', widget.snapshot?.capabilities.join(', ') ?? '-'),
+            _line('Capabilities',
+                widget.snapshot?.capabilities.join(', ') ?? '-'),
           ]),
           _section('Event context', [
             _line('event_id', event?.eventId ?? 'none'),
             _line('event_state', event?.eventState.name ?? 'none'),
-            _line('write_allowed', writeAllowed ? 'yes' : 'blocked by network/event'),
+            _line('write_allowed',
+                writeAllowed ? 'yes' : 'blocked by network/event'),
           ]),
           _section('Network', [
             _line('state', widget.networkState.name.toUpperCase()),
-            _line('last_transition', widget.networkTransitionAt.toIso8601String()),
+            _line('last_transition',
+                widget.networkTransitionAt.toIso8601String()),
           ]),
-          _section('Cache status (minutes)', _cache.entries.map((e) => _line(e.key, e.value == null ? 'missing' : '${e.value!.inMinutes}m')).toList()),
+          _section(
+              'Cache status (minutes)',
+              _cache.entries
+                  .map((e) => _line(e.key,
+                      e.value == null ? 'missing' : '${e.value!.inMinutes}m'))
+                  .toList()),
           _section(
             'API stats',
             [
-              ...widget.apiClient.recentRequests().map((r) => _line('${r.method} ${r.path}', '${r.status} / ${r.latencyMs}ms')),
+              ...widget.apiClient.recentRequests().map((r) => _line(
+                  '${r.method} ${r.path}', '${r.status} / ${r.latencyMs}ms')),
               _line('errors', widget.apiClient.recentErrorCodes().join(', ')),
             ],
           ),
           _section('Idempotency', [
             _line('entries', '${_idStats.count}'),
-            _line('latest', '${_idStats.latestIntent ?? '-'} -> ${_idStats.latestKey ?? '-'}'),
+            _line('latest',
+                '${_idStats.latestIntent ?? '-'} -> ${_idStats.latestKey ?? '-'}'),
           ]),
-          Wrap(spacing: 6, children: chips.map((e) => ChoiceChip(label: Text(e.isEmpty ? 'all logs' : e), selected: _filter == e, onSelected: (_) => setState(() => _filter = e))).toList()),
+          Wrap(
+              spacing: 6,
+              children: chips
+                  .map((e) => ChoiceChip(
+                      label: Text(e.isEmpty ? 'all logs' : e),
+                      selected: _filter == e,
+                      onSelected: (_) => setState(() => _filter = e)))
+                  .toList()),
           const SizedBox(height: ToreTokens.s8),
-          ...logs.take(80).map((e) => ListTile(title: Text(e.event), subtitle: Text('${e.ts.toIso8601String()}\n${scrubJsonMap(e.fields)}'))),
+          ...logs.take(80).map((e) => ListTile(
+              title: Text(e.event),
+              subtitle: Text(
+                  '${e.ts.toIso8601String()}\n${scrubJsonMap(e.fields)}'))),
           const SizedBox(height: ToreTokens.s8),
-          FilledButton(onPressed: _copyBuildInfo, child: const Text('Copy build info')),
-          TextField(controller: _urlController, decoration: const InputDecoration(labelText: 'Open URL in app', hintText: 'tore://event/event_42')),
+          FilledButton(
+              onPressed: _copyBuildInfo, child: const Text('Copy build info')),
+          TextField(
+              controller: _urlController,
+              decoration: const InputDecoration(
+                  labelText: 'Open URL in app',
+                  hintText: 'tore://event/event_42')),
           FilledButton(onPressed: _openUrlInApp, child: const Text('Open URL')),
-          FilledButton(onPressed: _copyTelemetry, child: const Text('Export telemetry (scrubbed)')),
-          FilledButton(onPressed: _copyBlob, child: const Text('Copy diagnostics to clipboard')),
+          FilledButton(
+              onPressed: _copyTelemetry,
+              child: const Text('Export telemetry (scrubbed)')),
+          FilledButton(
+              onPressed: _copyBlob,
+              child: const Text('Copy diagnostics to clipboard')),
           if (!kReleaseMode) ...[
-            OutlinedButton(onPressed: _clearCaches, child: const Text('Clear caches')),
-            OutlinedButton(onPressed: _clearIdempotency, child: const Text('Clear idempotency store')),
+            OutlinedButton(
+                onPressed: _clearCaches, child: const Text('Clear caches')),
+            OutlinedButton(
+                onPressed: _clearIdempotency,
+                child: const Text('Clear idempotency store')),
             DropdownButton<ConnectivityState>(
               value: widget.networkState,
-              items: ConnectivityState.values.map((e) => DropdownMenuItem(value: e, child: Text('Simulate ${e.name}'))).toList(),
+              items: ConnectivityState.values
+                  .map((e) => DropdownMenuItem(
+                      value: e, child: Text('Simulate ${e.name}')))
+                  .toList(),
               onChanged: (v) {
                 if (v != null) widget.onSimulatedNetworkChanged(v);
               },
@@ -172,11 +220,17 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Widget _section(String title, List<Widget> children) => Card(
         child: Padding(
           padding: const EdgeInsets.all(ToreTokens.s12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: ToreTokens.s12), ...children]),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: ToreTokens.s12),
+            ...children
+          ]),
         ),
       );
 
-  Widget _line(String k, String v) => Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('$k: $v'));
+  Widget _line(String k, String v) =>
+      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('$k: $v'));
 
   Future<void> _copyBuildInfo() async {
     final info = {
@@ -186,9 +240,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       'build_time': widget.buildInfo.buildTime,
       'environment': appEnvironmentLabel(widget.environment),
     };
-    await Clipboard.setData(ClipboardData(text: const JsonEncoder.withIndent('  ').convert(info)));
+    await Clipboard.setData(
+        ClipboardData(text: const JsonEncoder.withIndent('  ').convert(info)));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Build info copied.')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Build info copied.')));
   }
 
   Future<void> _openUrlInApp() async {
@@ -196,7 +252,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   }
 
   Future<void> _copyTelemetry() async {
-    final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter).take(120);
+    final logs = ClientLog.instance
+        .entries(filter: _filter.isEmpty ? null : _filter)
+        .take(120);
     final lines = logs.map((entry) => jsonEncode({
           'ts': entry.ts.toIso8601String(),
           'event': entry.event,
@@ -204,29 +262,38 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         }));
     await Clipboard.setData(ClipboardData(text: lines.join('\n')));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Telemetry export copied (scrubbed).')));
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Telemetry export copied (scrubbed).')));
   }
 
   Future<void> _copyBlob() async {
-    final scrubbedEvent = widget.eventContext?.eventId == null ? 'none' : scrubJsonMap({'user_id': widget.eventContext!.eventId})['user_id'];
+    final scrubbedEvent = widget.eventContext?.eventId == null
+        ? 'none'
+        : scrubJsonMap({'user_id': widget.eventContext!.eventId})['user_id'];
     final blob = StringBuffer()
       ..writeln('mode=${widget.mode.name}')
       ..writeln('network=${widget.networkState.name}')
       ..writeln('event=$scrubbedEvent')
-      ..writeln('build=${widget.buildInfo.semver}+${widget.buildInfo.buildNumber}')
+      ..writeln(
+          'build=${widget.buildInfo.semver}+${widget.buildInfo.buildNumber}')
       ..writeln('environment=${appEnvironmentLabel(widget.environment)}')
       ..writeln('roles=${widget.snapshot?.roles.join(',') ?? '-'}')
-      ..writeln('cache=${scrubJsonMap(_cache.map((key, value) => MapEntry(key, value?.inMinutes.toString() ?? 'missing')))}')
+      ..writeln(
+          'cache=${scrubJsonMap(_cache.map((key, value) => MapEntry(key, value?.inMinutes.toString() ?? 'missing')))}')
       ..writeln('errors=${widget.apiClient.recentErrorCodes()}')
       ..writeln('logs=${logsBlob()}');
     await Clipboard.setData(ClipboardData(text: blob.toString()));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diagnostics copied.')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Diagnostics copied.')));
   }
 
   String logsBlob() {
-    final logs = ClientLog.instance.entries(filter: _filter.isEmpty ? null : _filter).take(50);
-    final lines = logs.map((entry) => '${entry.ts.toIso8601String()} ${entry.event} ${scrubJsonMap(entry.fields)}');
+    final logs = ClientLog.instance
+        .entries(filter: _filter.isEmpty ? null : _filter)
+        .take(50);
+    final lines = logs.map((entry) =>
+        '${entry.ts.toIso8601String()} ${entry.event} ${scrubJsonMap(entry.fields)}');
     return lines.join(' | ');
   }
 
@@ -250,7 +317,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       builder: (_) => AlertDialog(
         title: const Text('Confirm'),
         content: Text(text),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'))
+        ],
       ),
     );
     return result == true;

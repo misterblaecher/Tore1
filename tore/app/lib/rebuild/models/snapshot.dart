@@ -22,9 +22,17 @@ class UserSnapshot {
       };
 
   static UserSnapshot fromJson(Map<String, dynamic> map) => UserSnapshot(
-        roles: safeGetList(map, 'roles').map((e) => e.toString()).where((e) => e.isNotEmpty).toSet(),
-        capabilities: safeGetList(map, 'capabilities').map((e) => e.toString()).where((e) => e.isNotEmpty).toSet(),
-        globalModules: safeGetMap(map, 'globalModules', aliases: const ['global_modules']).map(
+        roles: safeGetList(map, 'roles')
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toSet(),
+        capabilities: safeGetList(map, 'capabilities')
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toSet(),
+        globalModules:
+            safeGetMap(map, 'globalModules', aliases: const ['global_modules'])
+                .map(
           (k, v) => MapEntry(k, _moduleStateFrom(v)),
         ),
         syncedAt: tryParseDateTime(map['syncedAt'], fallback: DateTime.now()),

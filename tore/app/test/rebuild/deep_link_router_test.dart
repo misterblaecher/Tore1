@@ -13,16 +13,22 @@ void main() {
   });
 
   test('parses https fallback for event/menu/bar', () {
-    expect(router.parse('https://tore.app/event/e42')!.route, AppRoutes.eventHub);
-    expect(router.parse('https://stage.tore.app/bar/b1')!.route, AppRoutes.barDashboard);
-    expect(router.parse('https://dev.tore.app/menu/event/e42')!.route, AppRoutes.menu);
+    expect(
+        router.parse('https://tore.app/event/e42')!.route, AppRoutes.eventHub);
+    expect(router.parse('https://stage.tore.app/bar/b1')!.route,
+        AppRoutes.barDashboard);
+    expect(router.parse('https://dev.tore.app/menu/event/e42')!.route,
+        AppRoutes.menu);
   });
 
-
   test('parses legacy open links and maps to rebuild routes only', () {
-    expect(router.parse('https://app.tore.be/open?type=event&id=event_42')!.route, AppRoutes.eventHub);
-    expect(router.parse('tore://open?type=join&id=event_42')!.route, AppRoutes.join);
-    final qr = router.parse('https://app.tore.be/open?type=qr&payload=legacy_payload');
+    expect(
+        router.parse('https://app.tore.be/open?type=event&id=event_42')!.route,
+        AppRoutes.eventHub);
+    expect(router.parse('tore://open?type=join&id=event_42')!.route,
+        AppRoutes.join);
+    final qr =
+        router.parse('https://app.tore.be/open?type=qr&payload=legacy_payload');
     expect(qr, isNotNull);
     expect(qr!.isQr, isTrue);
     expect(qr.qrPayload, 'legacy_payload');

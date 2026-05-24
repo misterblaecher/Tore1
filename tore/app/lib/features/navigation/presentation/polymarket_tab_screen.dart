@@ -13,7 +13,8 @@ class PolymarketTabScreen extends ConsumerStatefulWidget {
   const PolymarketTabScreen({super.key});
 
   @override
-  ConsumerState<PolymarketTabScreen> createState() => _PolymarketTabScreenState();
+  ConsumerState<PolymarketTabScreen> createState() =>
+      _PolymarketTabScreenState();
 }
 
 class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
@@ -37,7 +38,9 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
     });
 
     try {
-      final response = await ref.read(apiProvider).fetchPolymarketMarkets(scope: 'global', status: 'all', type: 'all');
+      final response = await ref
+          .read(apiProvider)
+          .fetchPolymarketMarkets(scope: 'global', status: 'all', type: 'all');
       if (!mounted) return;
       setState(() {
         _markets = response.items;
@@ -70,16 +73,34 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
                 const ToreSectionHeader('Chargement des marchés'),
                 const ToreLoadingSkeleton(lines: 8),
               ] else if (_hasError)
-                ToreErrorState(message: _error ?? 'Impossible de charger les marchés.', onRetry: _load)
+                ToreErrorState(
+                    message: _error ?? 'Impossible de charger les marchés.',
+                    onRetry: _load)
               else if (_markets.isEmpty)
                 const ToreEmptyState(
                   title: 'Aucun marché actif',
-                  message: 'Les marchés seront affichés ici dès leur ouverture.',
+                  message:
+                      'Les marchés seront affichés ici dès leur ouverture.',
                 )
               else ...[
-                _section('En feu', _markets.where((m) => m.volume > 1000 || m.poolTickets > 1000).toList(), session.isGuest),
-                _section('Live', _markets.where((m) => m.status.toLowerCase() == 'live').toList(), session.isGuest),
-                _section('Résolus', _markets.where((m) => m.status.toLowerCase() == 'resolved').toList(), session.isGuest),
+                _section(
+                    'En feu',
+                    _markets
+                        .where((m) => m.volume > 1000 || m.poolTickets > 1000)
+                        .toList(),
+                    session.isGuest),
+                _section(
+                    'Live',
+                    _markets
+                        .where((m) => m.status.toLowerCase() == 'live')
+                        .toList(),
+                    session.isGuest),
+                _section(
+                    'Résolus',
+                    _markets
+                        .where((m) => m.status.toLowerCase() == 'resolved')
+                        .toList(),
+                    session.isGuest),
               ],
             ],
           ),
@@ -96,7 +117,8 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
         if (items.isEmpty)
           const Padding(
             padding: EdgeInsets.only(bottom: AppSpacing.md),
-            child: Text('Aucun élément dans cette section.', style: AppTextStyles.muted),
+            child: Text('Aucun élément dans cette section.',
+                style: AppTextStyles.muted),
           )
         else
           ...items.map((market) => Padding(
@@ -107,25 +129,40 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
                     children: [
                       Row(
                         children: [
-                          Expanded(child: Text(market.question, style: const TextStyle(fontWeight: FontWeight.w700))),
-                          if (market.volume > 1200) const AppChip(label: 'CHAUD', color: AppColors.accentAmber),
+                          Expanded(
+                              child: Text(market.question,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700))),
+                          if (market.volume > 1200)
+                            const AppChip(
+                                label: 'CHAUD', color: AppColors.accentAmber),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.xs),
-                      Text('Oui ${(market.yesPct * 100).toStringAsFixed(0)}% • Non ${(market.noPct * 100).toStringAsFixed(0)}%'),
+                      Text(
+                          'Oui ${(market.yesPct * 100).toStringAsFixed(0)}% • Non ${(market.noPct * 100).toStringAsFixed(0)}%'),
                       const SizedBox(height: AppSpacing.xs),
-                      Text('Participants ${market.poolTickets} • Volume ${market.volume}', style: AppTextStyles.muted),
+                      Text(
+                          'Participants ${market.poolTickets} • Volume ${market.volume}',
+                          style: AppTextStyles.muted),
                       const SizedBox(height: AppSpacing.sm),
                       ToreButton.primary(
-                        label: isGuest ? 'Connecte-toi pour continuer' : 'Voir le marché',
-                        icon: isGuest ? Icons.lock_outline : Icons.arrow_forward,
+                        label: isGuest
+                            ? 'Connecte-toi pour continuer'
+                            : 'Voir le marché',
+                        icon:
+                            isGuest ? Icons.lock_outline : Icons.arrow_forward,
                         onPressed: () {
                           if (isGuest) {
-                            RequireAuthSheet.show(context, message: 'La prise de position nécessite une connexion.');
+                            RequireAuthSheet.show(context,
+                                message:
+                                    'La prise de position nécessite une connexion.');
                             return;
                           }
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Lecture ouverte: marché consultable depuis cet écran.')),
+                            const SnackBar(
+                                content: Text(
+                                    'Lecture ouverte: marché consultable depuis cet écran.')),
                           );
                         },
                       ),

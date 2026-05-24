@@ -1,5 +1,6 @@
 class GlossaryCommittee {
-  const GlossaryCommittee({required this.id, required this.name, this.shortName});
+  const GlossaryCommittee(
+      {required this.id, required this.name, this.shortName});
 
   final int id;
   final String name;
@@ -15,15 +16,19 @@ class GlossaryCommittee {
 }
 
 class GlossarySettings {
-  const GlossarySettings({required this.publicEnabled, required this.availableTags});
+  const GlossarySettings(
+      {required this.publicEnabled, required this.availableTags});
 
   final bool publicEnabled;
   final List<String> availableTags;
 
   factory GlossarySettings.fromJson(Map<String, dynamic> json) {
     return GlossarySettings(
-      publicEnabled: json['publicEnabled'] == true || json['public_enabled'] == true,
-      availableTags: ((json['availableTags'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList(growable: false),
+      publicEnabled:
+          json['publicEnabled'] == true || json['public_enabled'] == true,
+      availableTags: ((json['availableTags'] as List?) ?? const <dynamic>[])
+          .map((e) => e.toString())
+          .toList(growable: false),
     );
   }
 
@@ -68,11 +73,17 @@ class GlossaryTerm {
       term: (json['term'] ?? '').toString(),
       definition: (json['definition'] ?? '').toString(),
       examples: json['examples']?.toString(),
-      tags: ((json['tags'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList(growable: false),
+      tags: ((json['tags'] as List?) ?? const <dynamic>[])
+          .map((e) => e.toString())
+          .toList(growable: false),
       isOfficial: json['isOfficial'] == true,
       status: (json['status'] ?? '').toString(),
-      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString())?.toUtc() ?? DateTime.now().toUtc(),
-      updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString())?.toUtc() ?? DateTime.now().toUtc(),
+      createdAt:
+          DateTime.tryParse((json['createdAt'] ?? '').toString())?.toUtc() ??
+              DateTime.now().toUtc(),
+      updatedAt:
+          DateTime.tryParse((json['updatedAt'] ?? '').toString())?.toUtc() ??
+              DateTime.now().toUtc(),
     );
   }
 
@@ -92,7 +103,8 @@ class GlossaryTerm {
 }
 
 class GlossaryTermsPage {
-  const GlossaryTermsPage({required this.items, this.nextCursor, this.serverTime});
+  const GlossaryTermsPage(
+      {required this.items, this.nextCursor, this.serverTime});
 
   final List<GlossaryTerm> items;
   final String? nextCursor;
@@ -101,9 +113,13 @@ class GlossaryTermsPage {
   factory GlossaryTermsPage.fromJson(Map<String, dynamic> json) {
     final rawItems = (json['items'] as List?) ?? const <dynamic>[];
     return GlossaryTermsPage(
-      items: rawItems.whereType<Map>().map((e) => GlossaryTerm.fromJson(Map<String, dynamic>.from(e))).toList(growable: false),
+      items: rawItems
+          .whereType<Map>()
+          .map((e) => GlossaryTerm.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false),
       nextCursor: json['nextCursor']?.toString(),
-      serverTime: DateTime.tryParse((json['serverTime'] ?? '').toString())?.toUtc(),
+      serverTime:
+          DateTime.tryParse((json['serverTime'] ?? '').toString())?.toUtc(),
     );
   }
 

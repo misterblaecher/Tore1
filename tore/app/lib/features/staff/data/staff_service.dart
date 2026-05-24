@@ -33,7 +33,8 @@ class StaffService {
       '/events/$eventId/staff/accept',
       data: {'token': token},
     );
-    return StaffAcceptResult.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return StaffAcceptResult.fromJson(
+        Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<List<EventStaffMember>> listStaff({
@@ -41,7 +42,8 @@ class StaffService {
   }) async {
     final res = await _dio.get('/events/$eventId/staff');
     final list = (res.data as List)
-        .map((item) => EventStaffMember.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map((item) =>
+            EventStaffMember.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
     return list;
   }

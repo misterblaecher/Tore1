@@ -16,10 +16,12 @@ class HomeTerritoryFeedScreen extends ConsumerStatefulWidget {
   const HomeTerritoryFeedScreen({super.key});
 
   @override
-  ConsumerState<HomeTerritoryFeedScreen> createState() => _HomeTerritoryFeedScreenState();
+  ConsumerState<HomeTerritoryFeedScreen> createState() =>
+      _HomeTerritoryFeedScreenState();
 }
 
-class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScreen> {
+class _HomeTerritoryFeedScreenState
+    extends ConsumerState<HomeTerritoryFeedScreen> {
   bool _loading = true;
   String? _error;
   bool _fromCache = false;
@@ -61,7 +63,11 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 name: (map['name'] ?? 'Event').toString(),
                 distanceLabel: 'à proximité',
                 participants: (map['participants_count'] as int?) ?? 0,
-                modules: const [Icons.local_bar_outlined, Icons.music_note_outlined, Icons.casino_outlined],
+                modules: const [
+                  Icons.local_bar_outlined,
+                  Icons.music_note_outlined,
+                  Icons.casino_outlined
+                ],
               ),
             );
           }
@@ -107,15 +113,24 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
     }
   }
 
-  Future<void> _saveCache(List<_TerritoryEvent> events, List<_ActiveBar> bars) async {
+  Future<void> _saveCache(
+      List<_TerritoryEvent> events, List<_ActiveBar> bars) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _territoryFeedCacheKey,
       jsonEncode({
         'events': events
-            .map((e) => {'id': e.id, 'name': e.name, 'distance': e.distanceLabel, 'participants': e.participants})
+            .map((e) => {
+                  'id': e.id,
+                  'name': e.name,
+                  'distance': e.distanceLabel,
+                  'participants': e.participants
+                })
             .toList(),
-        'bars': bars.map((b) => {'id': b.id, 'name': b.name, 'distance': b.distanceLabel}).toList(),
+        'bars': bars
+            .map((b) =>
+                {'id': b.id, 'name': b.name, 'distance': b.distanceLabel})
+            .toList(),
       }),
     );
   }
@@ -133,7 +148,10 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
             name: (item['name'] ?? 'Event').toString(),
             distanceLabel: (item['distance'] ?? 'à proximité').toString(),
             participants: (item['participants'] as int?) ?? 0,
-            modules: const [Icons.local_bar_outlined, Icons.music_note_outlined],
+            modules: const [
+              Icons.local_bar_outlined,
+              Icons.music_note_outlined
+            ],
           ),
         )
         .toList();
@@ -177,7 +195,8 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                       'assets/branding/logo_minimal.png',
                       width: 30,
                       height: 30,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.local_fire_department_outlined),
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.local_fire_department_outlined),
                     ),
                     const SizedBox(width: 10),
                     const Expanded(
@@ -185,7 +204,8 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('TORÈ', style: AppTextStyles.massiveTitle),
-                          Text('Liège · Territory Hub', style: AppTextStyles.muted),
+                          Text('Liège · Territory Hub',
+                              style: AppTextStyles.muted),
                         ],
                       ),
                     ),
@@ -193,10 +213,14 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const SolarChip(label: 'Territoire Liège', color: AppColors.solarGold),
+                        const SolarChip(
+                            label: 'Territoire Liège',
+                            color: AppColors.solarGold),
                         const SizedBox(height: 6),
                         Text(
-                          session.isGuest ? 'Exploration invitée' : 'Statut: connecté',
+                          session.isGuest
+                              ? 'Exploration invitée'
+                              : 'Statut: connecté',
                           style: AppTextStyles.muted,
                         ),
                       ],
@@ -206,7 +230,8 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 if (_fromCache || _error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(_error ?? 'Affichage depuis le cache local.', style: const TextStyle(color: AppColors.warning)),
+                    child: Text(_error ?? 'Affichage depuis le cache local.',
+                        style: const TextStyle(color: AppColors.warning)),
                   ),
                 const SizedBox(height: 16),
                 const SolarSectionTitle('Événements actifs'),
@@ -228,13 +253,22 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(event.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                              Text(event.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 18)),
                               const SizedBox(height: 6),
-                              Text(event.distanceLabel, style: AppTextStyles.muted),
+                              Text(event.distanceLabel,
+                                  style: AppTextStyles.muted),
                               const SizedBox(height: 8),
-                              Wrap(spacing: 6, children: [for (final icon in event.modules) Icon(icon, size: 16, color: AppColors.solarGold)]),
+                              Wrap(spacing: 6, children: [
+                                for (final icon in event.modules)
+                                  Icon(icon,
+                                      size: 16, color: AppColors.solarGold)
+                              ]),
                               const SizedBox(height: 8),
-                              Text('${event.participants} présents', style: AppTextStyles.muted),
+                              Text('${event.participants} présents',
+                                  style: AppTextStyles.muted),
                             ],
                           ),
                         ),
@@ -258,17 +292,23 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [Text(bar.name), Text(bar.distanceLabel, style: AppTextStyles.muted)],
+                            children: [
+                              Text(bar.name),
+                              Text(bar.distanceLabel,
+                                  style: AppTextStyles.muted)
+                            ],
                           ),
                         ),
-                        const SolarChip(label: 'Actif', color: AppColors.solarRedSoft),
+                        const SolarChip(
+                            label: 'Actif', color: AppColors.solarRedSoft),
                       ],
                     ),
                   ),
                 if (!_loading && _bars.isEmpty)
                   const ToreEmptyState(
                     title: "Aucun bar pour l'instant",
-                    message: "Reviens un peu plus tard pour découvrir les bars actifs.",
+                    message:
+                        "Reviens un peu plus tard pour découvrir les bars actifs.",
                   ),
                 if (kTrendingEnabled) ...[
                   const SizedBox(height: 12),
@@ -286,7 +326,9 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
                 ],
                 if (session.isGuest) ...[
                   const SizedBox(height: 12),
-                  const AuthRequiredNotice(message: 'Le check-in, la création d\'event et les outils staff demandent un compte.'),
+                  const AuthRequiredNotice(
+                      message:
+                          'Le check-in, la création d\'event et les outils staff demandent un compte.'),
                 ],
               ],
             ),
@@ -298,7 +340,12 @@ class _HomeTerritoryFeedScreenState extends ConsumerState<HomeTerritoryFeedScree
 }
 
 class _TerritoryEvent {
-  const _TerritoryEvent({required this.id, required this.name, required this.distanceLabel, required this.modules, required this.participants});
+  const _TerritoryEvent(
+      {required this.id,
+      required this.name,
+      required this.distanceLabel,
+      required this.modules,
+      required this.participants});
 
   final int id;
   final String name;
@@ -308,7 +355,8 @@ class _TerritoryEvent {
 }
 
 class _ActiveBar {
-  const _ActiveBar({required this.id, required this.name, required this.distanceLabel});
+  const _ActiveBar(
+      {required this.id, required this.name, required this.distanceLabel});
 
   final int id;
   final String name;

@@ -19,7 +19,8 @@ import 'package:tore/features/wallet/presentation/wallet_screen.dart';
 import 'package:tore/features/map_calendar/presentation/calendar_screen.dart';
 import 'package:tore/state.dart';
 import 'package:tore/core/auth/auth_models.dart';
-import 'package:tore/ui/components/components.dart' show ToreChip, ToreChipVariant, ToreDivider;
+import 'package:tore/ui/components/components.dart'
+    show ToreChip, ToreChipVariant, ToreDivider;
 import 'package:tore/shared/utils/write_gate.dart';
 import 'package:tore/ui/app_design_system.dart' as ds;
 import 'package:tore/features/navigation/presentation/soiree_ops_screen.dart';
@@ -31,12 +32,18 @@ class HomeHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ctx = ref.watch(appContextProvider);
     final hasEvent = ctx.hasActiveEvent;
-    final configAsync = hasEvent ? ref.watch(eventConfigProvider(ctx.activeEventId!)) : null;
-    final eventAsync = hasEvent ? ref.watch(_eventDetailsProvider(ctx.activeEventId!)) : null;
+    final configAsync =
+        hasEvent ? ref.watch(eventConfigProvider(ctx.activeEventId!)) : null;
+    final eventAsync =
+        hasEvent ? ref.watch(_eventDetailsProvider(ctx.activeEventId!)) : null;
     final config = configAsync?.maybeWhen(data: (c) => c, orElse: () => null);
-    final eventState = eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ?? 'LIVE';
+    final eventState =
+        eventAsync?.maybeWhen(data: _readEventState, orElse: () => 'LIVE') ??
+            'LIVE';
     final readOnly = isReadOnly(ref);
-    final modules = ref.watch(_modulesProvider).maybeWhen(data: (m) => m, orElse: () => const <String, dynamic>{});
+    final modules = ref
+        .watch(_modulesProvider)
+        .maybeWhen(data: (m) => m, orElse: () => const <String, dynamic>{});
     final committeesModule = modules['committee_os'] == true;
     final glossaryModule = modules['folklore_glossary'] == true;
     final me = ref.watch(meProvider).valueOrNull;
@@ -53,7 +60,11 @@ class HomeHubScreen extends ConsumerWidget {
           read: ref.read,
           refresh: ref.refresh,
           eventId: ctx.activeEventId!,
-          modulesOn: {'menu': menuOn, 'wallet': walletOn, 'polymarket': polymarketOn},
+          modulesOn: {
+            'menu': menuOn,
+            'wallet': walletOn,
+            'polymarket': polymarketOn
+          },
         );
       });
     }
@@ -65,7 +76,8 @@ class HomeHubScreen extends ConsumerWidget {
               'assets/branding/logo_minimal.png',
               width: 22,
               height: 22,
-              errorBuilder: (_, __, ___) => const Text('TORÈ', style: TextStyle(fontWeight: FontWeight.w700)),
+              errorBuilder: (_, __, ___) => const Text('TORÈ',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
             ),
             const SizedBox(width: 8),
             const Text('Home Hub'),
@@ -75,12 +87,14 @@ class HomeHubScreen extends ConsumerWidget {
           if (hasEvent && tickerOn)
             IconButton(
               tooltip: 'Ticker',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TickerScreen())),
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TickerScreen())),
               icon: const Icon(Icons.toll_outlined),
             ),
           IconButton(
             tooltip: 'Profil',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
@@ -91,14 +105,16 @@ class HomeHubScreen extends ConsumerWidget {
           if (accountMode == AccountMode.organizer)
             FloatingActionButton.extended(
               heroTag: 'create-event-fab',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const CreateEventWizardScreen())),
               icon: const Icon(Icons.add),
               label: const Text('Créer event'),
             ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
             heroTag: 'scan-qr-fab',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerScreen())),
+            onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QrScannerScreen())),
             icon: const Icon(Icons.qr_code_scanner_outlined),
             label: const Text('Scanner QR'),
           ),
@@ -108,7 +124,9 @@ class HomeHubScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           _EventHeader(
-            title: hasEvent ? (ctx.activeEventName ?? 'Event #${ctx.activeEventId}') : 'Aucun event actif',
+            title: hasEvent
+                ? (ctx.activeEventName ?? 'Event #${ctx.activeEventId}')
+                : 'Aucun event actif',
             status: hasEvent ? eventState : 'OFF',
             onLeave: hasEvent
                 ? (readOnly
@@ -118,15 +136,23 @@ class HomeHubScreen extends ConsumerWidget {
                               context: context,
                               builder: (_) => AlertDialog(
                                 title: const Text('Quitter l’event ?'),
-                                content: const Text('Tu vas revenir en mode libre.'),
+                                content:
+                                    const Text('Tu vas revenir en mode libre.'),
                                 actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-                                  FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
+                                  TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text('Annuler')),
+                                  FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: const Text('Quitter')),
                                 ],
                               ),
                             ) ??
                             false;
-                        if (ok) ref.read(appContextProvider.notifier).leaveEvent();
+                        if (ok)
+                          ref.read(appContextProvider.notifier).leaveEvent();
                       })
                 : null,
           ),
@@ -136,11 +162,15 @@ class HomeHubScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const ds.SectionTitle('Mode soirée'),
-                Text('Mode actif: ${accountMode.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text('Mode actif: ${accountMode.name}',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                if (accountMode == AccountMode.user) const Text('Découvrir et participer aux events.'),
-                if (accountMode == AccountMode.organizer) const Text("Créer et gérer des events depuis l'app."),
-                if (accountMode == AccountMode.team) const Text('Scanner QR et gérer les check-ins.'),
+                if (accountMode == AccountMode.user)
+                  const Text('Découvrir et participer aux events.'),
+                if (accountMode == AccountMode.organizer)
+                  const Text("Créer et gérer des events depuis l'app."),
+                if (accountMode == AccountMode.team)
+                  const Text('Scanner QR et gérer les check-ins.'),
               ],
             ),
           ),
@@ -150,7 +180,8 @@ class HomeHubScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Scanne un QR join_event ou entre un code pour activer ton event.'),
+                  const Text(
+                      'Scanne un QR join_event ou entre un code pour activer ton event.'),
                   const SizedBox(height: 10),
                   FilledButton.icon(
                     onPressed: () => showCodeEntrySheet(context),
@@ -160,91 +191,104 @@ class HomeHubScreen extends ConsumerWidget {
                 ],
               ),
             ),
-
           if (accountMode == AccountMode.organizer)
             _ModuleCard(
               icon: Icons.event,
               title: 'Mes events',
               subtitle: "Lister et opérer tes soirées dans l'app",
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: true))),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const SoireeOpsScreen(organizerMode: true))),
             ),
           if (accountMode == AccountMode.organizer)
             _ModuleCard(
               icon: Icons.add_circle_outline,
               title: 'Créer un event',
               subtitle: 'Formulaire rapide app-first',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: true))),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const SoireeOpsScreen(organizerMode: true))),
             ),
           if (accountMode == AccountMode.team)
             _ModuleCard(
               icon: Icons.qr_code_scanner_outlined,
               title: 'Scanner QR (check-in)',
               subtitle: 'Valider un check-in event_checkin:<id>',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SoireeOpsScreen(organizerMode: false))),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const SoireeOpsScreen(organizerMode: false))),
             ),
-
           if (!hasEvent)
             _ModuleCard(
               icon: Icons.calendar_month_outlined,
               title: 'Calendrier',
               subtitle: 'Events publics: Live / Today / Upcoming',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen())),
+              onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CalendarScreen())),
             ),
           if (!hasEvent)
             _ModuleCard(
               icon: Icons.groups_outlined,
               title: 'Communauté',
               subtitle: 'Explorer + Join by code + Mes orgas',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityScreen())),
+              onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CommunityScreen())),
             ),
           if (hasEvent)
             _ModuleCard(
               icon: Icons.event_note_outlined,
               title: 'Event Hub',
               subtitle: 'Modules actifs de l’event',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EventHubScreen(eventId: ctx.activeEventId!, eventName: ctx.activeEventName ?? 'Event #${ctx.activeEventId}'))),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => EventHubScreen(
+                      eventId: ctx.activeEventId!,
+                      eventName: ctx.activeEventName ??
+                          'Event #${ctx.activeEventId}'))),
             ),
           if (hasEvent && menuOn)
             _ModuleCard(
               icon: Icons.restaurant_menu_outlined,
               title: 'Menu',
               subtitle: 'Commander dans ton event',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MenuScreen(eventId: ctx.activeEventId!))),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => MenuScreen(eventId: ctx.activeEventId!))),
             ),
           if (hasEvent && walletOn)
             _ModuleCard(
               icon: Icons.account_balance_wallet_outlined,
               title: 'Wallet',
               subtitle: 'Solde, historique et My Wallet QR',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: ctx.activeEventId!))),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => WalletScreen(eventId: ctx.activeEventId!))),
             ),
           if (hasEvent && polymarketOn)
             _ModuleCard(
               icon: Icons.casino_outlined,
               title: 'Polymarket',
               subtitle: 'Polymarkets et positions',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PolymarketTabScreen())),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const PolymarketTabScreen())),
             ),
           if (committeesModule)
             _ModuleCard(
               icon: Icons.groups_outlined,
               title: 'Comité OS',
               subtitle: 'Page publique + espace privé',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommitteesListScreen())),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const CommitteesListScreen())),
             ),
           if (glossaryModule)
             _ModuleCard(
               icon: Icons.menu_book_outlined,
               title: 'Glossaire Folklore',
               subtitle: 'Comités publics et termes folklore',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GlossaryHomeScreen())),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const GlossaryHomeScreen())),
             ),
           if (committeesModule)
             _ModuleCard(
               icon: Icons.calendar_month_outlined,
               title: 'Calendrier',
               subtitle: 'Vue publique cross-bars',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen())),
+              onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CalendarScreen())),
             ),
           if (hasEvent && tickerOn)
             _ModuleCard(
@@ -254,9 +298,12 @@ class HomeHubScreen extends ConsumerWidget {
               onTap: () {
                 final eventId = ctx.activeEventId;
                 if (eventId != null) {
-                  ref.read(tickerControllerProvider(eventId).notifier).refresh();
+                  ref
+                      .read(tickerControllerProvider(eventId).notifier)
+                      .refresh();
                 }
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TickerScreen()));
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TickerScreen()));
               },
             ),
         ],
@@ -280,7 +327,9 @@ class _EventHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
+              Expanded(
+                  child: Text(title,
+                      style: Theme.of(context).textTheme.titleLarge)),
               if (status != 'OFF') _EventStateBadge(status: status),
             ],
           ),
@@ -288,7 +337,10 @@ class _EventHeader extends StatelessWidget {
             const SizedBox(height: 8),
             const ToreDivider(),
             const SizedBox(height: 8),
-            TextButton.icon(onPressed: onLeave, icon: const Icon(Icons.logout), label: const Text('Quitter l’event')),
+            TextButton.icon(
+                onPressed: onLeave,
+                icon: const Icon(Icons.logout),
+                label: const Text('Quitter l’event')),
           ],
         ],
       ),
@@ -304,7 +356,12 @@ class _EventStateBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = status.toUpperCase();
-    final isBlocked = normalized == 'PAUSE' || normalized == 'PAUSED' || normalized == 'READ_ONLY' || normalized == 'FROZEN' || normalized == 'ENDED' || normalized == 'CLOSED';
+    final isBlocked = normalized == 'PAUSE' ||
+        normalized == 'PAUSED' ||
+        normalized == 'READ_ONLY' ||
+        normalized == 'FROZEN' ||
+        normalized == 'ENDED' ||
+        normalized == 'CLOSED';
     final isRunning = normalized == 'RUNNING' || normalized == 'LIVE';
     return ToreChip(
       label: isRunning ? 'RUNNING' : (isBlocked ? normalized : normalized),
@@ -313,12 +370,16 @@ class _EventStateBadge extends StatelessWidget {
   }
 }
 
-final _eventDetailsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, eventId) async {
+final _eventDetailsProvider =
+    FutureProvider.family<Map<String, dynamic>, int>((ref, eventId) async {
   return ref.read(apiProvider).event(eventId);
 });
 
 String _readEventState(Map<String, dynamic> event) {
-  final value = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'RUNNING').toString().toUpperCase();
+  final value =
+      (event['state'] ?? event['status'] ?? event['event_state'] ?? 'RUNNING')
+          .toString()
+          .toUpperCase();
   if (value == 'LIVE') return 'RUNNING';
   if (value == 'PAUSE') return 'PAUSED';
   if (value == 'CLOSED') return 'ENDED';
@@ -326,7 +387,11 @@ String _readEventState(Map<String, dynamic> event) {
 }
 
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  const _ModuleCard(
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      required this.onTap});
   final IconData icon;
   final String title;
   final String subtitle;
@@ -346,7 +411,9 @@ class _ModuleCard extends StatelessWidget {
                 children: [
                   Icon(icon),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700))),
+                  Expanded(
+                      child: Text(title,
+                          style: const TextStyle(fontWeight: FontWeight.w700))),
                   const Icon(Icons.chevron_right),
                 ],
               ),

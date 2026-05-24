@@ -58,7 +58,8 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     _pollTimer?.cancel();
     if (state == NetworkState.offline) return;
     final seconds = state == NetworkState.degraded ? 5 : 2;
-    _pollTimer = Timer.periodic(Duration(seconds: seconds), (_) => _load(silent: true));
+    _pollTimer =
+        Timer.periodic(Duration(seconds: seconds), (_) => _load(silent: true));
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -82,51 +83,40 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     }
   }
 
-  Future<void> _vote(Map<String, dynamic> candidate) async {
-    if (_posting) return;
-    setState(() => _posting = true);
-    try {
-      await ref.read(apiProvider).voteMusic(eventId: widget.eventId, candidate: candidate, idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString());
-      await _load();
-    } on DioException catch (e) {
-      if (!mounted) return;
-      final msg = (e.response?.data is Map) ? ((e.response?.data['reason'] ?? 'vote_failed').toString()) : 'vote_failed';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    } finally {
-      if (mounted) setState(() => _posting = false);
-    }
-  }
-
   Future<void> _addCandidate() async {
     final raw = _urlCtrl.text.trim();
     if (!isLocallyValidCandidateLink(raw, _provider)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lien invalide pour ce provider.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lien invalide pour ce provider.')));
       return;
     }
     if (_posting) return;
     setState(() => _posting = true);
     try {
       final res = await ref.read(apiProvider).addMusicCandidate(
-        eventId: widget.eventId,
-        provider: musicProviderApiValue(_provider),
-        externalUrl: raw,
-        titleHint: _titleHintCtrl.text,
-        idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
-      );
+            eventId: widget.eventId,
+            provider: musicProviderApiValue(_provider),
+            externalUrl: raw,
+            titleHint: _titleHintCtrl.text,
+            idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
+          );
       final status = (res['status'] ?? '').toString();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(status == 'already_exists' ? 'Déjà dans la liste' : 'Candidat ajouté')),
+        SnackBar(
+            content: Text(status == 'already_exists'
+                ? 'Déjà dans la liste'
+                : 'Candidat ajouté')),
       );
       await _load();
     } on DioException catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ajout impossible')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Ajout impossible')));
     } finally {
       if (mounted) setState(() => _posting = false);
     }
   }
-
 
   Future<void> _suggestPreEvent() async {
     final raw = _urlCtrl.text.trim();
@@ -134,12 +124,12 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     setState(() => _posting = true);
     try {
       await ref.read(apiProvider).suggestMusicPreEvent(
-        eventId: widget.eventId,
-        provider: musicProviderApiValue(_provider),
-        externalUrl: raw,
-        title: _titleHintCtrl.text.trim(),
-        idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
-      );
+            eventId: widget.eventId,
+            provider: musicProviderApiValue(_provider),
+            externalUrl: raw,
+            title: _titleHintCtrl.text.trim(),
+            idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
+          );
       await _load();
     } finally {
       if (mounted) setState(() => _posting = false);
@@ -151,10 +141,10 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
     setState(() => _posting = true);
     try {
       await ref.read(apiProvider).voteMusicPreEvent(
-        eventId: widget.eventId,
-        suggestionId: suggestionId,
-        idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
-      );
+            eventId: widget.eventId,
+            suggestionId: suggestionId,
+            idempotencyKey: DateTime.now().microsecondsSinceEpoch.toString(),
+          );
       await _load();
     } finally {
       if (mounted) setState(() => _posting = false);
@@ -180,9 +170,11 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
       _pollingState = network;
       _schedulePolling(network);
     }
-    final runtimeState = ((_payload?['runtimeState'] ?? 'LIVE').toString()).toUpperCase();
+    final runtimeState =
+        ((_payload?['runtimeState'] ?? 'LIVE').toString()).toUpperCase();
     final readOnly = isReadOnly(ref);
-    final round = Map<String, dynamic>.from((_payload?['round'] as Map?) ?? const {});
+    final round =
+        Map<String, dynamic>.from((_payload?['round'] as Map?) ?? const {});
     final roundStatus = (round['status'] ?? 'IDLE').toString();
     final writeBlocked = isWriteBlocked(
       readOnly: readOnly,
@@ -190,8 +182,10 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
       degradedBlocked: network == NetworkState.degraded,
     );
     final canVote = !writeBlocked && !_posting && roundStatus == 'OPEN';
-    final permissions = Map<String, dynamic>.from((_context?['permissions'] as Map?) ?? const {});
-    final canAdminMusic = (permissions['canAdminMusic'] == true) || (permissions['canDjMusic'] == true);
+    final permissions = Map<String, dynamic>.from(
+        (_context?['permissions'] as Map?) ?? const {});
+    final canAdminMusic = (permissions['canAdminMusic'] == true) ||
+        (permissions['canDjMusic'] == true);
 
     return Scaffold(
       appBar: AppBar(
@@ -199,7 +193,9 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
         actions: [
           if (canAdminMusic)
             IconButton(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MusicAdminPanelScreen(eventId: widget.eventId))),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      MusicAdminPanelScreen(eventId: widget.eventId))),
               icon: const Icon(Icons.tune),
             ),
         ],
@@ -210,7 +206,8 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
               length: 2,
               child: Column(
                 children: [
-                  const TabBar(tabs: [Tab(text: 'Pré-event'), Tab(text: 'Live')]),
+                  const TabBar(
+                      tabs: [Tab(text: 'Pré-event'), Tab(text: 'Live')]),
                   Expanded(
                     child: RefreshIndicator(
                       onRefresh: _load,
@@ -220,22 +217,56 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                           children: [
                             DropdownButton<MusicProvider>(
                               value: _provider,
-                              items: MusicProvider.values.map((provider) => DropdownMenuItem(value: provider, child: Text(musicProviderLabel(provider)))).toList(),
-                              onChanged: (v) => setState(() => _provider = v ?? MusicProvider.spotify),
+                              items: MusicProvider.values
+                                  .map((provider) => DropdownMenuItem(
+                                      value: provider,
+                                      child:
+                                          Text(musicProviderLabel(provider))))
+                                  .toList(),
+                              onChanged: (v) => setState(
+                                  () => _provider = v ?? MusicProvider.spotify),
                             ),
-                            TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Lien')),
-                            TextField(controller: _titleHintCtrl, decoration: const InputDecoration(labelText: 'Titre (optionnel)')),
+                            TextField(
+                                controller: _urlCtrl,
+                                decoration:
+                                    const InputDecoration(labelText: 'Lien')),
+                            TextField(
+                                controller: _titleHintCtrl,
+                                decoration: const InputDecoration(
+                                    labelText: 'Titre (optionnel)')),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: writeBlocked || _posting ? null : _suggestPreEvent, child: const Text('Suggérer un son')),
+                            ElevatedButton(
+                                onPressed: writeBlocked || _posting
+                                    ? null
+                                    : _suggestPreEvent,
+                                child: const Text('Suggérer un son')),
                             const SizedBox(height: 12),
-                            if (((_preEventPayload?['items'] as List?) ?? const []).isEmpty)
-                              const Card(child: ListTile(title: Text('Aucune suggestion pour le moment'), subtitle: Text('Sois le premier à proposer un son.'))),
-                            ...(((_preEventPayload?['items'] as List?) ?? const [])).map((row) {
-                              final item = Map<String, dynamic>.from(row as Map);
-                              return Card(child: ListTile(
-                                title: Text('${item['title'] ?? 'Track'} - ${item['artist'] ?? ''}'),
+                            if (((_preEventPayload?['items'] as List?) ??
+                                    const [])
+                                .isEmpty)
+                              const Card(
+                                  child: ListTile(
+                                      title: Text(
+                                          'Aucune suggestion pour le moment'),
+                                      subtitle: Text(
+                                          'Sois le premier à proposer un son.'))),
+                            ...(((_preEventPayload?['items'] as List?) ??
+                                    const []))
+                                .map((row) {
+                              final item =
+                                  Map<String, dynamic>.from(row as Map);
+                              return Card(
+                                  child: ListTile(
+                                title: Text(
+                                    '${item['title'] ?? 'Track'} - ${item['artist'] ?? ''}'),
                                 subtitle: Text('Votes: ${item['votes'] ?? 0}'),
-                                trailing: IconButton(icon: const Icon(Icons.thumb_up_alt_outlined), onPressed: writeBlocked || _posting ? null : () => _votePreEvent((item['id'] ?? 0) as int)),
+                                trailing: IconButton(
+                                    icon:
+                                        const Icon(Icons.thumb_up_alt_outlined),
+                                    onPressed: writeBlocked || _posting
+                                        ? null
+                                        : () => _votePreEvent(
+                                            (item['id'] ?? 0) as int)),
                               ));
                             }),
                           ],
@@ -243,7 +274,8 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                         ListView(
                           padding: const EdgeInsets.all(16),
                           children: [
-                            if (_payload == null) const Text('Module indisponible.'),
+                            if (_payload == null)
+                              const Text('Module indisponible.'),
                             if (_payload != null) ...[
                               Card(
                                 child: ListTile(
@@ -259,52 +291,90 @@ class _MusicVoteScreenState extends ConsumerState<MusicVoteScreen> {
                               if (_payload!['nowPlaying'] is Map)
                                 Card(
                                   child: ListTile(
-                                    title: Text('Now Playing: ${_payload!['nowPlaying']['title'] ?? ''}'),
-                                    subtitle: Text('Open in ${_payload!['nowPlaying']['provider'] ?? ''}: ${_payload!['nowPlaying']['externalUrl'] ?? ''}'),
+                                    title: Text(
+                                        'Now Playing: ${_payload!['nowPlaying']['title'] ?? ''}'),
+                                    subtitle: Text(
+                                        'Open in ${_payload!['nowPlaying']['provider'] ?? ''}: ${_payload!['nowPlaying']['externalUrl'] ?? ''}'),
                                   ),
                                 ),
                               if (_payload!['winner'] is Map)
                                 Card(
                                   child: ListTile(
-                                    title: Text('Next winner: ${_payload!['winner']['candidate']['title'] ?? ''}'),
-                                    subtitle: Text('Votes: ${_payload!['winner']['votesCount'] ?? 0} • Open in ${_payload!['winner']['candidate']['provider'] ?? ''}'),
+                                    title: Text(
+                                        'Next winner: ${_payload!['winner']['candidate']['title'] ?? ''}'),
+                                    subtitle: Text(
+                                        'Votes: ${_payload!['winner']['votesCount'] ?? 0} • Open in ${_payload!['winner']['candidate']['provider'] ?? ''}'),
                                   ),
                                 ),
                               const SizedBox(height: 16),
                               DropdownButton<MusicProvider>(
                                 value: _provider,
                                 items: MusicProvider.values
-                                    .map((provider) => DropdownMenuItem(value: provider, child: Text(musicProviderLabel(provider))))
+                                    .map((provider) => DropdownMenuItem(
+                                        value: provider,
+                                        child:
+                                            Text(musicProviderLabel(provider))))
                                     .toList(),
-                                onChanged: (v) => setState(() => _provider = v ?? MusicProvider.spotify),
+                                onChanged: (v) => setState(() =>
+                                    _provider = v ?? MusicProvider.spotify),
                               ),
-                              TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Lien')),
-                              TextField(controller: _titleHintCtrl, decoration: const InputDecoration(labelText: 'Titre (optionnel)')),
+                              TextField(
+                                  controller: _urlCtrl,
+                                  decoration:
+                                      const InputDecoration(labelText: 'Lien')),
+                              TextField(
+                                  controller: _titleHintCtrl,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Titre (optionnel)')),
                               const SizedBox(height: 8),
                               ElevatedButton(
                                 onPressed: canVote ? _addCandidate : null,
                                 child: const Text('Ajouter'),
                               ),
                               const SizedBox(height: 16),
-                              const Text('Candidats', style: TextStyle(fontWeight: FontWeight.bold)),
+                              const Text('Candidats',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                               const SizedBox(height: 8),
-                              if (((_payload!['candidates'] as List?) ?? const []).isEmpty)
-                                const Card(child: ListTile(title: Text('Aucun candidat live'), subtitle: Text('Ajoute un morceau quand un round est ouvert.'))),
-                              ...(((_payload!['candidates'] as List?) ?? const [])).map((row) {
-                                final candidate = Map<String, dynamic>.from(row as Map);
-                                final provider = musicProviderFromApi('${candidate['provider'] ?? ''}');
-                                final url = (candidate['urlOriginal'] ?? candidate['externalUrl'] ?? '').toString();
+                              if (((_payload!['candidates'] as List?) ??
+                                      const [])
+                                  .isEmpty)
+                                const Card(
+                                    child: ListTile(
+                                        title: Text('Aucun candidat live'),
+                                        subtitle: Text(
+                                            'Ajoute un morceau quand un round est ouvert.'))),
+                              ...(((_payload!['candidates'] as List?) ??
+                                      const []))
+                                  .map((row) {
+                                final candidate =
+                                    Map<String, dynamic>.from(row as Map);
+                                final provider = musicProviderFromApi(
+                                    '${candidate['provider'] ?? ''}');
+                                final url = (candidate['urlOriginal'] ??
+                                        candidate['externalUrl'] ??
+                                        '')
+                                    .toString();
                                 return Card(
                                   child: ListTile(
-                                    title: Text((candidate['titleHint'] ?? '').toString().isNotEmpty ? '${candidate['titleHint']}' : 'Lien'),
+                                    title: Text((candidate['titleHint'] ?? '')
+                                            .toString()
+                                            .isNotEmpty
+                                        ? '${candidate['titleHint']}'
+                                        : 'Lien'),
                                     subtitle: Text(candidateShortLink(url)),
-                                    leading: Chip(label: Text(provider == null ? '${candidate['provider'] ?? ''}' : musicProviderLabel(provider))),
+                                    leading: Chip(
+                                        label: Text(provider == null
+                                            ? '${candidate['provider'] ?? ''}'
+                                            : musicProviderLabel(provider))),
                                     trailing: IconButton(
                                       icon: const Icon(Icons.open_in_new),
                                       onPressed: () async {
                                         final uri = Uri.tryParse(url);
                                         if (uri != null) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                          await launchUrl(uri,
+                                              mode: LaunchMode
+                                                  .externalApplication);
                                         }
                                       },
                                     ),

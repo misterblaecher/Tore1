@@ -37,9 +37,13 @@ class RemoteConfigPayload {
     );
   }
 
-  factory RemoteConfigPayload.fromJson(Map<String, dynamic> json, {required AppEnvironment environment, required String source}) {
-    final modules = (json['modules_defaults'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final minBuild = int.tryParse(json['min_supported_build']?.toString() ?? '');
+  factory RemoteConfigPayload.fromJson(Map<String, dynamic> json,
+      {required AppEnvironment environment, required String source}) {
+    final modules =
+        (json['modules_defaults'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{};
+    final minBuild =
+        int.tryParse(json['min_supported_build']?.toString() ?? '');
     final minVersion = json['min_supported_version']?.toString();
     final diagnostics = json['diagnostics_enabled'];
 
@@ -48,12 +52,16 @@ class RemoteConfigPayload {
         for (final row in modules.entries) row.key: row.value == true,
       },
       disableWritesGlobal: json['disable_writes_global'] == true,
-      disableWritesMessage: json['disable_writes_message']?.toString().trim().isNotEmpty == true
-          ? json['disable_writes_message'].toString()
-          : 'Writes are temporarily frozen.',
+      disableWritesMessage:
+          json['disable_writes_message']?.toString().trim().isNotEmpty == true
+              ? json['disable_writes_message'].toString()
+              : 'Writes are temporarily frozen.',
       minSupportedBuild: minBuild,
-      minSupportedVersion: minVersion == null || minVersion.isEmpty ? null : minVersion,
-      diagnosticsEnabled: diagnostics is bool ? diagnostics : environment != AppEnvironment.prod,
+      minSupportedVersion:
+          minVersion == null || minVersion.isEmpty ? null : minVersion,
+      diagnosticsEnabled: diagnostics is bool
+          ? diagnostics
+          : environment != AppEnvironment.prod,
       fetchedAt: DateTime.now(),
       source: source,
     );
@@ -72,7 +80,10 @@ class RemoteConfigPayload {
 }
 
 class RemoteConfigService {
-  RemoteConfigService({required ApiClient apiClient, required CacheStore cacheStore, required AppEnvironment environment})
+  RemoteConfigService(
+      {required ApiClient apiClient,
+      required CacheStore cacheStore,
+      required AppEnvironment environment})
       : _apiClient = apiClient,
         _cacheStore = cacheStore,
         _environment = environment;
@@ -88,25 +99,36 @@ class RemoteConfigService {
     final cached = await _cacheStore.loadJson(cacheKey, ttl: cacheTtl);
     try {
       final remote = await _apiClient.fetchRemoteConfig();
-      final payload = RemoteConfigPayload.fromJson(remote, environment: _environment, source: 'remote');
+      final payload = RemoteConfigPayload.fromJson(remote,
+          environment: _environment, source: 'remote');
       await _cacheStore.saveJson(cacheKey, payload.toJson());
-      await ClientLog.instance.log('remote_config.load', {'source': 'remote', 'disable_writes_global': payload.disableWritesGlobal});
+      await ClientLog.instance.log('remote_config.load', {
+        'source': 'remote',
+        'disable_writes_global': payload.disableWritesGlobal
+      });
       return payload;
     } catch (_) {
       if (cached != null) {
-        final payload = RemoteConfigPayload.fromJson(cached.payload, environment: _environment, source: 'cache');
-        await ClientLog.instance.log('remote_config.load', {'source': 'cache', 'stale': cached.isStale});
+        final payload = RemoteConfigPayload.fromJson(cached.payload,
+            environment: _environment, source: 'cache');
+        await ClientLog.instance.log(
+            'remote_config.load', {'source': 'cache', 'stale': cached.isStale});
         return payload;
       }
       final defaults = RemoteConfigPayload.defaults(_environment);
-      await ClientLog.instance.log('remote_config.load', {'source': 'defaults'});
+      await ClientLog.instance
+          .log('remote_config.load', {'source': 'defaults'});
       return defaults;
     }
   }
 }
 
 class BuildInfo {
-  const BuildInfo({required this.semver, required this.buildNumber, required this.gitSha, required this.buildTime});
+  const BuildInfo(
+      {required this.semver,
+      required this.buildNumber,
+      required this.gitSha,
+      required this.buildTime});
 
   final String semver;
   final int buildNumber;
@@ -117,7 +139,8 @@ class BuildInfo {
     const semver = String.fromEnvironment('APP_VERSION', defaultValue: '1.0.0');
     const buildRaw = String.fromEnvironment('APP_BUILD', defaultValue: '1');
     const gitSha = String.fromEnvironment('GIT_SHA', defaultValue: 'unknown');
-    const buildTime = String.fromEnvironment('BUILD_TIME', defaultValue: 'unknown');
+    const buildTime =
+        String.fromEnvironment('BUILD_TIME', defaultValue: 'unknown');
     return BuildInfo(
       semver: semver,
       buildNumber: int.tryParse(buildRaw) ?? 1,

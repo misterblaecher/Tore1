@@ -10,7 +10,8 @@ class _MemoryPersistence implements IdempotencyPersistence {
   final Map<String, String> _data = {};
 
   @override
-  Future<Map<String, String>> loadAll() async => Map<String, String>.from(_data);
+  Future<Map<String, String>> loadAll() async =>
+      Map<String, String>.from(_data);
 
   @override
   Future<void> saveAll(Map<String, String> data) async {
@@ -18,6 +19,7 @@ class _MemoryPersistence implements IdempotencyPersistence {
       ..clear()
       ..addAll(data);
   }
+
   @override
   Future<void> clear() async {
     _data.clear();
@@ -34,7 +36,8 @@ void main() {
     expect(mapBackendStateAlias('FROZEN'), EventState.readOnly);
   });
 
-  test('module gating and deep-link guards enforce mode + OFF module blocking', () {
+  test('module gating and deep-link guards enforce mode + OFF module blocking',
+      () {
     final guards = RouteGuards();
     final snapshot = UserSnapshot(
       roles: {'USER'},

@@ -14,13 +14,13 @@ AccountMode accountModeFromJson(dynamic raw) {
 
 String accountModeToJson(AccountMode mode) => mode.name;
 
-
 class RoleUpgradeRequest {
   final int id;
   final AccountMode requestedMode;
   final String status;
 
-  const RoleUpgradeRequest({required this.id, required this.requestedMode, required this.status});
+  const RoleUpgradeRequest(
+      {required this.id, required this.requestedMode, required this.status});
 
   factory RoleUpgradeRequest.fromJson(Map<String, dynamic> json) {
     return RoleUpgradeRequest(
@@ -73,7 +73,10 @@ class AppUser {
       visibility: (json['visibility'] ?? 'public').toString(),
       showIdentityInBar: (json['show_identity_in_bar'] as bool?) ?? false,
       accountMode: accountModeFromJson(json['account_mode']),
-      roleRequestPending: json['role_request_pending'] is Map<String, dynamic> ? RoleUpgradeRequest.fromJson(json['role_request_pending'] as Map<String, dynamic>) : null,
+      roleRequestPending: json['role_request_pending'] is Map<String, dynamic>
+          ? RoleUpgradeRequest.fromJson(
+              json['role_request_pending'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -116,7 +119,7 @@ class AppUser {
       visibility: visibility ?? this.visibility,
       showIdentityInBar: showIdentityInBar ?? this.showIdentityInBar,
       accountMode: accountMode ?? this.accountMode,
-      roleRequestPending: this.roleRequestPending,
+      roleRequestPending: roleRequestPending,
     );
   }
 }

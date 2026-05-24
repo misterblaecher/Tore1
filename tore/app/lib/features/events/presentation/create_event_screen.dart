@@ -43,21 +43,24 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   Future<void> _pickDateTime({required bool isStart}) async {
     final initial = isStart ? _startsAt : _endsAt;
+    final pickerContext = context;
     final date = await showDatePicker(
-      context: context,
+      context: pickerContext,
       initialDate: initial,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
     );
     if (date == null) return;
+    if (!pickerContext.mounted) return;
 
     final time = await showTimePicker(
-      context: context,
+      context: pickerContext,
       initialTime: TimeOfDay.fromDateTime(initial),
     );
     if (time == null) return;
 
-    final next = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final next =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
     setState(() {
       if (isStart) {
         _startsAt = next;
@@ -83,6 +86,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
 
     setState(() => _submitting = true);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final repo = ref.read(eventsRepositoryProvider);
       final created = await repo.createEvent(
@@ -98,8 +103,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             eventName: created.name,
           );
 
-      if (!mounted) return;
-      await Navigator.of(context).pushReplacement(
+      if (!navigator.mounted) return;
+      await navigator.pushReplacement(
         MaterialPageRoute(
           builder: (_) => QrPackScreen(
             eventId: created.eventId,
@@ -108,8 +113,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ),
       );
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(
         const SnackBar(content: Text('Création impossible.')),
       );
     } finally {

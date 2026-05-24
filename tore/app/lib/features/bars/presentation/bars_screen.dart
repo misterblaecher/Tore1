@@ -58,7 +58,8 @@ class BarsScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(ToreSpace.s4),
               itemCount: bars.length,
               separatorBuilder: (_, __) => const SizedBox(height: ToreSpace.s3),
-              itemBuilder: (context, index) => _BarCompactCard(bar: bars[index]),
+              itemBuilder: (context, index) =>
+                  _BarCompactCard(bar: bars[index]),
             );
           },
         ),
@@ -75,7 +76,10 @@ class _BarCompactCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = bar.status?.toUpperCase();
-    final metadata = [bar.district, bar.style].whereType<String>().where((value) => value.trim().isNotEmpty).join(' · ');
+    final metadata = [bar.district, bar.style]
+        .whereType<String>()
+        .where((value) => value.trim().isNotEmpty)
+        .join(' · ');
     final ticker = bar.tickerLine ?? bar.lastEvent;
 
     return InkWell(
@@ -85,7 +89,8 @@ class _BarCompactCard extends ConsumerWidget {
               barId: bar.id,
               barName: bar.name,
             );
-        Navigator.of(context).pushNamed('/bars/${bar.id}/events', arguments: bar.name);
+        Navigator.of(context)
+            .pushNamed('/bars/${bar.id}/events', arguments: bar.name);
       },
       child: ToreCard(
         child: Column(
@@ -93,7 +98,9 @@ class _BarCompactCard extends ConsumerWidget {
           children: [
             ToreListRow(
               title: bar.name,
-              subtitle: metadata.isEmpty ? (bar.city.isEmpty ? null : bar.city) : metadata,
+              subtitle: metadata.isEmpty
+                  ? (bar.city.isEmpty ? null : bar.city)
+                  : metadata,
               trailing: const Icon(Icons.chevron_right),
             ),
             const ToreDivider(),
@@ -118,7 +125,8 @@ class _BarCompactCard extends ConsumerWidget {
                 ticker,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: ToreType.meta.copyWith(color: ToreSemantic.textSecondary),
+                style:
+                    ToreType.meta.copyWith(color: ToreSemantic.textSecondary),
               ),
             ],
           ],

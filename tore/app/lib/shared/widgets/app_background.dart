@@ -62,10 +62,12 @@ class _ChartTexturePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Candles very subtle
     final rnd = math.Random(7);
-    final candlePaintUp = Paint()..color = ToreColors.up.withOpacity(0.10);
-    final candlePaintDown = Paint()..color = ToreColors.rubine.withOpacity(0.10);
+    final candlePaintUp = Paint()
+      ..color = ToreColors.up.withValues(alpha: 0.10);
+    final candlePaintDown = Paint()
+      ..color = ToreColors.rubine.withValues(alpha: 0.10);
     final wickPaint = Paint()
-      ..color = Colors.white.withOpacity(0.05)
+      ..color = Colors.white.withValues(alpha: 0.05)
       ..strokeWidth = 1;
 
     final count = (size.width / 14).clamp(18, 80).toInt();
@@ -83,11 +85,12 @@ class _ChartTexturePainter extends CustomPainter {
       // wick
       final wickTop = top - 8 - rnd.nextDouble() * 18;
       final wickBot = top + h + 8 + rnd.nextDouble() * 18;
-      canvas.drawLine(Offset(x + 3, wickTop), Offset(x + 3, wickBot), wickPaint);
+      canvas.drawLine(
+          Offset(x + 3, wickTop), Offset(x + 3, wickBot), wickPaint);
     }
 
     // Noise overlay (tiny dots)
-    final dotPaint = Paint()..color = Colors.white.withOpacity(0.03);
+    final dotPaint = Paint()..color = Colors.white.withValues(alpha: 0.03);
     final dots = (size.width * size.height / 2200).clamp(400, 1800).toInt();
     for (int i = 0; i < dots; i++) {
       final x = rnd.nextDouble() * size.width;
@@ -102,7 +105,7 @@ class _ChartTexturePainter extends CustomPainter {
         radius: 1.1,
         colors: [
           Colors.transparent,
-          Colors.black.withOpacity(0.35),
+          Colors.black.withValues(alpha: 0.35),
         ],
         stops: const [0.6, 1.0],
       ).createShader(Offset.zero & size);

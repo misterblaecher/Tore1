@@ -11,10 +11,24 @@ void main() {
   });
 
   test('cta label mapping', () {
-    expect(orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.followOnly, status: null), 'Suivre');
-    expect(orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.openMembership, status: null), 'Rejoindre');
-    expect(orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.requestToJoin, status: null), 'Demander à rejoindre');
-    expect(orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.openMembership, status: MembershipStatus.pending), 'Demande envoyée');
-    expect(orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.openMembership, status: MembershipStatus.active), 'Quitter');
+    expect(orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.followOnly, status: null),
+        'Suivre');
+    expect(
+        orgaPrimaryCtaLabel(
+            joinMode: OrgaJoinMode.openMembership, status: null),
+        'Rejoindre');
+    expect(
+        orgaPrimaryCtaLabel(joinMode: OrgaJoinMode.requestToJoin, status: null),
+        'Demander à rejoindre');
+    expect(
+        orgaPrimaryCtaLabel(
+            joinMode: OrgaJoinMode.openMembership,
+            status: MembershipStatus.pending),
+        'Demande envoyée');
+    expect(
+        orgaPrimaryCtaLabel(
+            joinMode: OrgaJoinMode.openMembership,
+            status: MembershipStatus.active),
+        'Quitter');
   });
 }

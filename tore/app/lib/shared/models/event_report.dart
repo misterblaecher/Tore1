@@ -96,10 +96,12 @@ class EventSales {
 
   factory EventSales.fromJson(Map<String, dynamic> json) {
     final rawItems = (json['by_item'] as List? ?? const [])
-        .map((e) => EventSalesItem.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+            (e) => EventSalesItem.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
     final rawCategories = (json['by_category'] as List? ?? const [])
-        .map((e) => EventSalesCategory.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map((e) =>
+            EventSalesCategory.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
 
     return EventSales(

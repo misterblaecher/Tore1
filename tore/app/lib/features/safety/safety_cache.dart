@@ -38,7 +38,8 @@ class SafetyCacheStore {
     if (payload is! Map) return null;
     return SafetyCacheEntry(
       payload: Map<String, dynamic>.from(payload),
-      lastSyncAt: DateTime.tryParse((decoded['lastSyncAt'] ?? '').toString())?.toUtc(),
+      lastSyncAt:
+          DateTime.tryParse((decoded['lastSyncAt'] ?? '').toString())?.toUtc(),
     );
   }
 }

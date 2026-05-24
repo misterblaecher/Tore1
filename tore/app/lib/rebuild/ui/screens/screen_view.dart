@@ -4,7 +4,12 @@ import '../../models/rebuild_types.dart';
 import '../widgets/common_widgets.dart';
 
 class ScreenView extends StatelessWidget {
-  const ScreenView({super.key, required this.definition, required this.state, required this.onWrite, required this.writeAllowed});
+  const ScreenView(
+      {super.key,
+      required this.definition,
+      required this.state,
+      required this.onWrite,
+      required this.writeAllowed});
 
   final ModuleDefinition definition;
   final ModuleState state;
@@ -34,9 +39,13 @@ class ScreenView extends StatelessWidget {
             ),
           if (onWrite != null)
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFF4C430), foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFF4C430),
+                  foregroundColor: Colors.black),
               onPressed: writeAllowed ? onWrite : null,
-              child: Text(writeAllowed ? (definition.writeAction ?? 'Write') : 'Write blocked (offline/readonly)'),
+              child: Text(writeAllowed
+                  ? (definition.writeAction ?? 'Write')
+                  : 'Write blocked (offline/readonly)'),
             ),
         ],
       ),

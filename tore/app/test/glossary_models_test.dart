@@ -23,7 +23,10 @@ void main() {
   });
 
   test('parses glossary settings', () {
-    final settings = GlossarySettings.fromJson({'public_enabled': true, 'availableTags': ['A', 'B']});
+    final settings = GlossarySettings.fromJson({
+      'public_enabled': true,
+      'availableTags': ['A', 'B']
+    });
     expect(settings.publicEnabled, isTrue);
     expect(settings.availableTags, ['A', 'B']);
   });

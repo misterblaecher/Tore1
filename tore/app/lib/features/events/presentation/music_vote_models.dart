@@ -53,7 +53,9 @@ bool isLocallyValidCandidateLink(String raw, MusicProvider provider) {
   final host = uri.host.toLowerCase();
   switch (provider) {
     case MusicProvider.youtubeMusic:
-      return host.contains('youtube.com') || host == 'youtu.be' || host == 'music.youtube.com';
+      return host.contains('youtube.com') ||
+          host == 'youtu.be' ||
+          host == 'music.youtube.com';
     case MusicProvider.soundcloud:
       return host == 'soundcloud.com' && uri.pathSegments.length >= 2;
     case MusicProvider.spotify:
@@ -66,6 +68,7 @@ bool isLocallyValidCandidateLink(String raw, MusicProvider provider) {
 String candidateShortLink(String raw) {
   final uri = Uri.tryParse(raw);
   if (uri == null) return raw;
-  final path = uri.path.length > 28 ? '${uri.path.substring(0, 28)}…' : uri.path;
+  final path =
+      uri.path.length > 28 ? '${uri.path.substring(0, 28)}…' : uri.path;
   return '${uri.host}$path';
 }

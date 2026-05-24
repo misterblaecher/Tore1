@@ -15,7 +15,9 @@ class QrValidationResult {
 }
 
 class QrValidator {
-  QrValidator({QrResolveService? resolver, Future<QrResolveResult> Function(String raw)? resolveRaw})
+  QrValidator(
+      {QrResolveService? resolver,
+      Future<QrResolveResult> Function(String raw)? resolveRaw})
       : _resolver = resolver,
         _resolveRaw = resolveRaw;
 
@@ -24,12 +26,14 @@ class QrValidator {
 
   Future<QrValidationResult> validate(QrPayload payload) async {
     if (payload.type == QrType.unknown) {
-      return const QrValidationResult(status: QrValidationStatus.unknownType, reason: 'Type inconnu');
+      return const QrValidationResult(
+          status: QrValidationStatus.unknownType, reason: 'Type inconnu');
     }
 
     final expiry = payload.expiresAt;
     if (expiry != null && expiry.isBefore(DateTime.now())) {
-      return const QrValidationResult(status: QrValidationStatus.expired, reason: 'expired');
+      return const QrValidationResult(
+          status: QrValidationStatus.expired, reason: 'expired');
     }
 
     if (payload.signature != null && payload.signature!.isNotEmpty) {
@@ -46,17 +50,23 @@ class QrValidator {
       final resolver = _resolveRaw;
       if (resolver == null && _resolver == null) return null;
       final result = await (resolver?.call(raw) ?? _resolver!.resolve(raw));
-      if (result.valid) return const QrValidationResult(status: QrValidationStatus.ok);
+      if (result.valid)
+        return const QrValidationResult(status: QrValidationStatus.ok);
       switch ((result.reason ?? '').toLowerCase()) {
         case 'expired':
-          return const QrValidationResult(status: QrValidationStatus.expired, reason: 'expired');
+          return const QrValidationResult(
+              status: QrValidationStatus.expired, reason: 'expired');
         case 'revoked':
-          return const QrValidationResult(status: QrValidationStatus.revoked, reason: 'revoked');
+          return const QrValidationResult(
+              status: QrValidationStatus.revoked, reason: 'revoked');
         case 'invalid':
         case 'invalid_qr':
-          return const QrValidationResult(status: QrValidationStatus.invalid, reason: 'invalid_qr');
+          return const QrValidationResult(
+              status: QrValidationStatus.invalid, reason: 'invalid_qr');
         default:
-          return QrValidationResult(status: QrValidationStatus.invalid, reason: result.reason ?? 'invalid_qr');
+          return QrValidationResult(
+              status: QrValidationStatus.invalid,
+              reason: result.reason ?? 'invalid_qr');
       }
     } catch (_) {
       return null;

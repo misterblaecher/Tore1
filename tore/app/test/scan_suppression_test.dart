@@ -12,7 +12,8 @@ class _FakeClock {
 void main() {
   test('suppresses same hash inside cooldown window using fake clock', () {
     final clock = _FakeClock(DateTime(2025, 1, 1, 12, 0, 0));
-    final suppression = ScanSuppression(cooldown: const Duration(milliseconds: 1200), clock: clock.call);
+    final suppression = ScanSuppression(
+        cooldown: const Duration(milliseconds: 1200), clock: clock.call);
 
     expect(suppression.shouldSuppress(hash: 'abc'), isFalse);
 
@@ -23,9 +24,11 @@ void main() {
     expect(suppression.shouldSuppress(hash: 'abc'), isFalse);
   });
 
-  test('does not suppress different hash during cooldown and updates baseline', () {
+  test('does not suppress different hash during cooldown and updates baseline',
+      () {
     final clock = _FakeClock(DateTime(2025, 1, 1, 12, 0, 0));
-    final suppression = ScanSuppression(cooldown: const Duration(milliseconds: 1200), clock: clock.call);
+    final suppression = ScanSuppression(
+        cooldown: const Duration(milliseconds: 1200), clock: clock.call);
 
     expect(suppression.shouldSuppress(hash: 'abc'), isFalse);
 
@@ -36,13 +39,15 @@ void main() {
     expect(
       suppression.shouldSuppress(hash: 'xyz'),
       isTrue,
-      reason: 'same hash must be suppressed from the last allowed scan timestamp',
+      reason:
+          'same hash must be suppressed from the last allowed scan timestamp',
     );
   });
 
   test('alternating hashes are always allowed', () {
     final clock = _FakeClock(DateTime(2025, 1, 1, 12, 0, 0));
-    final suppression = ScanSuppression(cooldown: const Duration(milliseconds: 1200), clock: clock.call);
+    final suppression = ScanSuppression(
+        cooldown: const Duration(milliseconds: 1200), clock: clock.call);
 
     expect(suppression.shouldSuppress(hash: 'a'), isFalse);
     clock.now = clock.now.add(const Duration(milliseconds: 200));
@@ -55,7 +60,8 @@ void main() {
 
   test('shouldAllow mirrors shouldSuppress semantics', () {
     final clock = _FakeClock(DateTime(2025, 1, 1, 12, 0, 0));
-    final suppression = ScanSuppression(cooldown: const Duration(milliseconds: 1200), clock: clock.call);
+    final suppression = ScanSuppression(
+        cooldown: const Duration(milliseconds: 1200), clock: clock.call);
 
     expect(suppression.shouldAllow(hash: 'abc'), isTrue);
 

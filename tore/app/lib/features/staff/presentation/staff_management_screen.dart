@@ -14,7 +14,8 @@ class StaffManagementScreen extends ConsumerStatefulWidget {
   final int eventId;
 
   @override
-  ConsumerState<StaffManagementScreen> createState() => _StaffManagementScreenState();
+  ConsumerState<StaffManagementScreen> createState() =>
+      _StaffManagementScreenState();
 }
 
 class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
@@ -93,7 +94,8 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text('Impossible de charger le staff. ${ErrorMapper.message(err)}'),
+                child: Text(
+                    'Impossible de charger le staff. ${ErrorMapper.message(err)}'),
               ),
             ),
           ],

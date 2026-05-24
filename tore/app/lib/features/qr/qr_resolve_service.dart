@@ -32,10 +32,12 @@ class QrResolveResult {
     return QrResolveResult(
       valid: json['valid'] == true,
       type: (json['type'] ?? 'unknown').toString(),
-      eventId: json['event_id'] is num ? (json['event_id'] as num).toInt() : null,
+      eventId:
+          json['event_id'] is num ? (json['event_id'] as num).toInt() : null,
       barId: json['bar_id'] is num ? (json['bar_id'] as num).toInt() : null,
       token: json['token']?.toString(),
-      orderId: json['order_id'] is num ? (json['order_id'] as num).toInt() : null,
+      orderId:
+          json['order_id'] is num ? (json['order_id'] as num).toInt() : null,
       routeFront: json['route_front']?.toString(),
       reason: json['reason']?.toString(),
       requiredRole: json['required_role']?.toString(),

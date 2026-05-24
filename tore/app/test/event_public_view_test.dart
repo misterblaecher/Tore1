@@ -12,7 +12,11 @@ void main() {
       'modulesOn': ['menu', 'wallet'],
       'host': {'name': 'Cercle X', 'instagram': 'cerclex'},
       'venue': {'name': 'Hall A'},
-      'links': {'webUrl': 'https://app.tore.be/event/12', 'openUrl': 'https://app.tore.be/open?type=event&id=12', 'deeplink': 'tore://open?type=event&id=12'},
+      'links': {
+        'webUrl': 'https://app.tore.be/event/12',
+        'openUrl': 'https://app.tore.be/open?type=event&id=12',
+        'deeplink': 'tore://open?type=event&id=12'
+      },
       'flags': {'canJoin': true},
     });
 

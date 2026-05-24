@@ -42,16 +42,20 @@ class ApiClient {
       InterceptorsWrapper(
         onError: (e, handler) async {
           final is401 = e.response?.statusCode == 401;
-          final canRetry = is401 && e.requestOptions.extra['retried401'] != true;
+          final canRetry =
+              is401 && e.requestOptions.extra['retried401'] != true;
           if (!canRetry) {
             handler.next(e);
             return;
           }
 
-          final hasToken = await tokenStorage.readToken().then((value) => (value ?? '').isNotEmpty);
+          final hasToken = await tokenStorage
+              .readToken()
+              .then((value) => (value ?? '').isNotEmpty);
           if (!hasToken) {
             if (kDebugMode) {
-              debugPrint('[auth][401] no token in storage -> keep session, propagate unauthenticated error');
+              debugPrint(
+                  '[auth][401] no token in storage -> keep session, propagate unauthenticated error');
             }
             handler.next(e);
             return;
@@ -139,7 +143,8 @@ class ApiClient {
       final access = (data['access_token'] ?? '').toString();
       final refresh = (data['refresh_token'] ?? '').toString();
       if (access.isEmpty || refresh.isEmpty) return false;
-      await tokenStorage.writeTokens(accessToken: access, refreshToken: refresh);
+      await tokenStorage.writeTokens(
+          accessToken: access, refreshToken: refresh);
       return true;
     } catch (_) {
       return false;
@@ -150,7 +155,9 @@ class ApiClient {
     if (_isClearingSession) return;
     _isClearingSession = true;
     try {
-      if (kDebugMode) debugPrint('[auth][refresh] failed -> clear session and notify unauthenticated');
+      if (kDebugMode)
+        debugPrint(
+            '[auth][refresh] failed -> clear session and notify unauthenticated');
       await tokenStorage.clearAuthToken();
       AuthStateSignal.instance.notifyUnauthenticated();
     } finally {

@@ -2,7 +2,8 @@ import 'package:tore/core/network/api_client.dart';
 import 'package:tore/features/health/data/health_repository.dart';
 
 class FakeHealthRepository extends HealthRepository {
-  FakeHealthRepository() : super(ApiClient.create(baseUrl: 'http://localhost:1'));
+  FakeHealthRepository()
+      : super(ApiClient.create(baseUrl: 'http://localhost:1'));
 
   @override
   Future<bool> ping() async => true;

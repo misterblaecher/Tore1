@@ -16,15 +16,23 @@ class AppConfig {
   static const String _environmentDefine = 'TORE_ENV';
   static const String _defaultEnvironment = 'dev';
 
-  static String get apiBaseUrlResolved => AppConfig.fromDartDefines().apiBaseUrl;
+  static String get apiBaseUrlResolved =>
+      AppConfig.fromDartDefines().apiBaseUrl;
 
   factory AppConfig.fromDartDefines() {
-    const definedApiBaseUrl = String.fromEnvironment(_apiBaseUrlDefine, defaultValue: '');
-    const definedApiBaseUrlCompat = String.fromEnvironment(_apiBaseUrlCompatDefine, defaultValue: '');
-    const definedFlavor = String.fromEnvironment(_flutterFlavorDefine, defaultValue: _defaultEnvironment);
-    const definedEnv = String.fromEnvironment(_environmentDefine, defaultValue: _defaultEnvironment);
-    final normalizedFlavor = (definedFlavor.isEmpty ? _defaultEnvironment : definedFlavor).toLowerCase();
-    final normalizedEnv = (definedEnv.isEmpty ? normalizedFlavor : definedEnv).toLowerCase();
+    const definedApiBaseUrl =
+        String.fromEnvironment(_apiBaseUrlDefine, defaultValue: '');
+    const definedApiBaseUrlCompat =
+        String.fromEnvironment(_apiBaseUrlCompatDefine, defaultValue: '');
+    const definedFlavor = String.fromEnvironment(_flutterFlavorDefine,
+        defaultValue: _defaultEnvironment);
+    const definedEnv = String.fromEnvironment(_environmentDefine,
+        defaultValue: _defaultEnvironment);
+    final normalizedFlavor =
+        (definedFlavor.isEmpty ? _defaultEnvironment : definedFlavor)
+            .toLowerCase();
+    final normalizedEnv =
+        (definedEnv.isEmpty ? normalizedFlavor : definedEnv).toLowerCase();
 
     final fallbackBaseUrl = _defaultBaseUrlForFlavor(normalizedFlavor);
     final apiBaseUrl = _resolveApiBaseUrl(
@@ -82,5 +90,6 @@ class AppConfig {
 
   /// Enable extra auth/token logs (debug only).
   static bool get enableAuthLogs =>
-      kDebugMode && const bool.fromEnvironment('AUTH_LOGS', defaultValue: false);
+      kDebugMode &&
+      const bool.fromEnvironment('AUTH_LOGS', defaultValue: false);
 }

@@ -16,7 +16,8 @@ class BroadcastItem {
       id: (json['id'] as num?)?.toInt() ?? 0,
       message: (json['message'] ?? '').toString(),
       level: (json['level'] ?? 'info').toString(),
-      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ??
+          DateTime.now(),
     );
   }
 }

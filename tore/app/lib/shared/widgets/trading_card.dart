@@ -23,7 +23,7 @@ class TradingCard extends StatelessWidget {
         border: Border.all(color: ToreColors.border),
         boxShadow: [
           BoxShadow(
-            color: ToreColors.rubine.withOpacity(0.10),
+            color: ToreColors.rubine.withValues(alpha: 0.10),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),

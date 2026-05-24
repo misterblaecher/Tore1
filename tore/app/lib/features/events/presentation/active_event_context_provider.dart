@@ -43,12 +43,14 @@ class ActiveEventContext {
 }
 
 class EventPermissions {
-  const EventPermissions({required this.canCreateBets, required this.canResolveBets});
+  const EventPermissions(
+      {required this.canCreateBets, required this.canResolveBets});
   final bool canCreateBets;
   final bool canResolveBets;
 }
 
-class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventContext?>> {
+class ActiveEventContextController
+    extends StateNotifier<AsyncValue<ActiveEventContext?>> {
   ActiveEventContextController(this.ref) : super(const AsyncData(null)) {
     ref.listen<AppContextState>(appContextProvider, (_, next) {
       _handleAppContext(next);
@@ -77,7 +79,8 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
           eventName: ctx.activeEventName ?? 'Event #$nextEventId',
           eventState: 'LIVE',
           modulesOn: Map<String, bool>.from(ctx.activeEventModules ?? const {}),
-          permissions: const EventPermissions(canCreateBets: false, canResolveBets: false),
+          permissions: const EventPermissions(
+              canCreateBets: false, canResolveBets: false),
         ),
       );
       unawaited(refresh(force: true));
@@ -100,27 +103,41 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
 
     try {
       final payload = await ref.read(apiProvider).eventContext(eventId);
-      final event = Map<String, dynamic>.from((payload['event'] as Map?) ?? const {});
+      final event =
+          Map<String, dynamic>.from((payload['event'] as Map?) ?? const {});
       final modules = Map<String, bool>.from(
-        ((payload['modulesOn'] as Map?) ?? const {}).map((key, value) => MapEntry(key.toString(), value == true)),
+        ((payload['modulesOn'] as Map?) ?? const {})
+            .map((key, value) => MapEntry(key.toString(), value == true)),
       );
-      final permissionsJson = Map<String, dynamic>.from((payload['permissions'] as Map?) ?? const {});
+      final permissionsJson = Map<String, dynamic>.from(
+          (payload['permissions'] as Map?) ?? const {});
       ref.read(appContextProvider.notifier).setActiveEventModules(modules);
       final current = state.valueOrNull;
       state = AsyncData(
         ActiveEventContext(
           eventId: eventId,
-          eventName: (event['name'] ?? current?.eventName ?? 'Event #$eventId').toString(),
-          eventState: (payload['eventState'] ?? payload['event_state'] ?? current?.eventState ?? 'LIVE').toString().toUpperCase(),
+          eventName: (event['name'] ?? current?.eventName ?? 'Event #$eventId')
+              .toString(),
+          eventState: (payload['eventState'] ??
+                  payload['event_state'] ??
+                  current?.eventState ??
+                  'LIVE')
+              .toString()
+              .toUpperCase(),
           modulesOn: modules,
           permissions: EventPermissions(
             canCreateBets: permissionsJson['canCreateBets'] == true,
             canResolveBets: permissionsJson['canResolveBets'] == true,
           ),
-          lastUpdatedAt: _readDateTime(payload['lastUpdatedAt'] ?? payload['lastStateUpdatedAt']),
+          lastUpdatedAt: _readDateTime(
+              payload['lastUpdatedAt'] ?? payload['lastStateUpdatedAt']),
         ),
       );
-      prefetchEventEssentials(read: ref.read, refresh: ref.refresh, eventId: eventId, modulesOn: modules);
+      prefetchEventEssentials(
+          read: ref.read,
+          refresh: ref.refresh,
+          eventId: eventId,
+          modulesOn: modules);
     } catch (error, stackTrace) {
       final current = state.valueOrNull;
       if (current == null) {
@@ -157,6 +174,7 @@ class ActiveEventContextController extends StateNotifier<AsyncValue<ActiveEventC
   }
 }
 
-final activeEventContextProvider = StateNotifierProvider<ActiveEventContextController, AsyncValue<ActiveEventContext?>>((ref) {
+final activeEventContextProvider = StateNotifierProvider<
+    ActiveEventContextController, AsyncValue<ActiveEventContext?>>((ref) {
   return ActiveEventContextController(ref);
 });

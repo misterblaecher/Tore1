@@ -37,10 +37,13 @@ class AppContextState {
   }) {
     return AppContextState(
       selectedBarId: clearBar ? null : (selectedBarId ?? this.selectedBarId),
-      selectedBarName: clearBar ? null : (selectedBarName ?? this.selectedBarName),
+      selectedBarName:
+          clearBar ? null : (selectedBarName ?? this.selectedBarName),
       activeEventId: clearEvent ? null : (activeEventId ?? this.activeEventId),
-      activeEventName: clearEvent ? null : (activeEventName ?? this.activeEventName),
-      activeEventModules: clearEvent ? null : (activeEventModules ?? this.activeEventModules),
+      activeEventName:
+          clearEvent ? null : (activeEventName ?? this.activeEventName),
+      activeEventModules:
+          clearEvent ? null : (activeEventModules ?? this.activeEventModules),
     );
   }
 }
@@ -68,7 +71,8 @@ class AppContextController extends StateNotifier<AppContextState> {
       try {
         final decoded = jsonDecode(eventModulesRaw);
         if (decoded is Map) {
-          eventModules = decoded.map((key, value) => MapEntry(key.toString(), value == true));
+          eventModules = decoded
+              .map((key, value) => MapEntry(key.toString(), value == true));
         }
       } catch (_) {
         eventModules = null;

@@ -15,17 +15,20 @@ class FakeEntryService extends EntryService {
   FakeEntryService() : super(Dio(), PerfTracer());
 
   @override
-  Future<Map<String, dynamic>> getEntryCount(int eventId) async => {'entryCount': 12};
+  Future<Map<String, dynamic>> getEntryCount(int eventId) async =>
+      {'entryCount': 12};
 
   @override
-  Future<Map<String, dynamic>> getEntryStats(int eventId) async => {'accepted_last_10_min': 3};
+  Future<Map<String, dynamic>> getEntryStats(int eventId) async =>
+      {'accepted_last_10_min': 3};
 
   @override
   Future<String> exportCsv(int eventId) async => 'ok';
 }
 
 void main() {
-  testWidgets('EntryModeScreen shows scanner and manual mode controls', (tester) async {
+  testWidgets('EntryModeScreen shows scanner and manual mode controls',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.binding.setSurfaceSize(const Size(390, 844));

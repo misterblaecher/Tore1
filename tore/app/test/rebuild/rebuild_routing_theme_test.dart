@@ -19,20 +19,25 @@ void main() {
 
     expect(guards.modeAllowed(ToreMode.orga, snapshot), isTrue);
     expect(guards.modeAllowed(ToreMode.bar, snapshot), isFalse);
-    expect(guards.routeAllowedForMode(AppRoutes.orgaHub, ToreMode.orga), isTrue);
-    expect(guards.routeAllowedForMode(AppRoutes.orgaHub, ToreMode.user), isFalse);
+    expect(
+        guards.routeAllowedForMode(AppRoutes.orgaHub, ToreMode.orga), isTrue);
+    expect(
+        guards.routeAllowedForMode(AppRoutes.orgaHub, ToreMode.user), isFalse);
   });
 
   test('qr resolve type maps to expected route', () {
     final router = QrRouter();
-    expect(router.targetFor(const QrResolve(valid: true, type: 'join_event')), AppRoutes.join);
-    expect(router.targetFor(const QrResolve(valid: true, type: 'menu')), AppRoutes.menu);
-    expect(router.targetFor(const QrResolve(valid: true, type: 'event_hub')), AppRoutes.eventHub);
+    expect(router.targetFor(const QrResolve(valid: true, type: 'join_event')),
+        AppRoutes.join);
+    expect(router.targetFor(const QrResolve(valid: true, type: 'menu')),
+        AppRoutes.menu);
+    expect(router.targetFor(const QrResolve(valid: true, type: 'event_hub')),
+        AppRoutes.eventHub);
   });
 
   test('theme tokens are night-first and CTA yellow is stable', () {
-    expect(ToreTokens.black.value, 0xFF050506);
-    expect(ToreTokens.ruby.value, 0xFFBA1733);
-    expect(ToreTokens.yellowCta.value, 0xFFF4C430);
+    expect(ToreTokens.black.toARGB32(), 0xFF050506);
+    expect(ToreTokens.ruby.toARGB32(), 0xFFBA1733);
+    expect(ToreTokens.yellowCta.toARGB32(), 0xFFF4C430);
   });
 }

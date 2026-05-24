@@ -31,7 +31,8 @@ class Bar {
       style: _optionalText(json['style']),
       distanceLabel: _optionalText(json['distance'] ?? json['distance_label']),
       tickerLine: _optionalText(json['ticker_line']),
-      lastEvent: _optionalText(json['lastEvent']?['name'] ?? json['last_event']?['name']),
+      lastEvent: _optionalText(
+          json['lastEvent']?['name'] ?? json['last_event']?['name']),
     );
   }
 

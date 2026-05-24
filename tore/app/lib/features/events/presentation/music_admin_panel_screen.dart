@@ -15,7 +15,8 @@ class MusicAdminPanelScreen extends ConsumerStatefulWidget {
   final int eventId;
 
   @override
-  ConsumerState<MusicAdminPanelScreen> createState() => _MusicAdminPanelScreenState();
+  ConsumerState<MusicAdminPanelScreen> createState() =>
+      _MusicAdminPanelScreenState();
 }
 
 class _MusicAdminPanelScreenState extends ConsumerState<MusicAdminPanelScreen> {
@@ -51,7 +52,8 @@ class _MusicAdminPanelScreenState extends ConsumerState<MusicAdminPanelScreen> {
     _pollTimer?.cancel();
     if (state == NetworkState.offline) return;
     final seconds = state == NetworkState.degraded ? 5 : 2;
-    _pollTimer = Timer.periodic(Duration(seconds: seconds), (_) => _load(silent: true));
+    _pollTimer =
+        Timer.periodic(Duration(seconds: seconds), (_) => _load(silent: true));
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -74,7 +76,9 @@ class _MusicAdminPanelScreenState extends ConsumerState<MusicAdminPanelScreen> {
       await _load();
     } on DioException catch (e) {
       if (!mounted) return;
-      final msg = (e.response?.data is Map) ? ((e.response?.data['reason'] ?? 'action_failed').toString()) : 'action_failed';
+      final msg = (e.response?.data is Map)
+          ? ((e.response?.data['reason'] ?? 'action_failed').toString())
+          : 'action_failed';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _pending = false);
@@ -85,9 +89,15 @@ class _MusicAdminPanelScreenState extends ConsumerState<MusicAdminPanelScreen> {
 
   Map<String, dynamic> _candidate() => {
         'provider': 'spotify',
-        'externalUrl': _urlCtrl.text.trim().isEmpty ? 'https://open.spotify.com/search/${Uri.encodeComponent('${_titleCtrl.text} ${_artistCtrl.text}')}' : _urlCtrl.text.trim(),
-        'title': _titleCtrl.text.trim().isEmpty ? 'Unknown title' : _titleCtrl.text.trim(),
-        'artist': _artistCtrl.text.trim().isEmpty ? 'Unknown artist' : _artistCtrl.text.trim(),
+        'externalUrl': _urlCtrl.text.trim().isEmpty
+            ? 'https://open.spotify.com/search/${Uri.encodeComponent('${_titleCtrl.text} ${_artistCtrl.text}')}'
+            : _urlCtrl.text.trim(),
+        'title': _titleCtrl.text.trim().isEmpty
+            ? 'Unknown title'
+            : _titleCtrl.text.trim(),
+        'artist': _artistCtrl.text.trim().isEmpty
+            ? 'Unknown artist'
+            : _artistCtrl.text.trim(),
       };
 
   @override
@@ -97,8 +107,12 @@ class _MusicAdminPanelScreenState extends ConsumerState<MusicAdminPanelScreen> {
       _pollingState = network;
       _schedulePolling(network);
     }
-    final state = ((_payload?['runtimeState'] ?? 'LIVE').toString()).toUpperCase();
-    final blocked = isWriteBlocked(readOnly: isReadOnly(ref), runtimeBlocked: isWriteBlockedByEventState(state), degradedBlocked: network == NetworkState.degraded);
+    final state =
+        ((_payload?['runtimeState'] ?? 'LIVE').toString()).toUpperCase();
+    final blocked = isWriteBlocked(
+        readOnly: isReadOnly(ref),
+        runtimeBlocked: isWriteBlockedByEventState(state),
+        degradedBlocked: network == NetworkState.degraded);
     final actionsDisabled = blocked || _pending;
 
     return Scaffold(
@@ -109,51 +123,100 @@ class _MusicAdminPanelScreenState extends ConsumerState<MusicAdminPanelScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 DropdownButtonFormField<int>(
-                  value: _durationSec,
-                  items: const [60, 120, 180, 300].map((v) => DropdownMenuItem(value: v, child: Text('${v}s'))).toList(),
-                  onChanged: actionsDisabled ? null : (v) => setState(() => _durationSec = v ?? 120),
-                  decoration: const InputDecoration(labelText: 'Round duration'),
+                  initialValue: _durationSec,
+                  items: const [60, 120, 180, 300]
+                      .map((v) =>
+                          DropdownMenuItem(value: v, child: Text('${v}s')))
+                      .toList(),
+                  onChanged: actionsDisabled
+                      ? null
+                      : (v) => setState(() => _durationSec = v ?? 120),
+                  decoration:
+                      const InputDecoration(labelText: 'Round duration'),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
                   onPressed: actionsDisabled
                       ? null
-                      : () => _act(() => ref.read(apiProvider).adminMusicRoundStart(eventId: widget.eventId, durationSec: _durationSec, idempotencyKey: _idempotency())),
+                      : () => _act(() => ref
+                          .read(apiProvider)
+                          .adminMusicRoundStart(
+                              eventId: widget.eventId,
+                              durationSec: _durationSec,
+                              idempotencyKey: _idempotency())),
                   child: const Text('Start round'),
                 ),
                 ElevatedButton(
-                  onPressed: actionsDisabled ? null : () => _act(() => ref.read(apiProvider).adminMusicRoundEnd(eventId: widget.eventId, idempotencyKey: _idempotency())),
+                  onPressed: actionsDisabled
+                      ? null
+                      : () => _act(() => ref
+                          .read(apiProvider)
+                          .adminMusicRoundEnd(
+                              eventId: widget.eventId,
+                              idempotencyKey: _idempotency())),
                   child: const Text('End round'),
                 ),
                 const Divider(),
-                TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Now Playing title')),
-                TextField(controller: _artistCtrl, decoration: const InputDecoration(labelText: 'Now Playing artist')),
-                TextField(controller: _urlCtrl, decoration: const InputDecoration(labelText: 'Now Playing link')),
+                TextField(
+                    controller: _titleCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Now Playing title')),
+                TextField(
+                    controller: _artistCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Now Playing artist')),
+                TextField(
+                    controller: _urlCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Now Playing link')),
                 const SizedBox(height: 8),
                 ElevatedButton(
                   onPressed: actionsDisabled
                       ? null
-                      : () => _act(() => ref.read(apiProvider).adminMusicNowPlaying(eventId: widget.eventId, candidate: _candidate(), idempotencyKey: _idempotency(), reason: _reasonCtrl.text.trim().isEmpty ? null : _reasonCtrl.text.trim())),
+                      : () => _act(() => ref
+                          .read(apiProvider)
+                          .adminMusicNowPlaying(
+                              eventId: widget.eventId,
+                              candidate: _candidate(),
+                              idempotencyKey: _idempotency(),
+                              reason: _reasonCtrl.text.trim().isEmpty
+                                  ? null
+                                  : _reasonCtrl.text.trim())),
                   child: const Text('Set now playing'),
                 ),
                 const Divider(),
-                TextField(controller: _reasonCtrl, decoration: const InputDecoration(labelText: 'Reason (skip/clear/force)')),
+                TextField(
+                    controller: _reasonCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Reason (skip/clear/force)')),
                 ElevatedButton(
                   onPressed: actionsDisabled
                       ? null
-                      : () => _act(() => ref.read(apiProvider).adminMusicSkip(eventId: widget.eventId, idempotencyKey: _idempotency(), reason: _reasonCtrl.text.trim().isEmpty ? 'skip' : _reasonCtrl.text.trim())),
+                      : () => _act(() => ref.read(apiProvider).adminMusicSkip(
+                          eventId: widget.eventId,
+                          idempotencyKey: _idempotency(),
+                          reason: _reasonCtrl.text.trim().isEmpty
+                              ? 'skip'
+                              : _reasonCtrl.text.trim())),
                   child: const Text('Skip winner'),
                 ),
                 ElevatedButton(
                   onPressed: actionsDisabled
                       ? null
-                      : () => _act(() => ref.read(apiProvider).adminMusicForce(eventId: widget.eventId, candidate: _candidate(), idempotencyKey: _idempotency(), reason: _reasonCtrl.text.trim())),
+                      : () => _act(() => ref.read(apiProvider).adminMusicForce(
+                          eventId: widget.eventId,
+                          candidate: _candidate(),
+                          idempotencyKey: _idempotency(),
+                          reason: _reasonCtrl.text.trim())),
                   child: const Text('Force track'),
                 ),
                 ElevatedButton(
                   onPressed: actionsDisabled
                       ? null
-                      : () => _act(() => ref.read(apiProvider).adminMusicClear(eventId: widget.eventId, idempotencyKey: _idempotency(), reason: _reasonCtrl.text.trim())),
+                      : () => _act(() => ref.read(apiProvider).adminMusicClear(
+                          eventId: widget.eventId,
+                          idempotencyKey: _idempotency(),
+                          reason: _reasonCtrl.text.trim())),
                   child: const Text('Clear votes'),
                 ),
               ],

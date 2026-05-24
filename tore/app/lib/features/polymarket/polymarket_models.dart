@@ -41,25 +41,27 @@ class MarketLite {
   });
 
   factory MarketLite.fromJson(Map<String, dynamic> json) {
-    int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
-    double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
-    final yp = _d(json['yesPct'] ?? json['yes_price']);
-    final np = _d(json['noPct'] ?? json['no_price']);
+    int i(dynamic v) => (v as num?)?.toInt() ?? 0;
+    double d(dynamic v) => (v as num?)?.toDouble() ?? 0;
+    final yp = d(json['yesPct'] ?? json['yes_price']);
+    final np = d(json['noPct'] ?? json['no_price']);
     return MarketLite(
-      id: _i(json['id']),
+      id: i(json['id']),
       question: json['question']?.toString() ?? '',
       status: json['status']?.toString() ?? 'live',
       scope: json['scope']?.toString() ?? 'global',
-      type: json['type']?.toString() ?? json['kind']?.toString().toLowerCase() ?? 'objective',
-      yesPrice: _d(json['yesPrice'] ?? json['yes_price']),
-      noPrice: _d(json['noPrice'] ?? json['no_price']),
+      type: json['type']?.toString() ??
+          json['kind']?.toString().toLowerCase() ??
+          'objective',
+      yesPrice: d(json['yesPrice'] ?? json['yes_price']),
+      noPrice: d(json['noPrice'] ?? json['no_price']),
       yesPct: yp,
       noPct: np > 0 ? np : (1 - yp),
-      poolTickets: _i(json['poolTickets'] ?? json['liquidity']),
-      volume: _i(json['volumeTickets'] ?? json['volume']),
-      myPositionYes: _i(json['my_position_yes']),
-      myPositionNo: _i(json['my_position_no']),
-      myPositionTotal: _i(json['my_total']),
+      poolTickets: i(json['poolTickets'] ?? json['liquidity']),
+      volume: i(json['volumeTickets'] ?? json['volume']),
+      myPositionYes: i(json['my_position_yes']),
+      myPositionNo: i(json['my_position_no']),
+      myPositionTotal: i(json['my_total']),
       eventId: (json['event_id'] as num?)?.toInt(),
     );
   }
@@ -108,11 +110,15 @@ class MarketDetail extends MarketLite {
       noPct: lite.noPct,
       poolTickets: lite.poolTickets,
       volume: lite.volume,
-      myPositionYes: (position['yesShares'] as num?)?.toInt() ?? lite.myPositionYes,
-      myPositionNo: (position['noShares'] as num?)?.toInt() ?? lite.myPositionNo,
-      myPositionTotal: (position['totalShares'] as num?)?.toInt() ?? lite.myPositionTotal,
+      myPositionYes:
+          (position['yesShares'] as num?)?.toInt() ?? lite.myPositionYes,
+      myPositionNo:
+          (position['noShares'] as num?)?.toInt() ?? lite.myPositionNo,
+      myPositionTotal:
+          (position['totalShares'] as num?)?.toInt() ?? lite.myPositionTotal,
       eventId: lite.eventId,
-      outcome: json['outcome']?.toString() ?? json['resolved_outcome']?.toString(),
+      outcome:
+          json['outcome']?.toString() ?? json['resolved_outcome']?.toString(),
       description: json['description']?.toString(),
       rules: json['rules']?.toString(),
     );
@@ -206,7 +212,10 @@ class MarketDetailResponse {
   final List<TradeRow> myHistory;
   final String? nextCursor;
 
-  const MarketDetailResponse({required this.market, required this.myHistory, required this.nextCursor});
+  const MarketDetailResponse(
+      {required this.market,
+      required this.myHistory,
+      required this.nextCursor});
 
   factory MarketDetailResponse.fromJson(Map<String, dynamic> json) {
     final marketJson = (json['market'] is Map)

@@ -9,10 +9,22 @@ void main() {
   });
 
   test('local link validation happy and invalid cases', () {
-    expect(isLocallyValidCandidateLink('https://music.youtube.com/watch?v=abc', MusicProvider.youtubeMusic), isTrue);
-    expect(isLocallyValidCandidateLink('http://music.youtube.com/watch?v=abc', MusicProvider.youtubeMusic), isFalse);
-    expect(isLocallyValidCandidateLink('https://soundcloud.com/artist/title', MusicProvider.soundcloud), isTrue);
-    expect(isLocallyValidCandidateLink('https://soundcloud.com/discover', MusicProvider.soundcloud), isFalse);
+    expect(
+        isLocallyValidCandidateLink('https://music.youtube.com/watch?v=abc',
+            MusicProvider.youtubeMusic),
+        isTrue);
+    expect(
+        isLocallyValidCandidateLink(
+            'http://music.youtube.com/watch?v=abc', MusicProvider.youtubeMusic),
+        isFalse);
+    expect(
+        isLocallyValidCandidateLink(
+            'https://soundcloud.com/artist/title', MusicProvider.soundcloud),
+        isTrue);
+    expect(
+        isLocallyValidCandidateLink(
+            'https://soundcloud.com/discover', MusicProvider.soundcloud),
+        isFalse);
   });
 
   test('provider label mapping', () {

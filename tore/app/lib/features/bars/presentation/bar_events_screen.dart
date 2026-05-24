@@ -10,7 +10,8 @@ import '../../events/presentation/event_hub_screen.dart';
 import 'bars_providers.dart';
 
 class BarEventsScreen extends ConsumerWidget {
-  const BarEventsScreen({super.key, required this.barId, required this.barName});
+  const BarEventsScreen(
+      {super.key, required this.barId, required this.barName});
 
   final int barId;
   final String barName;
@@ -31,7 +32,9 @@ class BarEventsScreen extends ConsumerWidget {
           ),
           data: (events) {
             final grouped = _groupEvents(events);
-            final hasItems = grouped.live.isNotEmpty || grouped.today.isNotEmpty || grouped.upcoming.isNotEmpty;
+            final hasItems = grouped.live.isNotEmpty ||
+                grouped.today.isNotEmpty ||
+                grouped.upcoming.isNotEmpty;
             if (!hasItems) {
               return const _EmptyState();
             }
@@ -43,19 +46,22 @@ class BarEventsScreen extends ConsumerWidget {
                   _EventSection(
                     title: 'LIVE',
                     events: grouped.live,
-                    onTap: (event) => _openEvent(context: context, ref: ref, event: event),
+                    onTap: (event) =>
+                        _openEvent(context: context, ref: ref, event: event),
                   ),
                 if (grouped.today.isNotEmpty)
                   _EventSection(
                     title: 'TODAY',
                     events: grouped.today,
-                    onTap: (event) => _openEvent(context: context, ref: ref, event: event),
+                    onTap: (event) =>
+                        _openEvent(context: context, ref: ref, event: event),
                   ),
                 if (grouped.upcoming.isNotEmpty)
                   _EventSection(
                     title: 'UPCOMING',
                     events: grouped.upcoming,
-                    onTap: (event) => _openEvent(context: context, ref: ref, event: event),
+                    onTap: (event) =>
+                        _openEvent(context: context, ref: ref, event: event),
                   ),
               ],
             );
@@ -70,7 +76,9 @@ class BarEventsScreen extends ConsumerWidget {
     required WidgetRef ref,
     required EventSummary event,
   }) {
-    ref.read(appContextProvider.notifier).setBar(barId: barId, barName: barName);
+    ref
+        .read(appContextProvider.notifier)
+        .setBar(barId: barId, barName: barName);
     ref.read(appContextProvider.notifier).enterEvent(
           eventId: event.id,
           eventName: event.name,
@@ -79,14 +87,16 @@ class BarEventsScreen extends ConsumerWidget {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EventHubScreen(eventId: event.id, eventName: event.name),
+        builder: (_) =>
+            EventHubScreen(eventId: event.id, eventName: event.name),
       ),
     );
   }
 }
 
 class _GroupedEvents {
-  const _GroupedEvents({required this.live, required this.today, required this.upcoming});
+  const _GroupedEvents(
+      {required this.live, required this.today, required this.upcoming});
 
   final List<EventSummary> live;
   final List<EventSummary> today;
@@ -116,7 +126,8 @@ _GroupedEvents _groupEvents(List<EventSummary> events) {
 }
 
 class _EventSection extends StatelessWidget {
-  const _EventSection({required this.title, required this.events, required this.onTap});
+  const _EventSection(
+      {required this.title, required this.events, required this.onTap});
 
   final String title;
   final List<EventSummary> events;
@@ -136,7 +147,8 @@ class _EventSection extends StatelessWidget {
           ...events.map(
             (event) => Padding(
               padding: const EdgeInsets.only(bottom: ToreSpace.s2),
-              child: _EventCard(event: event, onTap: () => onTap(event), section: title),
+              child: _EventCard(
+                  event: event, onTap: () => onTap(event), section: title),
             ),
           ),
         ],
@@ -146,7 +158,8 @@ class _EventSection extends StatelessWidget {
 }
 
 class _EventCard extends StatelessWidget {
-  const _EventCard({required this.event, required this.onTap, required this.section});
+  const _EventCard(
+      {required this.event, required this.onTap, required this.section});
 
   final EventSummary event;
   final VoidCallback onTap;
@@ -234,7 +247,9 @@ class _EmptyState extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const SizedBox(height: 120),
-        Center(child: Text('Aucun event', style: Theme.of(context).textTheme.titleMedium)),
+        Center(
+            child: Text('Aucun event',
+                style: Theme.of(context).textTheme.titleMedium)),
         const SizedBox(height: 8),
         Center(
           child: TextButton(

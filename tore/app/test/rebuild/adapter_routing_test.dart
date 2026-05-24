@@ -20,7 +20,8 @@ class _FakeApi extends Api {
 
   @override
   Future<MenuFetchResult> menuWithCacheStatus(int eventId) async {
-    return const MenuFetchResult(items: <Map<String, dynamic>>[], fromCache: true);
+    return const MenuFetchResult(
+        items: <Map<String, dynamic>>[], fromCache: true);
   }
 
   @override
@@ -47,14 +48,17 @@ Widget _wrapWithRootProviderScope(Widget child) {
             showIdentityInBar: false,
           )),
       userIdProvider.overrideWithValue(null),
-      eventConfigProvider.overrideWith((ref, eventId) async => EventConfig.fallback(eventId)),
+      eventConfigProvider
+          .overrideWith((ref, eventId) async => EventConfig.fallback(eventId)),
     ],
     child: MaterialApp(home: child),
   );
 }
 
 void main() {
-  testWidgets('adapter screen does not add nested ProviderScope when one already exists', (tester) async {
+  testWidgets(
+      'adapter screen does not add nested ProviderScope when one already exists',
+      (tester) async {
     await tester.pumpWidget(
       _wrapWithRootProviderScope(
         const RebuildMenuAdapterScreen(
@@ -72,7 +76,8 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('adapter screen creates ProviderScope only when missing', (tester) async {
+  testWidgets('adapter screen creates ProviderScope only when missing',
+      (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: RebuildMenuAdapterScreen(
@@ -90,7 +95,8 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('adapter screens render independently from app boot gating', (tester) async {
+  testWidgets('adapter screens render independently from app boot gating',
+      (tester) async {
     await tester.pumpWidget(
       _wrapWithRootProviderScope(
         const RebuildMenuAdapterScreen(

@@ -5,7 +5,8 @@ class AuthStateSignal {
 
   static final AuthStateSignal instance = AuthStateSignal._();
 
-  final StreamController<void> _unauthenticatedController = StreamController<void>.broadcast();
+  final StreamController<void> _unauthenticatedController =
+      StreamController<void>.broadcast();
 
   Stream<void> get onUnauthenticated => _unauthenticatedController.stream;
 

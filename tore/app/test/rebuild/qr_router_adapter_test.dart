@@ -7,18 +7,21 @@ void main() {
   test('migrated QR order_client routes to rebuild adapter orders path', () {
     final router = QrRouter();
 
-    expect(router.targetFor(const QrResolve(valid: true, type: 'order_client')), AppRoutes.orders);
+    expect(router.targetFor(const QrResolve(valid: true, type: 'order_client')),
+        AppRoutes.orders);
   });
 
   test('blocks legacy route strings from routeFront mapping', () {
     final router = QrRouter();
 
     expect(
-      router.targetFor(const QrResolve(valid: true, type: 'menu', routeFront: '/app_shell')),
+      router.targetFor(
+          const QrResolve(valid: true, type: 'menu', routeFront: '/app_shell')),
       AppRoutes.blocked,
     );
     expect(
-      router.targetFor(const QrResolve(valid: true, type: 'menu', routeFront: '/features/orders')),
+      router.targetFor(const QrResolve(
+          valid: true, type: 'menu', routeFront: '/features/orders')),
       AppRoutes.blocked,
     );
   });

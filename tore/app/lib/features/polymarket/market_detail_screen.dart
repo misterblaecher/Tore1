@@ -10,7 +10,11 @@ import '../../shared/widgets/service_limited_banner.dart';
 import 'polymarket_models.dart';
 
 class MarketDetailScreen extends ConsumerStatefulWidget {
-  const MarketDetailScreen({super.key, required this.marketId, this.eventId, this.canResolve = false});
+  const MarketDetailScreen(
+      {super.key,
+      required this.marketId,
+      this.eventId,
+      this.canResolve = false});
 
   final int marketId;
   final int? eventId;
@@ -47,7 +51,8 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ref.read(apiProvider).fetchPolymarketMarket(widget.marketId);
+      final res =
+          await ref.read(apiProvider).fetchPolymarketMarket(widget.marketId);
       if (!mounted) return;
       setState(() {
         _market = res.market;
@@ -60,7 +65,9 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       await _resolveRuntimeBlock();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              ErrorMapper.runtimeBlockedMessage(e) ?? ErrorMapper.message(e))));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -78,7 +85,9 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
 
   String? _extractRuntimeReason(Map<String, dynamic> json) {
     final reason = json['reason']?.toString();
-    final state = (json['runtime_state'] ?? json['state'] ?? json['status'])?.toString().toLowerCase();
+    final state = (json['runtime_state'] ?? json['state'] ?? json['status'])
+        ?.toString()
+        .toLowerCase();
     if (json['event_paused'] == true) return 'event_paused';
     if (json['read_only'] == true) return 'read_only';
     if (json['frozen'] == true) return 'frozen';
@@ -92,6 +101,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     if (_submitting || _writeBlocked || _market == null) return;
     setState(() => _submitting = true);
     final key = 'pm-${widget.marketId}-${side.toLowerCase()}-$_amount-v1';
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(apiProvider).postPolymarketPosition(
             marketId: widget.marketId,
@@ -100,14 +110,16 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             amountCents: _amount,
             idempotencyKey: key,
           );
-      if (!mounted) return;
       await _load();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Position placée ✅')));
+      if (!messenger.mounted) return;
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Position placée ✅')));
     } catch (e) {
-      if (!mounted) return;
+      if (!messenger.mounted) return;
       final msg = ErrorMapper.message(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      final runtimeReason = normalizeRuntimeBlockReason(reason: _extractErrorReason(e));
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+      final runtimeReason =
+          normalizeRuntimeBlockReason(reason: _extractErrorReason(e));
       if (runtimeReason != null) setState(() => _bannerReason = runtimeReason);
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -126,16 +138,36 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
           builder: (context, setLocal) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButton<String>(value: outcome, items: const [DropdownMenuItem(value: 'YES', child: Text('YES')), DropdownMenuItem(value: 'NO', child: Text('NO')), DropdownMenuItem(value: 'VOID', child: Text('VOID'))], onChanged: (v) => setLocal(() => outcome = v ?? 'YES')),
-              TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason')),
+              DropdownButton<String>(
+                  value: outcome,
+                  items: const [
+                    DropdownMenuItem(value: 'YES', child: Text('YES')),
+                    DropdownMenuItem(value: 'NO', child: Text('NO')),
+                    DropdownMenuItem(value: 'VOID', child: Text('VOID'))
+                  ],
+                  onChanged: (v) => setLocal(() => outcome = v ?? 'YES')),
+              TextField(
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(labelText: 'Reason')),
             ],
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'))
+        ],
       ),
     );
     if (ok != true || reasonCtrl.text.trim().length < 3) return;
-    await ref.read(apiProvider).resolveEventPolymarketMarket(eventId: widget.eventId!, marketId: widget.marketId, outcome: outcome, reason: reasonCtrl.text.trim());
+    await ref.read(apiProvider).resolveEventPolymarketMarket(
+        eventId: widget.eventId!,
+        marketId: widget.marketId,
+        outcome: outcome,
+        reason: reasonCtrl.text.trim());
     await _load();
   }
 
@@ -152,7 +184,9 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   Future<void> _loadMoreHistory() async {
     if (_nextCursor == null) return;
     try {
-      final page = await ref.read(apiProvider).fetchMyHistory(marketId: widget.marketId, cursor: _nextCursor);
+      final page = await ref
+          .read(apiProvider)
+          .fetchMyHistory(marketId: widget.marketId, cursor: _nextCursor);
       if (!mounted) return;
       setState(() {
         final fresh = page.items.where((e) => _historyIds.add(e.id)).toList();
@@ -166,13 +200,26 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
   Widget build(BuildContext context) {
     final readOnly = isReadOnly(ref);
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-    if (_loading) return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: CircularProgressIndicator()));
+    if (_loading)
+      return Scaffold(
+          appBar: AppBar(title: const Text('Polymarket')),
+          body: const Center(child: CircularProgressIndicator()));
     final m = _market;
-    if (m == null) return Scaffold(appBar: AppBar(title: const Text('Polymarket')), body: const Center(child: Text('Introuvable')));
+    if (m == null)
+      return Scaffold(
+          appBar: AppBar(title: const Text('Polymarket')),
+          body: const Center(child: Text('Introuvable')));
     final resolvedBlocked = m.status == 'resolved';
-    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: _writeBlocked) || resolvedBlocked;
-    if (m.outcome != null && m.myPositionTotal > 0 && _resolutionFlash == null) {
-      final won = (m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0);
+    final writeBlocked = isWriteBlocked(
+            readOnly: readOnly,
+            degradedBlocked: degradedBlocked,
+            runtimeBlocked: _writeBlocked) ||
+        resolvedBlocked;
+    if (m.outcome != null &&
+        m.myPositionTotal > 0 &&
+        _resolutionFlash == null) {
+      final won = (m.outcome == 'YES' && m.myPositionYes > 0) ||
+          (m.outcome == 'NO' && m.myPositionNo > 0);
       _resolutionFlash = won ? 'You won' : 'You lost';
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) setState(() => _resolutionFlash = null);
@@ -185,31 +232,46 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
         child: ListView(
           padding: const EdgeInsets.all(14),
           children: [
-            Text(m.question, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(m.question,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            Text('YES ${(m.yesPct * 100).toStringAsFixed(0)}% / NO ${(m.noPct * 100).toStringAsFixed(0)}%'),
+            Text(
+                'YES ${(m.yesPct * 100).toStringAsFixed(0)}% / NO ${(m.noPct * 100).toStringAsFixed(0)}%'),
             const SizedBox(height: 6),
             LinearProgressIndicator(value: m.yesPct, minHeight: 10),
             const SizedBox(height: 6),
             Text('Pool: ${m.poolTickets} • Volume: ${m.volume} tickets'),
             if ((m.description ?? '').isNotEmpty) Text(m.description!),
             if (m.outcome != null)
-              Text('Résultat: ${m.outcome} ${m.myPositionTotal == 0 ? '' : ((m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0) ? '• WIN' : '• LOSE')}'),
+              Text(
+                  'Résultat: ${m.outcome} ${m.myPositionTotal == 0 ? '' : ((m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0) ? '• WIN' : '• LOSE')}'),
             if (_resolutionFlash != null)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: _resolutionFlash == 'You won' ? Colors.green.shade100 : Colors.red.shade100, borderRadius: BorderRadius.circular(10)),
-                child: Text('$_resolutionFlash • outcome ${m.outcome}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                decoration: BoxDecoration(
+                    color: _resolutionFlash == 'You won'
+                        ? Colors.green.shade100
+                        : Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Text('$_resolutionFlash • outcome ${m.outcome}',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
             const SizedBox(height: 12),
-            Text('My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
+            Text(
+                'My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
             if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: ServiceLimitedBanner(
-                  message: resolvedBlocked ? 'Polymarket résolu: achats désactivés.' : writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeReason: _bannerReason),
+                  message: resolvedBlocked
+                      ? 'Polymarket résolu: achats désactivés.'
+                      : writeBlockedMessage(
+                          readOnly: readOnly,
+                          degradedBlocked: degradedBlocked,
+                          runtimeReason: _bannerReason),
                 ),
               ),
             const SizedBox(height: 12),
@@ -219,7 +281,9 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                   .map((e) => ChoiceChip(
                         label: Text('$e'),
                         selected: _amount == e,
-                        onSelected: writeBlocked ? null : (_) => setState(() => _amount = e),
+                        onSelected: writeBlocked
+                            ? null
+                            : (_) => setState(() => _amount = e),
                       ))
                   .toList(),
             ),
@@ -232,7 +296,8 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                 final parsed = int.tryParse(v);
                 if (parsed == null || parsed < 1) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Montant invalide (minimum 1).')),
+                    const SnackBar(
+                        content: Text('Montant invalide (minimum 1).')),
                   );
                   return;
                 }
@@ -244,26 +309,34 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               children: [
                 Expanded(
                   child: FilledButton(
-                    onPressed: (_submitting || writeBlocked) ? null : () => _submit('yes'),
+                    onPressed: (_submitting || writeBlocked)
+                        ? null
+                        : () => _submit('yes'),
                     child: const Text('Buy YES'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: (_submitting || writeBlocked) ? null : () => _submit('no'),
+                    onPressed: (_submitting || writeBlocked)
+                        ? null
+                        : () => _submit('no'),
                     child: const Text('Buy NO'),
                   ),
                 ),
               ],
             ),
-            if (widget.canResolve && widget.eventId != null && m.outcome == null)
+            if (widget.canResolve &&
+                widget.eventId != null &&
+                m.outcome == null)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: FilledButton.tonal(onPressed: _resolveMarket, child: const Text('Resolve')),
+                child: FilledButton.tonal(
+                    onPressed: _resolveMarket, child: const Text('Resolve')),
               ),
             const SizedBox(height: 16),
-            const Text('My History', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('My History',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             ..._history.map((h) => ListTile(
                   dense: true,
@@ -272,7 +345,9 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                   trailing: Text(TimeOfDay.fromDateTime(h.ts).format(context)),
                 )),
             if (_nextCursor != null)
-              TextButton(onPressed: _loadMoreHistory, child: const Text('Charger plus')),
+              TextButton(
+                  onPressed: _loadMoreHistory,
+                  child: const Text('Charger plus')),
           ],
         ),
       ),

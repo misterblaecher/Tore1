@@ -34,7 +34,8 @@ class ToreCTA extends StatelessWidget {
       case ToreCTAStyle.secondary:
         bg = Colors.transparent;
         fg = ToreSemantic.textPrimary;
-        border = BorderSide(color: ToreSemantic.divider, width: ToreStroke.hairline);
+        border =
+            BorderSide(color: ToreSemantic.divider, width: ToreStroke.hairline);
         break;
       case ToreCTAStyle.destructive:
         bg = ToreSemantic.danger;
@@ -57,8 +58,12 @@ class ToreCTA extends StatelessWidget {
           elevation: 0,
         ),
         child: busy
-            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(label, style: ToreType.body.copyWith(fontWeight: FontWeight.w600)),
+            ? const SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : Text(label,
+                style: ToreType.body.copyWith(fontWeight: FontWeight.w600)),
       ),
     );
   }

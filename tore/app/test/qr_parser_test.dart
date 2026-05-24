@@ -57,13 +57,11 @@ void main() {
       expect(payload.betId, 44);
     });
 
-
     test('parse open event deeplink', () {
       final payload = parser.parse('tore://open?type=event&id=21');
       expect(payload.type, QrType.joinEvent);
       expect(payload.eventId, 21);
     });
-
 
     test('parse https open deeplink compatibility', () {
       final payload = parser.parse('https://app.tore.be/open?type=event&id=21');
@@ -89,19 +87,22 @@ void main() {
     });
 
     test('parse open staff backup deeplink', () {
-      final payload = parser.parse('tore://open?type=staff_backup&eventId=12&code=ABCD2345');
+      final payload = parser
+          .parse('tore://open?type=staff_backup&eventId=12&code=ABCD2345');
       expect(payload.type, QrType.staffBackup);
       expect(payload.eventId, 12);
       expect(payload.tokenId, 'ABCD2345');
     });
 
     test('parse open orga invite deeplink', () {
-      final payload = parser.parse('tore://open?type=orga_invite&code=ABC123ZZ');
+      final payload =
+          parser.parse('tore://open?type=orga_invite&code=ABC123ZZ');
       expect(payload.type, QrType.orgaInvite);
       expect(payload.tokenId, 'ABC123ZZ');
     });
     test('parse json payload', () {
-      final payload = parser.parse('{"type":"join_event","event_id":88,"exp":9999999999}');
+      final payload =
+          parser.parse('{"type":"join_event","event_id":88,"exp":9999999999}');
       expect(payload.type, QrType.joinEvent);
       expect(payload.eventId, 88);
       expect(payload.expiresAt, isNotNull);

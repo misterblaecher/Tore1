@@ -24,7 +24,13 @@ void main() {
         {'rank': 1, 'userId': 'u1', 'name': 'A', 'score': 100, 'private': false}
       ],
       'list': [
-        {'rank': 1, 'userId': 'u1', 'name': 'A', 'score': 100, 'private': false},
+        {
+          'rank': 1,
+          'userId': 'u1',
+          'name': 'A',
+          'score': 100,
+          'private': false
+        },
         {'rank': 2, 'userId': 'u2', 'name': 'B', 'score': 90, 'private': true}
       ],
       'me': {'rank': 2, 'userId': 'u2', 'name': 'B', 'score': 90}

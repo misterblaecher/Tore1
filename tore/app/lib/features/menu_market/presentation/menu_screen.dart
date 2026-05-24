@@ -45,26 +45,43 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final userId = ref.read(userIdProvider);
 
     final event = await api.event(widget.eventId);
-    final eventState = (event['state'] ?? event['status'] ?? event['event_state'] ?? 'LIVE').toString();
+    final eventState =
+        (event['state'] ?? event['status'] ?? event['event_state'] ?? 'LIVE')
+            .toString();
 
     final menuResult = await api.menuWithCacheStatus(widget.eventId);
     final items = menuResult.items.cast<Map<String, dynamic>>();
     var isOffline = menuResult.fromCache;
 
     if (userId == null) {
-      return _MenuData(items: items, tickets: null, isOffline: isOffline, eventState: eventState);
+      return _MenuData(
+          items: items,
+          tickets: null,
+          isOffline: isOffline,
+          eventState: eventState);
     }
 
     int? tickets;
     try {
-      final bal = await api.ticketBalance(eventId: widget.eventId, userId: userId);
-      final ticketsValue = bal['balance'] ?? bal['tickets'] ?? bal['amount'] ?? bal['value'] ?? 0;
-      tickets = (ticketsValue is num) ? ticketsValue.toInt() : int.tryParse(ticketsValue.toString()) ?? 0;
+      final bal =
+          await api.ticketBalance(eventId: widget.eventId, userId: userId);
+      final ticketsValue = bal['balance'] ??
+          bal['tickets'] ??
+          bal['amount'] ??
+          bal['value'] ??
+          0;
+      tickets = (ticketsValue is num)
+          ? ticketsValue.toInt()
+          : int.tryParse(ticketsValue.toString()) ?? 0;
     } catch (_) {
       isOffline = true;
     }
 
-    return _MenuData(items: items, tickets: tickets, isOffline: isOffline, eventState: eventState);
+    return _MenuData(
+        items: items,
+        tickets: tickets,
+        isOffline: isOffline,
+        eventState: eventState);
   }
 
   void _refresh() {
@@ -74,7 +91,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   }
 
   int _requiredTickets(Map<String, dynamic> d) {
-    final v = d['ticket_cost'] ?? d['tickets_cost'] ?? d['price_tickets'] ?? d['priceTickets'] ?? d['ticket_price'];
+    final v = d['ticket_cost'] ??
+        d['tickets_cost'] ??
+        d['price_tickets'] ??
+        d['priceTickets'] ??
+        d['ticket_price'];
     if (v is num) return v.toInt();
     if (v != null) return int.tryParse(v.toString()) ?? 1;
     return 1;
@@ -87,8 +108,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final cart = ref.watch(cartProvider(widget.eventId));
     final favorites = ref.watch(menuFavoritesProvider(widget.eventId));
     final configAsync = ref.watch(eventConfigProvider(widget.eventId));
-    final config = configAsync.maybeWhen(data: (value) => value, orElse: () => null);
-    final configOfflineLimited = configAsync.maybeWhen(error: (err, _) => err is OfflineNoCacheException, orElse: () => false);
+    final config =
+        configAsync.maybeWhen(data: (value) => value, orElse: () => null);
+    final configOfflineLimited = configAsync.maybeWhen(
+        error: (err, _) => err is OfflineNoCacheException, orElse: () => false);
     final readOnly = isReadOnly(ref);
 
     if (config != null && !config.menuEnabled) {
@@ -113,14 +136,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               tooltip: 'Organisateur',
               icon: const Icon(Icons.event_note_outlined),
               onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrganizerScreen(eventId: widget.eventId)));
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => OrganizerScreen(eventId: widget.eventId)));
               },
             ),
           IconButton(
             tooltip: 'Portefeuille',
             icon: const Icon(Icons.account_balance_wallet_outlined),
             onPressed: () async {
-              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalletScreen(eventId: widget.eventId)));
+              await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => WalletScreen(eventId: widget.eventId)));
               _refresh();
             },
           ),
@@ -129,14 +154,17 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               tooltip: 'Prix (Admin)',
               icon: const Icon(Icons.edit_outlined),
               onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminPricesScreen(eventId: widget.eventId)));
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) =>
+                        AdminPricesScreen(eventId: widget.eventId)));
               },
             ),
           IconButton(
             tooltip: 'Classement',
             icon: const Icon(Icons.emoji_events_outlined),
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => LeaderboardScreen(eventId: widget.eventId)));
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => LeaderboardScreen(eventId: widget.eventId)));
             },
           ),
         ],
@@ -153,16 +181,29 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             return Center(child: Text(ErrorMapper.message(err as Object)));
           }
 
-          final data = snap.data ?? const _MenuData(items: [], tickets: null, isOffline: false, eventState: 'LIVE');
+          final data = snap.data ??
+              const _MenuData(
+                  items: [],
+                  tickets: null,
+                  isOffline: false,
+                  eventState: 'LIVE');
           final items = data.items;
           final tickets = data.tickets;
           final isOffline = data.isOffline;
-          final runtimeWriteBlocked = isWriteBlockedByEventState(data.eventState);
-          final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-          final allWritesBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeWriteBlocked);
+          final runtimeWriteBlocked =
+              isWriteBlockedByEventState(data.eventState);
+          final degradedBlocked =
+              isWriteDegradedBlocked(ref, WriteIntent.critical);
+          final allWritesBlocked = isWriteBlocked(
+              readOnly: readOnly,
+              degradedBlocked: degradedBlocked,
+              runtimeBlocked: runtimeWriteBlocked);
           final visibleItems = _showFavoritesOnly
               ? items.where((item) {
-                  final id = ((item['id'] as int?) ?? (item['item_id'] as int?) ?? (item['drink_id'] as int?) ?? 0);
+                  final id = ((item['id'] as int?) ??
+                      (item['item_id'] as int?) ??
+                      (item['drink_id'] as int?) ??
+                      0);
                   return favorites.contains(id);
                 }).toList()
               : items;
@@ -192,12 +233,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     },
                   ),
                 ),
-                if (tickets != null) Chip(label: Text('🎟️ $tickets')) else const SizedBox.shrink(),
+                if (tickets != null)
+                  Chip(label: Text('🎟️ $tickets'))
+                else
+                  const SizedBox.shrink(),
                 const SizedBox(width: 8),
                 FilterChip(
                   label: const Text('Favoris'),
                   selected: _showFavoritesOnly,
-                  onSelected: (_) => setState(() => _showFavoritesOnly = !_showFavoritesOnly),
+                  onSelected: (_) =>
+                      setState(() => _showFavoritesOnly = !_showFavoritesOnly),
                 ),
               ],
             ),
@@ -214,10 +259,18 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 if (allWritesBlocked)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: data.eventState)),
+                    child: ServiceLimitedBanner(
+                        message: writeBlockedMessage(
+                            readOnly: readOnly,
+                            degradedBlocked: degradedBlocked,
+                            runtimeState: data.eventState)),
                   ),
                 top,
-                Expanded(child: Center(child: Text(_showFavoritesOnly ? 'Aucun favori.' : 'Menu vide'))),
+                Expanded(
+                    child: Center(
+                        child: Text(_showFavoritesOnly
+                            ? 'Aucun favori.'
+                            : 'Menu vide'))),
               ],
             );
           }
@@ -232,7 +285,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               if (allWritesBlocked)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: data.eventState)),
+                  child: ServiceLimitedBanner(
+                      message: writeBlockedMessage(
+                          readOnly: readOnly,
+                          degradedBlocked: degradedBlocked,
+                          runtimeState: data.eventState)),
                 ),
               top,
               Expanded(
@@ -242,16 +299,22 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   itemBuilder: (_, i) {
                     final d = visibleItems[i];
 
-                    final itemId = ((d['id'] as int?) ?? (d['item_id'] as int?) ?? (d['drink_id'] as int?) ?? 0);
+                    final itemId = ((d['id'] as int?) ??
+                        (d['item_id'] as int?) ??
+                        (d['drink_id'] as int?) ??
+                        0);
                     final name = (d['name'] ?? '').toString();
                     final type = (d['type'] ?? '').toString();
                     final base = (d['base_price_cents'] as int?) ?? 0;
                     final eff = (d['effective_price_cents'] as int?) ?? base;
                     final effPrice = (eff / 100.0).toStringAsFixed(2);
-                    final subtitle = type.isEmpty ? 'Prix: $effPrice €' : '$type • $effPrice €';
+                    final subtitle = type.isEmpty
+                        ? 'Prix: $effPrice €'
+                        : '$type • $effPrice €';
 
                     final requiredTickets = _requiredTickets(d);
-                    final hasEnoughTickets = tickets == null ? true : tickets >= requiredTickets;
+                    final hasEnoughTickets =
+                        tickets == null ? true : tickets >= requiredTickets;
                     final stockState = menuItemStockState(d);
                     final isOut = stockState == MenuItemStockState.out;
                     final isLow = stockState == MenuItemStockState.low;
@@ -259,7 +322,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                     final disabledBecauseAuth = userId == null;
                     final disabledBecauseOffline = isOffline || degradedBlocked;
                     final disabledBecauseEventState = allWritesBlocked;
-                    final cartController = ref.read(cartProvider(widget.eventId).notifier);
+                    final cartController =
+                        ref.read(cartProvider(widget.eventId).notifier);
 
                     return ListTile(
                       onTap: () {
@@ -268,30 +332,49 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                           isScrollControlled: true,
                           builder: (_) => MenuItemDetailSheet(
                             item: d,
-                            enabled: !(disabledBecauseAuth || disabledBecauseOffline || disabledBecauseEventState || isOut),
+                            enabled: !(disabledBecauseAuth ||
+                                disabledBecauseOffline ||
+                                disabledBecauseEventState ||
+                                isOut),
                             onAdd: (qty) {
                               cartController.addOrIncrement(
                                 itemId: itemId,
-                                barId: int.tryParse((d['bar_id'] ?? d['barId'] ?? '').toString()) ?? 0,
+                                barId: int.tryParse(
+                                        (d['bar_id'] ?? d['barId'] ?? '')
+                                            .toString()) ??
+                                    0,
                                 name: name,
                                 subtitle: subtitle,
                                 ticketCost: requiredTickets,
                                 available: d['available'] as bool?,
-                                stockStatus: (d['stockStatus'] ?? d['stock_status'])?.toString(),
-                                feeTickets: (d['feeTickets'] as num?)?.toInt() ?? 0,
+                                stockStatus:
+                                    (d['stockStatus'] ?? d['stock_status'])
+                                        ?.toString(),
+                                feeTickets:
+                                    (d['feeTickets'] as num?)?.toInt() ?? 0,
                                 qty: qty,
                               );
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name ajouté au panier (x$qty)')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          '$name ajouté au panier (x$qty)')));
                             },
                           ),
                         );
                       },
                       title: Row(
                         children: [
-                          Expanded(child: Text(name.isEmpty ? '(Sans nom)' : name)),
+                          Expanded(
+                              child: Text(name.isEmpty ? '(Sans nom)' : name)),
                           IconButton(
-                            onPressed: itemId == 0 ? null : () => ref.read(menuFavoritesProvider(widget.eventId).notifier).toggle(itemId),
-                            icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                            onPressed: itemId == 0
+                                ? null
+                                : () => ref
+                                    .read(menuFavoritesProvider(widget.eventId)
+                                        .notifier)
+                                    .toggle(itemId),
+                            icon: Icon(
+                                isFavorite ? Icons.star : Icons.star_border),
                           ),
                         ],
                       ),
@@ -302,20 +385,34 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       trailing: SizedBox(
                         width: 130,
                         child: ElevatedButton(
-                          onPressed: (itemId == 0 || disabledBecauseAuth || disabledBecauseOffline || disabledBecauseEventState || isOut || !hasEnoughTickets)
+                          onPressed: (itemId == 0 ||
+                                  disabledBecauseAuth ||
+                                  disabledBecauseOffline ||
+                                  disabledBecauseEventState ||
+                                  isOut ||
+                                  !hasEnoughTickets)
                               ? null
                               : () {
                                   cartController.addOrIncrement(
                                     itemId: itemId,
-                                    barId: int.tryParse((d['bar_id'] ?? d['barId'] ?? '').toString()) ?? 0,
+                                    barId: int.tryParse(
+                                            (d['bar_id'] ?? d['barId'] ?? '')
+                                                .toString()) ??
+                                        0,
                                     name: name,
                                     subtitle: subtitle,
                                     ticketCost: requiredTickets,
                                     available: d['available'] as bool?,
-                                    stockStatus: (d['stockStatus'] ?? d['stock_status'])?.toString(),
-                                    feeTickets: (d['feeTickets'] as num?)?.toInt() ?? 0,
+                                    stockStatus:
+                                        (d['stockStatus'] ?? d['stock_status'])
+                                            ?.toString(),
+                                    feeTickets:
+                                        (d['feeTickets'] as num?)?.toInt() ?? 0,
                                   );
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name ajouté au panier')));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content:
+                                              Text('$name ajouté au panier')));
                                 },
                           child: Text(
                             disabledBecauseAuth
@@ -324,7 +421,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                     ? 'Hors-ligne'
                                     : (disabledBecauseEventState
                                         ? 'Bloqué'
-                                        : (isOut ? 'RUPTURE' : (!hasEnoughTickets ? 'Tickets ×$requiredTickets' : 'Ajouter')))),
+                                        : (isOut
+                                            ? 'RUPTURE'
+                                            : (!hasEnoughTickets
+                                                ? 'Tickets ×$requiredTickets'
+                                                : 'Ajouter')))),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

@@ -20,17 +20,24 @@ class ToreNetworkBanner extends ConsumerWidget {
         : (isOffline ? Colors.red.shade300 : Colors.orange.shade300);
     final text = isOnline
         ? 'ONLINE'
-        : (isOffline ? 'OFFLINE — mode lecture.' : 'DEGRADED — réseau instable.');
+        : (isOffline
+            ? 'OFFLINE — mode lecture.'
+            : 'DEGRADED — réseau instable.');
 
     return Material(
       color: bg,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: border))),
+        decoration:
+            BoxDecoration(border: Border(bottom: BorderSide(color: border))),
         child: Row(
           children: [
-            Icon(isOnline ? Icons.wifi : (isOffline ? Icons.cloud_off : Icons.wifi_tethering_error_rounded)),
+            Icon(isOnline
+                ? Icons.wifi
+                : (isOffline
+                    ? Icons.cloud_off
+                    : Icons.wifi_tethering_error_rounded)),
             const SizedBox(width: 8),
             Expanded(child: Text(text)),
             if (!isOnline)

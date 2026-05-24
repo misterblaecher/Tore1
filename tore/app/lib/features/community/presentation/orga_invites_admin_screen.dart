@@ -17,7 +17,8 @@ class OrgaInvitesAdminScreen extends ConsumerWidget {
 
   final int orgId;
 
-  String _idem() => 'orga-invite-admin-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  String _idem() =>
+      'orga-invite-admin-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,19 +38,23 @@ class OrgaInvitesAdminScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(12),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 DropdownButtonFormField<String>(
-                  value: inviteType,
-                  items: const ['FOLLOWER', 'MEMBER', 'STAFF', 'MANAGER'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  initialValue: inviteType,
+                  items: const ['FOLLOWER', 'MEMBER', 'STAFF', 'MANAGER']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
                   onChanged: (v) => setLocal(() => inviteType = v ?? 'MEMBER'),
                   decoration: const InputDecoration(labelText: 'Type'),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<int?>(
-                  value: expiry,
+                  initialValue: expiry,
                   items: const [
-                    DropdownMenuItem<int?>(value: null, child: Text('Sans expiration')),
+                    DropdownMenuItem<int?>(
+                        value: null, child: Text('Sans expiration')),
                     DropdownMenuItem<int?>(value: 1, child: Text('1 heure')),
                     DropdownMenuItem<int?>(value: 24, child: Text('24 heures')),
-                    DropdownMenuItem<int?>(value: 24 * 7, child: Text('7 jours')),
+                    DropdownMenuItem<int?>(
+                        value: 24 * 7, child: Text('7 jours')),
                   ],
                   onChanged: (v) => setLocal(() => expiry = v),
                   decoration: const InputDecoration(labelText: 'Expiration'),
@@ -64,7 +69,11 @@ class OrgaInvitesAdminScreen extends ConsumerWidget {
           });
         },
       );
-      final created = await api.orgaCreateInvite(orgId: orgId, inviteType: inviteType, expiresInHours: expiry, idempotencyKey: _idem());
+      final created = await api.orgaCreateInvite(
+          orgId: orgId,
+          inviteType: inviteType,
+          expiresInHours: expiry,
+          idempotencyKey: _idem());
       if (!context.mounted) return;
       await showDialog(
         context: context,
@@ -104,16 +113,21 @@ class OrgaInvitesAdminScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Invitations')),
       body: invites.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Erreur chargement invitations')),
+        error: (_, __) =>
+            const Center(child: Text('Erreur chargement invitations')),
         data: (payload) {
-          final items = ((payload['items'] as List?) ?? const []).cast<dynamic>();
+          final items =
+              ((payload['items'] as List?) ?? const []).cast<dynamic>();
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
               if (!canWriteNow && reason != null) Text(reason),
               Align(
                 alignment: Alignment.centerRight,
-                child: FilledButton.icon(onPressed: canWriteNow ? createInvite : null, icon: const Icon(Icons.add), label: const Text('Créer invitation')),
+                child: FilledButton.icon(
+                    onPressed: canWriteNow ? createInvite : null,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Créer invitation')),
               ),
               const SizedBox(height: 8),
               ToreCard(
@@ -124,46 +138,70 @@ class OrgaInvitesAdminScreen extends ConsumerWidget {
                         final row = Map<String, dynamic>.from(raw as Map);
                         final status = (row['status'] ?? 'ACTIVE').toString();
                         return ToreListRow(
-                          title: '${row['invite_type'] ?? 'MEMBER'} • ${row['code_suffix'] ?? ''}',
+                          title:
+                              '${row['invite_type'] ?? 'MEMBER'} • ${row['code_suffix'] ?? ''}',
                           subtitle: 'Expire: ${row['expires_at'] ?? '-'}',
-                          trailing: Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                            ToreChip(
-                              label: status,
-                              variant: status == 'ACTIVE'
-                                  ? ToreChipVariant.ok
-                                  : status == 'REVOKED'
-                                      ? ToreChipVariant.closed
-                                      : ToreChipVariant.warn,
-                            ),
-                            if (status == 'ACTIVE')
-                              TextButton(
-                                onPressed: canWriteNow
-                                    ? () async {
-                                        final reasonCtl = TextEditingController();
-                                        await showDialog(
-                                          context: context,
-                                          builder: (_) => AlertDialog(
-                                            title: const Text('Révoquer invitation'),
-                                            content: TextField(controller: reasonCtl, decoration: const InputDecoration(hintText: 'Raison (obligatoire)')),
-                                            actions: [
-                                              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-                                              FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Confirmer')),
-                                            ],
-                                          ),
-                                        );
-                                        if (reasonCtl.text.trim().isEmpty) return;
-                                        await api.orgaRevokeInvite(
-                                          orgId: orgId,
-                                          inviteId: (row['id'] as num).toInt(),
-                                          reason: reasonCtl.text.trim(),
-                                          idempotencyKey: _idem(),
-                                        );
-                                        ref.invalidate(orgaInvitesProvider(orgId));
-                                      }
-                                    : null,
-                                child: const Text('Revoke'),
-                              ),
-                          ]),
+                          trailing: Wrap(
+                              spacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                ToreChip(
+                                  label: status,
+                                  variant: status == 'ACTIVE'
+                                      ? ToreChipVariant.ok
+                                      : status == 'REVOKED'
+                                          ? ToreChipVariant.closed
+                                          : ToreChipVariant.warn,
+                                ),
+                                if (status == 'ACTIVE')
+                                  TextButton(
+                                    onPressed: canWriteNow
+                                        ? () async {
+                                            final reasonCtl =
+                                                TextEditingController();
+                                            await showDialog(
+                                              context: context,
+                                              builder: (_) => AlertDialog(
+                                                title: const Text(
+                                                    'Révoquer invitation'),
+                                                content: TextField(
+                                                    controller: reasonCtl,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                            hintText:
+                                                                'Raison (obligatoire)')),
+                                                actions: [
+                                                  TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                              context),
+                                                      child: const Text(
+                                                          'Annuler')),
+                                                  FilledButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                              context),
+                                                      child: const Text(
+                                                          'Confirmer')),
+                                                ],
+                                              ),
+                                            );
+                                            if (reasonCtl.text.trim().isEmpty)
+                                              return;
+                                            await api.orgaRevokeInvite(
+                                              orgId: orgId,
+                                              inviteId:
+                                                  (row['id'] as num).toInt(),
+                                              reason: reasonCtl.text.trim(),
+                                              idempotencyKey: _idem(),
+                                            );
+                                            ref.invalidate(
+                                                orgaInvitesProvider(orgId));
+                                          }
+                                        : null,
+                                    child: const Text('Revoke'),
+                                  ),
+                              ]),
                         );
                       }),
                   ],

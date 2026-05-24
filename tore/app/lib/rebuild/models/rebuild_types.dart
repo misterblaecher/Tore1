@@ -1,7 +1,11 @@
 enum ToreMode { user, orga, bar }
+
 enum EventState { draft, live, paused, readOnly, ended }
+
 enum ModuleState { on, off, frozen, readOnly }
+
 enum ScopeBadge { global, bar, event }
+
 enum ConnectivityState { online, degraded, offline }
 
 extension EventStateX on EventState {

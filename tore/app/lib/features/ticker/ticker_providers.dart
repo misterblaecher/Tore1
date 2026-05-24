@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../api.dart';
 import '../../core/network/network_state_provider.dart';
 import '../../state.dart';
 import '../../shared/cache/cache_providers.dart';
@@ -46,7 +45,8 @@ class TickerState {
 }
 
 class TickerController extends StateNotifier<TickerState> {
-  TickerController(this.ref, this.eventId) : super(const TickerState(loading: true)) {
+  TickerController(this.ref, this.eventId)
+      : super(const TickerState(loading: true)) {
     _bootstrap();
   }
 
@@ -77,23 +77,46 @@ class TickerController extends StateNotifier<TickerState> {
 
   Future<void> _saveCache() async {
     final cache = ref.read(cacheStoreProvider);
-    await cache.setJson(_cacheKey, {
-      'items': state.items.take(_maxItems).map((e) => {
-        'id': e.id,
-        'type': e.type,
-        'ts': e.ts.toIso8601String(),
-        'severity': e.severity,
-        'moduleKey': e.moduleKey,
-        'payloadCompact': switch (e.payload) {
-          BroadcastTickerPayload p => {'message': p.message, 'level': p.level},
-          OrderTickerPayload p => {'kind': p.kind, 'orderId': p.orderId, 'status': p.status, 'totalTickets': p.totalTickets, 'userLabel': p.userLabel},
-          PriceTickerPayload p => {'drinkName': p.drinkName, 'fromPrice': p.fromPrice, 'toPrice': p.toPrice, 'direction': p.direction},
-          GiftTickerPayload p => {'amount': p.amount, 'fromLabel': p.fromLabel, 'toLabel': p.toLabel},
-          _ => <String, dynamic>{},
-        }
-      }).toList(),
-      'lastSyncAt': state.lastSyncAt?.toIso8601String(),
-    }, ttl: const Duration(days: 1));
+    await cache.setJson(
+        _cacheKey,
+        {
+          'items': state.items
+              .take(_maxItems)
+              .map((e) => {
+                    'id': e.id,
+                    'type': e.type,
+                    'ts': e.ts.toIso8601String(),
+                    'severity': e.severity,
+                    'moduleKey': e.moduleKey,
+                    'payloadCompact': switch (e.payload) {
+                      BroadcastTickerPayload p => {
+                          'message': p.message,
+                          'level': p.level
+                        },
+                      OrderTickerPayload p => {
+                          'kind': p.kind,
+                          'orderId': p.orderId,
+                          'status': p.status,
+                          'totalTickets': p.totalTickets,
+                          'userLabel': p.userLabel
+                        },
+                      PriceTickerPayload p => {
+                          'drinkName': p.drinkName,
+                          'fromPrice': p.fromPrice,
+                          'toPrice': p.toPrice,
+                          'direction': p.direction
+                        },
+                      GiftTickerPayload p => {
+                          'amount': p.amount,
+                          'fromLabel': p.fromLabel,
+                          'toLabel': p.toLabel
+                        },
+                    }
+                  })
+              .toList(),
+          'lastSyncAt': state.lastSyncAt?.toIso8601String(),
+        },
+        ttl: const Duration(days: 1));
   }
 
   Future<void> refresh() async {
@@ -105,15 +128,20 @@ class TickerController extends StateNotifier<TickerState> {
     }
     try {
       final api = ref.read(apiProvider);
-      final since = state.items.isNotEmpty ? state.items.first.ts.toIso8601String() : null;
+      final since = state.items.isNotEmpty
+          ? state.items.first.ts.toIso8601String()
+          : null;
       final page = await api.tickerFeed(eventId, since: since, limit: 50);
-      final raw = (page['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      final raw =
+          (page['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
       final parsed = raw.map(TickerItem.fromJson).toList();
-      final merged = _dedup([...parsed, ...state.items])..sort((a, b) => b.ts.compareTo(a.ts));
+      final merged = _dedup([...parsed, ...state.items])
+        ..sort((a, b) => b.ts.compareTo(a.ts));
       final clipped = merged.take(_maxItems).toList();
       state = state.copyWith(
         items: clipped,
-        nextCursor: page['nextCursor']?.toString() ?? page['next_cursor']?.toString(),
+        nextCursor:
+            page['nextCursor']?.toString() ?? page['next_cursor']?.toString(),
         loading: false,
         unstableConnection: false,
         lastSyncAt: DateTime.now(),
@@ -121,12 +149,19 @@ class TickerController extends StateNotifier<TickerState> {
       await _saveCache();
     } on DioException catch (e) {
       if (e.response?.statusCode == 429) {
-        state = state.copyWith(loading: false, error: 'rate limited', unstableConnection: true);
+        state = state.copyWith(
+            loading: false, error: 'rate limited', unstableConnection: true);
       } else {
-        state = state.copyWith(loading: false, error: 'connexion instable', unstableConnection: true);
+        state = state.copyWith(
+            loading: false,
+            error: 'connexion instable',
+            unstableConnection: true);
       }
     } catch (_) {
-      state = state.copyWith(loading: false, error: 'connexion instable', unstableConnection: true);
+      state = state.copyWith(
+          loading: false,
+          error: 'connexion instable',
+          unstableConnection: true);
     }
   }
 
@@ -153,8 +188,8 @@ class TickerController extends StateNotifier<TickerState> {
 final AutoDisposeStateNotifierProviderFamily<TickerController, TickerState, int>
     tickerControllerProvider = StateNotifierProvider.autoDispose
         .family<TickerController, TickerState, int>((ref, eventId) {
-      ref.listen(networkStatusProvider, (_, __) {
-        ref.read(tickerControllerProvider(eventId).notifier)._startPolling();
-      });
-      return TickerController(ref, eventId);
-    });
+  ref.listen(networkStatusProvider, (_, __) {
+    ref.read(tickerControllerProvider(eventId).notifier)._startPolling();
+  });
+  return TickerController(ref, eventId);
+});

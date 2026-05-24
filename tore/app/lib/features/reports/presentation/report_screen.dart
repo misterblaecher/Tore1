@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/cache/offline_no_cache_exception.dart';
-import '../../../shared/models/event_report.dart';
 import '../../../shared/widgets/offline_fallback_screen.dart';
 import '../data/event_cost_service.dart';
 import 'report_providers.dart';
@@ -85,7 +84,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: amountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'Montant (€)',
                       border: OutlineInputBorder(),
@@ -93,14 +93,15 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: category,
+                    initialValue: category,
                     decoration: const InputDecoration(
                       labelText: 'Catégorie',
                       border: OutlineInputBorder(),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'stock', child: Text('Stock')),
-                      DropdownMenuItem(value: 'location', child: Text('Location')),
+                      DropdownMenuItem(
+                          value: 'location', child: Text('Location')),
                       DropdownMenuItem(value: 'staff', child: Text('Staff')),
                       DropdownMenuItem(value: 'other', child: Text('Autre')),
                     ],
@@ -122,12 +123,14 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                     final cents = _eurosToCents(amountCtrl.text.trim());
                     if (label.isEmpty || cents == null || cents <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Montant ou label invalide')),
+                        const SnackBar(
+                            content: Text('Montant ou label invalide')),
                       );
                       return;
                     }
                     Navigator.of(dialogContext).pop(
-                      _CostDraft(label: label, amountCents: cents, category: category),
+                      _CostDraft(
+                          label: label, amountCents: cents, category: category),
                     );
                   },
                   child: const Text('Ajouter'),
@@ -208,7 +211,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
             return OfflineFallbackScreen(
               title: 'Rapport indisponible hors ligne',
               message: 'Aucun rapport en cache pour cet event.',
-              onRetry: () => ref.invalidate(eventReportProvider(widget.eventId)),
+              onRetry: () =>
+                  ref.invalidate(eventReportProvider(widget.eventId)),
             );
           }
           return Center(child: Text('Erreur: $err'));
@@ -240,7 +244,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
               children: [
                 if (isOffline)
                   Card(
-                    color: Theme.of(context).colorScheme.surfaceVariant,
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     child: ListTile(
                       leading: const Icon(Icons.cloud_off_outlined),
                       title: const Text('Mode hors ligne (lecture seule)'),
@@ -279,8 +284,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                 ),
                 const SizedBox(height: 16),
                 _SectionTitle(title: 'Ventes par item (Top 10)'),
-                if (topItems.isEmpty)
-                  const Text('Aucune vente enregistrée.'),
+                if (topItems.isEmpty) const Text('Aucune vente enregistrée.'),
                 if (topItems.isNotEmpty)
                   Card(
                     child: Column(
@@ -307,7 +311,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                             (category) => ListTile(
                               title: Text(category.category),
                               subtitle: Text('Qté: ${category.qty}'),
-                              trailing: Text(_formatCents(category.revenueCents)),
+                              trailing:
+                                  Text(_formatCents(category.revenueCents)),
                             ),
                           )
                           .toList(),
@@ -339,15 +344,16 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (report.costs.lines.isEmpty)
-                  const Text('Aucun coût saisi.'),
+                if (report.costs.lines.isEmpty) const Text('Aucun coût saisi.'),
                 if (report.costs.lines.isNotEmpty)
                   Card(
                     child: Column(
                       children: report.costs.lines
                           .map(
                             (cost) => ListTile(
-                              title: Text(cost.label.isEmpty ? cost.category : cost.label),
+                              title: Text(cost.label.isEmpty
+                                  ? cost.category
+                                  : cost.label),
                               subtitle: Text('Catégorie: ${cost.category}'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -356,8 +362,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                   if (!isOffline)
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline),
-                                      onPressed: () =>
-                                          _confirmDeleteCost(cost.id, costService),
+                                      onPressed: () => _confirmDeleteCost(
+                                          cost.id, costService),
                                     ),
                                 ],
                               ),
@@ -393,7 +399,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       label: const Text('Partager'),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Partage: bientôt disponible')),
+                          const SnackBar(
+                              content: Text('Partage: bientôt disponible')),
                         );
                       },
                     ),

@@ -123,9 +123,13 @@ class WalletHistoryEntry {
     }
     final type = (m['type'] ?? m['kind'] ?? 'unknown').toString();
     final deltaRaw = m['delta'] ?? m['amount'] ?? m['change'] ?? 0;
-    final delta = (deltaRaw is num) ? deltaRaw.toInt() : int.tryParse(deltaRaw.toString()) ?? 0;
+    final delta = (deltaRaw is num)
+        ? deltaRaw.toInt()
+        : int.tryParse(deltaRaw.toString()) ?? 0;
     final balRaw = m['balance_after'] ?? m['balance'] ?? m['after'];
-    final balanceAfter = (balRaw is num) ? balRaw.toInt() : (balRaw == null ? null : int.tryParse(balRaw.toString()));
+    final balanceAfter = (balRaw is num)
+        ? balRaw.toInt()
+        : (balRaw == null ? null : int.tryParse(balRaw.toString()));
     final note = m['note']?.toString() ?? m['message']?.toString();
     final orderId = m['order_id']?.toString();
     return WalletHistoryEntry(
@@ -181,8 +185,10 @@ class TickerItem {
         title = qty != null ? 'Commande ×$qty — $drink' : 'Commande — $drink';
       } else if (type == 'move' || type == 'price_move') {
         final drink = payload['drink_name'] ?? payload['name'] ?? 'Boisson';
-        final pct = payload['pct'] ?? payload['change_pct'] ?? payload['change'];
-        title = pct != null ? '$drink ${pct.toString()}%' : 'Variation — $drink';
+        final pct =
+            payload['pct'] ?? payload['change_pct'] ?? payload['change'];
+        title =
+            pct != null ? '$drink ${pct.toString()}%' : 'Variation — $drink';
       } else if (type == 'leaderboard') {
         title = 'Classement mis à jour';
       } else if (type == 'checkin') {
@@ -190,6 +196,7 @@ class TickerItem {
         title = 'Check-in — $drink';
       }
     }
-    return TickerItem(type: type, ts: ts, title: title, subtitle: subtitle, payload: payload);
+    return TickerItem(
+        type: type, ts: ts, title: title, subtitle: subtitle, payload: payload);
   }
 }

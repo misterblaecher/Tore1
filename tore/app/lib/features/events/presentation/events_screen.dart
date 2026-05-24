@@ -44,7 +44,8 @@ class EventsScreen extends ConsumerWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            return Center(child: Text(ErrorMapper.message(snap.error as Object)));
+            return Center(
+                child: Text(ErrorMapper.message(snap.error as Object)));
           }
 
           final items = (snap.data ?? []).cast<Map<String, dynamic>>();
@@ -58,8 +59,7 @@ class EventsScreen extends ConsumerWidget {
               _tryParseDt(e['ends_at'] ?? e['end_at'] ?? e['end']);
 
           // Tri: par date de début (plus proche en haut). Fallback: id.
-          final sorted = [...items]
-            ..sort((a, b) {
+          final sorted = [...items]..sort((a, b) {
               final sa = getStart(a);
               final sb = getStart(b);
               if (sa != null && sb != null) return sa.compareTo(sb);
@@ -99,25 +99,29 @@ class EventsScreen extends ConsumerWidget {
                 onTap: () {
                   // Persist selection in global context.
                   ref.read(appContextProvider.notifier).setBar(
-                    barId: barId,
-                    barName: barName,
-                  );
+                        barId: barId,
+                        barName: barName,
+                      );
                   ref.read(appContextProvider.notifier).enterEvent(
-                    eventId: id,
-                    eventName: rawName,
-                  );
+                        eventId: id,
+                        eventName: rawName,
+                      );
                   ref.read(eventConfigProvider(id).future);
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => MenuScreen(eventId: id)),
                   );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacity(0.06),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.06),
+                      color: Colors.white.withValues(alpha: 0.06),
                     ),
                   ),
                   child: Row(
@@ -166,9 +170,9 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondary.withOpacity(0.18),
+        color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Text(
         text,

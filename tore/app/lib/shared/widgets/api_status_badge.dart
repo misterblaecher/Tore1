@@ -20,7 +20,8 @@ class ApiStatusBadge extends ConsumerWidget {
     return health.when(
       loading: () => _chip('API', '…', ToreColors.subtext),
       error: (_, __) => _chip('API', 'KO', ToreColors.rubine),
-      data: (ok) => _chip('API', ok ? 'OK' : 'KO', ok ? ToreColors.up : ToreColors.rubine),
+      data: (ok) => _chip(
+          'API', ok ? 'OK' : 'KO', ok ? ToreColors.up : ToreColors.rubine),
     );
   }
 
@@ -28,9 +29,9 @@ class ApiStatusBadge extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -27,7 +27,9 @@ class ToreChip extends StatelessWidget {
       case ToreChipVariant.live:
         bg = ToreSemantic.accentPrimary;
         fg = ToreSemantic.textPrimary;
-        glow = theme.allowGlow ? ToreColors.rubyGlow.withOpacity(0.22) : null;
+        glow = theme.allowGlow
+            ? ToreColors.rubyGlow.withValues(alpha: 0.22)
+            : null;
         break;
       case ToreChipVariant.closed:
         bg = ToreSemantic.surfacePanel;
@@ -67,7 +69,10 @@ class ToreChip extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(999),
         boxShadow: glow != null
-            ? [BoxShadow(color: glow!, blurRadius: 16, offset: const Offset(0, 0))]
+            ? [
+                BoxShadow(
+                    color: glow, blurRadius: 16, offset: const Offset(0, 0))
+              ]
             : const [],
       ),
       child: Text(

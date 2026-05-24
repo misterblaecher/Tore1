@@ -3,13 +3,19 @@ import '../models/rebuild_types.dart';
 import '../models/snapshot.dart';
 
 class RouteGuards {
-  static const List<String> _legacyPrefixes = ['/legacy', '/features', '/shell', '/app_shell'];
+  static const List<String> _legacyPrefixes = [
+    '/legacy',
+    '/features',
+    '/shell',
+    '/app_shell'
+  ];
 
   bool modeAllowed(ToreMode mode, UserSnapshot? userSnapshot) {
     final roles = userSnapshot?.roles ?? const <String>{};
     final caps = userSnapshot?.capabilities ?? const <String>{};
     if (mode == ToreMode.user) return true;
-    if (mode == ToreMode.orga) return roles.contains('ORGA') || caps.contains('can_access_orga');
+    if (mode == ToreMode.orga)
+      return roles.contains('ORGA') || caps.contains('can_access_orga');
     return roles.contains('BAR') || caps.contains('can_access_bar');
   }
 

@@ -10,7 +10,8 @@ class WalletHistoryArgs {
   final String userId;
   final int limit;
 
-  const WalletHistoryArgs({required this.eventId, required this.userId, this.limit = 50});
+  const WalletHistoryArgs(
+      {required this.eventId, required this.userId, this.limit = 50});
 
   @override
   bool operator ==(Object other) =>
@@ -23,8 +24,8 @@ class WalletHistoryArgs {
   int get hashCode => Object.hash(eventId, userId, limit);
 }
 
-final walletHistoryProvider =
-    FutureProvider.autoDispose.family<List<WalletHistoryEntry>, WalletHistoryArgs>((ref, args) async {
+final walletHistoryProvider = FutureProvider.autoDispose
+    .family<List<WalletHistoryEntry>, WalletHistoryArgs>((ref, args) async {
   final link = ref.keepAlive();
   Timer(const Duration(minutes: 2), link.close);
 

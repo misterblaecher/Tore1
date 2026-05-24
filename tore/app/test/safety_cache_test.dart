@@ -17,7 +17,10 @@ void main() {
   });
 
   test('expired cache returns null', () async {
-    final expired = DateTime.now().toUtc().subtract(const Duration(minutes: 2)).toIso8601String();
+    final expired = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(minutes: 2))
+        .toIso8601String();
     SharedPreferences.setMockInitialValues({
       'safety_history_42': jsonEncode({
         'payload': {'items': []},

@@ -40,7 +40,9 @@ class QrRouter {
     final routeFront = resolved.routeFront?.trim();
     if (routeFront != null && routeFront.isNotEmpty) {
       if (!routeFront.startsWith('/')) return AppRoutes.blocked;
-      return _allowedTargets.contains(routeFront) ? routeFront : AppRoutes.blocked;
+      return _allowedTargets.contains(routeFront)
+          ? routeFront
+          : AppRoutes.blocked;
     }
 
     switch (resolved.type) {

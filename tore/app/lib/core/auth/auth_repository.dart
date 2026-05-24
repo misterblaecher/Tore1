@@ -50,7 +50,8 @@ class AuthRepository {
   }
 
   Future<AuthTokens> loginWithGoogle(String idToken) async {
-    final r = await api.dio.post(ApiEndpoints.authGoogle, data: {'idToken': idToken});
+    final r =
+        await api.dio.post(ApiEndpoints.authGoogle, data: {'idToken': idToken});
     return _parseTokens(r.data);
   }
 
@@ -61,25 +62,37 @@ class AuthRepository {
         data: {'email': email},
         options: Options(extra: {'skipRetry': true}),
       );
-      final data = (r.data is Map) ? (r.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
+      final data = (r.data is Map)
+          ? (r.data as Map).cast<String, dynamic>()
+          : const <String, dynamic>{};
       return EmailRequestResult(devToken: data['otp_debug']?.toString());
     } on DioException catch (e) {
       final reason = _extractReason(e.response?.data);
       if (e.response?.statusCode == 429 || reason == 'rate_limited') {
-        final data = (e.response?.data is Map) ? (e.response!.data as Map).cast<String, dynamic>() : const <String, dynamic>{};
-        final nestedDetail = (data['detail'] is Map) ? (data['detail'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
-        final retryAfterFromBody = (nestedDetail['retry_after_seconds'] as num?)?.toInt() ?? (data['retry_after_seconds'] as num?)?.toInt();
-        final retryAfterFromHeader = int.tryParse((e.response?.headers.value('retry-after') ?? '').trim());
-        throw EmailRateLimitException((retryAfterFromBody ?? retryAfterFromHeader ?? 30).clamp(1, 600));
+        final data = (e.response?.data is Map)
+            ? (e.response!.data as Map).cast<String, dynamic>()
+            : const <String, dynamic>{};
+        final nestedDetail = (data['detail'] is Map)
+            ? (data['detail'] as Map).cast<String, dynamic>()
+            : const <String, dynamic>{};
+        final retryAfterFromBody =
+            (nestedDetail['retry_after_seconds'] as num?)?.toInt() ??
+                (data['retry_after_seconds'] as num?)?.toInt();
+        final retryAfterFromHeader = int.tryParse(
+            (e.response?.headers.value('retry-after') ?? '').trim());
+        throw EmailRateLimitException(
+            (retryAfterFromBody ?? retryAfterFromHeader ?? 30).clamp(1, 600));
       }
       if (reason != null) throw EmailAuthException(reason);
       rethrow;
     }
   }
 
-  Future<AuthTokens> verifyEmailOtp({required String email, required String code}) async {
+  Future<AuthTokens> verifyEmailOtp(
+      {required String email, required String code}) async {
     try {
-      final r = await api.dio.post(ApiEndpoints.authEmailVerifyOtp, data: {'email': email, 'code': code});
+      final r = await api.dio.post(ApiEndpoints.authEmailVerifyOtp,
+          data: {'email': email, 'code': code});
       return _parseTokens(r.data);
     } on DioException catch (e) {
       final reason = _extractReason(e.response?.data);
@@ -92,16 +105,19 @@ class AuthRepository {
   }
 
   Future<void> upgradeGuest({required String guestDeviceId}) async {
-    await api.dio.post(ApiEndpoints.authUpgradeGuest, data: {'guest_device_id': guestDeviceId});
+    await api.dio.post(ApiEndpoints.authUpgradeGuest,
+        data: {'guest_device_id': guestDeviceId});
   }
 
-  Future<RoleUpgradeRequest> requestRoleUpgrade({required AccountMode mode, required String code}) async {
+  Future<RoleUpgradeRequest> requestRoleUpgrade(
+      {required AccountMode mode, required String code}) async {
     final r = await api.dio.post(ApiEndpoints.authRoleRequestUpgrade, data: {
       'requested_mode': accountModeToJson(mode),
       'code': code,
     });
     final data = (r.data as Map).cast<String, dynamic>();
-    return RoleUpgradeRequest.fromJson((data['request'] as Map).cast<String, dynamic>());
+    return RoleUpgradeRequest.fromJson(
+        (data['request'] as Map).cast<String, dynamic>());
   }
 
   Future<AppUser> patchMe({
@@ -122,7 +138,8 @@ class AuthRepository {
       if (addressText != null) 'address_text': addressText,
       if (showAddress != null) 'show_address': showAddress,
       if (showAvatar != null) 'show_avatar': showAvatar,
-      if (showIdentityToStaff != null) 'show_identity_to_staff': showIdentityToStaff,
+      if (showIdentityToStaff != null)
+        'show_identity_to_staff': showIdentityToStaff,
       if (bio != null) 'bio': bio,
       if (visibility != null) 'visibility': visibility,
       if (showIdentityInBar != null) 'show_identity_in_bar': showIdentityInBar,
@@ -136,12 +153,16 @@ class AuthRepository {
 
   AuthTokens _parseTokens(dynamic rawData) {
     final data = (rawData as Map).cast<String, dynamic>();
-    final access = (data['access_token'] ?? data['accessToken'] ?? data['token'] ?? '').toString();
-    final refresh = (data['refresh_token'] ?? data['refreshToken'] ?? '').toString();
+    final access =
+        (data['access_token'] ?? data['accessToken'] ?? data['token'] ?? '')
+            .toString();
+    final refresh =
+        (data['refresh_token'] ?? data['refreshToken'] ?? '').toString();
     if (access.isEmpty) {
       throw Exception('Réponse auth invalide: token manquant');
     }
-    return AuthTokens(accessToken: access, refreshToken: refresh.isEmpty ? access : refresh);
+    return AuthTokens(
+        accessToken: access, refreshToken: refresh.isEmpty ? access : refresh);
   }
 
   String? _extractReason(dynamic payload) {

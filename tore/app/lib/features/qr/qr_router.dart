@@ -38,6 +38,7 @@ class QrRouterService {
   }) async {
     final payload = _ref.read(qrParserProvider).parse(raw);
     final validation = await _ref.read(qrValidatorProvider).validate(payload);
+    if (!context.mounted) return;
 
     if (!validation.isOk) {
       await _routeValidationError(context, payload, validation, onOutcome);
@@ -46,7 +47,10 @@ class QrRouterService {
 
     if (payload.isUnknown) {
       onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
-      await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR non reconnu');
+      await _openUnknown(
+          context: context,
+          payload: payload,
+          reason: payload.reason ?? 'QR non reconnu');
       return;
     }
 
@@ -68,7 +72,10 @@ class QrRouterService {
       case QrType.joinEvent:
         if (payload.eventId == null && (payload.tokenId ?? '').isEmpty) {
           onOutcome?.call(const QrRouteOutcome.unknown('JOIN invalide'));
-          await _openUnknown(context: context, payload: payload, reason: 'event_id/code manquant');
+          await _openUnknown(
+              context: context,
+              payload: payload,
+              reason: 'event_id/code manquant');
           return;
         }
         final activeEventId = _ref.read(appContextProvider).activeEventId;
@@ -76,7 +83,9 @@ class QrRouterService {
           onOutcome?.call(const QrRouteOutcome.success('Event hub'));
           await Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => EventHubScreen(eventId: payload.eventId!, eventName: 'Event #${payload.eventId}'),
+              builder: (_) => EventHubScreen(
+                  eventId: payload.eventId!,
+                  eventName: 'Event #${payload.eventId}'),
             ),
           );
           return;
@@ -93,10 +102,12 @@ class QrRouterService {
         );
         return;
       case QrType.menu:
-        final eventId = payload.eventId ?? _ref.read(appContextProvider).activeEventId;
+        final eventId =
+            payload.eventId ?? _ref.read(appContextProvider).activeEventId;
         if (eventId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Menu invalide'));
-          await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
+          await _openUnknown(
+              context: context, payload: payload, reason: 'event_id manquant');
           return;
         }
         _enterEvent(eventId);
@@ -107,46 +118,53 @@ class QrRouterService {
         return;
       case QrType.staffEntry:
         if (_requiresAuthenticatedUser()) {
-          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Connecte-toi pour continuer'));
           await _showAuthRequired(context);
           return;
         }
         if (payload.eventId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Staff entry invalide'));
-          await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
+          await _openUnknown(
+              context: context, payload: payload, reason: 'event_id manquant');
           return;
         }
         _ref.read(staffSessionProvider.notifier).establish(
-          eventId: payload.eventId!,
-          role: StaffSessionRole.entry,
-          tokenId: payload.tokenId,
-          expiresAt: payload.expiresAt,
-        );
+              eventId: payload.eventId!,
+              role: StaffSessionRole.entry,
+              tokenId: payload.tokenId,
+              expiresAt: payload.expiresAt,
+            );
         _enterEvent(payload.eventId!);
         onOutcome?.call(const QrRouteOutcome.success('Staff entry'));
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => EntryStaffScreen(eventId: payload.eventId)),
+          MaterialPageRoute(
+              builder: (_) => EntryStaffScreen(eventId: payload.eventId)),
         );
         return;
       case QrType.staffBar:
         if (_requiresAuthenticatedUser()) {
-          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Connecte-toi pour continuer'));
           await _showAuthRequired(context);
           return;
         }
         if (payload.eventId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Staff bar invalide'));
-          await _openUnknown(context: context, payload: payload, reason: 'event_id manquant');
+          await _openUnknown(
+              context: context, payload: payload, reason: 'event_id manquant');
           return;
         }
         final roleRaw = (payload.fields['role'] ?? '').toLowerCase();
-        final role = roleRaw == 'manager' ? StaffSessionRole.manager : StaffSessionRole.bar;
+        final role = roleRaw == 'manager'
+            ? StaffSessionRole.manager
+            : StaffSessionRole.bar;
         _ref.read(staffSessionProvider.notifier).establish(
-          eventId: payload.eventId!,
-          role: role,
-          tokenId: payload.tokenId,
-          expiresAt: payload.expiresAt,
-        );
+              eventId: payload.eventId!,
+              role: role,
+              tokenId: payload.tokenId,
+              expiresAt: payload.expiresAt,
+            );
         _enterEvent(payload.eventId!);
         if (role == StaffSessionRole.bar) {
           onOutcome?.call(const QrRouteOutcome.success('Staff bar'));
@@ -154,19 +172,22 @@ class QrRouterService {
             MaterialPageRoute(
               builder: (_) => const ModuleUnavailableScreen(
                 title: 'Module BAR indisponible',
-                message: 'Session BAR créée. Utilise le tableau bar depuis le portail staff.',
+                message:
+                    'Session BAR créée. Utilise le tableau bar depuis le portail staff.',
                 reasonCode: 'bar_pending_p3',
               ),
             ),
           );
           return;
         }
-        onOutcome?.call(const QrRouteOutcome.denied('Module manager indisponible'));
+        onOutcome
+            ?.call(const QrRouteOutcome.denied('Module manager indisponible'));
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => const ModuleUnavailableScreen(
               title: 'Module manager indisponible',
-              message: "Session manager créée. Ce mode n'est pas accessible sur cette version mobile.",
+              message:
+                  "Session manager créée. Ce mode n'est pas accessible sur cette version mobile.",
               reasonCode: 'manager_module_unavailable',
             ),
           ),
@@ -180,14 +201,16 @@ class QrRouterService {
         return;
       case QrType.orga:
         if (_requiresAuthenticatedUser()) {
-          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Connecte-toi pour continuer'));
           await _showAuthRequired(context);
           return;
         }
         final orgId = payload.committeeId ?? payload.eventId;
         if (orgId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('Orga invalide'));
-          await _openUnknown(context: context, payload: payload, reason: 'org_id manquant');
+          await _openUnknown(
+              context: context, payload: payload, reason: 'org_id manquant');
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Organisation'));
@@ -197,47 +220,61 @@ class QrRouterService {
         return;
       case QrType.staffInvite:
         if (_requiresAuthenticatedUser()) {
-          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Connecte-toi pour continuer'));
           await _showAuthRequired(context);
           return;
         }
         final code = (payload.tokenId ?? payload.fields['code'] ?? '').trim();
         if (code.isEmpty) {
-          await _openUnknown(context: context, payload: payload, reason: 'code invite manquant');
+          await _openUnknown(
+              context: context,
+              payload: payload,
+              reason: 'code invite manquant');
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Staff invite'));
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => StaffInviteJoinScreen(code: code)));
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => StaffInviteJoinScreen(code: code)));
         return;
       case QrType.staffBackup:
         if (_requiresAuthenticatedUser()) {
-          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Connecte-toi pour continuer'));
           await _showAuthRequired(context);
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Staff backup'));
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => StaffBackupJoinScreen(prefillEventId: payload.eventId, prefillCode: payload.tokenId),
+            builder: (_) => StaffBackupJoinScreen(
+                prefillEventId: payload.eventId, prefillCode: payload.tokenId),
           ),
         );
         return;
       case QrType.orgaInvite:
         if (_requiresAuthenticatedUser()) {
-          onOutcome?.call(const QrRouteOutcome.denied('Connecte-toi pour continuer'));
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Connecte-toi pour continuer'));
           await _showAuthRequired(context);
           return;
         }
         final code = (payload.tokenId ?? payload.fields['code'] ?? '').trim();
         if (code.isEmpty) {
-          await _openUnknown(context: context, payload: payload, reason: 'code invite orga manquant');
+          await _openUnknown(
+              context: context,
+              payload: payload,
+              reason: 'code invite orga manquant');
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Orga invite'));
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrgaInviteJoinScreen(code: code)));
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => OrgaInviteJoinScreen(code: code)));
         return;
       case QrType.wifi:
-        if (payload.eventId == null || payload.tokenId == null || payload.tokenId!.isEmpty) {
+        if (payload.eventId == null ||
+            payload.tokenId == null ||
+            payload.tokenId!.isEmpty) {
           onOutcome?.call(const QrRouteOutcome.denied('WiFi QR invalide'));
           await Navigator.of(context).push(
             MaterialPageRoute(
@@ -252,24 +289,34 @@ class QrRouterService {
         }
         onOutcome?.call(const QrRouteOutcome.success('WiFi'));
         await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => WifiScreen(eventId: payload.eventId!, token: payload.tokenId!)),
+          MaterialPageRoute(
+              builder: (_) => WifiScreen(
+                  eventId: payload.eventId!, token: payload.tokenId!)),
         );
         return;
       case QrType.hunt:
         final activeEventId = _ref.read(appContextProvider).activeEventId;
-        final qrEventId = payload.eventId ?? int.tryParse((payload.fields['event_id'] ?? '').toString());
-        if (activeEventId == null || qrEventId == null || activeEventId != qrEventId) {
-          onOutcome?.call(const QrRouteOutcome.denied('Checkpoint hors contexte event'));
+        final qrEventId = payload.eventId ??
+            int.tryParse((payload.fields['event_id'] ?? '').toString());
+        if (activeEventId == null ||
+            qrEventId == null ||
+            activeEventId != qrEventId) {
+          onOutcome?.call(
+              const QrRouteOutcome.denied('Checkpoint hors contexte event'));
           await Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const QrInvalidScreen(details: 'Checkpoint Hunt invalide: event actif absent ou différent.'),
+              builder: (_) => const QrInvalidScreen(
+                  details:
+                      'Checkpoint Hunt invalide: event actif absent ou différent.'),
             ),
           );
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Hunt checkpoint'));
         await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => HuntScreen(eventId: activeEventId, initialClaimPayload: payload)),
+          MaterialPageRoute(
+              builder: (_) => HuntScreen(
+                  eventId: activeEventId, initialClaimPayload: payload)),
         );
         return;
       case QrType.battle:
@@ -289,7 +336,8 @@ class QrRouterService {
         final barId = payload.barId ?? int.tryParse(payload.tokenId ?? '');
         if (barId == null) {
           onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
-          await _openUnknown(context: context, payload: payload, reason: 'bar id manquant');
+          await _openUnknown(
+              context: context, payload: payload, reason: 'bar id manquant');
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Bar'));
@@ -307,7 +355,10 @@ class QrRouterService {
         final profileId = payload.tokenId ?? payload.fields['id'];
         if (profileId == null || profileId.isEmpty) {
           onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
-          await _openUnknown(context: context, payload: payload, reason: 'profile id manquant');
+          await _openUnknown(
+              context: context,
+              payload: payload,
+              reason: 'profile id manquant');
           return;
         }
         onOutcome?.call(const QrRouteOutcome.success('Profil'));
@@ -323,7 +374,10 @@ class QrRouterService {
         return;
       case QrType.unknown:
         onOutcome?.call(const QrRouteOutcome.unknown('QR non reconnu'));
-        await _openUnknown(context: context, payload: payload, reason: payload.reason ?? 'QR non reconnu');
+        await _openUnknown(
+            context: context,
+            payload: payload,
+            reason: payload.reason ?? 'QR non reconnu');
         return;
     }
   }
@@ -334,7 +388,8 @@ class QrRouterService {
   }
 
   Future<void> _showAuthRequired(BuildContext context) async {
-    await RequireAuthSheet.show(context, message: 'Cette action de scan demande un compte connecté.');
+    await RequireAuthSheet.show(context,
+        message: 'Cette action de scan demande un compte connecté.');
   }
 
   Future<void> _routeValidationError(
@@ -346,19 +401,25 @@ class QrRouterService {
     switch (validation.status) {
       case QrValidationStatus.expired:
         onOutcome?.call(const QrRouteOutcome.denied('QR expiré'));
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => QrExpiredScreen(details: validation.reason)));
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => QrExpiredScreen(details: validation.reason)));
         return;
       case QrValidationStatus.revoked:
         onOutcome?.call(const QrRouteOutcome.denied('QR révoqué'));
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => QrRevokedScreen(details: validation.reason)));
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => QrRevokedScreen(details: validation.reason)));
         return;
       case QrValidationStatus.invalid:
         onOutcome?.call(const QrRouteOutcome.unknown('QR invalide'));
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => QrInvalidScreen(details: validation.reason)));
+        await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => QrInvalidScreen(details: validation.reason)));
         return;
       case QrValidationStatus.unknownType:
         onOutcome?.call(const QrRouteOutcome.unknown('Type inconnu'));
-        await _openUnknown(context: context, payload: payload, reason: validation.reason ?? 'Type inconnu');
+        await _openUnknown(
+            context: context,
+            payload: payload,
+            reason: validation.reason ?? 'Type inconnu');
         return;
       case QrValidationStatus.ok:
         return;
@@ -366,7 +427,8 @@ class QrRouterService {
   }
 
   bool _isWriteBlockedForPayload(QrPayload payload) {
-    final readOnly = _ref.read(isReadOnlyProvider) || _ref.read(networkStatusProvider) == NetworkState.offline;
+    final readOnly = _ref.read(isReadOnlyProvider) ||
+        _ref.read(networkStatusProvider) == NetworkState.offline;
     if (!readOnly) return false;
     if (payload.type == QrType.staffEntry) {
       return false; // controlled exception: entry staff can capture offline then sync.
@@ -375,16 +437,27 @@ class QrRouterService {
   }
 
   void _enterEvent(int eventId) {
-    _ref.read(appContextProvider.notifier).enterEvent(eventId: eventId, eventName: 'Event #$eventId');
+    _ref
+        .read(appContextProvider.notifier)
+        .enterEvent(eventId: eventId, eventName: 'Event #$eventId');
   }
 
-  Future<void> _openUnknown({required BuildContext context, required QrPayload payload, required String reason}) async {
+  Future<void> _openUnknown(
+      {required BuildContext context,
+      required QrPayload payload,
+      required String reason}) async {
     final manualRaw = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (_) => UnknownQrScreen(raw: payload.raw, reason: reason, reasonCode: payload.reason ?? 'unknown'),
+        builder: (_) => UnknownQrScreen(
+            raw: payload.raw,
+            reason: reason,
+            reasonCode: payload.reason ?? 'unknown'),
       ),
     );
-    if (manualRaw != null && manualRaw.isNotEmpty && manualRaw.trim() != payload.raw.trim()) {
+    if (manualRaw != null &&
+        manualRaw.isNotEmpty &&
+        manualRaw.trim() != payload.raw.trim()) {
+      if (!context.mounted) return;
       await route(context: context, raw: manualRaw);
     }
   }
@@ -395,9 +468,11 @@ enum QrRouteStatus { success, denied, unknown }
 class QrRouteOutcome {
   const QrRouteOutcome(this.status, this.label);
 
-  const QrRouteOutcome.success(String label) : this(QrRouteStatus.success, label);
+  const QrRouteOutcome.success(String label)
+      : this(QrRouteStatus.success, label);
   const QrRouteOutcome.denied(String label) : this(QrRouteStatus.denied, label);
-  const QrRouteOutcome.unknown(String label) : this(QrRouteStatus.unknown, label);
+  const QrRouteOutcome.unknown(String label)
+      : this(QrRouteStatus.unknown, label);
 
   final QrRouteStatus status;
   final String label;

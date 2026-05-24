@@ -12,16 +12,18 @@ void main() {
 
   test('stores and reads access/refresh tokens', () async {
     final storage = TokenStorage();
-    await storage.writeTokens(accessToken: 'access-123', refreshToken: 'refresh-456');
+    await storage.writeTokens(
+        accessToken: 'access-123', refreshToken: 'refresh-456');
 
     expect(await storage.readToken(), 'access-123');
     expect(await storage.readRefreshToken(), 'refresh-456');
   });
 
-
-  test('clearAuthToken removes access and refresh but keeps guest mode data', () async {
+  test('clearAuthToken removes access and refresh but keeps guest mode data',
+      () async {
     final storage = TokenStorage();
-    await storage.writeTokens(accessToken: 'access-123', refreshToken: 'refresh-456');
+    await storage.writeTokens(
+        accessToken: 'access-123', refreshToken: 'refresh-456');
     await storage.writeGuestDeviceId('guest-uuid-1');
     await storage.writeGuestModeEnabled(true);
 

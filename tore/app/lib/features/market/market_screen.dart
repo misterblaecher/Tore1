@@ -10,7 +10,7 @@ class MarketScreen extends ConsumerWidget {
   final int eventId;
   const MarketScreen({super.key, required this.eventId});
 
-  String _eur(int cents) => (cents / 100).toStringAsFixed(2) + " €";
+  String _eur(int cents) => "${(cents / 100).toStringAsFixed(2)} €";
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -93,7 +93,8 @@ class MarketScreen extends ConsumerWidget {
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.w600)),
                       IconButton(
-                        onPressed: qty < 50 ? () => setState(() => qty++) : null,
+                        onPressed:
+                            qty < 50 ? () => setState(() => qty++) : null,
                         icon: const Icon(Icons.add),
                       ),
                     ],
@@ -103,7 +104,8 @@ class MarketScreen extends ConsumerWidget {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(ctx, true),
-                      child: Text("Acheter (${_eur(drink.effectivePriceCents * qty)})"),
+                      child: Text(
+                          "Acheter (${_eur(drink.effectivePriceCents * qty)})"),
                     ),
                   ),
                 ],

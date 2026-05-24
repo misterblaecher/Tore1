@@ -12,7 +12,8 @@ class EventsDiscoveryScreen extends ConsumerStatefulWidget {
   const EventsDiscoveryScreen({super.key});
 
   @override
-  ConsumerState<EventsDiscoveryScreen> createState() => _EventsDiscoveryScreenState();
+  ConsumerState<EventsDiscoveryScreen> createState() =>
+      _EventsDiscoveryScreenState();
 }
 
 class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
@@ -33,7 +34,8 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
           if (organizer)
             IconButton(
               tooltip: 'Créer event',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const CreateEventWizardScreen())),
               icon: const Icon(Icons.add_circle_outline),
             ),
         ],
@@ -58,8 +60,14 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
             final bars = (snap.data ?? []).cast<Map<String, dynamic>>();
             final events = <Map<String, dynamic>>[];
             for (final bar in bars) {
-              events.add({'name': '${bar['name'] ?? 'Event'} — Tonight', 'when': 'Ce soir'});
-              events.add({'name': '${bar['name'] ?? 'Event'} — Weekly', 'when': 'Cette semaine'});
+              events.add({
+                'name': '${bar['name'] ?? 'Event'} — Tonight',
+                'when': 'Ce soir'
+              });
+              events.add({
+                'name': '${bar['name'] ?? 'Event'} — Weekly',
+                'when': 'Cette semaine'
+              });
             }
 
             final filtered = events.where((event) {
@@ -83,10 +91,12 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
                     segments: const [
                       ButtonSegment(value: 'all', label: Text('Tous')),
                       ButtonSegment(value: 'tonight', label: Text('Ce soir')),
-                      ButtonSegment(value: 'week', label: Text('Cette semaine')),
+                      ButtonSegment(
+                          value: 'week', label: Text('Cette semaine')),
                     ],
                     selected: {_filter},
-                    onSelectionChanged: (values) => setState(() => _filter = values.first),
+                    onSelectionChanged: (values) =>
+                        setState(() => _filter = values.first),
                   ),
                 ),
                 Expanded(
@@ -95,7 +105,8 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
                     itemBuilder: (_, index) {
                       final item = filtered[index];
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         child: SolarCard(
                           padding: const EdgeInsets.all(14),
                           child: Row(
@@ -104,9 +115,12 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(item['name']!.toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text(item['name']!.toString(),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 4),
-                                    Text(item['when']!.toString(), style: AppTextStyles.muted),
+                                    Text(item['when']!.toString(),
+                                        style: AppTextStyles.muted),
                                   ],
                                 ),
                               ),
@@ -121,7 +135,9 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
                 if (session.isGuest)
                   const Padding(
                     padding: EdgeInsets.all(12),
-                    child: AuthRequiredNotice(message: 'Créer un event et gérer le staff nécessitent une session connectée.'),
+                    child: AuthRequiredNotice(
+                        message:
+                            'Créer un event et gérer le staff nécessitent une session connectée.'),
                   ),
               ],
             );
@@ -130,7 +146,8 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
       ),
       floatingActionButton: organizer
           ? FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreateEventWizardScreen())),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const CreateEventWizardScreen())),
               icon: const Icon(Icons.add),
               label: const Text('Créer event'),
             )

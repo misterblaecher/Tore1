@@ -28,11 +28,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   final _profileNavKey = GlobalKey<NavigatorState>();
 
   Widget _tabNavigator(GlobalKey<NavigatorState> key, Widget root) {
-    return Navigator(key: key, onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root));
+    return Navigator(
+        key: key,
+        onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root));
   }
 
   Future<void> _openScan() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrScannerGateScreen()));
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const QrScannerGateScreen()));
   }
 
   @override
@@ -54,11 +57,11 @@ class _AppShellState extends ConsumerState<AppShell> {
         root: const EventsDiscoveryScreen(),
       ),
       _ShellTab(
-          key: _polymarketNavKey,
-          icon: Icons.candlestick_chart_outlined,
-          label: 'Polymarket',
-          root: const PolymarketTabScreen(),
-        ),
+        key: _polymarketNavKey,
+        icon: Icons.candlestick_chart_outlined,
+        label: 'Polymarket',
+        root: const PolymarketTabScreen(),
+      ),
       _ShellTab(
         key: _profileNavKey,
         icon: Icons.person_outline,
@@ -80,7 +83,9 @@ class _AppShellState extends ConsumerState<AppShell> {
             Expanded(
               child: IndexedStack(
                 index: _index,
-                children: [for (final tab in tabs) _tabNavigator(tab.key, tab.root)],
+                children: [
+                  for (final tab in tabs) _tabNavigator(tab.key, tab.root)
+                ],
               ),
             ),
           ],
@@ -97,7 +102,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: Color(0x88F4B400), blurRadius: 24, spreadRadius: 1),
+              BoxShadow(
+                  color: Color(0x88F4B400), blurRadius: 24, spreadRadius: 1),
             ],
           ),
           child: const Icon(Icons.qr_code_scanner_outlined, size: 32),
@@ -122,7 +128,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(height: 30),
-                  Text('Scan', style: TextStyle(fontSize: 12, color: AppColors.accentGold)),
+                  Text('Scan',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.accentGold)),
                 ],
               ),
               for (final tab in rightTabs)
@@ -139,7 +147,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       persistentFooterButtons: isGuest
           ? [
               TextButton.icon(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
+                onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
                 icon: const Icon(Icons.lock_open_outlined),
                 label: const Text("Connecte-toi pour l'accès complet"),
               ),
@@ -150,7 +159,11 @@ class _AppShellState extends ConsumerState<AppShell> {
 }
 
 class _ShellTab {
-  const _ShellTab({required this.key, required this.icon, required this.label, required this.root});
+  const _ShellTab(
+      {required this.key,
+      required this.icon,
+      required this.label,
+      required this.root});
 
   final GlobalKey<NavigatorState> key;
   final IconData icon;
@@ -159,7 +172,11 @@ class _ShellTab {
 }
 
 class _TabButton extends StatelessWidget {
-  const _TabButton({required this.icon, required this.label, required this.active, required this.onTap});
+  const _TabButton(
+      {required this.icon,
+      required this.label,
+      required this.active,
+      required this.onTap});
   final IconData icon;
   final String label;
   final bool active;
@@ -172,7 +189,11 @@ class _TabButton extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: color), const SizedBox(height: 2), Text(label, style: TextStyle(fontSize: 12, color: color))]),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(fontSize: 12, color: color))
+        ]),
       ),
     );
   }

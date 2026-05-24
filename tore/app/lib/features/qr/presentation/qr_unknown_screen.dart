@@ -60,7 +60,9 @@ class _UnknownQrScreenState extends State<UnknownQrScreen> {
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: _manualController,
-                    decoration: const InputDecoration(labelText: 'Entrer un code', hintText: 'Code alphanumérique ou URL'),
+                    decoration: const InputDecoration(
+                        labelText: 'Entrer un code',
+                        hintText: 'Code alphanumérique ou URL'),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   SelectableText(_diagnostic, style: AppTextStyles.muted),
@@ -74,7 +76,8 @@ class _UnknownQrScreenState extends State<UnknownQrScreen> {
                   ToreButton.secondary(
                     label: 'Entrer un code',
                     icon: Icons.keyboard,
-                    onPressed: () => Navigator.of(context).pop(_manualController.text.trim()),
+                    onPressed: () => Navigator.of(context)
+                        .pop(_manualController.text.trim()),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   ToreButton.secondary(
@@ -95,5 +98,6 @@ class _UnknownQrScreenState extends State<UnknownQrScreen> {
 }
 
 class QrUnknownScreen extends UnknownQrScreen {
-  const QrUnknownScreen({super.key, required super.raw, required super.reason, super.reasonCode});
+  const QrUnknownScreen(
+      {super.key, required super.raw, required super.reason, super.reasonCode});
 }

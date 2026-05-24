@@ -118,7 +118,8 @@ class _QrCard extends StatelessWidget {
                 TextButton.icon(
                   onPressed: canRender
                       ? () async {
-                          await Clipboard.setData(ClipboardData(text: item.value));
+                          await Clipboard.setData(
+                              ClipboardData(text: item.value));
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('${item.label} copié.')),

@@ -79,7 +79,8 @@ class EntryService {
   }
 
   Future<Map<String, dynamic>> getEntryStats(int eventId) async {
-    final res = await _dio.get('/entry/stats', queryParameters: {'event_id': eventId});
+    final res =
+        await _dio.get('/entry/stats', queryParameters: {'event_id': eventId});
     return Map<String, dynamic>.from(res.data as Map);
   }
 

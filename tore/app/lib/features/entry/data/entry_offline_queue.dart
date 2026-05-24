@@ -49,7 +49,8 @@ class EntryQueueItem {
         eventId: (json['eventId'] ?? 0) as int,
         type: (json['type'] ?? 'CHECKIN').toString().toUpperCase(),
         rawQr: json['rawQr']?.toString(),
-        scannedAt: DateTime.tryParse((json['scannedAt'] ?? '').toString()) ?? DateTime.now(),
+        scannedAt: DateTime.tryParse((json['scannedAt'] ?? '').toString()) ??
+            DateTime.now(),
         idempotencyKey: (json['idempotencyKey'] ?? '').toString(),
         delta: (json['delta'] ?? 1) as int,
         reason: json['reason']?.toString(),
@@ -68,14 +69,16 @@ class EntryOfflineQueueStore {
     if (raw == null || raw.isEmpty) return [];
     final list = (jsonDecode(raw) as List<dynamic>?) ?? const [];
     return list
-        .map((row) => EntryQueueItem.fromJson(Map<String, dynamic>.from(row as Map)))
+        .map((row) =>
+            EntryQueueItem.fromJson(Map<String, dynamic>.from(row as Map)))
         .where((item) => item.id.isNotEmpty && item.idempotencyKey.isNotEmpty)
         .toList();
   }
 
   Future<void> save(List<EntryQueueItem> items) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, jsonEncode(items.map((e) => e.toJson()).toList()));
+    await prefs.setString(
+        _key, jsonEncode(items.map((e) => e.toJson()).toList()));
   }
 }
 

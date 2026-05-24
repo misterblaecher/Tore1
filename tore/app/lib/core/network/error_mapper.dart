@@ -85,9 +85,15 @@ class ErrorMapper {
             final mapped = _mapReason(reason);
             if (mapped.isNotEmpty) return mapped;
           }
-          if (code == 401) return 'Non authentifié. Connecte-toi pour continuer.';
-          if (code == 403) return 'Accès refusé.';
-          if (code == 404) return 'Ressource introuvable.';
+          if (code == 401) {
+            return 'Non authentifié. Connecte-toi pour continuer.';
+          }
+          if (code == 403) {
+            return 'Accès refusé.';
+          }
+          if (code == 404) {
+            return 'Ressource introuvable.';
+          }
           if (code == 429) {
             final retryAfter = retryAfterSeconds(e);
             if (retryAfter != null) {
@@ -95,10 +101,11 @@ class ErrorMapper {
             }
             return 'Trop de requêtes. Attends quelques secondes puis réessaie.';
           }
-          if (code != null && code >= 500) return 'Serveur indisponible. Réessaie.';
+          if (code != null && code >= 500) {
+            return 'Serveur indisponible. Réessaie.';
+          }
           return 'Erreur serveur ($code).';
         case DioExceptionType.unknown:
-        default:
           return 'Erreur réseau. Réessaie.';
       }
     }

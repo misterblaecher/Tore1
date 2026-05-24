@@ -6,10 +6,12 @@ import '../../state.dart';
 import 'broadcast_repository.dart';
 
 final broadcastRepositoryProvider = Provider<BroadcastRepository>((ref) {
-  return BroadcastRepository(ref.watch(apiProvider), ref.watch(cacheStoreProvider));
+  return BroadcastRepository(
+      ref.watch(apiProvider), ref.watch(cacheStoreProvider));
 });
 
-final broadcastFeedProvider = FutureProvider.family<BroadcastResult, int>((ref, eventId) async {
+final broadcastFeedProvider =
+    FutureProvider.family<BroadcastResult, int>((ref, eventId) async {
   return ref.watch(broadcastRepositoryProvider).fetch(eventId);
 });
 
@@ -32,20 +34,26 @@ class BroadcastScreen extends ConsumerWidget {
               if (data.fromCache)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('Offline cache • dernier sync ${data.lastSyncAt?.toLocal().toString() ?? '-'}'),
+                  child: Text(
+                      'Offline cache • dernier sync ${data.lastSyncAt?.toLocal().toString() ?? '-'}'),
                 ),
               ...data.items.map((item) => Card(
                     child: ListTile(
                       title: Text(item.message),
-                      subtitle: Text('${item.level.toUpperCase()} • ${item.createdAt.toLocal()}'),
+                      subtitle: Text(
+                          '${item.level.toUpperCase()} • ${item.createdAt.toLocal()}'),
                     ),
                   )),
-              if (data.items.isEmpty) const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: Text('Aucun broadcast.'))),
+              if (data.items.isEmpty)
+                const Padding(
+                    padding: EdgeInsets.only(top: 80),
+                    child: Center(child: Text('Aucun broadcast.'))),
             ],
           ),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Impossible de charger les broadcasts.')),
+        error: (_, __) =>
+            const Center(child: Text('Impossible de charger les broadcasts.')),
       ),
     );
   }

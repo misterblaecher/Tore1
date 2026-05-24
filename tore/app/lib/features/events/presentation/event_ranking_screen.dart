@@ -5,7 +5,8 @@ import '../../../api.dart';
 import '../../../state.dart';
 import '../../../ui/components/tore_card.dart';
 
-final eventRankingProvider = FutureProvider.family<EventRankingFetchResult, int>((ref, eventId) async {
+final eventRankingProvider =
+    FutureProvider.family<EventRankingFetchResult, int>((ref, eventId) async {
   final api = ref.watch(apiProvider);
   return api.eventRankingWithCacheStatus(eventId);
 });
@@ -22,13 +23,17 @@ class EventRankingScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Classement')),
       body: rankingAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Classement indisponible: $error')),
+        error: (error, _) =>
+            Center(child: Text('Classement indisponible: $error')),
         data: (result) {
           final payload = result.payload;
           final top3 = (payload['top3'] as List? ?? const []).cast<dynamic>();
           final list = (payload['list'] as List? ?? const []).cast<dynamic>();
-          final me = payload['me'] is Map ? Map<String, dynamic>.from(payload['me'] as Map) : null;
-          final updatedAt = DateTime.tryParse((payload['updatedAt'] ?? '').toString());
+          final me = payload['me'] is Map
+              ? Map<String, dynamic>.from(payload['me'] as Map)
+              : null;
+          final updatedAt =
+              DateTime.tryParse((payload['updatedAt'] ?? '').toString());
           final rulesText = (payload['rulesText'] ?? '').toString();
           final meRank = me?['rank'];
 
@@ -46,14 +51,17 @@ class EventRankingScreen extends ConsumerWidget {
                       children: [
                         Text(
                           updatedAt == null
-                              ? (result.fromCache ? 'Classement hors-ligne (cache)' : 'Classement live')
+                              ? (result.fromCache
+                                  ? 'Classement hors-ligne (cache)'
+                                  : 'Classement live')
                               : 'Mis à jour ${updatedAt.toLocal()}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         if (result.fromCache)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
-                            child: Text('Affichage du dernier classement en cache.'),
+                            child: Text(
+                                'Affichage du dernier classement en cache.'),
                           ),
                       ],
                     ),
@@ -65,7 +73,12 @@ class EventRankingScreen extends ConsumerWidget {
                     child: Wrap(
                       spacing: 10,
                       runSpacing: 10,
-                      children: [for (final row in top3) _TopCard(entry: Map<String, dynamic>.from(row as Map), meRank: meRank)],
+                      children: [
+                        for (final row in top3)
+                          _TopCard(
+                              entry: Map<String, dynamic>.from(row as Map),
+                              meRank: meRank)
+                      ],
                     ),
                   );
                 }
@@ -92,10 +105,13 @@ class EventRankingScreen extends ConsumerWidget {
                 final highlightMe = meRank != null && row['rank'] == meRank;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    color: highlightMe ? Colors.amber.withOpacity(0.15) : null,
+                    color: highlightMe
+                        ? Colors.amber.withValues(alpha: 0.15)
+                        : null,
                     border: Border.all(color: Colors.white12),
                   ),
                   child: Row(
@@ -105,13 +121,17 @@ class EventRankingScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text((row['displayName'] ?? 'Player').toString(), style: const TextStyle(fontWeight: FontWeight.w600)),
+                            Text((row['displayName'] ?? 'Player').toString(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            Text(_statsText(row), style: Theme.of(context).textTheme.bodySmall),
+                            Text(_statsText(row),
+                                style: Theme.of(context).textTheme.bodySmall),
                           ],
                         ),
                       ),
-                      Text('${row['score'] ?? 0}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('${row['score'] ?? 0}',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
                 );
@@ -124,7 +144,9 @@ class EventRankingScreen extends ConsumerWidget {
   }
 
   String _statsText(Map<String, dynamic> row) {
-    final stats = row['stats'] is Map ? Map<String, dynamic>.from(row['stats'] as Map) : const <String, dynamic>{};
+    final stats = row['stats'] is Map
+        ? Map<String, dynamic>.from(row['stats'] as Map)
+        : const <String, dynamic>{};
     return 'cmd ${stats['orders'] ?? 0} · dép ${stats['spentTickets'] ?? 0} · gifts ${stats['giftsSent'] ?? 0} · bets ${stats['bets'] ?? 0}';
   }
 }
@@ -147,17 +169,24 @@ class _TopCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$medal  #$rank', style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text('$medal  #$rank',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
-            Text((entry['displayName'] ?? 'Player').toString(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Text((entry['displayName'] ?? 'Player').toString(),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: [
                 Chip(label: Text('Score ${entry['score'] ?? 0}')),
-                if ((entry['stats'] as Map?)?['orders'] != null) Chip(label: Text('Cmd ${(entry['stats'] as Map)['orders']}')),
-                if ((entry['stats'] as Map?)?['spentTickets'] != null) Chip(label: Text('Dép ${(entry['stats'] as Map)['spentTickets']}')),
+                if ((entry['stats'] as Map?)?['orders'] != null)
+                  Chip(label: Text('Cmd ${(entry['stats'] as Map)['orders']}')),
+                if ((entry['stats'] as Map?)?['spentTickets'] != null)
+                  Chip(
+                      label: Text(
+                          'Dép ${(entry['stats'] as Map)['spentTickets']}')),
               ],
             ),
           ],

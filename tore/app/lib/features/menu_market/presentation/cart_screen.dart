@@ -39,7 +39,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   Map<int, Map<String, dynamic>> get _menuById {
     return {
       for (final item in widget.menuItems)
-        ((item['id'] as int?) ?? (item['item_id'] as int?) ?? (item['drink_id'] as int?) ?? -1): item,
+        ((item['id'] as int?) ??
+            (item['item_id'] as int?) ??
+            (item['drink_id'] as int?) ??
+            -1): item,
     };
   }
 
@@ -51,8 +54,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final runtimeWriteBlocked = isWriteBlockedByEventState(widget.eventState);
     final readOnly = isReadOnly(ref);
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
-    final writeBlocked = isWriteBlocked(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeBlocked: runtimeWriteBlocked);
-    final insufficientBalance = widget.tickets != null && cart.totalEstimatedTickets > widget.tickets!;
+    final writeBlocked = isWriteBlocked(
+        readOnly: readOnly,
+        degradedBlocked: degradedBlocked,
+        runtimeBlocked: runtimeWriteBlocked);
+    final insufficientBalance =
+        widget.tickets != null && cart.totalEstimatedTickets > widget.tickets!;
     final outLines = cart.lines.where((line) {
       final menuItem = _menuById[line.itemId];
       if (menuItem != null) {
@@ -62,7 +69,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       return line.available == false || status == 'OUT';
     }).toList();
     final hasUnavailable = outLines.isNotEmpty;
-    final canConfirm = !cart.isEmpty && !writeBlocked && !insufficientBalance && !hasUnavailable && userId != null && !_submitting;
+    final canConfirm = !cart.isEmpty &&
+        !writeBlocked &&
+        !insufficientBalance &&
+        !hasUnavailable &&
+        userId != null &&
+        !_submitting;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Panier')),
@@ -73,51 +85,78 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: ServiceLimitedBanner(message: writeBlockedMessage(readOnly: readOnly, degradedBlocked: degradedBlocked, runtimeState: widget.eventState)),
+                child: ServiceLimitedBanner(
+                    message: writeBlockedMessage(
+                        readOnly: readOnly,
+                        degradedBlocked: degradedBlocked,
+                        runtimeState: widget.eventState)),
               ),
             if (insufficientBalance)
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
-                child: ServiceLimitedBanner(message: 'Tickets insuffisants pour confirmer ce panier.'),
+                child: ServiceLimitedBanner(
+                    message: 'Tickets insuffisants pour confirmer ce panier.'),
               ),
             if (hasUnavailable)
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
-                child: ServiceLimitedBanner(message: 'Un ou plusieurs articles sont indisponibles. Retire-les pour confirmer.'),
+                child: ServiceLimitedBanner(
+                    message:
+                        'Un ou plusieurs articles sont indisponibles. Retire-les pour confirmer.'),
               ),
             ToreCard(
               child: Column(
                 children: [
-                  ToreListRow(title: 'Articles', trailing: Text(cart.totalItems.toString())),
+                  ToreListRow(
+                      title: 'Articles',
+                      trailing: Text(cart.totalItems.toString())),
                   const ToreDivider(),
-                  ToreListRow(title: 'Total tickets', trailing: Text('🎟️ ${cart.totalTickets}')),
+                  ToreListRow(
+                      title: 'Total tickets',
+                      trailing: Text('🎟️ ${cart.totalTickets}')),
                   if (cart.totalFeesTickets > 0) ...[
                     const ToreDivider(),
-                    ToreListRow(title: 'Frais estimés', trailing: Text('🎟️ ${cart.totalFeesTickets}')),
+                    ToreListRow(
+                        title: 'Frais estimés',
+                        trailing: Text('🎟️ ${cart.totalFeesTickets}')),
                   ],
                   const ToreDivider(),
-                  ToreListRow(title: 'Total estimé', trailing: Text('🎟️ ${cart.totalEstimatedTickets}')),
+                  ToreListRow(
+                      title: 'Total estimé',
+                      trailing: Text('🎟️ ${cart.totalEstimatedTickets}')),
                 ],
               ),
             ),
             const SizedBox(height: 10),
             Expanded(
               child: cart.isEmpty
-                  ? const Center(child: Text('Panier vide. Ajoute un article depuis le menu.'))
+                  ? const Center(
+                      child: Text(
+                          'Panier vide. Ajoute un article depuis le menu.'))
                   : ListView.separated(
                       itemCount: cart.lines.length,
                       separatorBuilder: (_, __) => const ToreDivider(),
                       itemBuilder: (context, index) {
                         final line = cart.lines[index];
-                        final unavailable = outLines.any((entry) => entry.itemId == line.itemId);
+                        final unavailable = outLines
+                            .any((entry) => entry.itemId == line.itemId);
                         return ToreListRow(
                           title: '${line.name} ×${line.qty}',
-                          subtitle: unavailable ? 'Indispo' : '${line.ticketCost} tickets/unité',
+                          subtitle: unavailable
+                              ? 'Indispo'
+                              : '${line.ticketCost} tickets/unité',
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(onPressed: () => controller.decrement(line.itemId), icon: const Icon(Icons.remove_circle_outline)),
-                              IconButton(onPressed: () => controller.increment(line.itemId), icon: const Icon(Icons.add_circle_outline)),
+                              IconButton(
+                                  onPressed: () =>
+                                      controller.decrement(line.itemId),
+                                  icon:
+                                      const Icon(Icons.remove_circle_outline)),
+                              IconButton(
+                                  onPressed: () =>
+                                      controller.increment(line.itemId),
+                                  icon: const Icon(Icons.add_circle_outline)),
                             ],
                           ),
                         );
@@ -137,13 +176,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             ToreCTA(
               label: _submitting ? 'Confirmation...' : 'Confirmer',
               busy: _submitting,
-              onPressed: canConfirm ? () => _confirmOrder(context, userId: userId!, cart: cart) : null,
+              onPressed: canConfirm
+                  ? () => _confirmOrder(context, userId: userId, cart: cart)
+                  : null,
             ),
             const SizedBox(height: 8),
             ToreCTA(
               label: 'Vider',
               style: ToreCTAStyle.secondary,
-              onPressed: (cart.isEmpty || writeBlocked) ? null : controller.clear,
+              onPressed:
+                  (cart.isEmpty || writeBlocked) ? null : controller.clear,
             ),
           ],
         ),
@@ -151,12 +193,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  Future<void> _confirmOrder(BuildContext context, {required String userId, required CartState cart}) async {
+  Future<void> _confirmOrder(BuildContext context,
+      {required String userId, required CartState cart}) async {
     setState(() => _submitting = true);
     try {
       final api = ref.read(apiProvider);
       final barId = cart.lines.first.barId;
-      final key = 'cart-${widget.eventId}-$userId-${DateTime.now().millisecondsSinceEpoch}';
+      final key =
+          'cart-${widget.eventId}-$userId-${DateTime.now().millisecondsSinceEpoch}';
       final order = await api.createOrder(
         barId: barId,
         eventId: widget.eventId,
@@ -172,16 +216,21 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             .toList(),
         idempotencyKey: key,
       );
-      final orderId = (order['id'] as num?)?.toInt() ?? int.tryParse(order['id']?.toString() ?? '');
+      final orderId = (order['id'] as num?)?.toInt() ??
+          int.tryParse(order['id']?.toString() ?? '');
       if (orderId == null || !context.mounted) return;
 
       ref.read(cartProvider(widget.eventId).notifier).clear();
       await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => OrderQrScreen(orderId: orderId, estimatedTickets: cart.totalEstimatedTickets)),
+        MaterialPageRoute(
+            builder: (_) => OrderQrScreen(
+                orderId: orderId,
+                estimatedTickets: cart.totalEstimatedTickets)),
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_friendlyError(e))));
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
@@ -191,7 +240,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   String _friendlyError(Object error) {
     if (error is DioException) {
-      if (error.type == DioExceptionType.connectionTimeout || error.type == DioExceptionType.receiveTimeout) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
         return 'Timeout réseau. Réessaie.';
       }
       if (error.response?.statusCode == 429) {

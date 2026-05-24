@@ -47,7 +47,8 @@ class ModuleUnavailableScreen extends StatelessWidget {
                 const SizedBox(height: 10),
                 ToreCTA(
                   label: 'Retour home',
-                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                  onPressed: () =>
+                      Navigator.of(context).popUntil((route) => route.isFirst),
                 ),
               ],
             ),

@@ -10,7 +10,8 @@ import 'package:tore/rebuild/services/client_log.dart';
 import 'package:tore/rebuild/ui/theme/tore_theme.dart';
 
 void main() {
-  test('scrubber redacts auth headers, jwt, query params, and contact fields', () {
+  test('scrubber redacts auth headers, jwt, query params, and contact fields',
+      () {
     final input = <String, dynamic>{
       'authorization': 'Bearer super.secret.token',
       'url': 'https://api.tore.app/x?token=abc123&auth=xyz',
@@ -22,7 +23,8 @@ void main() {
 
     final out = scrubJsonMap(input);
     expect(out['authorization'], '[redacted]');
-    expect((out['url'] as String), anyOf(contains('[redacted]'), contains('%5Bredacted%5D')));
+    expect((out['url'] as String),
+        anyOf(contains('[redacted]'), contains('%5Bredacted%5D')));
     expect(out['email'], '[redacted]');
     expect(out['phone'], '[redacted]');
     expect((out['user_id'] as String), contains('***'));
@@ -30,7 +32,8 @@ void main() {
     expect((out['note'] as String), isNot(contains('eyJabc.def.ghi')));
   });
 
-  test('safe parsing utilities return defaults for missing/unexpected values', () {
+  test('safe parsing utilities return defaults for missing/unexpected values',
+      () {
     final data = <String, dynamic>{
       'count': 'not-int',
       'nested': 'oops',
@@ -42,7 +45,10 @@ void main() {
     expect(safeGetInt(data, 'count', fallback: 7), 7);
     expect(safeGetMap(data, 'nested'), isEmpty);
     expect(safeGetList(data, 'items'), isEmpty);
-    expect(tryParseDateTime(data['when'], fallback: DateTime.fromMillisecondsSinceEpoch(0)), DateTime.fromMillisecondsSinceEpoch(0));
+    expect(
+        tryParseDateTime(data['when'],
+            fallback: DateTime.fromMillisecondsSinceEpoch(0)),
+        DateTime.fromMillisecondsSinceEpoch(0));
   });
 
   test('event state helper and spacing rhythm tokens stay stable', () {
@@ -62,10 +68,17 @@ void main() {
     for (var i = 0; i < 200; i++) {
       final map = <String, dynamic>{
         if (random.nextBool()) 'valid': random.nextBool(),
-        if (random.nextBool()) 'type': random.nextBool() ? 'join_event' : random.nextInt(999),
-        if (random.nextBool()) 'event_id': random.nextBool() ? random.nextInt(1000).toString() : null,
-        if (random.nextBool()) 'route_front': random.nextBool() ? '/event/${random.nextInt(99)}' : random.nextInt(10),
-        if (random.nextBool()) 'reason': random.nextBool() ? 'backend_down' : null,
+        if (random.nextBool())
+          'type': random.nextBool() ? 'join_event' : random.nextInt(999),
+        if (random.nextBool())
+          'event_id':
+              random.nextBool() ? random.nextInt(1000).toString() : null,
+        if (random.nextBool())
+          'route_front': random.nextBool()
+              ? '/event/${random.nextInt(99)}'
+              : random.nextInt(10),
+        if (random.nextBool())
+          'reason': random.nextBool() ? 'backend_down' : null,
       };
 
       expect(() => QrResolve.fromJson(map), returnsNormally);

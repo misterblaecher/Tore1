@@ -44,7 +44,8 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
   NetworkStateController(this.ref)
       : super(const NetworkSnapshot(state: NetworkState.online)) {
     unawaited(refresh());
-    _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) => unawaited(refresh()));
+    _pollTimer = Timer.periodic(
+        const Duration(seconds: 60), (_) => unawaited(refresh()));
   }
 
   final Ref ref;
@@ -59,7 +60,8 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
   Future<void> refresh() async {
     final started = DateTime.now();
     try {
-      final result = await ref.read(healthRepositoryProvider).pingWithPolicy(maxRetries: 1, receiveTimeout: const Duration(seconds: 30));
+      final result = await ref.read(healthRepositoryProvider).pingWithPolicy(
+          maxRetries: 1, receiveTimeout: const Duration(seconds: 30));
       final latency = DateTime.now().difference(started);
       if (result.reachability == HealthReachability.offlineConfirmed) {
         _registerFailure('socket_offline');
@@ -69,11 +71,14 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
         _registerFailure('health_unconfirmed');
         return;
       }
-      if (result.reachability == HealthReachability.slow || latency > const Duration(seconds: 3)) {
+      if (result.reachability == HealthReachability.slow ||
+          latency > const Duration(seconds: 3)) {
         state = state.copyWith(
           state: NetworkState.degraded,
           lastSuccessAt: DateTime.now(),
-          reason: result.reachability == HealthReachability.slow ? 'api_slow' : 'high_latency',
+          reason: result.reachability == HealthReachability.slow
+              ? 'api_slow'
+              : 'high_latency',
           consecutiveFailures: 0,
         );
         return;
@@ -95,7 +100,8 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
   void _registerFailure(String reason) {
     final now = DateTime.now();
     final failures = state.consecutiveFailures + 1;
-    final recentWindow = state.lastErrorAt != null && now.difference(state.lastErrorAt!).inSeconds <= 30;
+    final recentWindow = state.lastErrorAt != null &&
+        now.difference(state.lastErrorAt!).inSeconds <= 30;
 
     final nextState = failures >= 5
         ? NetworkState.offline
@@ -112,7 +118,8 @@ class NetworkStateController extends StateNotifier<NetworkSnapshot> {
   }
 }
 
-final networkStateProvider = StateNotifierProvider<NetworkStateController, NetworkSnapshot>((ref) {
+final networkStateProvider =
+    StateNotifierProvider<NetworkStateController, NetworkSnapshot>((ref) {
   return NetworkStateController(ref);
 });
 

@@ -23,13 +23,13 @@ class ToreColors {
 
   // Gold
   static const goldCore = Color(0xFFF5C400);
-  static const goldDim  = Color(0xFFC8A100);
-  static const goldInk  = Color(0xFF2B2206);
+  static const goldDim = Color(0xFFC8A100);
+  static const goldInk = Color(0xFF2B2206);
 
   // States (terrain)
-  static const ok   = Color(0xFF2ECC71);
+  static const ok = Color(0xFF2ECC71);
   static const warn = Color(0xFFFFB020);
-  static const bad  = Color(0xFFFF3B30);
+  static const bad = Color(0xFFFF3B30);
   static const info = Color(0xFF59A8FF);
 }
 
@@ -85,13 +85,37 @@ class ToreType {
   static const uiFont = 'Inter';
   static const monoFont = 'SpaceMono';
 
-  static const h1 = TextStyle(fontFamily: uiFont, fontSize: 28, height: 32 / 28, fontWeight: FontWeight.w700);
-  static const h2 = TextStyle(fontFamily: uiFont, fontSize: 22, height: 28 / 22, fontWeight: FontWeight.w700);
-  static const h3 = TextStyle(fontFamily: uiFont, fontSize: 18, height: 24 / 18, fontWeight: FontWeight.w600);
+  static const h1 = TextStyle(
+      fontFamily: uiFont,
+      fontSize: 28,
+      height: 32 / 28,
+      fontWeight: FontWeight.w700);
+  static const h2 = TextStyle(
+      fontFamily: uiFont,
+      fontSize: 22,
+      height: 28 / 22,
+      fontWeight: FontWeight.w700);
+  static const h3 = TextStyle(
+      fontFamily: uiFont,
+      fontSize: 18,
+      height: 24 / 18,
+      fontWeight: FontWeight.w600);
 
-  static const body = TextStyle(fontFamily: uiFont, fontSize: 15, height: 22 / 15, fontWeight: FontWeight.w500);
-  static const meta = TextStyle(fontFamily: uiFont, fontSize: 13, height: 18 / 13, fontWeight: FontWeight.w500);
+  static const body = TextStyle(
+      fontFamily: uiFont,
+      fontSize: 15,
+      height: 22 / 15,
+      fontWeight: FontWeight.w500);
+  static const meta = TextStyle(
+      fontFamily: uiFont,
+      fontSize: 13,
+      height: 18 / 13,
+      fontWeight: FontWeight.w500);
 
-  static const monoMetric = TextStyle(fontFamily: monoFont, fontSize: 16, height: 20 / 16, fontWeight: FontWeight.w600);
+  static const monoMetric = TextStyle(
+      fontFamily: monoFont,
+      fontSize: 16,
+      height: 20 / 16,
+      fontWeight: FontWeight.w600);
   // mono.big: pour compteurs (40–64) -> à utiliser au cas par cas
 }

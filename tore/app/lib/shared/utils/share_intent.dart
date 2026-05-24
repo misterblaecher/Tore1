@@ -1,11 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-const kShareFallbackHintPrivate = 'Connexion requise. Ouvre TORÈ → Entrer un code.';
-const kShareFallbackHintOffline = 'Hors-ligne : partage le lien, le code sera saisi dans TORÈ.';
+const kShareFallbackHintPrivate =
+    'Connexion requise. Ouvre TORÈ → Entrer un code.';
+const kShareFallbackHintOffline =
+    'Hors-ligne : partage le lien, le code sera saisi dans TORÈ.';
 
 class DevShareTraceItem {
-  DevShareTraceItem({required this.kind, required this.usedShortlink, required this.timestamp});
+  DevShareTraceItem(
+      {required this.kind,
+      required this.usedShortlink,
+      required this.timestamp});
   final String kind;
   final bool usedShortlink;
   final DateTime timestamp;
@@ -13,11 +18,17 @@ class DevShareTraceItem {
 
 class DevShareTrace {
   static final List<DevShareTraceItem> _items = <DevShareTraceItem>[];
-  static List<DevShareTraceItem> get items => List<DevShareTraceItem>.unmodifiable(_items);
+  static List<DevShareTraceItem> get items =>
+      List<DevShareTraceItem>.unmodifiable(_items);
 
   static void record({required String kind, required bool usedShortlink}) {
     if (!kDebugMode) return;
-    _items.insert(0, DevShareTraceItem(kind: kind, usedShortlink: usedShortlink, timestamp: DateTime.now()));
+    _items.insert(
+        0,
+        DevShareTraceItem(
+            kind: kind,
+            usedShortlink: usedShortlink,
+            timestamp: DateTime.now()));
     if (_items.length > 10) {
       _items.removeRange(10, _items.length);
     }
@@ -69,7 +80,9 @@ class ShareIntentBuilder {
     if (url.isNotEmpty) {
       await Clipboard.setData(ClipboardData(text: url));
     }
-    DevShareTrace.record(kind: input.kind, usedShortlink: (input.shortUrl ?? '').trim().isNotEmpty);
+    DevShareTrace.record(
+        kind: input.kind,
+        usedShortlink: (input.shortUrl ?? '').trim().isNotEmpty);
     return 'Lien copié';
   }
 
@@ -77,9 +90,13 @@ class ShareIntentBuilder {
     final value = (input.copyValue ?? '').trim();
     if (value.isNotEmpty) {
       await Clipboard.setData(ClipboardData(text: value));
-      DevShareTrace.record(kind: input.kind, usedShortlink: (input.shortUrl ?? '').trim().isNotEmpty);
+      DevShareTrace.record(
+          kind: input.kind,
+          usedShortlink: (input.shortUrl ?? '').trim().isNotEmpty);
       return 'Code copié';
     }
-    return (input.copyHint ?? '').trim().isNotEmpty ? input.copyHint!.trim() : kShareFallbackHintPrivate;
+    return (input.copyHint ?? '').trim().isNotEmpty
+        ? input.copyHint!.trim()
+        : kShareFallbackHintPrivate;
   }
 }

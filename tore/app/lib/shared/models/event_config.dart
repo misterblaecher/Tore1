@@ -37,7 +37,8 @@ class EventConfig {
       battlesEnabled: json['battles_enabled'] == true,
       huntEnabled: json['hunt_enabled'] == true,
       reportEnabled: json['report_enabled'] == true,
-      polymarketEnabled: json['polymarket_enabled'] == true || json['polymarket_enabled'] == null,
+      polymarketEnabled: json['polymarket_enabled'] == true ||
+          json['polymarket_enabled'] == null,
       updatedAt: json['updated_at']?.toString(),
       updatedByUserId: json['updated_by_user_id']?.toString(),
       role: json['role']?.toString(),

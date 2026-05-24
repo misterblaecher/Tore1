@@ -9,13 +9,15 @@ enum PerfMetricKey { scannerFlow, entryCheckin, orderCreate }
 String hashQr(String raw) => sha1.convert(utf8.encode(raw.trim())).toString();
 
 class PerfSummary {
-  const PerfSummary({required this.count, required this.p50, required this.p95});
+  const PerfSummary(
+      {required this.count, required this.p50, required this.p95});
 
   final int count;
   final Duration p50;
   final Duration p95;
 
-  static const empty = PerfSummary(count: 0, p50: Duration.zero, p95: Duration.zero);
+  static const empty =
+      PerfSummary(count: 0, p50: Duration.zero, p95: Duration.zero);
 }
 
 class PerfTracer {

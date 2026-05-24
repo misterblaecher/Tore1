@@ -18,7 +18,8 @@ class TickerItem {
   static TickerItem fromJson(Map<String, dynamic> m) {
     final ts = DateTime.tryParse((m['ts'] ?? '').toString()) ?? DateTime.now();
     final type = (m['type'] ?? 'broadcast').toString();
-    final payload = Map<String, dynamic>.from((m['payloadCompact'] as Map?) ?? const {});
+    final payload =
+        Map<String, dynamic>.from((m['payloadCompact'] as Map?) ?? const {});
     return TickerItem(
       id: (m['id'] ?? '').toString(),
       type: type,
@@ -78,7 +79,12 @@ class OrderTickerPayload extends TickerPayload {
   final String status;
   final int totalTickets;
   final String? userLabel;
-  const OrderTickerPayload({required this.kind, required this.orderId, required this.status, required this.totalTickets, this.userLabel});
+  const OrderTickerPayload(
+      {required this.kind,
+      required this.orderId,
+      required this.status,
+      required this.totalTickets,
+      this.userLabel});
 }
 
 class PriceTickerPayload extends TickerPayload {
@@ -86,14 +92,19 @@ class PriceTickerPayload extends TickerPayload {
   final int fromPrice;
   final int toPrice;
   final String direction;
-  const PriceTickerPayload({required this.drinkName, required this.fromPrice, required this.toPrice, required this.direction});
+  const PriceTickerPayload(
+      {required this.drinkName,
+      required this.fromPrice,
+      required this.toPrice,
+      required this.direction});
 }
 
 class GiftTickerPayload extends TickerPayload {
   final int amount;
   final String fromLabel;
   final String toLabel;
-  const GiftTickerPayload({required this.amount, required this.fromLabel, required this.toLabel});
+  const GiftTickerPayload(
+      {required this.amount, required this.fromLabel, required this.toLabel});
 }
 
 class TickerPage {

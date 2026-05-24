@@ -30,7 +30,9 @@ void main() {
   testWidgets('prefills join code from deep link routing', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [healthRepositoryProvider.overrideWithValue(FakeHealthRepository())],
+        overrides: [
+          healthRepositoryProvider.overrideWithValue(FakeHealthRepository())
+        ],
         child: const MaterialApp(
           home: JoinEventScreen(prefillCode: 'join66'),
         ),

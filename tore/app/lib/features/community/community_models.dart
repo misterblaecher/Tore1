@@ -35,13 +35,16 @@ class MyEventSummary {
     return MyEventSummary(
       id: (json['id'] as num?)?.toInt() ?? 0,
       name: (json['name'] ?? '').toString(),
-      startAt: DateTime.tryParse((json['startAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      endAt: DateTime.tryParse((json['endAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      startAt: DateTime.tryParse((json['startAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      endAt: DateTime.tryParse((json['endAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       venue: json['venue']?.toString(),
       visibility: (json['visibility'] ?? 'PRIVATE').toString(),
       publicationStatus: (json['publicationStatus'] ?? 'DRAFT').toString(),
       status: (json['eventState'] ?? json['status'] ?? 'LIVE').toString(),
-      modulesOn: Map<String, dynamic>.from((json['modulesOn'] as Map?) ?? const <String, dynamic>{}),
+      modulesOn: Map<String, dynamic>.from(
+          (json['modulesOn'] as Map?) ?? const <String, dynamic>{}),
       hostType: (json['host_type'] ?? 'user').toString(),
       hostId: json['host_id']?.toString(),
       roleForMe: (json['roleForMe'] ?? 'MEMBER').toString(),
@@ -70,8 +73,6 @@ class MyEventSummary {
 
 typedef OrgaEventSummary = MyEventSummary;
 
-
-
 class OrgaSummary {
   const OrgaSummary({
     required this.id,
@@ -97,7 +98,8 @@ class OrgaSummary {
       name: (json['name'] ?? '').toString(),
       city: json['city']?.toString(),
       type: (json['type'] ?? json['org_type'])?.toString(),
-      joinMode: (json['joinMode'] ?? json['join_mode'] ?? 'OPEN_MEMBERSHIP').toString(),
+      joinMode: (json['joinMode'] ?? json['join_mode'] ?? 'OPEN_MEMBERSHIP')
+          .toString(),
       followersCount: (json['followersCount'] as num?)?.toInt() ?? 0,
       lastActiveAt: DateTime.tryParse((json['lastActiveAt'] ?? '').toString()),
     );
@@ -119,7 +121,9 @@ class OrgaEventsResult {
 }
 
 enum OrgaJoinMode { followOnly, openMembership, requestToJoin }
+
 enum MembershipRole { owner, manager, staff, member, follower }
+
 enum MembershipStatus { active, pending, rejected, left }
 
 OrgaJoinMode parseOrgaJoinMode(String? raw) {
@@ -146,7 +150,8 @@ MembershipStatus parseMembershipStatus(String? raw) {
   }
 }
 
-String orgaPrimaryCtaLabel({required OrgaJoinMode joinMode, MembershipStatus? status}) {
+String orgaPrimaryCtaLabel(
+    {required OrgaJoinMode joinMode, MembershipStatus? status}) {
   if (status == MembershipStatus.pending) return 'Demande envoyée';
   if (status == MembershipStatus.active) return 'Quitter';
   switch (joinMode) {
@@ -160,7 +165,8 @@ String orgaPrimaryCtaLabel({required OrgaJoinMode joinMode, MembershipStatus? st
 }
 
 class OrgaMembership {
-  const OrgaMembership({required this.userId, required this.role, required this.status});
+  const OrgaMembership(
+      {required this.userId, required this.role, required this.status});
 
   final String userId;
   final MembershipRole role;
@@ -224,14 +230,16 @@ class ManageSnapshot {
   });
 
   factory ManageSnapshot.fromJson(Map<String, dynamic> json) {
-    final runtime = Map<String, dynamic>.from((json['runtime'] as Map?) ?? const <String, dynamic>{});
+    final runtime = Map<String, dynamic>.from(
+        (json['runtime'] as Map?) ?? const <String, dynamic>{});
     return ManageSnapshot(
       eventId: (json['eventId'] as num?)?.toInt() ?? 0,
       publicationStatus: (json['publicationStatus'] ?? 'DRAFT').toString(),
       visibility: (json['visibility'] ?? 'PRIVATE').toString(),
       runtimeState: (runtime['eventState'] ?? 'LIVE').toString(),
       runtimeUpdatedAt: runtime['lastUpdatedAt']?.toString(),
-      share: Map<String, dynamic>.from((json['share'] as Map?) ?? const <String, dynamic>{}),
+      share: Map<String, dynamic>.from(
+          (json['share'] as Map?) ?? const <String, dynamic>{}),
       qrPackAvailable: json['qrPackAvailable'] == true,
       staffInviteCodeCurrent: json['staffInviteCodeCurrent']?.toString(),
     );

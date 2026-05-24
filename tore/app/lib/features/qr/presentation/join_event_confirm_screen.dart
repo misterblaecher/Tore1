@@ -34,7 +34,8 @@ class JoinEventConfirmScreen extends ConsumerWidget {
               message: _joinErrorMessage(error),
               onRetry: () => ref.invalidate(eventConfigProvider(eventId)),
             ),
-            data: (cfg) => _JoinEventContent(event: event, config: cfg, eventId: eventId),
+            data: (cfg) =>
+                _JoinEventContent(event: event, config: cfg, eventId: eventId),
           ),
         ),
       ),
@@ -43,7 +44,8 @@ class JoinEventConfirmScreen extends ConsumerWidget {
 }
 
 class _JoinEventContent extends ConsumerWidget {
-  const _JoinEventContent({required this.event, required this.config, required this.eventId});
+  const _JoinEventContent(
+      {required this.event, required this.config, required this.eventId});
 
   final Map<String, dynamic> event;
   final dynamic config;
@@ -56,9 +58,12 @@ class _JoinEventContent extends ConsumerWidget {
       'menu': config.menuEnabled,
       'wallet': config.walletEnabled,
       'polymarket': config.polymarketEnabled,
-      'ticker': config.menuEnabled || config.walletEnabled || config.polymarketEnabled,
+      'ticker': config.menuEnabled ||
+          config.walletEnabled ||
+          config.polymarketEnabled,
     };
-    final visibleModules = modules.entries.where((e) => e.value).map((e) => e.key).toList();
+    final visibleModules =
+        modules.entries.where((e) => e.value).map((e) => e.key).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -73,7 +78,9 @@ class _JoinEventContent extends ConsumerWidget {
           spacing: 8,
           runSpacing: 8,
           children: visibleModules
-              .map((m) => Chip(avatar: Icon(_iconForModule(m), size: 18), label: Text(_labelForModule(m))))
+              .map((m) => Chip(
+                  avatar: Icon(_iconForModule(m), size: 18),
+                  label: Text(_labelForModule(m))))
               .toList(),
         ),
         const Spacer(),
@@ -94,7 +101,8 @@ class _JoinEventContent extends ConsumerWidget {
 }
 
 class _JoinErrorState extends StatelessWidget {
-  const _JoinErrorState({required this.reasonCode, required this.message, required this.onRetry});
+  const _JoinErrorState(
+      {required this.reasonCode, required this.message, required this.onRetry});
 
   final String reasonCode;
   final String message;
@@ -110,16 +118,21 @@ class _JoinErrorState extends StatelessWidget {
           const SizedBox(height: 10),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text('Code: $reasonCode', style: Theme.of(context).textTheme.bodySmall),
+          Text('Code: $reasonCode',
+              style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 16),
-          OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Réessayer')),
+          OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Réessayer')),
         ],
       ),
     );
   }
 }
 
-final _eventDetailsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, eventId) async {
+final _eventDetailsProvider =
+    FutureProvider.family<Map<String, dynamic>, int>((ref, eventId) async {
   return ref.read(apiProvider).event(eventId);
 });
 

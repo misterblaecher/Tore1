@@ -10,7 +10,8 @@ import 'market_detail_screen.dart';
 import 'polymarket_models.dart';
 
 class MyPositionsScreen extends ConsumerStatefulWidget {
-  const MyPositionsScreen({super.key, required this.scope, required this.eventId});
+  const MyPositionsScreen(
+      {super.key, required this.scope, required this.eventId});
 
   final String scope;
   final int? eventId;
@@ -33,7 +34,8 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
   void initState() {
     super.initState();
     _ctrl.addListener(() {
-      if (_ctrl.position.pixels > _ctrl.position.maxScrollExtent - 260) _loadMore();
+      if (_ctrl.position.pixels > _ctrl.position.maxScrollExtent - 260)
+        _loadMore();
     });
     _refresh();
   }
@@ -71,14 +73,16 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
           );
       if (!mounted) return;
       setState(() {
-        final fresh = page.items.where((e) => _seenMarketIds.add(e.marketId)).toList();
+        final fresh =
+            page.items.where((e) => _seenMarketIds.add(e.marketId)).toList();
         _items = [..._items, ...fresh];
         _nextCursor = page.nextCursor;
         _error = null;
       });
     } catch (e) {
       if (!mounted) return;
-      if (e is DioException && (e.response?.statusCode == 401 || e.response?.statusCode == 403)) {
+      if (e is DioException &&
+          (e.response?.statusCode == 401 || e.response?.statusCode == 403)) {
         await ref.read(authSessionProvider.notifier).markUnauthenticated();
         return;
       }
@@ -101,10 +105,12 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Connecte-toi pour voir tes positions.', textAlign: TextAlign.center),
+                const Text('Connecte-toi pour voir tes positions.',
+                    textAlign: TextAlign.center),
                 const SizedBox(height: 12),
                 FilledButton(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmailAuthScreen())),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const EmailAuthScreen())),
                   child: const Text('Se connecter'),
                 ),
               ],
@@ -126,41 +132,51 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
                       const SizedBox(height: 180),
                       Center(child: Text(_error!)),
                       const SizedBox(height: 12),
-                      Center(child: OutlinedButton(onPressed: _refresh, child: const Text('Réessayer'))),
+                      Center(
+                          child: OutlinedButton(
+                              onPressed: _refresh,
+                              child: const Text('Réessayer'))),
                     ],
                   )
                 : _items.isEmpty
                     ? ListView(
                         children: const [
                           SizedBox(height: 200),
-                          Center(child: Text('Aucune position pour le moment.')),
+                          Center(
+                              child: Text('Aucune position pour le moment.')),
                         ],
                       )
-            : ListView.builder(
-                controller: _ctrl,
-                itemCount: _items.length + 1,
-                itemBuilder: (_, i) {
-                  if (i == _items.length) {
-                    if (_nextCursor == null) return const SizedBox(height: 30);
-                    return Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Center(
-                        child: OutlinedButton.icon(
-                          onPressed: _loadMore,
-                          icon: const Icon(Icons.expand_more),
-                          label: const Text('Charger plus'),
-                        ),
+                    : ListView.builder(
+                        controller: _ctrl,
+                        itemCount: _items.length + 1,
+                        itemBuilder: (_, i) {
+                          if (i == _items.length) {
+                            if (_nextCursor == null)
+                              return const SizedBox(height: 30);
+                            return Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Center(
+                                child: OutlinedButton.icon(
+                                  onPressed: _loadMore,
+                                  icon: const Icon(Icons.expand_more),
+                                  label: const Text('Charger plus'),
+                                ),
+                              ),
+                            );
+                          }
+                          final p = _items[i];
+                          return ListTile(
+                            title: Text(p.question,
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                                'Total ${p.total} | ${p.status}${p.outcome != null ? ' | outcome ${p.outcome}' : ''}'),
+                            onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => MarketDetailScreen(
+                                        marketId: p.marketId))),
+                          );
+                        },
                       ),
-                    );
-                  }
-                  final p = _items[i];
-                  return ListTile(
-                    title: Text(p.question, maxLines: 2, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('Total ${p.total} | ${p.status}${p.outcome != null ? ' | outcome ${p.outcome}' : ''}'),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MarketDetailScreen(marketId: p.marketId))),
-                  );
-                },
-              ),
       ),
     );
   }
