@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tore/rebuild/models/backend_models.dart';
 import 'package:tore/rebuild/models/event_context.dart';
 import 'package:tore/rebuild/models/qr_resolve.dart';
 import 'package:tore/rebuild/models/rebuild_types.dart';
@@ -73,5 +74,39 @@ void main() {
 
     expect(moduleOff.code, 'module_off');
     expect(moduleOff.message, startsWith('Le module'));
+  });
+
+  test('API error code mapping distinguishes auth and missing resources', () {
+    expect(normalizeUiCode('missing_token'), 'unauthenticated');
+    expect(normalizeUiCode('event_not_found'), 'not_found');
+    expect(normalizeUiCode('not_found'), 'not_found');
+    expect(normalizeUiCode('validation_error'), 'invalid_request');
+    expect(resolveUiCopy('unauthenticated').title, 'Connexion requise');
+  });
+
+  test('mobile bootstrap and event context parse backend aliases', () {
+    final bootstrap = MobileBootstrapDto.fromJson({
+      'bar_id': 7,
+      'event_id': 12,
+      'eventName': 'Soiree',
+      'source': 'active',
+    });
+    expect(bootstrap.barId, '7');
+    expect(bootstrap.eventKey, 'event_12');
+    expect(bootstrap.eventApiId, '12');
+
+    final context = EventContext.fromJson({
+      'eventId': 'event_12',
+      'eventState': 'LIVE',
+      'moduleStates': {
+        'user_menu': 'ON',
+        'user_hunts': 'FROZEN',
+        'user_wifi': 'READ_ONLY',
+      },
+    });
+    expect(context.eventState, EventState.live);
+    expect(context.moduleStates['user_menu'], ModuleState.on);
+    expect(context.moduleStates['user_hunts'], ModuleState.frozen);
+    expect(context.moduleStates['user_wifi'], ModuleState.readOnly);
   });
 }

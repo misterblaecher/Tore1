@@ -152,8 +152,7 @@ class QrScannerScreen extends StatelessWidget {
                   Row(children: [
                     Expanded(
                         child: OutlinedButton(
-                            onPressed: () {},
-                            child: const Text('Torche (stub)'))),
+                            onPressed: () {}, child: const Text('Torche'))),
                     const SizedBox(width: ToreTokens.s8),
                     Expanded(
                         child: OutlinedButton(

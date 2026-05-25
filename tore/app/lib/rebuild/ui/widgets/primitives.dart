@@ -112,9 +112,18 @@ class ModuleCard extends StatelessWidget {
       duration: ToreMotion.micro(context),
       child: Card(
         child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+              horizontal: ToreTokens.s12, vertical: ToreTokens.s8),
           title: Text(def.title),
           subtitle: Text('${def.id} • ${state.name.toUpperCase()}'),
-          trailing: ToreBadge(label: def.scope.name.toUpperCase()),
+          trailing: Wrap(
+            spacing: ToreTokens.s8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ToreBadge(label: def.scope.name.toUpperCase()),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
           onTap: onOpen,
         ),
       ),

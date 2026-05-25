@@ -66,7 +66,7 @@ class ZonesQrAdminScreen extends StatelessWidget {
         footer: FilledButton.icon(
             onPressed: zones.isEmpty ? null : () {},
             icon: const Icon(Icons.download),
-            label: const Text('Export zones (stub)')),
+            label: const Text('Exporter zones')),
       );
 }
 
@@ -78,11 +78,46 @@ class AnalyticsScreen extends StatelessWidget {
         title: 'Analytics',
         connectivity: network,
         scopeBadges: const ['BAR'],
-        body: Column(children: [
-          const Text('Charts placeholder (no extra deps)'),
-          Container(height: 120, color: ToreTokens.surfaceAlt),
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Ventes par heure'),
           const SizedBox(height: ToreTokens.s8),
-          Container(height: 120, color: ToreTokens.surfaceAlt)
+          _BarChartRow(label: '20h', value: .45, amount: '€ 420'),
+          _BarChartRow(label: '21h', value: .72, amount: '€ 690'),
+          _BarChartRow(label: '22h', value: .95, amount: '€ 910'),
+          _BarChartRow(label: '23h', value: .64, amount: '€ 610'),
+          const SizedBox(height: ToreTokens.s16),
+          const Text('Top produits'),
+          const ListTile(title: Text('Pils 25cl'), trailing: Text('148')),
+          const ListTile(title: Text('Mojito'), trailing: Text('87')),
+          const ListTile(title: Text('Soft'), trailing: Text('63')),
         ]),
       );
+}
+
+class _BarChartRow extends StatelessWidget {
+  const _BarChartRow(
+      {required this.label, required this.value, required this.amount});
+
+  final String label;
+  final double value;
+  final String amount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ToreTokens.s8),
+      child: Row(children: [
+        SizedBox(width: 42, child: Text(label)),
+        Expanded(
+          child: LinearProgressIndicator(
+            minHeight: 12,
+            value: value,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(width: ToreTokens.s8),
+        Text(amount, style: ToreTypography.mono),
+      ]),
+    );
+  }
 }

@@ -24,6 +24,7 @@ import 'ui/screens/dev/diagnostics_screen.dart';
 import 'ui/screens/help/runbook_screens.dart';
 import 'ui/screens/orga/orga_exports_screen.dart';
 import 'ui/screens/orga/orga_screens.dart';
+import 'ui/screens/showcase/showcase_screens.dart';
 import 'ui/screens/system/update_required_screen.dart';
 import 'ui/screens/user/user_screens.dart';
 import 'ui/theme/tore_theme.dart';
@@ -62,6 +63,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   DateTime _networkTransitionAt = DateTime.now();
   bool _loading = true;
   bool _consented = false;
+  int _selectedUserTab = 0;
   List<BarDto> _bars = const [];
   List<EventDto> _barEvents = const [];
   WalletDto? _wallet;
@@ -73,6 +75,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   List<ZoneDto> _zones = const [];
   Map<String, dynamic>? _orgaQrPack;
   RemoteConfigPayload? _remoteConfig;
+  MobileBootstrapDto _mobileBootstrap = MobileBootstrapDto.fallback;
 
   @override
   void initState() {
@@ -84,15 +87,20 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   Future<void> _bootstrap() async {
     if (mounted) setState(() => _loading = true);
     final cachedMe = await _cache.loadCachedUser();
-    final cachedEvent = await _cache.loadCachedEvent('event_42');
+    final cachedEvent = await _cache.loadCachedEvent(_mobileBootstrap.eventKey);
     _userSnapshot = cachedMe;
     _eventContext = cachedEvent;
     _remoteConfig = await _remoteConfigService.load();
 
     try {
       if (_networkStateResolver.canReadRemote(_network)) {
+        _mobileBootstrap = await _api.fetchMobileBootstrap();
+        _eventContext =
+            await _cache.loadCachedEvent(_mobileBootstrap.eventKey) ??
+                _eventContext;
         _userSnapshot = await _api.fetchMeSnapshot();
-        _eventContext = await _api.fetchEventContext('event_42', _defs);
+        _eventContext =
+            await _api.fetchEventContext(_mobileBootstrap.eventKey, _defs);
         if (_userSnapshot != null) await _cache.saveUser(_userSnapshot!);
         if (_eventContext != null) await _cache.saveEvent(_eventContext!);
         await _loadDomainData();
@@ -112,33 +120,100 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   }
 
   Future<void> _loadDomainData() async {
+    final barId = _mobileBootstrap.barId ?? '1';
+    final eventApiId = _mobileBootstrap.eventApiId;
     _bars = await _safeLoad(
         () => _api.fetchBars(network: _network), const <BarDto>[]);
     _barEvents = await _safeLoad(
-        () => _api.fetchBarEvents('1', network: _network), const <EventDto>[]);
-    _wallet = await _safeLoad<WalletDto?>(
-        () => _api.fetchWallet(eventId: '42', network: _network), null);
+        () => _api.fetchBarEvents(barId, network: _network),
+        const <EventDto>[]);
+    if (!_useShowcaseFixtures) {
+      _wallet = await _safeLoad<WalletDto?>(
+          () => _api.fetchWallet(eventId: eventApiId, network: _network), null);
+    }
     _ticker = await _safeLoad(
-        () async => (await _api.fetchTicker('42', network: _network)).items,
+        () async =>
+            (await _api.fetchTicker(eventApiId, network: _network)).items,
         const <TickerItemDto>[]);
     _polyGlobal = await _safeLoad(
         () => _api.fetchPolymarketGlobal(network: _network),
         const <PolymarketDto>[]);
-    _polyEvent = await _safeLoad(
-        () => _api.fetchPolymarketEvent('42', network: _network),
-        const <PolymarketDto>[]);
-    _entryStats = await _safeLoad(
-        () => _api.fetchEntryStats('42', network: _network),
-        const EntryStatsDto(approvedCount: 0, deniedCount: 0));
+    if (!_useShowcaseFixtures) {
+      _polyEvent = await _safeLoad(
+          () => _api.fetchPolymarketEvent(eventApiId, network: _network),
+          const <PolymarketDto>[]);
+      _entryStats = await _safeLoad(
+          () => _api.fetchEntryStats(eventApiId, network: _network),
+          const EntryStatsDto(approvedCount: 0, deniedCount: 0));
+    }
     _orders = await _safeLoad(
-        () async => (await _api.fetchOrdersLive('42', network: _network)).items,
+        () async =>
+            (await _api.fetchOrdersLive(eventApiId, network: _network)).items,
         const <OrderDto>[]);
-    _zones = await _safeLoad(
-        () => _api.fetchZones('1', network: _network), const <ZoneDto>[]);
-    _orgaQrPack = await _safeLoad<Map<String, dynamic>?>(
-        () => _api.fetchOrgaQrPack(_eventContext?.eventId ?? '42',
-            network: _network),
-        null);
+    if (!_useShowcaseFixtures) {
+      _zones = await _safeLoad(
+          () => _api.fetchZones(barId, network: _network), const <ZoneDto>[]);
+      _orgaQrPack = await _safeLoad<Map<String, dynamic>?>(
+          () => _api.fetchOrgaQrPack(eventApiId, network: _network), null);
+    }
+    _applyShowcaseDefaults();
+  }
+
+  void _applyShowcaseDefaults() {
+    _wallet ??= const WalletDto(balance: 129.20, timeline: [
+      WalletTxDto(id: 'demo_wallet_1', type: 'Recharge cashless', delta: 50),
+      WalletTxDto(id: 'demo_wallet_2', type: 'Commande bar', delta: -12.5),
+      WalletTxDto(id: 'demo_wallet_3', type: 'Bonus event', delta: 5),
+    ]);
+    if (_ticker.isEmpty) {
+      _ticker = const [
+        TickerItemDto(
+            id: 'demo_ticker_1', message: '22:00 - Battle DJ ouverte'),
+        TickerItemDto(
+            id: 'demo_ticker_2', message: '22:30 - Happy hour au bar B'),
+        TickerItemDto(
+            id: 'demo_ticker_3', message: '23:00 - Hunt campus: indice 2'),
+      ];
+    }
+    if (_polyGlobal.isEmpty) {
+      _polyGlobal = const [
+        PolymarketDto(
+            id: 'demo_global_1', title: 'La soirée passe 500 check-ins'),
+        PolymarketDto(id: 'demo_global_2', title: 'Le bar B finit premier'),
+      ];
+    }
+    if (_polyEvent.isEmpty) {
+      _polyEvent = const [
+        PolymarketDto(id: 'demo_event_1', title: 'Le prochain son sera techno'),
+        PolymarketDto(id: 'demo_event_2', title: 'File entrée sous 5 minutes'),
+      ];
+    }
+    if (_entryStats == null ||
+        (_entryStats!.approvedCount == 0 && _entryStats!.deniedCount == 0)) {
+      _entryStats = const EntryStatsDto(approvedCount: 244, deniedCount: 17);
+    }
+    if (_orders.isEmpty) {
+      _orders = const [
+        OrderDto(id: '501', status: 'NEW'),
+        OrderDto(id: '502', status: 'IN_PROGRESS'),
+        OrderDto(id: '503', status: 'READY'),
+      ];
+    }
+    if (_zones.isEmpty) {
+      _zones = const [
+        ZoneDto(id: 'vip', name: 'VIP', enabled: true),
+        ZoneDto(id: 'staff', name: 'Staff', enabled: true),
+        ZoneDto(id: 'terrace', name: 'Terrasse', enabled: true),
+      ];
+    }
+    _orgaQrPack ??= {
+      'links': {
+        'Join QR (tore://)': 'tore://event/${_mobileBootstrap.eventApiId}',
+        'Entry Staff QR (tore://)':
+            'tore://qr/entry:${_mobileBootstrap.eventApiId}',
+        'Menu QR (tore://)': 'tore://menu/event/${_mobileBootstrap.eventApiId}',
+      }
+    };
   }
 
   Future<T> _safeLoad<T>(Future<T> Function() loader, T fallback) async {
@@ -193,6 +268,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   bool get _diagnosticsAllowed =>
       _remoteConfig?.diagnosticsEnabled ??
       (_environment != AppEnvironment.prod);
+
+  bool get _useShowcaseFixtures => _environment != AppEnvironment.prod;
 
   Color get _environmentColor => ToreTheme.envBadgeColor(_environment);
 
@@ -302,6 +379,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     final visibleModuleIds = _visibleModuleIdsForMode(mode);
     final defs = _defs
         .where((d) => d.mode == mode)
+        .where((d) => !_hiddenShellModuleIds.contains(d.id))
         .where((d) => _effectiveState(d.id) != ModuleState.off)
         .where(
             (d) => visibleModuleIds == null || visibleModuleIds.contains(d.id))
@@ -314,6 +392,14 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             onOpen: () => _openModule(d.id))
     ];
   }
+
+  static const Set<String> _hiddenShellModuleIds = {
+    'user_splash',
+    'user_consent',
+    'user_home',
+    'user_login_profile',
+    'user_qr_scanner',
+  };
 
   Set<String>? _visibleModuleIdsForMode(ToreMode mode) {
     if (_environment != AppEnvironment.prod) return null;
@@ -356,12 +442,24 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       'user_ticker': AppRoutes.ticker,
       'user_polymarket_global': AppRoutes.polymarketGlobal,
       'user_polymarket_event': AppRoutes.polymarketEvent,
+      'user_ranking': AppRoutes.ranking,
+      'user_battles': AppRoutes.battles,
+      'user_hunts': AppRoutes.hunts,
+      'user_wifi': AppRoutes.wifi,
+      'user_safe_kit': AppRoutes.safeKit,
+      'user_forum': AppRoutes.forum,
+      'user_calendar': AppRoutes.calendar,
+      'user_glossary': AppRoutes.glossary,
       'user_login_profile': AppRoutes.profile,
       'orga_event_control_hub': AppRoutes.orgaHub,
       'orga_entry_mode': AppRoutes.orgaEntry,
       'orga_menu_admin': AppRoutes.orgaMenu,
       'orga_polymarket_admin': AppRoutes.orgaMarket,
       'orga_urgency_actions': AppRoutes.orgaUrgency,
+      'orga_music_admin': AppRoutes.orgaMusic,
+      'orga_battle_admin': AppRoutes.orgaBattle,
+      'orga_hunt_admin': AppRoutes.orgaHunt,
+      'orga_forum_moderation': AppRoutes.orgaForum,
       'orga_finance_admin': AppRoutes.orgaExports,
       'bar_dashboard': AppRoutes.barDashboard,
       'bar_orders_live': AppRoutes.barOrders,
@@ -386,12 +484,24 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       AppRoutes.ticker: 'user_ticker',
       AppRoutes.polymarketGlobal: 'user_polymarket_global',
       AppRoutes.polymarketEvent: 'user_polymarket_event',
+      AppRoutes.ranking: 'user_ranking',
+      AppRoutes.battles: 'user_battles',
+      AppRoutes.hunts: 'user_hunts',
+      AppRoutes.wifi: 'user_wifi',
+      AppRoutes.safeKit: 'user_safe_kit',
+      AppRoutes.forum: 'user_forum',
+      AppRoutes.calendar: 'user_calendar',
+      AppRoutes.glossary: 'user_glossary',
       AppRoutes.profile: 'user_login_profile',
       AppRoutes.orgaHub: 'orga_event_control_hub',
       AppRoutes.orgaEntry: 'orga_entry_mode',
       AppRoutes.orgaMenu: 'orga_menu_admin',
       AppRoutes.orgaMarket: 'orga_polymarket_admin',
       AppRoutes.orgaUrgency: 'orga_urgency_actions',
+      AppRoutes.orgaMusic: 'orga_music_admin',
+      AppRoutes.orgaBattle: 'orga_battle_admin',
+      AppRoutes.orgaHunt: 'orga_hunt_admin',
+      AppRoutes.orgaForum: 'orga_forum_moderation',
       AppRoutes.orgaExports: 'orga_finance_admin',
       AppRoutes.barDashboard: 'bar_dashboard',
       AppRoutes.barOrders: 'bar_orders_live',
@@ -407,12 +517,206 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
     Navigator.pushNamed(context, AppRoutes.devDiagnostics);
   }
 
+  Widget _showcaseUserFeature({
+    required String title,
+    required String metric,
+    required String label,
+    required List<ShowcaseItem> items,
+    List<ShowcaseAction> actions = const [],
+  }) =>
+      ShowcaseFeatureScreen(
+        title: title,
+        badges: const ['USER', 'SHOWCASE'],
+        heroMetric: metric,
+        heroLabel: label,
+        items: items,
+        actions: actions,
+        network: _network,
+      );
+
+  Widget _showcaseOrgaFeature({
+    required String title,
+    required String metric,
+    required String label,
+    required List<ShowcaseItem> items,
+    List<ShowcaseAction> actions = const [],
+  }) =>
+      ShowcaseFeatureScreen(
+        title: title,
+        badges: const ['ORGA', 'SHOWCASE'],
+        heroMetric: metric,
+        heroLabel: label,
+        items: items,
+        actions: actions,
+        network: _network,
+      );
+
+  Widget _shellBody(BuildContext context) {
+    final cards = switch (_mode) {
+      ToreMode.user => _userTabCards(context),
+      ToreMode.orga => _modeCards(
+          title: 'Command Center',
+          subtitle:
+              'Pilotage orga live pour ${_mobileBootstrap.eventName ?? _mobileBootstrap.eventKey}',
+          mode: ToreMode.orga,
+          metric: '${_entryStats?.approvedCount ?? 0}',
+          metricLabel: 'entrées validées'),
+      ToreMode.bar => _modeCards(
+          title: 'Bar Ops',
+          subtitle: 'Commandes, zones et analytics du bar actif',
+          mode: ToreMode.bar,
+          metric: '${_orders.length}',
+          metricLabel: 'commandes live'),
+    };
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+      children: [
+        NetworkBanner(state: _network),
+        _HeroStatusCard(
+          mode: _mode,
+          eventName: _mobileBootstrap.eventName ?? _mobileBootstrap.eventKey,
+          barName: _mobileBootstrap.barName ?? 'Bar actif',
+          eventState: _eventContext?.eventState ?? EventState.draft,
+          syncedAt: _eventContext?.syncedAt,
+        ),
+        const SizedBox(height: ToreTokens.s12),
+        ...cards,
+      ],
+    );
+  }
+
+  List<Widget> _userTabCards(BuildContext context) {
+    switch (_selectedUserTab) {
+      case 1:
+        return [
+          _SectionHeader(
+              title: 'Ticker live',
+              actionLabel: 'Ouvrir',
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.ticker);
+              }),
+          ..._ticker.map((t) => Card(child: ListTile(title: Text(t.message)))),
+        ];
+      case 2:
+        return [
+          _SectionHeader(
+              title: 'Scanner',
+              actionLabel: 'Ouvrir',
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.scanner);
+              }),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(ToreTokens.s16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Icon(Icons.qr_code_scanner, size: 64),
+                    const SizedBox(height: ToreTokens.s8),
+                    const Text(
+                        'Scanner QR événement, menu, staff, WiFi ou invitation.'),
+                    const SizedBox(height: ToreTokens.s12),
+                    FilledButton.icon(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, AppRoutes.scanner),
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('Lancer le scanner'),
+                    ),
+                  ]),
+            ),
+          ),
+        ];
+      case 3:
+        return [
+          _SectionHeader(
+              title: 'Polymarket',
+              actionLabel: 'Global',
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.polymarketGlobal);
+              }),
+          ..._polyGlobal
+              .map((m) => Card(child: ListTile(title: Text(m.title)))),
+          const SizedBox(height: ToreTokens.s8),
+          _SectionHeader(
+              title: 'Marchés event',
+              actionLabel: 'Event',
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.polymarketEvent);
+              }),
+          ..._polyEvent.map((m) => Card(child: ListTile(title: Text(m.title)))),
+        ];
+      case 4:
+        return [
+          _SectionHeader(
+              title: 'Profil',
+              actionLabel: 'Réglages',
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.profile);
+              }),
+          HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Préférences & diagnostics'),
+              subtitle: const Text('Thème, contraste, logs et aide'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pushNamed(context, AppRoutes.profile),
+            ),
+          ),
+        ];
+      default:
+        return [
+          _QuickActions(onOpen: (route) => Navigator.pushNamed(context, route)),
+          const SizedBox(height: ToreTokens.s12),
+          _SectionHeader(
+              title: 'Découvrir',
+              actionLabel: 'Events',
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.events);
+              }),
+          ..._moduleCards(ToreMode.user),
+        ];
+    }
+  }
+
+  List<Widget> _modeCards({
+    required String title,
+    required String subtitle,
+    required ToreMode mode,
+    required String metric,
+    required String metricLabel,
+  }) {
+    return [
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(ToreTokens.s16),
+          child: Row(children: [
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: ToreTokens.s4),
+                    Text(subtitle),
+                  ]),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(metric, style: ToreTypography.monoNumber(context, size: 30)),
+              Text(metricLabel),
+            ]),
+          ]),
+        ),
+      ),
+      const SizedBox(height: ToreTokens.s12),
+      ..._moduleCards(mode),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ToreTheme.build(),
-      initialRoute: AppRoutes.boot,
       routes: {
         AppRoutes.boot: (_) => _loading
             ? BootSplashScreen(
@@ -462,7 +766,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                 : 'Writes blocked by network or event state'),
         ...buildAdapterRoutes(
             network: _network,
-            eventId: int.tryParse(_eventContext?.eventId ?? '42') ?? 42,
+            eventId: int.tryParse(_mobileBootstrap.eventApiId) ?? 42,
             orderId: _orders.isEmpty ? 1 : int.tryParse(_orders.first.id) ?? 1,
             eventState: _eventContext?.eventState ?? EventState.draft),
         AppRoutes.wallet: (_) => WalletScreen(
@@ -486,6 +790,140 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             network: _network,
             rows:
                 _polyEvent.map((m) => ListTile(title: Text(m.title))).toList()),
+        AppRoutes.ranking: (_) => _showcaseUserFeature(
+              title: 'Ranking',
+              metric: '#12',
+              label: 'Position équipe',
+              items: const [
+                ShowcaseItem(
+                    title: 'Les Rubis', subtitle: '1 240 pts', status: 'TOP 1'),
+                ShowcaseItem(
+                    title: 'La Terrasse',
+                    subtitle: '1 080 pts',
+                    status: 'TOP 2'),
+                ShowcaseItem(
+                    title: 'TON équipe',
+                    subtitle: '940 pts • +3 places',
+                    status: 'LIVE'),
+              ],
+            ),
+        AppRoutes.battles: (_) => _showcaseUserFeature(
+              title: 'Battles',
+              metric: '68%',
+              label: 'Vote A en tête',
+              items: const [
+                ShowcaseItem(
+                    title: 'DJ Set: Techno vs Afro',
+                    subtitle: 'Vote ouvert encore 06:42',
+                    status: 'OPEN'),
+                ShowcaseItem(
+                    title: 'Battle chants',
+                    subtitle: 'Finale prête côté orga',
+                    status: 'NEXT'),
+              ],
+              actions: const [
+                ShowcaseAction(label: 'Voter A', icon: Icons.how_to_vote),
+                ShowcaseAction(label: 'Voter B', icon: Icons.how_to_vote),
+              ],
+            ),
+        AppRoutes.hunts: (_) => _showcaseUserFeature(
+              title: 'Hunts',
+              metric: '3/7',
+              label: 'Indices trouvés',
+              items: const [
+                ShowcaseItem(
+                    title: 'Indice #4',
+                    subtitle: 'Près du bar B • QR à scanner',
+                    status: 'ACTIVE'),
+                ShowcaseItem(
+                    title: 'Bonus équipe',
+                    subtitle: '+120 pts si trouvé avant 23h',
+                    status: 'BOOST'),
+              ],
+              actions: const [
+                ShowcaseAction(label: 'Scanner indice', icon: Icons.qr_code),
+              ],
+            ),
+        AppRoutes.wifi: (_) => _showcaseUserFeature(
+              title: 'WiFi',
+              metric: 'TORÈ-GUEST',
+              label: 'Réseau événement',
+              items: const [
+                ShowcaseItem(
+                    title: 'QR WiFi',
+                    subtitle: 'Connexion invitée sans mot de passe visible',
+                    status: 'READY'),
+                ShowcaseItem(
+                    title: 'Rotation sécurité',
+                    subtitle: 'Token renouvelé après la soirée',
+                    status: 'SAFE'),
+              ],
+            ),
+        AppRoutes.safeKit: (_) => _showcaseUserFeature(
+              title: 'Safe Kit',
+              metric: '2 min',
+              label: 'Temps réponse staff',
+              items: const [
+                ShowcaseItem(
+                    title: 'Buddy check',
+                    subtitle: 'Prévenir un contact de confiance',
+                    status: 'ON'),
+                ShowcaseItem(
+                    title: 'Alerte discrète',
+                    subtitle: 'Remonte au hub orga sans exposer le message',
+                    status: 'ARMED'),
+              ],
+              actions: const [
+                ShowcaseAction(
+                    label: 'Check-in OK', icon: Icons.health_and_safety),
+                ShowcaseAction(label: 'Demander aide', icon: Icons.warning),
+              ],
+            ),
+        AppRoutes.forum: (_) => _showcaseUserFeature(
+              title: 'Forum',
+              metric: '42',
+              label: 'Messages live',
+              items: const [
+                ShowcaseItem(
+                    title: 'Objet perdu',
+                    subtitle: 'Carte étudiante trouvée près de la scène',
+                    status: 'PIN'),
+                ShowcaseItem(
+                    title: 'After',
+                    subtitle: 'Thread modéré par l’équipe orga',
+                    status: 'LIVE'),
+              ],
+            ),
+        AppRoutes.calendar: (_) => _showcaseUserFeature(
+              title: 'Calendar',
+              metric: '23:00',
+              label: 'Prochain temps fort',
+              items: const [
+                ShowcaseItem(
+                    title: 'Battle DJ',
+                    subtitle: 'Scène principale • rappel activé',
+                    status: 'NEXT'),
+                ShowcaseItem(
+                    title: 'Dernier service bar',
+                    subtitle: 'Notification 15 min avant',
+                    status: 'SYNC'),
+              ],
+            ),
+        AppRoutes.glossary: (_) => _showcaseUserFeature(
+              title: 'Glossary',
+              metric: '18',
+              label: 'Termes comité',
+              items: const [
+                ShowcaseItem(
+                    title: 'Baptême',
+                    subtitle: 'Définition publique et règles de contexte',
+                    status: 'PUBLIC'),
+                ShowcaseItem(
+                    title: 'Comité',
+                    subtitle: 'Contacts utiles et responsabilités',
+                    status: 'OK'),
+              ],
+            ),
         AppRoutes.profile: (_) => ProfileSettingsScreen(
             network: _network,
             onOpenDiagnostics: _diagnosticsAllowed ? _openDiagnostics : null,
@@ -513,6 +951,71 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         AppRoutes.orgaUrgency: (_) => OrgaUrgencyActionsScreen(
             network: _network,
             onSensitive: (a) => _sensitiveWrite('orga_urgency_actions', a)),
+        AppRoutes.orgaMusic: (_) => _showcaseOrgaFeature(
+              title: 'Music Admin',
+              metric: 'OPEN',
+              label: 'Round de vote',
+              items: const [
+                ShowcaseItem(
+                    title: 'Playlist prioritaire',
+                    subtitle: '3 sons en file, override staff possible',
+                    status: 'LIVE'),
+                ShowcaseItem(
+                    title: 'Suggestion publique',
+                    subtitle: 'Filtrage doublons et votes par compte',
+                    status: 'ON'),
+              ],
+              actions: const [
+                ShowcaseAction(label: 'Forcer morceau', icon: Icons.music_note),
+                ShowcaseAction(
+                    label: 'Clôturer round', icon: Icons.stop_circle),
+              ],
+            ),
+        AppRoutes.orgaBattle: (_) => _showcaseOrgaFeature(
+              title: 'Battle Admin',
+              metric: '2',
+              label: 'Battles actives',
+              items: const [
+                ShowcaseItem(
+                    title: 'DJ Set',
+                    subtitle: '68% option A • clôture manuelle disponible',
+                    status: 'OPEN'),
+                ShowcaseItem(
+                    title: 'Chants',
+                    subtitle: 'Finale préparée, publication en attente',
+                    status: 'DRAFT'),
+              ],
+            ),
+        AppRoutes.orgaHunt: (_) => _showcaseOrgaFeature(
+              title: 'Hunt Admin',
+              metric: '7',
+              label: 'QR indices',
+              items: const [
+                ShowcaseItem(
+                    title: 'Indice terrasse',
+                    subtitle: 'Non découvert • bonus +120 pts',
+                    status: 'HIDDEN'),
+                ShowcaseItem(
+                    title: 'Indice bar B',
+                    subtitle: 'Découvert par Les Rubis',
+                    status: 'FOUND'),
+              ],
+            ),
+        AppRoutes.orgaForum: (_) => _showcaseOrgaFeature(
+              title: 'Forum Moderation',
+              metric: '3',
+              label: 'À relire',
+              items: const [
+                ShowcaseItem(
+                    title: 'Signalement',
+                    subtitle: 'Message masqué automatiquement',
+                    status: 'REVIEW'),
+                ShowcaseItem(
+                    title: 'Annonce épinglée',
+                    subtitle: 'Visible sur le hub utilisateur',
+                    status: 'PIN'),
+              ],
+            ),
         AppRoutes.userHelp: (_) => RunbookScreen(
             onOpenUrgency: () =>
                 Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
@@ -520,7 +1023,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             onOpenUrgency: () =>
                 Navigator.pushNamed(context, AppRoutes.orgaUrgency)),
         AppRoutes.orgaExports: (_) => OrgaExportsScreen(
-            eventId: _eventContext?.eventId ?? '42',
+            eventId: _mobileBootstrap.eventApiId,
             environment: _environment,
             moduleStates: _eventContext?.moduleStates ?? const {},
             backendPack: _orgaQrPack,
@@ -588,33 +1091,50 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                 }))
           : Scaffold(
               appBar: AppBar(
-                title: const Text('TORÈ Night OS'),
+                title: const Text('TORÈ'),
                 actions: [
-                  DropdownButton<ConnectivityState>(
-                    value: _network,
-                    onChanged: (v) {
-                      if (!mounted) return;
-                      setState(() {
-                        _network = v ?? _network;
-                        _networkTransitionAt = DateTime.now();
-                      });
-                    },
-                    items: ConnectivityState.values
-                        .map((e) =>
-                            DropdownMenuItem(value: e, child: Text(e.name)))
-                        .toList(),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<ConnectivityState>(
+                      value: _network,
+                      dropdownColor: ToreTokens.surfaceAlt,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.white),
+                      onChanged: (v) {
+                        if (!mounted) return;
+                        setState(() {
+                          _network = v ?? _network;
+                          _networkTransitionAt = DateTime.now();
+                        });
+                      },
+                      items: ConnectivityState.values
+                          .map((e) =>
+                              DropdownMenuItem(value: e, child: Text(e.name)))
+                          .toList(),
+                    ),
                   ),
-                  DropdownButton<ToreMode>(
-                    value: _mode,
-                    onChanged: (v) {
-                      if (!mounted) return;
-                      setState(() => _mode = v ?? _mode);
-                    },
-                    items: ToreMode.values
-                        .where((m) => _guards.modeAllowed(m, _userSnapshot))
-                        .map((e) =>
-                            DropdownMenuItem(value: e, child: Text(e.name)))
-                        .toList(),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<ToreMode>(
+                      value: _mode,
+                      dropdownColor: ToreTokens.surfaceAlt,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.white),
+                      onChanged: (v) {
+                        if (!mounted) return;
+                        setState(() {
+                          _mode = v ?? _mode;
+                          _selectedUserTab = 0;
+                        });
+                      },
+                      items: ToreMode.values
+                          .where((m) => _guards.modeAllowed(m, _userSnapshot))
+                          .map((e) =>
+                              DropdownMenuItem(value: e, child: Text(e.name)))
+                          .toList(),
+                    ),
                   ),
                 ],
               ),
@@ -626,6 +1146,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                   : null,
               bottomNavigationBar: _mode == ToreMode.user
                   ? NavigationBar(
+                      selectedIndex: _selectedUserTab,
                       destinations: const [
                         NavigationDestination(
                             icon: Icon(Icons.home), label: 'Home'),
@@ -636,28 +1157,17 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                             icon: Icon(Icons.qr_code_scanner),
                             label: 'Scanner'),
                         NavigationDestination(
-                            icon: Icon(Icons.show_chart), label: 'Polymarket'),
+                            icon: Icon(Icons.show_chart), label: 'Market'),
                         NavigationDestination(
                             icon: Icon(Icons.person), label: 'Profile'),
                       ],
                       onDestinationSelected: (i) {
-                        final route = [
-                          AppRoutes.home,
-                          AppRoutes.ticker,
-                          AppRoutes.scanner,
-                          AppRoutes.polymarketGlobal,
-                          AppRoutes.profile
-                        ][i];
-                        Navigator.pushNamed(context, route);
+                        if (!mounted) return;
+                        setState(() => _selectedUserTab = i);
                       },
                     )
                   : null,
-              body: ListView(padding: const EdgeInsets.all(12), children: [
-                NetworkBanner(state: _network),
-                HeaderCard(
-                    userSnapshot: _userSnapshot, eventContext: _eventContext),
-                ..._moduleCards(_mode)
-              ]),
+              body: _shellBody(context),
             ),
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
@@ -685,6 +1195,118 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         }
         return null;
       },
+    );
+  }
+}
+
+class _HeroStatusCard extends StatelessWidget {
+  const _HeroStatusCard({
+    required this.mode,
+    required this.eventName,
+    required this.barName,
+    required this.eventState,
+    this.syncedAt,
+  });
+
+  final ToreMode mode;
+  final String eventName;
+  final String barName;
+  final EventState eventState;
+  final DateTime? syncedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final stateLabel = eventState.name.toUpperCase();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Text(eventName,
+                  style: Theme.of(context).textTheme.headlineSmall),
+            ),
+            ToreBadge(
+                label: stateLabel,
+                color: eventState.isLive ? ToreTokens.ruby : Colors.orange),
+          ]),
+          const SizedBox(height: ToreTokens.s8),
+          Text('$barName • mode ${mode.name.toUpperCase()}'),
+          const SizedBox(height: ToreTokens.s8),
+          Text(
+            'Synchronisé ${syncedAt?.toLocal().toIso8601String() ?? 'maintenant'}',
+            style: ToreTypography.mono,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.onOpen});
+
+  final void Function(String route) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = const [
+      _QuickAction('Scanner', Icons.qr_code_scanner, AppRoutes.scanner),
+      _QuickAction('Join', Icons.group_add, AppRoutes.join),
+      _QuickAction('Menu', Icons.local_bar, AppRoutes.menu),
+      _QuickAction('Wallet', Icons.account_balance_wallet, AppRoutes.wallet),
+      _QuickAction('Safe Kit', Icons.health_and_safety, AppRoutes.safeKit),
+      _QuickAction('Ranking', Icons.leaderboard, AppRoutes.ranking),
+    ];
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: actions.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
+        mainAxisSpacing: ToreTokens.s8,
+        crossAxisSpacing: ToreTokens.s8,
+        childAspectRatio: 2.8,
+      ),
+      itemBuilder: (context, index) {
+        final action = actions[index];
+        return FilledButton.icon(
+          onPressed: () => onOpen(action.route),
+          icon: Icon(action.icon),
+          label: Text(action.label),
+        );
+      },
+    );
+  }
+}
+
+class _QuickAction {
+  const _QuickAction(this.label, this.icon, this.route);
+
+  final String label;
+  final IconData icon;
+  final String route;
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, this.actionLabel, this.onTap});
+
+  final String title;
+  final String? actionLabel;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+          top: ToreTokens.s8, bottom: ToreTokens.s8, left: ToreTokens.s4),
+      child: Row(children: [
+        Expanded(
+          child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+        ),
+        if (actionLabel != null)
+          TextButton(onPressed: onTap, child: Text(actionLabel!)),
+      ]),
     );
   }
 }

@@ -55,9 +55,20 @@ EventState mapBackendStateAlias(String raw) {
 }
 
 ModuleState _moduleStateFrom(Object? value) {
-  final name = value?.toString() ?? '';
+  final name = value?.toString().trim() ?? '';
   for (final state in ModuleState.values) {
     if (state.name == name) return state;
+  }
+  switch (name.toUpperCase()) {
+    case 'ON':
+      return ModuleState.on;
+    case 'OFF':
+      return ModuleState.off;
+    case 'FROZEN':
+      return ModuleState.frozen;
+    case 'READ_ONLY':
+    case 'READONLY':
+      return ModuleState.readOnly;
   }
   return ModuleState.off;
 }

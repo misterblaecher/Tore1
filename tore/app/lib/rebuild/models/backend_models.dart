@@ -5,6 +5,62 @@ class PagedResult<T> {
   final String? nextCursor;
 }
 
+class MobileBootstrapDto {
+  const MobileBootstrapDto({
+    required this.eventKey,
+    required this.eventApiId,
+    this.barId,
+    this.barName,
+    this.eventName,
+    this.source,
+  });
+
+  final String eventKey;
+  final String eventApiId;
+  final String? barId;
+  final String? barName;
+  final String? eventName;
+  final String? source;
+
+  static const fallback =
+      MobileBootstrapDto(eventKey: 'event_42', eventApiId: '42', barId: '1');
+
+  factory MobileBootstrapDto.fromJson(Map<String, dynamic> json) {
+    final rawEventKey = (json['eventId'] ?? json['event_id'] ?? '').toString();
+    final eventKey = _normalizeEventKey(rawEventKey);
+    final rawApiId = (json['eventApiId'] ??
+            json['event_api_id'] ??
+            json['event_id'] ??
+            _stripEventPrefix(eventKey))
+        .toString();
+    final eventApiId = _nonEmpty(rawApiId) ?? _stripEventPrefix(eventKey);
+    return MobileBootstrapDto(
+      eventKey: eventKey,
+      eventApiId: eventApiId,
+      barId: _nonEmpty((json['barId'] ?? json['bar_id'])?.toString()),
+      barName: _nonEmpty((json['barName'] ?? json['bar_name'])?.toString()),
+      eventName:
+          _nonEmpty((json['eventName'] ?? json['event_name'])?.toString()),
+      source: _nonEmpty(json['source']?.toString()),
+    );
+  }
+}
+
+String _normalizeEventKey(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty || value == 'null') return 'event_42';
+  return value.startsWith('event_') ? value : 'event_$value';
+}
+
+String _stripEventPrefix(String raw) =>
+    raw.trim().replaceFirst(RegExp(r'^event_'), '');
+
+String? _nonEmpty(String? raw) {
+  final value = raw?.trim() ?? '';
+  if (value.isEmpty || value == 'null') return null;
+  return value;
+}
+
 class BarDto {
   const BarDto({required this.id, required this.name, this.city});
 

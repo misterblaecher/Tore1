@@ -60,12 +60,12 @@ class ApiClient {
     _logWire('/auth/me', rawJson);
 
     final snapshot = UserSnapshot(
-      roles: const {'USER', 'ORGA'},
-      capabilities: const {'can_access_orga', 'can_scan_qr'},
+      roles: const {'USER', 'ORGA', 'BAR'},
+      capabilities: const {'can_access_orga', 'can_access_bar', 'can_scan_qr'},
       globalModules: const {
         'user_qr_scanner': ModuleState.on,
         'user_polymarket_global': ModuleState.on,
-        'bar_dashboard': ModuleState.off,
+        'bar_dashboard': ModuleState.on,
       },
       syncedAt: DateTime.now(),
     );
@@ -76,30 +76,44 @@ class ApiClient {
     return snapshot;
   }
 
+  Future<MobileBootstrapDto> fetchMobileBootstrap() async {
+    final rawJson =
+        await _getJson('/mobile/bootstrap', network: ConnectivityState.online);
+    final bootstrap = MobileBootstrapDto.fromJson(rawJson);
+    _logNormalized('/mobile/bootstrap', {
+      'eventId': bootstrap.eventKey,
+      'eventApiId': bootstrap.eventApiId,
+      'barId': bootstrap.barId,
+      'source': bootstrap.source,
+    });
+    return bootstrap;
+  }
+
   Future<EventContext> fetchEventContext(
       String eventId, List<ModuleDefinition> defs) async {
-    final rawJson = await _getJson('/events/$eventId/context',
+    final rawJson = await _getJson('/mobile/events/$eventId/context',
         network: ConnectivityState.online);
+    final remote = EventContext.fromJson(rawJson);
     final states = <String, ModuleState>{
       for (final d in defs)
         d.id: d.scope == ScopeBadge.event || d.scope == ScopeBadge.bar
             ? ModuleState.on
             : ModuleState.readOnly,
-      'user_hunts': ModuleState.frozen,
-      'orga_finance_admin': ModuleState.off,
+      'user_hunts': ModuleState.on,
+      'orga_finance_admin': ModuleState.on,
       'bar_orders_live': ModuleState.on,
     };
+    states.addAll(remote.moduleStates);
     final context = EventContext(
-      eventId: eventId,
-      eventState: mapBackendStateAlias(safeGetString(rawJson, 'eventState',
-          fallback: 'RUNNING', aliases: const ['event_state'])),
+      eventId: remote.eventId,
+      eventState: remote.eventState,
       moduleStates: states,
       syncedAt: tryParseDateTime(
           rawJson['lastUpdatedAt'] ?? rawJson['last_updated_at'],
           fallback: DateTime.now()),
     );
     _logNormalized(
-        '/events/{id}/context', {'eventState': context.eventState.name});
+        '/mobile/events/{id}/context', {'eventState': context.eventState.name});
     return context;
   }
 
@@ -465,8 +479,7 @@ class ApiClient {
   ApiError _normalizeError(Object? error) {
     if (error is ApiError) return error;
     if (error is DioException) {
-      final reason = (error.response?.data as Map?)?['reason']?.toString() ??
-          'backend_down';
+      final reason = _reasonFromDio(error);
       final normalized = normalizeUiCode(reason);
       _recentErrors.add(normalized);
       if (_recentErrors.length > 20) {
@@ -480,6 +493,41 @@ class ApiClient {
     ClientLog.instance.log('api.error', {'normalized_code': 'backend_down'});
     return const ApiError(
         ErrorModel(code: 'backend_down', message: 'Service indisponible'));
+  }
+
+  String _reasonFromDio(DioException error) {
+    final data = error.response?.data;
+    if (data is Map) {
+      final directReason = data['reason']?.toString();
+      if (directReason != null && directReason.isNotEmpty) {
+        return directReason;
+      }
+      final detail = data['detail'];
+      if (detail is Map) {
+        final nestedReason =
+            detail['reason']?.toString() ?? detail['code']?.toString();
+        if (nestedReason != null && nestedReason.isNotEmpty) {
+          return nestedReason;
+        }
+      } else if (detail is String && detail.trim().isNotEmpty) {
+        final normalized = detail.trim().toLowerCase().replaceAll(' ', '_');
+        if (normalized == 'missing_token') return 'unauthenticated';
+        return normalized;
+      }
+    }
+
+    switch (error.response?.statusCode) {
+      case 401:
+        return 'unauthenticated';
+      case 403:
+        return 'forbidden';
+      case 404:
+        return 'not_found';
+      case 422:
+        return 'invalid_request';
+      default:
+        return 'backend_down';
+    }
   }
 
   List<Map<String, dynamic>> _items(Map<String, dynamic> map) {

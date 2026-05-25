@@ -69,6 +69,18 @@ const Map<String, UiCopy> uiCopyMapping = {
       title: 'Service indisponible',
       message: 'Serveur occupé. Réessayez dans un instant.',
       ctaLabel: 'Réessayer'),
+  'unauthenticated': UiCopy(
+      title: 'Connexion requise',
+      message: 'Connectez-vous pour accéder à cette section.',
+      ctaLabel: 'Se connecter'),
+  'not_found': UiCopy(
+      title: 'Introuvable',
+      message: 'Cette ressource n’est pas disponible.',
+      ctaLabel: 'Retour'),
+  'invalid_request': UiCopy(
+      title: 'Demande invalide',
+      message: 'La demande envoyée n’est pas acceptée.',
+      ctaLabel: 'OK'),
   'offline_write_blocked': UiCopy(
       title: 'Action bloquée hors ligne',
       message: 'Repassez en ligne pour confirmer cette action.',
@@ -85,6 +97,17 @@ String normalizeUiCode(String? code) {
       return 'qr_replay';
     case 'invalid_qr':
       return 'qr_unknown';
+    case 'unauthorized':
+    case 'missing_token':
+      return 'unauthenticated';
+    case 'forbidden':
+      return 'module_off';
+    case 'event_not_found':
+    case 'not_found':
+      return 'not_found';
+    case 'validation_error':
+    case 'unprocessable_entity':
+      return 'invalid_request';
     default:
       return (code == null || code.isEmpty) ? 'qr_unknown' : code.toLowerCase();
   }

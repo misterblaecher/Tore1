@@ -63,14 +63,32 @@ class ToreTheme {
         border: OutlineInputBorder(),
       ),
       textTheme: const TextTheme(
-        headlineMedium: ToreTypography.title,
-        titleMedium: ToreTypography.section,
-        bodyMedium: ToreTypography.body,
-        bodySmall: ToreTypography.mono,
+        headlineMedium: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.1,
+            color: Colors.white),
+        headlineSmall: TextStyle(
+            fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
+        titleLarge: TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+        titleMedium: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+            color: Colors.white),
+        bodyMedium: TextStyle(fontSize: 14, height: 1.3, color: Colors.white70),
+        bodySmall: TextStyle(
+            fontFamily: 'monospace',
+            letterSpacing: 0.35,
+            color: Colors.white70),
+        labelLarge: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(44),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white54,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
