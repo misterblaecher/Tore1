@@ -55,12 +55,30 @@ class HeaderCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(ToreTokens.s12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('roles: ${userSnapshot?.roles.join(', ') ?? '-'}'),
-          Text('caps: ${userSnapshot?.capabilities.join(', ') ?? '-'}'),
-          Text(
-              'event: ${eventContext?.eventId ?? '-'} • ${eventContext?.eventState.name.toUpperCase() ?? 'DRAFT'}'),
-          Text('synced: ${eventContext?.syncedAt.toIso8601String() ?? 'never'}',
-              style: ToreTypography.mono),
+          Row(children: [
+            const CircleAvatar(
+              backgroundColor: ToreTokens.ruby,
+              child: Icon(Icons.person, color: Colors.white),
+            ),
+            const SizedBox(width: ToreTokens.s12),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Alex Martin',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Text('Membre TORÈ · soirée active'),
+                  ]),
+            ),
+            ToreBadge(
+                label:
+                    eventContext?.eventState.isLive ?? true ? 'LIVE' : 'BETA',
+                color: eventContext?.eventState.isLive ?? true
+                    ? ToreTokens.ruby
+                    : ToreTokens.warning),
+          ]),
+          const SizedBox(height: ToreTokens.s12),
+          const Text('Préférences, wallet et invitations synchronisés.'),
         ]),
       ),
     );
@@ -83,12 +101,14 @@ class ToreBadge extends StatelessWidget {
               horizontal: ToreTokens.s8, vertical: ToreTokens.s4),
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(6),
             border: highContrast
                 ? Border.all(color: Colors.white70, width: 1.4)
                 : null,
           ),
-          child: Text(label, style: const TextStyle(fontSize: 11)),
+          child: Text(label,
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
         );
       },
     );
@@ -107,27 +127,90 @@ class ModuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = _moduleSubtitle(def.id);
     return AnimatedScale(
       scale: 1,
       duration: ToreMotion.micro(context),
       child: Card(
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: ToreTokens.s12, vertical: ToreTokens.s8),
-          title: Text(def.title),
-          subtitle: Text('${def.id} • ${state.name.toUpperCase()}'),
-          trailing: Wrap(
-            spacing: ToreTokens.s8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ToreBadge(label: def.scope.name.toUpperCase()),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
           onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(ToreTokens.s12),
+            child: Row(children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: ToreTokens.ruby.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_moduleIcon(def.id),
+                    color: ToreTokens.yellowCta, size: 20),
+              ),
+              const SizedBox(width: ToreTokens.s12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(def.title,
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: ToreTokens.s4),
+                      Text(subtitle,
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 12)),
+                    ]),
+              ),
+              ToreBadge(
+                  label: def.scope == ScopeBadge.event ? 'LIVE' : 'APP',
+                  color: def.scope == ScopeBadge.event
+                      ? ToreTokens.ruby
+                      : ToreTokens.surfaceAlt),
+              const SizedBox(width: ToreTokens.s8),
+              const Icon(Icons.chevron_right, color: Colors.white54),
+            ]),
+          ),
         ),
       ),
     );
+  }
+
+  IconData _moduleIcon(String id) {
+    if (id.contains('wallet')) return Icons.account_balance_wallet;
+    if (id.contains('menu') || id.contains('orders')) return Icons.local_bar;
+    if (id.contains('event') || id.contains('join'))
+      return Icons.confirmation_number;
+    if (id.contains('ranking')) return Icons.leaderboard;
+    if (id.contains('battle')) return Icons.how_to_vote;
+    if (id.contains('safe')) return Icons.health_and_safety;
+    if (id.contains('wifi')) return Icons.wifi;
+    if (id.contains('calendar')) return Icons.calendar_month;
+    if (id.contains('polymarket')) return Icons.show_chart;
+    return Icons.bolt;
+  }
+
+  String _moduleSubtitle(String id) {
+    const labels = {
+      'user_bars': 'Trouver les bars partenaires',
+      'user_events': 'Voir les soirées disponibles',
+      'user_join': 'Rejoindre une soirée',
+      'user_event_hub': 'Infos, programme et accès',
+      'user_menu': 'Commander au bar',
+      'user_wallet': 'Solde, tickets et paiements',
+      'user_orders_lifecycle': 'Suivre mes commandes',
+      'user_ticker': 'Temps forts en direct',
+      'user_polymarket_global': 'Prédictions globales',
+      'user_polymarket_event': 'Prédictions de la soirée',
+      'user_ranking': 'Classement live',
+      'user_battles': 'Votes et battles DJ',
+      'user_hunts': 'Chasses et défis',
+      'user_wifi': 'WiFi invité',
+      'user_safe_kit': 'Aide et sécurité',
+      'user_forum': 'Messages de la soirée',
+      'user_calendar': 'Calendrier des prochains events',
+      'user_glossary': 'Lexique TORÈ',
+    };
+    return labels[id] ?? 'Disponible dans la bêta';
   }
 }
 

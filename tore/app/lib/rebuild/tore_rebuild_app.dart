@@ -38,6 +38,7 @@ class ToreRebuildApp extends StatefulWidget {
 }
 
 class _ToreRebuildAppState extends State<ToreRebuildApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   final _api = ApiClient();
   late final ContractApi _contractApi = RebuildContractApi(_api);
   final _cache = CacheStore();
@@ -56,7 +57,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   static const String _startupUrl =
       String.fromEnvironment('TORE_STARTUP_URL', defaultValue: '');
 
-  ToreMode _mode = ToreMode.user;
+  final ToreMode _mode = ToreMode.user;
   UserSnapshot? _userSnapshot;
   EventContext? _eventContext;
   ConnectivityState _network = ConnectivityState.online;
@@ -64,6 +65,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   bool _loading = true;
   bool _consented = false;
   int _selectedUserTab = 0;
+  _QuickAction? _activeHomeAction;
   List<BarDto> _bars = const [];
   List<EventDto> _barEvents = const [];
   WalletDto? _wallet;
@@ -270,6 +272,9 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       (_environment != AppEnvironment.prod);
 
   bool get _useShowcaseFixtures => _environment != AppEnvironment.prod;
+
+  bool get _isConnectedAccount =>
+      _userSnapshot != null && !_userSnapshot!.roles.contains('GUEST');
 
   Color get _environmentColor => ToreTheme.envBadgeColor(_environment);
 
@@ -552,6 +557,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
       );
 
   Widget _shellBody(BuildContext context) {
+    final currentEventState =
+        _useShowcaseFixtures ? EventState.live : _eventContext?.eventState;
     final cards = switch (_mode) {
       ToreMode.user => _userTabCards(context),
       ToreMode.orga => _modeCards(
@@ -568,20 +575,37 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
           metric: '${_orders.length}',
           metricLabel: 'commandes live'),
     };
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-      children: [
-        NetworkBanner(state: _network),
-        _HeroStatusCard(
-          mode: _mode,
-          eventName: _mobileBootstrap.eventName ?? _mobileBootstrap.eventKey,
-          barName: _mobileBootstrap.barName ?? 'Bar actif',
-          eventState: _eventContext?.eventState ?? EventState.draft,
-          syncedAt: _eventContext?.syncedAt,
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF120609), ToreTokens.black],
         ),
-        const SizedBox(height: ToreTokens.s12),
-        ...cards,
-      ],
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 108),
+        children: [
+          NetworkBanner(state: _network),
+          _HeroStatusCard(
+            mode: _mode,
+            eventName: _mobileBootstrap.eventName ?? _mobileBootstrap.eventKey,
+            barName: _mobileBootstrap.barName ?? 'Bar actif',
+            eventState: currentEventState ?? EventState.draft,
+            syncedAt: _eventContext?.syncedAt,
+          ),
+          const SizedBox(height: ToreTokens.s16),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            child: Column(
+              key: ValueKey(
+                  '${_mode.name}-$_selectedUserTab-${_activeHomeAction?.route ?? ''}'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: cards,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -591,90 +615,105 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         return [
           _SectionHeader(
               title: 'Ticker live',
-              actionLabel: 'Ouvrir',
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.ticker);
-              }),
-          ..._ticker.map((t) => Card(child: ListTile(title: Text(t.message)))),
+              actionLabel: 'Filtres',
+              onTap: () => ToreFeedback.success(
+                  context, 'Filtres ticker: annonces, commandes, bets.')),
+          _TickerPreview(items: _ticker),
         ];
       case 2:
         return [
-          _SectionHeader(
-              title: 'Scanner',
-              actionLabel: 'Ouvrir',
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.scanner);
-              }),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(ToreTokens.s16),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Icon(Icons.qr_code_scanner, size: 64),
-                    const SizedBox(height: ToreTokens.s8),
-                    const Text(
-                        'Scanner QR événement, menu, staff, WiFi ou invitation.'),
-                    const SizedBox(height: ToreTokens.s12),
-                    FilledButton.icon(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.scanner),
-                      icon: const Icon(Icons.qr_code_scanner),
-                      label: const Text('Lancer le scanner'),
-                    ),
-                  ]),
-            ),
-          ),
+          _ScannerTabCard(
+              onOpen: () => Navigator.pushNamed(context, AppRoutes.scanner)),
         ];
       case 3:
         return [
-          _SectionHeader(
-              title: 'Polymarket',
-              actionLabel: 'Global',
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.polymarketGlobal);
-              }),
-          ..._polyGlobal
-              .map((m) => Card(child: ListTile(title: Text(m.title)))),
-          const SizedBox(height: ToreTokens.s8),
-          _SectionHeader(
-              title: 'Marchés event',
-              actionLabel: 'Event',
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.polymarketEvent);
-              }),
-          ..._polyEvent.map((m) => Card(child: ListTile(title: Text(m.title)))),
+          _MarketsTab(
+              global: _polyGlobal,
+              event: _polyEvent,
+              onGlobal: () =>
+                  Navigator.pushNamed(context, AppRoutes.polymarketGlobal),
+              onEvent: () =>
+                  Navigator.pushNamed(context, AppRoutes.polymarketEvent)),
         ];
       case 4:
         return [
-          _SectionHeader(
-              title: 'Profil',
-              actionLabel: 'Réglages',
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.profile);
-              }),
-          HeaderCard(userSnapshot: _userSnapshot, eventContext: _eventContext),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Préférences & diagnostics'),
-              subtitle: const Text('Thème, contraste, logs et aide'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.pushNamed(context, AppRoutes.profile),
-            ),
-          ),
+          if (_isConnectedAccount)
+            _ForumCommunitySurface(
+              onOpenForum: () => Navigator.pushNamed(context, AppRoutes.forum),
+              onSubmitRequest: () => ToreFeedback.success(
+                  context, 'Demande de forum envoyée à la modération TORÈ.'),
+            )
+          else
+            const _ConnectedOnlyForumPrompt(),
         ];
       default:
         return [
-          _QuickActions(onOpen: (route) => Navigator.pushNamed(context, route)),
-          const SizedBox(height: ToreTokens.s12),
+          _QuickActions(
+            onOpen: (action) {
+              if (action.tabIndex != null) {
+                setState(() {
+                  _activeHomeAction = null;
+                  _selectedUserTab = action.tabIndex!;
+                });
+                return;
+              }
+              setState(() => _activeHomeAction = action);
+            },
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            transitionBuilder: (child, animation) {
+              final offset = Tween<Offset>(
+                begin: const Offset(0, -0.06),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                  parent: animation, curve: Curves.easeOutCubic));
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(position: offset, child: child),
+              );
+            },
+            child: _activeHomeAction == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    key: ValueKey(_activeHomeAction!.route),
+                    padding: const EdgeInsets.only(top: ToreTokens.s12),
+                    child: _HomeActionPanel(
+                      action: _activeHomeAction!,
+                      onOpenFull: () => Navigator.pushNamed(
+                          context, _activeHomeAction!.route),
+                      onClose: () => setState(() => _activeHomeAction = null),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: ToreTokens.s16),
           _SectionHeader(
-              title: 'Découvrir',
+              title: 'Live maintenant',
               actionLabel: 'Events',
               onTap: () {
                 Navigator.pushNamed(context, AppRoutes.events);
               }),
-          ..._moduleCards(ToreMode.user),
+          _HomeEventCard(
+            title: _mobileBootstrap.eventName ?? 'Afond Night',
+            bar: _mobileBootstrap.barName ?? 'TORÈ Test Bar',
+            meta: 'Live maintenant · entrée gratuite',
+            onTap: () => Navigator.pushNamed(context, AppRoutes.eventHub),
+          ),
+          const SizedBox(height: ToreTokens.s8),
+          _HomeEventCard(
+            title: 'Rooftop After',
+            bar: 'Bar B',
+            meta: 'Ce soir · 23:30 · 128 intéressés',
+            onTap: () => Navigator.pushNamed(context, AppRoutes.join),
+          ),
+          const SizedBox(height: ToreTokens.s16),
+          const _SectionHeader(title: 'Bars partenaires'),
+          _BarsPreview(
+            onBarTap: () => Navigator.pushNamed(context, AppRoutes.bars),
+          ),
+          const SizedBox(height: ToreTokens.s16),
+          const _SectionHeader(title: 'Modules actifs'),
+          ..._moduleCards(ToreMode.user).whereType<ModuleCard>().take(4),
         ];
     }
   }
@@ -715,6 +754,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ToreTheme.build(),
       routes: {
@@ -727,7 +767,10 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                     _diagnosticsAllowed ? _openDiagnostics : null)
             : ConsentCharterScreen(onAccept: () {
                 if (!mounted) return;
-                setState(() => _consented = true);
+                setState(() {
+                  _consented = true;
+                  _selectedUserTab = 0;
+                });
               }),
         AppRoutes.home: (_) => _mustShowUpdateRequired
             ? UpdateRequiredScreen(
@@ -879,21 +922,24 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                 ShowcaseAction(label: 'Demander aide', icon: Icons.warning),
               ],
             ),
-        AppRoutes.forum: (_) => _showcaseUserFeature(
-              title: 'Forum',
-              metric: '42',
-              label: 'Messages live',
-              items: const [
-                ShowcaseItem(
-                    title: 'Objet perdu',
-                    subtitle: 'Carte étudiante trouvée près de la scène',
-                    status: 'PIN'),
-                ShowcaseItem(
-                    title: 'After',
-                    subtitle: 'Thread modéré par l’équipe orga',
-                    status: 'LIVE'),
-              ],
-            ),
+        AppRoutes.forum: (_) => _isConnectedAccount
+            ? ScreenScaffold(
+                title: 'Forum',
+                connectivity: _network,
+                body: _ForumCommunitySurface(
+                  fullPage: true,
+                  onOpenForum: () => ToreFeedback.success(
+                      context, 'Page publique du forum ouverte.'),
+                  onSubmitRequest: () => ToreFeedback.success(context,
+                      'Demande de forum envoyée à la modération TORÈ.'),
+                ),
+              )
+            : const ScreenScaffold(
+                title: 'Forum',
+                body: BlockedStateView(
+                    title: 'Connexion requise',
+                    message:
+                        'Le Forum TORÈ est réservé aux comptes connectés pour protéger les rôles et permissions.')),
         AppRoutes.calendar: (_) => _showcaseUserFeature(
               title: 'Calendar',
               metric: '23:00',
@@ -1087,79 +1133,66 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                       _diagnosticsAllowed ? _openDiagnostics : null)
               : ConsentCharterScreen(onAccept: () {
                   if (!mounted) return;
-                  setState(() => _consented = true);
+                  setState(() {
+                    _consented = true;
+                    _selectedUserTab = 0;
+                  });
                 }))
           : Scaffold(
               appBar: AppBar(
-                title: const Text('TORÈ'),
+                title: Row(children: [
+                  Image.asset('assets/branding/logo_minimal.png',
+                      width: 32, height: 32),
+                  const SizedBox(width: ToreTokens.s8),
+                  const Text('TORÈ'),
+                ]),
                 actions: [
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<ConnectivityState>(
-                      value: _network,
-                      dropdownColor: ToreTokens.surfaceAlt,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.white),
-                      onChanged: (v) {
-                        if (!mounted) return;
-                        setState(() {
-                          _network = v ?? _network;
-                          _networkTransitionAt = DateTime.now();
-                        });
-                      },
-                      items: ConnectivityState.values
-                          .map((e) =>
-                              DropdownMenuItem(value: e, child: Text(e.name)))
-                          .toList(),
+                  Padding(
+                    padding: const EdgeInsets.only(right: ToreTokens.s8),
+                    child: Center(
+                      child: ToreBadge(
+                          label: 'LIVE',
+                          color: _network == ConnectivityState.online
+                              ? ToreTokens.ruby
+                              : ToreTokens.warning),
                     ),
                   ),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<ToreMode>(
-                      value: _mode,
-                      dropdownColor: ToreTokens.surfaceAlt,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.white),
-                      onChanged: (v) {
-                        if (!mounted) return;
-                        setState(() {
-                          _mode = v ?? _mode;
-                          _selectedUserTab = 0;
-                        });
-                      },
-                      items: ToreMode.values
-                          .where((m) => _guards.modeAllowed(m, _userSnapshot))
-                          .map((e) =>
-                              DropdownMenuItem(value: e, child: Text(e.name)))
-                          .toList(),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _navigatorKey.currentState
+                        ?.pushNamed(AppRoutes.profile),
+                    child: const SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: Icon(Icons.person_outline),
                     ),
                   ),
                 ],
               ),
               floatingActionButton: _mode == ToreMode.user
                   ? FloatingActionButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRoutes.scanner),
+                      onPressed: () => setState(() => _selectedUserTab = 2),
                       child: const Icon(Icons.qr_code_scanner))
                   : null,
               bottomNavigationBar: _mode == ToreMode.user
                   ? NavigationBar(
-                      selectedIndex: _selectedUserTab,
-                      destinations: const [
-                        NavigationDestination(
-                            icon: Icon(Icons.home), label: 'Home'),
-                        NavigationDestination(
+                      selectedIndex: _isConnectedAccount
+                          ? _selectedUserTab
+                          : _selectedUserTab.clamp(0, 3),
+                      destinations: [
+                        const NavigationDestination(
+                            icon: Icon(Icons.home), label: 'Hub'),
+                        const NavigationDestination(
                             icon: Icon(Icons.candlestick_chart),
                             label: 'Ticker'),
-                        NavigationDestination(
+                        const NavigationDestination(
                             icon: Icon(Icons.qr_code_scanner),
                             label: 'Scanner'),
-                        NavigationDestination(
-                            icon: Icon(Icons.show_chart), label: 'Market'),
-                        NavigationDestination(
-                            icon: Icon(Icons.person), label: 'Profile'),
+                        const NavigationDestination(
+                            icon: Icon(Icons.show_chart), label: 'Bets'),
+                        if (_isConnectedAccount)
+                          const NavigationDestination(
+                              icon: Icon(Icons.forum), label: 'Forum'),
                       ],
                       onDestinationSelected: (i) {
                         if (!mounted) return;
@@ -1217,28 +1250,80 @@ class _HeroStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stateLabel = eventState.name.toUpperCase();
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF261018), ToreTokens.surface],
+        ),
+        border: Border.all(color: ToreTokens.border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(ToreTokens.s16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: ToreTokens.black,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: ToreTokens.ruby),
+              ),
+              child: const Icon(Icons.local_fire_department,
+                  color: ToreTokens.yellowCta),
+            ),
+            const SizedBox(width: ToreTokens.s12),
             Expanded(
-              child: Text(eventName,
-                  style: Theme.of(context).textTheme.headlineSmall),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(eventName,
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: ToreTokens.s4),
+                    Text('$barName · pass actif'),
+                  ]),
             ),
             ToreBadge(
-                label: stateLabel,
+                label: stateLabel == 'LIVE' ? 'LIVE' : 'BETA',
                 color: eventState.isLive ? ToreTokens.ruby : Colors.orange),
           ]),
-          const SizedBox(height: ToreTokens.s8),
-          Text('$barName • mode ${mode.name.toUpperCase()}'),
-          const SizedBox(height: ToreTokens.s8),
-          Text(
-            'Synchronisé ${syncedAt?.toLocal().toIso8601String() ?? 'maintenant'}',
-            style: ToreTypography.mono,
-          ),
+          const SizedBox(height: ToreTokens.s16),
+          Row(children: const [
+            Expanded(child: _HeroMetric(value: '€129', label: 'wallet')),
+            SizedBox(width: ToreTokens.s8),
+            Expanded(child: _HeroMetric(value: '244', label: 'check-ins')),
+            SizedBox(width: ToreTokens.s8),
+            Expanded(child: _HeroMetric(value: '03', label: 'orders')),
+          ]),
         ]),
       ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(ToreTokens.s8),
+      decoration: BoxDecoration(
+        color: ToreTokens.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ToreTokens.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(value, style: ToreTypography.monoNumber(context, size: 18)),
+        Text(label,
+            style: const TextStyle(color: Colors.white54, fontSize: 11)),
+      ]),
     );
   }
 }
@@ -1246,12 +1331,13 @@ class _HeroStatusCard extends StatelessWidget {
 class _QuickActions extends StatelessWidget {
   const _QuickActions({required this.onOpen});
 
-  final void Function(String route) onOpen;
+  final void Function(_QuickAction action) onOpen;
 
   @override
   Widget build(BuildContext context) {
     final actions = const [
-      _QuickAction('Scanner', Icons.qr_code_scanner, AppRoutes.scanner),
+      _QuickAction('Scanner', Icons.qr_code_scanner, AppRoutes.scanner,
+          tabIndex: 2),
       _QuickAction('Join', Icons.group_add, AppRoutes.join),
       _QuickAction('Menu', Icons.local_bar, AppRoutes.menu),
       _QuickAction('Wallet', Icons.account_balance_wallet, AppRoutes.wallet),
@@ -1263,29 +1349,829 @@ class _QuickActions extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: actions.length,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220,
+        maxCrossAxisExtent: 180,
         mainAxisSpacing: ToreTokens.s8,
         crossAxisSpacing: ToreTokens.s8,
-        childAspectRatio: 2.8,
+        childAspectRatio: 2.35,
       ),
       itemBuilder: (context, index) {
         final action = actions[index];
-        return FilledButton.icon(
-          onPressed: () => onOpen(action.route),
-          icon: Icon(action.icon),
-          label: Text(action.label),
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: Duration(milliseconds: 180 + index * 45),
+          curve: Curves.easeOutBack,
+          builder: (context, value, child) {
+            return Opacity(
+              opacity: value.clamp(0.0, 1.0),
+              child: Transform.translate(
+                offset: Offset(0, (1 - value) * 10),
+                child:
+                    Transform.scale(scale: 0.94 + value * 0.06, child: child),
+              ),
+            );
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onOpen(action),
+            child: Container(
+              decoration: BoxDecoration(
+                color: ToreTokens.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: ToreTokens.border),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(ToreTokens.s12),
+                child: Row(children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: ToreTokens.ruby,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(action.icon, color: Colors.white, size: 19),
+                  ),
+                  const SizedBox(width: ToreTokens.s8),
+                  Expanded(
+                    child: Text(
+                      action.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ),
         );
       },
     );
   }
 }
 
+class _TickerPreview extends StatelessWidget {
+  const _TickerPreview({required this.items});
+
+  final List<TickerItemDto> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = items.take(4).toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s12),
+        child: Column(children: [
+          for (var i = 0; i < visible.length; i++) ...[
+            Row(children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: ToreTokens.yellowCta,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: ToreTokens.s12),
+              Expanded(child: Text(visible[i].message)),
+              const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
+            ]),
+            if (i != visible.length - 1)
+              const Divider(color: ToreTokens.border, height: 22),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _ScannerTabCard extends StatelessWidget {
+  const _ScannerTabCard({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(
+            height: 220,
+            decoration: BoxDecoration(
+              color: ToreTokens.black,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: ToreTokens.yellowCta, width: 1.4),
+            ),
+            child: Stack(alignment: Alignment.center, children: const [
+              Icon(Icons.qr_code_scanner,
+                  size: 92, color: ToreTokens.yellowCta),
+              Positioned(
+                bottom: 18,
+                child: Text('QR event · menu · WiFi · invitation'),
+              ),
+            ]),
+          ),
+          const SizedBox(height: ToreTokens.s12),
+          FilledButton.icon(
+            onPressed: onOpen,
+            icon: const Icon(Icons.center_focus_strong),
+            label: const Text('Ouvrir le scanner'),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _MarketsTab extends StatelessWidget {
+  const _MarketsTab({
+    required this.global,
+    required this.event,
+    required this.onGlobal,
+    required this.onEvent,
+  });
+
+  final List<PolymarketDto> global;
+  final List<PolymarketDto> event;
+  final VoidCallback onGlobal;
+  final VoidCallback onEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _SectionHeader(
+          title: 'Bets globaux', actionLabel: 'Ouvrir', onTap: onGlobal),
+      for (final item in global)
+        _BetCard(title: item.title, odds: '62%', onTap: onGlobal),
+      const SizedBox(height: ToreTokens.s12),
+      _SectionHeader(title: 'Bets soirée', actionLabel: 'Live', onTap: onEvent),
+      for (final item in event)
+        _BetCard(title: item.title, odds: '1.8x', onTap: onEvent),
+    ]);
+  }
+}
+
+class _BetCard extends StatelessWidget {
+  const _BetCard(
+      {required this.title, required this.odds, required this.onTap});
+
+  final String title;
+  final String odds;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ToreTokens.s8),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(ToreTokens.s12),
+            child: Row(children: [
+              const Icon(Icons.show_chart, color: ToreTokens.yellowCta),
+              const SizedBox(width: ToreTokens.s12),
+              Expanded(
+                  child: Text(title,
+                      style: Theme.of(context).textTheme.titleMedium)),
+              ToreBadge(label: odds, color: ToreTokens.rubyDeep),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeActionPanel extends StatelessWidget {
+  const _HomeActionPanel({
+    required this.action,
+    required this.onOpenFull,
+    required this.onClose,
+  });
+
+  final _QuickAction action;
+  final VoidCallback onOpenFull;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _HomeActionCopy.forRoute(action.route);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onOpenFull,
+      child: Card(
+        color: ToreTokens.surfaceAlt,
+        child: Padding(
+          padding: const EdgeInsets.all(ToreTokens.s16),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: ToreTokens.ruby.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(action.icon, color: ToreTokens.yellowCta),
+              ),
+              const SizedBox(width: ToreTokens.s12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(copy.title,
+                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(copy.subtitle),
+                    ]),
+              ),
+              IconButton(
+                tooltip: 'Fermer',
+                onPressed: onClose,
+                icon: const Icon(Icons.close),
+              ),
+            ]),
+            const SizedBox(height: ToreTokens.s12),
+            Wrap(
+              spacing: ToreTokens.s8,
+              runSpacing: ToreTokens.s8,
+              children: [
+                for (final chip in copy.chips)
+                  Chip(
+                    label: Text(chip),
+                    backgroundColor: ToreTokens.black,
+                    side: const BorderSide(color: ToreTokens.ruby),
+                  ),
+              ],
+            ),
+            const SizedBox(height: ToreTokens.s12),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onOpenFull,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 46),
+                decoration: BoxDecoration(
+                  color: ToreTokens.ruby,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(copy.ctaIcon, color: Colors.white),
+                    const SizedBox(width: ToreTokens.s8),
+                    Text(
+                      copy.cta,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeActionCopy {
+  const _HomeActionCopy({
+    required this.title,
+    required this.subtitle,
+    required this.chips,
+    required this.cta,
+    required this.ctaIcon,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<String> chips;
+  final String cta;
+  final IconData ctaIcon;
+
+  static _HomeActionCopy forRoute(String route) {
+    switch (route) {
+      case AppRoutes.join:
+        return const _HomeActionCopy(
+          title: 'Rejoindre la soirée',
+          subtitle: 'QR valide ou code manuel. Accès en un geste.',
+          chips: ['Afond Night', 'Entrée gratuite', 'Pass actif'],
+          cta: 'Ouvrir le join',
+          ctaIcon: Icons.group_add,
+        );
+      case AppRoutes.menu:
+        return const _HomeActionCopy(
+          title: 'Menu express',
+          subtitle: 'Ajoute au panier, confirme, puis montre le QR au bar.',
+          chips: ['2 taps max', 'Panier inline', 'QR commande'],
+          cta: 'Commander',
+          ctaIcon: Icons.local_bar,
+        );
+      case AppRoutes.wallet:
+        return const _HomeActionCopy(
+          title: 'Wallet',
+          subtitle: 'Solde, tickets et historique de la soirée.',
+          chips: ['€129.20', 'Tickets prêts', 'Top-up'],
+          cta: 'Voir le wallet',
+          ctaIcon: Icons.account_balance_wallet,
+        );
+      case AppRoutes.safeKit:
+        return const _HomeActionCopy(
+          title: 'Safe Kit',
+          subtitle: 'Aide discrète, buddy check et contact staff.',
+          chips: ['Alerte discrète', 'Buddy OK', 'Staff 2 min'],
+          cta: 'Ouvrir Safe Kit',
+          ctaIcon: Icons.health_and_safety,
+        );
+      case AppRoutes.ranking:
+        return const _HomeActionCopy(
+          title: 'Ranking live',
+          subtitle: 'Classement de la soirée et progression équipe.',
+          chips: ['#12', '+3 places', '940 pts'],
+          cta: 'Voir le classement',
+          ctaIcon: Icons.leaderboard,
+        );
+      default:
+        return const _HomeActionCopy(
+          title: 'Action TORÈ',
+          subtitle: 'Module prêt pour la soirée.',
+          chips: ['LIVE', 'BETA'],
+          cta: 'Ouvrir',
+          ctaIcon: Icons.arrow_forward,
+        );
+    }
+  }
+}
+
+class _HomeEventCard extends StatelessWidget {
+  const _HomeEventCard({
+    required this.title,
+    required this.bar,
+    required this.meta,
+    required this.onTap,
+  });
+
+  final String title;
+  final String bar;
+  final String meta;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(ToreTokens.s16),
+          child: Row(children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: ToreTokens.rubyDeep,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.local_fire_department,
+                  color: ToreTokens.yellowCta),
+            ),
+            const SizedBox(width: ToreTokens.s12),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: ToreTokens.s4),
+                    Text(bar, style: const TextStyle(color: Colors.white70)),
+                    Text(meta,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                  ]),
+            ),
+            const Icon(Icons.arrow_forward_ios,
+                color: ToreTokens.yellowCta, size: 16),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _BarsPreview extends StatelessWidget {
+  const _BarsPreview({required this.onBarTap});
+
+  final VoidCallback onBarTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bars = const [
+      ('TORÈ Test Bar', 'Live · 2 events'),
+      ('Bar B', 'Happy hour · 1 event'),
+    ];
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: bars.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: ToreTokens.s8,
+        crossAxisSpacing: ToreTokens.s8,
+        childAspectRatio: 1.5,
+      ),
+      itemBuilder: (context, index) {
+        final bar = bars[index];
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onBarTap,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(ToreTokens.s12),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: ToreTokens.ruby.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.storefront,
+                          color: ToreTokens.yellowCta, size: 20),
+                    ),
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(bar.$1,
+                              style: Theme.of(context).textTheme.titleMedium),
+                          Text(bar.$2,
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12)),
+                        ]),
+                  ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ForumCommunitySurface extends StatelessWidget {
+  const _ForumCommunitySurface({
+    required this.onOpenForum,
+    required this.onSubmitRequest,
+    this.fullPage = false,
+  });
+
+  final VoidCallback onOpenForum;
+  final VoidCallback onSubmitRequest;
+  final bool fullPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _SectionHeader(
+          title: 'Forum TORÈ',
+          actionLabel: fullPage ? null : 'Page publique',
+          onTap: onOpenForum),
+      Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: ToreTokens.border),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF261018), ToreTokens.surface],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(ToreTokens.s16),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: ToreTokens.rubyDeep,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: ToreTokens.yellowCta),
+                ),
+                child: const Icon(Icons.forum, color: ToreTokens.yellowCta),
+              ),
+              const SizedBox(width: ToreTokens.s12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Comité Saint-Torè',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const Text('Espace public · Liège · folklore étudiant'),
+                    ]),
+              ),
+              const ToreBadge(label: 'PUBLIC', color: ToreTokens.ruby),
+            ]),
+            const SizedBox(height: ToreTokens.s12),
+            const Text(
+                'Accueil officiel du comité : description, bannière, événements, liens utiles et membres publics selon confidentialité.'),
+            const SizedBox(height: ToreTokens.s12),
+            Row(children: const [
+              Expanded(child: _ForumStat(value: '12', label: 'soirées')),
+              SizedBox(width: ToreTokens.s8),
+              Expanded(child: _ForumStat(value: '244', label: 'entrées')),
+              SizedBox(width: ToreTokens.s8),
+              Expanded(child: _ForumStat(value: '68%', label: 'bets')),
+            ]),
+            const SizedBox(height: ToreTokens.s12),
+            FilledButton.icon(
+              onPressed: onOpenForum,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Voir la page publique'),
+            ),
+          ]),
+        ),
+      ),
+      const SizedBox(height: ToreTokens.s12),
+      const _ForumFeedCard(),
+      const SizedBox(height: ToreTokens.s12),
+      _ForumRequestCard(onSubmit: onSubmitRequest),
+      const SizedBox(height: ToreTokens.s12),
+      const _ForumPrivateChannelsCard(),
+      const SizedBox(height: ToreTokens.s12),
+      const _ForumAdminCard(),
+      const SizedBox(height: ToreTokens.s12),
+      const _ForumStatsCard(),
+    ]);
+  }
+}
+
+class _ForumStat extends StatelessWidget {
+  const _ForumStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(ToreTokens.s8),
+      decoration: BoxDecoration(
+        color: ToreTokens.black.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ToreTokens.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(value, style: ToreTypography.monoNumber(context, size: 18)),
+        Text(label,
+            style: const TextStyle(color: Colors.white54, fontSize: 11)),
+      ]),
+    );
+  }
+}
+
+class _ForumFeedCard extends StatelessWidget {
+  const _ForumFeedCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final posts = const [
+      (
+        'Prochaine guindaille',
+        'TD Outremeuse · vendredi 22:30 · QR join activé',
+        Icons.event
+      ),
+      (
+        'Dernière soirée organisée',
+        'Afond Night : 244 entrées, 3 modules actifs, recap publié',
+        Icons.insights
+      ),
+      (
+        'Annonce comité',
+        'Les inscriptions staff sont ouvertes pour la Saint-Torè.',
+        Icons.campaign
+      ),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Fil public', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s8),
+          const Text(
+              'Comme une page communautaire : annonces, events, souvenirs et liens utiles.'),
+          const SizedBox(height: ToreTokens.s12),
+          for (final post in posts)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(post.$3, color: ToreTokens.yellowCta),
+              title: Text(post.$1),
+              subtitle: Text(post.$2),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ForumRequestCard extends StatelessWidget {
+  const _ForumRequestCard({required this.onSubmit});
+
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Demander un espace',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s8),
+          const Text(
+              'Comité, ordre, régionale ou rivageoise : la demande est modérée avant création.'),
+          const SizedBox(height: ToreTokens.s12),
+          Wrap(
+              spacing: ToreTokens.s8,
+              runSpacing: ToreTokens.s8,
+              children: const [
+                Chip(label: Text('Comité')),
+                Chip(label: Text('Cercle')),
+                Chip(label: Text('Ordre')),
+                Chip(label: Text('Régionale')),
+                Chip(label: Text('Rivageoise')),
+                Chip(label: Text('Autre')),
+              ]),
+          const SizedBox(height: ToreTokens.s12),
+          const TextField(
+            style: TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+                labelText: 'Nom souhaité', prefixIcon: Icon(Icons.badge)),
+          ),
+          const SizedBox(height: ToreTokens.s12),
+          const TextField(
+            style: TextStyle(color: Colors.white),
+            minLines: 2,
+            maxLines: 3,
+            decoration: InputDecoration(
+                labelText: 'Description / justification',
+                prefixIcon: Icon(Icons.description)),
+          ),
+          const SizedBox(height: ToreTokens.s12),
+          FilledButton.icon(
+              onPressed: onSubmit,
+              icon: const Icon(Icons.send),
+              label: const Text('Soumettre la demande')),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ForumPrivateChannelsCard extends StatelessWidget {
+  const _ForumPrivateChannelsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final channels = const [
+      ('# annonces', 'Lecture publique, écriture responsables'),
+      ('# staff-event', 'Préparation, QR pack, rôles terrain'),
+      ('# comité-privé', 'Discussion interne et passation'),
+      ('# modération', 'Signalements, permissions, accès'),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Salons privés', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s8),
+          const Text(
+              'Des groupes de discussion type Discord, reliés aux rôles TORÈ et aux events.'),
+          const SizedBox(height: ToreTokens.s12),
+          for (final channel in channels)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.tag, color: ToreTokens.yellowCta),
+              title: Text(channel.$1),
+              subtitle: Text(channel.$2),
+              trailing: const ToreBadge(label: 'PRIVÉ'),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ForumAdminCard extends StatelessWidget {
+  const _ForumAdminCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = const [
+      ('Infos forum', 'Description, bannière, liens utiles'),
+      ('Membres', 'Invitations, visibilité publique'),
+      ('Fonctions & grades', 'Rôles, permissions, accès'),
+      ('Accès', 'Lecture, écriture, modération'),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Gestion responsable',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s8),
+          for (final row in rows)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.admin_panel_settings,
+                  color: ToreTokens.yellowCta),
+              title: Text(row.$1),
+              subtitle: Text(row.$2),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ForumStatsCard extends StatelessWidget {
+  const _ForumStatsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = const [
+      ('Afond Night', '244 entrées · menu + bets + safe kit'),
+      ('Rooftop After', '128 entrées · tickets + hunts'),
+      ('Saint-Torè warmup', 'Post-event exporté'),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Statistiques TORÈ',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s8),
+          const Text(
+              'Résumé post-event, modules activés, tickets, ventes et participation aux bets/hunts/battles.'),
+          const SizedBox(height: ToreTokens.s12),
+          for (final row in rows)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.insights, color: ToreTokens.yellowCta),
+              title: Text(row.$1),
+              subtitle: Text(row.$2),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ConnectedOnlyForumPrompt extends StatelessWidget {
+  const _ConnectedOnlyForumPrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(ToreTokens.s16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.lock, color: ToreTokens.yellowCta),
+          SizedBox(height: ToreTokens.s12),
+          Text('Forum disponible après connexion',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          SizedBox(height: ToreTokens.s8),
+          Text(
+              'Connecte-toi pour rejoindre un comité, demander un espace ou gérer les rôles folkloriques.'),
+        ]),
+      ),
+    );
+  }
+}
+
 class _QuickAction {
-  const _QuickAction(this.label, this.icon, this.route);
+  const _QuickAction(this.label, this.icon, this.route, {this.tabIndex});
 
   final String label;
   final IconData icon;
   final String route;
+  final int? tabIndex;
 }
 
 class _SectionHeader extends StatelessWidget {

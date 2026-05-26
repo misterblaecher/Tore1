@@ -4,9 +4,11 @@ import '../../config/app_environment.dart';
 
 class ToreTokens {
   static const black = Color(0xFF050506);
-  static const surface = Color(0xFF111118);
-  static const surfaceAlt = Color(0xFF181820);
+  static const surface = Color(0xFF121217);
+  static const surfaceAlt = Color(0xFF1B1A22);
+  static const border = Color(0xFF2A2631);
   static const ruby = Color(0xFFBA1733);
+  static const rubyDeep = Color(0xFF6E0D18);
   static const yellowCta = Color(0xFFF4C430);
   static const ok = Color(0xFF50D890);
   static const warning = Color(0xFFFFA629);
@@ -56,11 +58,55 @@ class ToreTheme {
       cardTheme: const CardThemeData(
         color: ToreTokens.surface,
         margin: EdgeInsets.zero,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+          side: BorderSide(color: ToreTokens.border),
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: ToreTokens.black,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+            color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: ToreTokens.surface,
+        indicatorColor: ToreTokens.yellowCta,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? Colors.white
+                : Colors.white70,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? ToreTokens.black
+                : Colors.white,
+            size: 22,
+          ),
+        ),
       ),
       inputDecorationTheme: const InputDecorationTheme(
         filled: true,
         fillColor: ToreTokens.surfaceAlt,
-        border: OutlineInputBorder(),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderSide: BorderSide(color: ToreTokens.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderSide: BorderSide(color: ToreTokens.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderSide: BorderSide(color: ToreTokens.yellowCta),
+        ),
       ),
       textTheme: const TextTheme(
         headlineMedium: TextStyle(
@@ -88,12 +134,17 @@ class ToreTheme {
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(44),
           foregroundColor: Colors.white,
+          backgroundColor: ToreTokens.ruby,
           disabledForegroundColor: Colors.white54,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(44),
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: ToreTokens.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
