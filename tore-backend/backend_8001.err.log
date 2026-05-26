@@ -1,9 +1,11 @@
 INFO:root:BOOT commit=None
-INFO:     Started server process [82388]
+INFO:     Started server process [51412]
 INFO:     Waiting for application startup.
-INFO:app.utils.migrations:Running migrations (RUN_MIGRATIONS=1, MIGRATIONS_FATAL=0)
+INFO:app.utils.migrations:Running migrations (RUN_MIGRATIONS=1, MIGRATIONS_FATAL=1)
 INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
 INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+WARNI [root] startup.env.warning=DATABASE_URL missing: sqlite dev fallback will be used
 WARNI [root] startup.env.warning=PUBLIC_URL/BASE_URL missing: using TORE_PUBLIC_APP_URL/default
 WARNI [root] startup.env.warning=TORE_QR_SIGNING_KEYS missing: fallback secret strategy in use
+WARNI [root] startup.env.warning=TORE_CORS_ORIGINS missing: localhost defaults are enabled
 WARNI [root] startup.env.warning=RETENTION_DAYS/TORE_PRIVACY_RETENTION_DAYS missing: default retention=30

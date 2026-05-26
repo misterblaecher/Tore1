@@ -14,6 +14,8 @@ import logoFull from "@/assets/logo-full.png";
 const mainNavLinks = [
   { label: "Plateforme", href: "/#solution" },
   { label: "Modules", href: "/#modules" },
+  { label: "Forum", href: "/forum/public" },
+  { label: "Studio", href: "/studio" },
   { label: "Roadmap", href: "/#roadmap" },
   { label: "Contact", href: "/#contact" },
 ];

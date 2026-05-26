@@ -18,6 +18,8 @@ import Terms from "./pages/legal/Terms";
 import Cookies from "./pages/legal/Cookies";
 import ProfilePage from "./pages/Profile";
 import ForumPage from "./pages/Forum";
+import ForumPublicPage from "./pages/ForumPublic";
+import CommitteeStudioPage from "./pages/CommitteeStudio";
 import LoginPage from "./pages/Login";
 import AuthCallbackPage from "./pages/AuthCallback";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -65,7 +67,9 @@ const App = () => (
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="/forum/public" element={<ForumPublicPage />} />
           <Route path="/forum" element={<ProtectedRoute><ForumPage /></ProtectedRoute>} />
+          <Route path="/studio" element={<ProtectedRoute><CommitteeStudioPage /></ProtectedRoute>} />
           <Route path="/legal/privacy" element={<Privacy />} />
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/cookies" element={<Cookies />} />

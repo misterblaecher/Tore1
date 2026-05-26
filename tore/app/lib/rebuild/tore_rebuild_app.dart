@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'config/app_environment.dart';
 import 'models/event_context.dart';
@@ -348,6 +349,14 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
 
     if (!mounted) return;
     Navigator.pushNamed(context, route);
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ToreFeedback.error(context, 'Lien impossible à ouvrir pour le moment.');
+    }
   }
 
   Future<void> _sensitiveWrite(String moduleId, String action) async {
@@ -700,9 +709,17 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             onTap: () => Navigator.pushNamed(context, AppRoutes.eventHub),
           ),
           const SizedBox(height: ToreTokens.s16),
-          const _SectionHeader(title: 'Bars partenaires'),
+          _NearbyEventsPreview(
+            onOpenEvent: () => Navigator.pushNamed(context, AppRoutes.events),
+          ),
+          const SizedBox(height: ToreTokens.s16),
+          _SectionHeader(
+              title: 'Bars proches',
+              actionLabel: 'Voir tout',
+              onTap: () => Navigator.pushNamed(context, AppRoutes.bars)),
           _BarsPreview(
             onBarTap: () => Navigator.pushNamed(context, AppRoutes.bars),
+            onOpenMap: _openExternalUrl,
           ),
         ];
     }
@@ -1753,63 +1770,159 @@ class _HomeEventCard extends StatelessWidget {
   }
 }
 
+class _NearbyEventsPreview extends StatelessWidget {
+  const _NearbyEventsPreview({required this.onOpenEvent});
+
+  final VoidCallback onOpenEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    final events = const [
+      (
+        title: 'TD Outremeuse',
+        place: 'L’Embuscade',
+        distance: '450 m',
+        time: 'Ce soir · 22:30',
+        status: 'QR join'
+      ),
+      (
+        title: 'Rooftop After',
+        place: 'Bar B',
+        distance: '900 m',
+        time: '23:45',
+        status: '128 intéressés'
+      ),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s12),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Text('Soirées près de toi',
+                style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            const ToreBadge(label: 'Liège', color: ToreTokens.ruby),
+          ]),
+          const SizedBox(height: ToreTokens.s8),
+          for (final event in events)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading:
+                  const Icon(Icons.local_activity, color: ToreTokens.yellowCta),
+              title: Text(event.title),
+              subtitle:
+                  Text('${event.place} · ${event.distance} · ${event.time}'),
+              trailing: TextButton(
+                onPressed: onOpenEvent,
+                child: Text(event.status),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
 class _BarsPreview extends StatelessWidget {
-  const _BarsPreview({required this.onBarTap});
+  const _BarsPreview({required this.onBarTap, required this.onOpenMap});
 
   final VoidCallback onBarTap;
+  final ValueChanged<String> onOpenMap;
 
   @override
   Widget build(BuildContext context) {
     final bars = const [
-      ('TORÈ Test Bar', 'Live · 2 events'),
-      ('Bar B', 'Happy hour · 1 event'),
-    ];
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: bars.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: ToreTokens.s8,
-        crossAxisSpacing: ToreTokens.s8,
-        childAspectRatio: 1.5,
+      (
+        name: 'L’Embuscade',
+        meta: 'Ouvert · 450 m · 2 soirées',
+        mapUrl: 'https://maps.app.goo.gl/5tsL5yu1XdKA25js6'
       ),
-      itemBuilder: (context, index) {
-        final bar = bars[index];
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onBarTap,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(ToreTokens.s12),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: ToreTokens.ruby.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.storefront,
-                          color: ToreTokens.yellowCta, size: 20),
-                    ),
-                    Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(bar.$1,
-                              style: Theme.of(context).textTheme.titleMedium),
-                          Text(bar.$2,
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 12)),
-                        ]),
-                  ]),
+      (
+        name: 'TORÈ Test Bar',
+        meta: 'Live · 700 m · 1 event',
+        mapUrl:
+            'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar'
+      ),
+      (
+        name: 'Bar B',
+        meta: 'Happy hour · 900 m',
+        mapUrl:
+            'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar%20B'
+      ),
+    ];
+    return Column(
+      children: [
+        for (var index = 0; index < bars.length; index++) ...[
+          _PartnerBarTile(
+            name: bars[index].name,
+            meta: bars[index].meta,
+            onTap: onBarTap,
+            onOpenMap: () => onOpenMap(bars[index].mapUrl),
+          ),
+          if (index != bars.length - 1) const SizedBox(height: ToreTokens.s8),
+        ],
+      ],
+    );
+  }
+}
+
+class _PartnerBarTile extends StatelessWidget {
+  const _PartnerBarTile({
+    required this.name,
+    required this.meta,
+    required this.onTap,
+    required this.onOpenMap,
+  });
+
+  final String name;
+  final String meta;
+  final VoidCallback onTap;
+  final VoidCallback onOpenMap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s12),
+        child: Row(children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: ToreTokens.ruby.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.storefront,
+                  color: ToreTokens.yellowCta, size: 22),
             ),
           ),
-        );
-      },
+          const SizedBox(width: ToreTokens.s12),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: ToreTokens.s4),
+              Text(meta,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ]),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Ouvrir dans Google Maps',
+            onPressed: onOpenMap,
+            icon: const Icon(Icons.map),
+          ),
+          const SizedBox(width: ToreTokens.s4),
+          IconButton(
+            tooltip: 'Voir les soirées',
+            onPressed: onTap,
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ]),
+      ),
     );
   }
 }

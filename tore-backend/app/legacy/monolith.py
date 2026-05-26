@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from email.message import EmailMessage
 
 import jwt
+from passlib.context import CryptContext
 from fastapi import FastAPI, HTTPException, Query, Depends, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -191,6 +192,7 @@ ENABLE_WHATSAPP_OTP = (os.getenv("ENABLE_WHATSAPP_OTP") or "false").strip().lowe
 ORGA_CODE = (os.getenv("ORGA_CODE") or "").strip()
 TEAM_CODE = (os.getenv("TEAM_CODE") or "").strip()
 ADMIN_API_KEY = (os.getenv("ADMIN_API_KEY") or "").strip()
+PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Price engine knobs (simple but fun)
 MIN_MULT = 0.50
@@ -557,6 +559,14 @@ def _ensure_app_user_privacy_columns() -> None:
             s.execute(text("ALTER TABLE app_users ADD COLUMN anonymized_at DATETIME"))
         if "account_mode" not in columns:
             s.execute(text("ALTER TABLE app_users ADD COLUMN account_mode VARCHAR(16) DEFAULT 'user'"))
+        if "first_name" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN first_name VARCHAR(120)"))
+        if "last_name" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN last_name VARCHAR(120)"))
+        if "nickname" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN nickname VARCHAR(120)"))
+        if "password_hash" not in columns:
+            s.execute(text("ALTER TABLE app_users ADD COLUMN password_hash VARCHAR(255)"))
         s.execute(text("UPDATE app_users SET account_mode='user' WHERE account_mode IS NULL OR account_mode = ''"))
         s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_account_mode ON app_users (account_mode)"))
         s.execute(text("CREATE INDEX IF NOT EXISTS ix_app_users_deleted_at ON app_users (deleted_at)"))
@@ -1358,6 +1368,19 @@ class EmailOtpRequestIn(BaseModel):
 class EmailOtpVerifyIn(BaseModel):
     email: str
     code: str = Field(min_length=6, max_length=6)
+
+
+class PasswordRegisterIn(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+    first_name: str = Field(min_length=1, max_length=120)
+    last_name: str = Field(min_length=1, max_length=120)
+    nickname: str = Field(min_length=1, max_length=120)
+
+
+class PasswordLoginIn(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 class RefreshIn(BaseModel):
@@ -4058,6 +4081,49 @@ def auth_email_verify_link(payload: MagicLinkVerifyIn, request: Request, db: Ses
     if len(token) != 6 or not token.isdigit():
         raise HTTPException(status_code=400, detail={"reason": "otp_required"})
     return auth_email_verify_otp(EmailOtpVerifyIn(email=payload.email, code=token), request, db)
+
+
+@app.post("/auth/password/register")
+def auth_password_register(payload: PasswordRegisterIn, db: Session = Depends(get_db)):
+    email = _normalize_email(payload.email)
+    existing = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail={"reason": "email_already_registered"})
+
+    nickname = payload.nickname.strip()
+    display_name = nickname or f"{payload.first_name.strip()} {payload.last_name.strip()}".strip()
+    password_hash = PWD_CONTEXT.hash(payload.password)
+    user = AppUser(
+        id=secrets.token_hex(16),
+        display_name=display_name[:120],
+        email=email,
+        first_name=payload.first_name.strip()[:120],
+        last_name=payload.last_name.strip()[:120],
+        nickname=nickname[:120],
+        password_hash=password_hash,
+    )
+    db.add(user)
+    db.flush()
+
+    tokens = _issue_auth_tokens(db, user)
+    db.commit()
+    return {"created": True, **tokens, "user": _user_snapshot(db, user)}
+
+
+@app.post("/auth/password/login")
+def auth_password_login(payload: PasswordLoginIn, db: Session = Depends(get_db)):
+    email = _normalize_email(payload.email)
+    user = db.query(AppUser).filter(func.lower(AppUser.email) == email).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail={"reason": "invalid_credentials"})
+
+    password_hash = (getattr(user, "password_hash", None) or "").strip()
+    if not password_hash or not PWD_CONTEXT.verify(payload.password, password_hash):
+        raise HTTPException(status_code=401, detail={"reason": "invalid_credentials"})
+
+    tokens = _issue_auth_tokens(db, user)
+    db.commit()
+    return {**tokens, "user": _user_snapshot(db, user)}
 
 
 @app.post("/auth/refresh")
