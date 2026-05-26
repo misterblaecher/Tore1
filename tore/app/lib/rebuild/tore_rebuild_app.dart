@@ -699,21 +699,11 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             meta: 'Live maintenant · entrée gratuite',
             onTap: () => Navigator.pushNamed(context, AppRoutes.eventHub),
           ),
-          const SizedBox(height: ToreTokens.s8),
-          _HomeEventCard(
-            title: 'Rooftop After',
-            bar: 'Bar B',
-            meta: 'Ce soir · 23:30 · 128 intéressés',
-            onTap: () => Navigator.pushNamed(context, AppRoutes.join),
-          ),
           const SizedBox(height: ToreTokens.s16),
           const _SectionHeader(title: 'Bars partenaires'),
           _BarsPreview(
             onBarTap: () => Navigator.pushNamed(context, AppRoutes.bars),
           ),
-          const SizedBox(height: ToreTokens.s16),
-          const _SectionHeader(title: 'Modules actifs'),
-          ..._moduleCards(ToreMode.user).whereType<ModuleCard>().take(4),
         ];
     }
   }
@@ -1341,8 +1331,6 @@ class _QuickActions extends StatelessWidget {
       _QuickAction('Join', Icons.group_add, AppRoutes.join),
       _QuickAction('Menu', Icons.local_bar, AppRoutes.menu),
       _QuickAction('Wallet', Icons.account_balance_wallet, AppRoutes.wallet),
-      _QuickAction('Safe Kit', Icons.health_and_safety, AppRoutes.safeKit),
-      _QuickAction('Ranking', Icons.leaderboard, AppRoutes.ranking),
     ];
     return GridView.builder(
       shrinkWrap: true,
@@ -1826,7 +1814,7 @@ class _BarsPreview extends StatelessWidget {
   }
 }
 
-class _ForumCommunitySurface extends StatelessWidget {
+class _ForumCommunitySurface extends StatefulWidget {
   const _ForumCommunitySurface({
     required this.onOpenForum,
     required this.onSubmitRequest,
@@ -1838,21 +1826,97 @@ class _ForumCommunitySurface extends StatelessWidget {
   final bool fullPage;
 
   @override
+  State<_ForumCommunitySurface> createState() => _ForumCommunitySurfaceState();
+}
+
+class _ForumCommunitySurfaceState extends State<_ForumCommunitySurface> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _eventNameController;
+  late final TextEditingController _eventPlaceController;
+  late final TextEditingController _eventDateController;
+
+  String _spaceType = 'Comité';
+  String _forumName = 'Comité Saint-Torè';
+  String _forumDescription = 'Espace public · Liège · folklore étudiant';
+  bool _spaceCreated = true;
+  int _selectedPanel = 0;
+
+  final List<({String title, String detail})> _events = [
+    (
+      title: 'Afond Night',
+      detail: 'Live · 244 entrées · menu + bets + safe kit'
+    ),
+    (title: 'Saint-Torè warmup', detail: 'Vendredi 22:30 · QR join activé'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: _forumName);
+    _descriptionController = TextEditingController(
+        text:
+            'Accueil officiel du comité : description, bannière, événements, liens utiles et membres visibles.');
+    _eventNameController = TextEditingController(text: 'TD Outremeuse');
+    _eventPlaceController =
+        TextEditingController(text: 'Liège · salle à confirmer');
+    _eventDateController = TextEditingController(text: 'Vendredi · 22:30');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _eventNameController.dispose();
+    _eventPlaceController.dispose();
+    _eventDateController.dispose();
+    super.dispose();
+  }
+
+  void _submitRequest() {
+    final name = _nameController.text.trim();
+    setState(() {
+      _spaceCreated = true;
+      _forumName = name.isEmpty ? 'Nouveau $_spaceType TORÈ' : name;
+      _forumDescription = '$_spaceType · demande acceptée · espace officiel';
+      _selectedPanel = 1;
+    });
+    widget.onSubmitRequest();
+    ToreFeedback.success(context, 'Espace créé : $_forumName');
+  }
+
+  void _createEvent() {
+    final title = _eventNameController.text.trim();
+    if (title.isEmpty) {
+      ToreFeedback.error(context, 'Ajoute un nom d’événement.');
+      return;
+    }
+    final place = _eventPlaceController.text.trim();
+    final date = _eventDateController.text.trim();
+    setState(() {
+      _events.insert(0, (
+        title: title,
+        detail:
+            '${date.isEmpty ? 'Date à confirmer' : date} · ${place.isEmpty ? 'Lieu à confirmer' : place} · brouillon TORÈ'
+      ));
+      _selectedPanel = 2;
+    });
+    ToreFeedback.success(context, 'Event créé dans le forum.');
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final panels = ['Créer', 'Gérer', 'Events', 'Salons'];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _SectionHeader(
           title: 'Forum TORÈ',
-          actionLabel: fullPage ? null : 'Page publique',
-          onTap: onOpenForum),
+          actionLabel: widget.fullPage ? null : 'Page publique',
+          onTap: widget.onOpenForum),
       Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: ToreTokens.border),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF261018), ToreTokens.surface],
-          ),
+          color: ToreTokens.surface,
         ),
         child: Padding(
           padding: const EdgeInsets.all(ToreTokens.s16),
@@ -1874,41 +1938,95 @@ class _ForumCommunitySurface extends StatelessWidget {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Comité Saint-Torè',
+                      Text(_forumName,
                           style: Theme.of(context).textTheme.titleLarge),
-                      const Text('Espace public · Liège · folklore étudiant'),
+                      Text(_forumDescription),
                     ]),
               ),
-              const ToreBadge(label: 'PUBLIC', color: ToreTokens.ruby),
+              ToreBadge(
+                  label: _spaceCreated ? 'ACTIF' : 'BROUILLON',
+                  color: _spaceCreated ? ToreTokens.ruby : ToreTokens.border),
             ]),
             const SizedBox(height: ToreTokens.s12),
-            const Text(
-                'Accueil officiel du comité : description, bannière, événements, liens utiles et membres publics selon confidentialité.'),
+            Text(_descriptionController.text.trim().isEmpty
+                ? 'Page publique du forum : description, bannière, événements, liens utiles et membres publics.'
+                : _descriptionController.text.trim()),
             const SizedBox(height: ToreTokens.s12),
-            Row(children: const [
-              Expanded(child: _ForumStat(value: '12', label: 'soirées')),
-              SizedBox(width: ToreTokens.s8),
-              Expanded(child: _ForumStat(value: '244', label: 'entrées')),
-              SizedBox(width: ToreTokens.s8),
-              Expanded(child: _ForumStat(value: '68%', label: 'bets')),
+            Row(children: [
+              Expanded(
+                  child:
+                      _ForumStat(value: '${_events.length}', label: 'events')),
+              const SizedBox(width: ToreTokens.s8),
+              Expanded(
+                  child: _ForumStat(
+                      value: _spaceCreated ? '18' : '0', label: 'membres')),
+              const SizedBox(width: ToreTokens.s8),
+              Expanded(
+                  child: _ForumStat(
+                      value: _spaceCreated ? '4' : '0', label: 'salons')),
             ]),
             const SizedBox(height: ToreTokens.s12),
-            FilledButton.icon(
-              onPressed: onOpenForum,
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('Voir la page publique'),
-            ),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: widget.onOpenForum,
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Page publique'),
+                ),
+              ),
+              const SizedBox(width: ToreTokens.s8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _selectedPanel = 1),
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Gérer'),
+                ),
+              ),
+            ]),
           ]),
         ),
       ),
       const SizedBox(height: ToreTokens.s12),
-      const _ForumFeedCard(),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (var i = 0; i < panels.length; i++) ...[
+            ChoiceChip(
+              label: Text(panels[i]),
+              selected: _selectedPanel == i,
+              onSelected: (_) => setState(() => _selectedPanel = i),
+            ),
+            const SizedBox(width: ToreTokens.s8),
+          ],
+        ]),
+      ),
       const SizedBox(height: ToreTokens.s12),
-      _ForumRequestCard(onSubmit: onSubmitRequest),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: switch (_selectedPanel) {
+          0 => _ForumRequestCard(
+              key: const ValueKey('create'),
+              nameController: _nameController,
+              descriptionController: _descriptionController,
+              selectedType: _spaceType,
+              onTypeChanged: (value) => setState(() => _spaceType = value),
+              onSubmit: _submitRequest,
+            ),
+          1 => _ForumAdminCard(
+              key: const ValueKey('admin'), forumName: _forumName),
+          2 => _ForumEventsManagerCard(
+              key: const ValueKey('events'),
+              events: _events,
+              eventNameController: _eventNameController,
+              eventPlaceController: _eventPlaceController,
+              eventDateController: _eventDateController,
+              onCreateEvent: _createEvent,
+            ),
+          _ => const _ForumPrivateChannelsCard(key: ValueKey('channels')),
+        },
+      ),
       const SizedBox(height: ToreTokens.s12),
-      const _ForumPrivateChannelsCard(),
-      const SizedBox(height: ToreTokens.s12),
-      const _ForumAdminCard(),
+      _ForumFeedCard(events: _events),
       const SizedBox(height: ToreTokens.s12),
       const _ForumStatsCard(),
     ]);
@@ -1940,27 +2058,12 @@ class _ForumStat extends StatelessWidget {
 }
 
 class _ForumFeedCard extends StatelessWidget {
-  const _ForumFeedCard();
+  const _ForumFeedCard({required this.events});
+
+  final List<({String title, String detail})> events;
 
   @override
   Widget build(BuildContext context) {
-    final posts = const [
-      (
-        'Prochaine guindaille',
-        'TD Outremeuse · vendredi 22:30 · QR join activé',
-        Icons.event
-      ),
-      (
-        'Dernière soirée organisée',
-        'Afond Night : 244 entrées, 3 modules actifs, recap publié',
-        Icons.insights
-      ),
-      (
-        'Annonce comité',
-        'Les inscriptions staff sont ouvertes pour la Saint-Torè.',
-        Icons.campaign
-      ),
-    ];
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(ToreTokens.s16),
@@ -1971,14 +2074,21 @@ class _ForumFeedCard extends StatelessWidget {
           const Text(
               'Comme une page communautaire : annonces, events, souvenirs et liens utiles.'),
           const SizedBox(height: ToreTokens.s12),
-          for (final post in posts)
+          for (final event in events.take(3))
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(post.$3, color: ToreTokens.yellowCta),
-              title: Text(post.$1),
-              subtitle: Text(post.$2),
+              leading: const Icon(Icons.event, color: ToreTokens.yellowCta),
+              title: Text(event.title),
+              subtitle: Text(event.detail),
               trailing: const Icon(Icons.chevron_right),
             ),
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.campaign, color: ToreTokens.yellowCta),
+            title: Text('Annonce comité'),
+            subtitle: Text('Les inscriptions staff sont ouvertes.'),
+            trailing: Icon(Icons.chevron_right),
+          ),
         ]),
       ),
     );
@@ -1986,12 +2096,31 @@ class _ForumFeedCard extends StatelessWidget {
 }
 
 class _ForumRequestCard extends StatelessWidget {
-  const _ForumRequestCard({required this.onSubmit});
+  const _ForumRequestCard({
+    super.key,
+    required this.nameController,
+    required this.descriptionController,
+    required this.selectedType,
+    required this.onTypeChanged,
+    required this.onSubmit,
+  });
 
+  final TextEditingController nameController;
+  final TextEditingController descriptionController;
+  final String selectedType;
+  final ValueChanged<String> onTypeChanged;
   final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
+    final types = const [
+      'Comité',
+      'Cercle',
+      'Ordre',
+      'Régionale',
+      'Rivageoise',
+      'Autre',
+    ];
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(ToreTokens.s16),
@@ -2003,37 +2132,107 @@ class _ForumRequestCard extends StatelessWidget {
           const Text(
               'Comité, ordre, régionale ou rivageoise : la demande est modérée avant création.'),
           const SizedBox(height: ToreTokens.s12),
-          Wrap(
-              spacing: ToreTokens.s8,
-              runSpacing: ToreTokens.s8,
-              children: const [
-                Chip(label: Text('Comité')),
-                Chip(label: Text('Cercle')),
-                Chip(label: Text('Ordre')),
-                Chip(label: Text('Régionale')),
-                Chip(label: Text('Rivageoise')),
-                Chip(label: Text('Autre')),
-              ]),
+          FilledButton.icon(
+              onPressed: onSubmit,
+              icon: const Icon(Icons.add_circle),
+              label: const Text('Créer l’espace')),
           const SizedBox(height: ToreTokens.s12),
-          const TextField(
-            style: TextStyle(color: Colors.white),
+          Wrap(spacing: ToreTokens.s8, runSpacing: ToreTokens.s8, children: [
+            for (final type in types)
+              ChoiceChip(
+                label: Text(type),
+                selected: selectedType == type,
+                onSelected: (_) => onTypeChanged(type),
+              ),
+          ]),
+          const SizedBox(height: ToreTokens.s12),
+          TextField(
+            controller: nameController,
+            style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-                labelText: 'Nom souhaité', prefixIcon: Icon(Icons.badge)),
+                labelText: 'Nom du $selectedType',
+                prefixIcon: const Icon(Icons.badge)),
           ),
           const SizedBox(height: ToreTokens.s12),
-          const TextField(
-            style: TextStyle(color: Colors.white),
+          TextField(
+            controller: descriptionController,
+            style: const TextStyle(color: Colors.white),
             minLines: 2,
             maxLines: 3,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
                 labelText: 'Description / justification',
                 prefixIcon: Icon(Icons.description)),
           ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ForumEventsManagerCard extends StatelessWidget {
+  const _ForumEventsManagerCard({
+    super.key,
+    required this.events,
+    required this.eventNameController,
+    required this.eventPlaceController,
+    required this.eventDateController,
+    required this.onCreateEvent,
+  });
+
+  final List<({String title, String detail})> events;
+  final TextEditingController eventNameController;
+  final TextEditingController eventPlaceController;
+  final TextEditingController eventDateController;
+  final VoidCallback onCreateEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(ToreTokens.s16),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Créer un event TORÈ',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s8),
+          const Text(
+              'L’event est ajouté au forum, prêt pour QR join, menu, staff, bets et recap.'),
           const SizedBox(height: ToreTokens.s12),
           FilledButton.icon(
-              onPressed: onSubmit,
-              icon: const Icon(Icons.send),
-              label: const Text('Soumettre la demande')),
+              onPressed: onCreateEvent,
+              icon: const Icon(Icons.add),
+              label: const Text('Créer l’event')),
+          const SizedBox(height: ToreTokens.s12),
+          TextField(
+            controller: eventNameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                labelText: 'Nom de l’event', prefixIcon: Icon(Icons.event)),
+          ),
+          const SizedBox(height: ToreTokens.s8),
+          TextField(
+            controller: eventDateController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                labelText: 'Date / heure', prefixIcon: Icon(Icons.schedule)),
+          ),
+          const SizedBox(height: ToreTokens.s8),
+          TextField(
+            controller: eventPlaceController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+                labelText: 'Lieu', prefixIcon: Icon(Icons.place)),
+          ),
+          const SizedBox(height: ToreTokens.s12),
+          for (final event in events)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading:
+                  const Icon(Icons.local_activity, color: ToreTokens.yellowCta),
+              title: Text(event.title),
+              subtitle: Text(event.detail),
+              trailing: const ToreBadge(label: 'TORÈ'),
+            ),
         ]),
       ),
     );
@@ -2041,7 +2240,7 @@ class _ForumRequestCard extends StatelessWidget {
 }
 
 class _ForumPrivateChannelsCard extends StatelessWidget {
-  const _ForumPrivateChannelsCard();
+  const _ForumPrivateChannelsCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -2076,7 +2275,9 @@ class _ForumPrivateChannelsCard extends StatelessWidget {
 }
 
 class _ForumAdminCard extends StatelessWidget {
-  const _ForumAdminCard();
+  const _ForumAdminCard({super.key, required this.forumName});
+
+  final String forumName;
 
   @override
   Widget build(BuildContext context) {
@@ -2093,6 +2294,8 @@ class _ForumAdminCard extends StatelessWidget {
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('Gestion responsable',
               style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: ToreTokens.s4),
+          Text(forumName, style: const TextStyle(color: Colors.white70)),
           const SizedBox(height: ToreTokens.s8),
           for (final row in rows)
             ListTile(

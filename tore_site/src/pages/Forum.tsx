@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CSSProperties } from "react";
+import { useState } from "react";
 
 const card: CSSProperties = {
   background: "#121217",
@@ -19,17 +20,36 @@ const pill: CSSProperties = {
 };
 
 export default function ForumPage() {
+  const [spaceType, setSpaceType] = useState("Comité");
+  const [forumName, setForumName] = useState("Comité Saint-Torè");
+  const [description, setDescription] = useState(
+    "Page publique : description, bannière, prochaines soirées, liens utiles et membres visibles selon confidentialité.",
+  );
+  const [activePanel, setActivePanel] = useState("Créer");
+  const [events, setEvents] = useState([
+    ["Afond Night", "244 entrées · menu + bets + safe kit"],
+    ["Saint-Torè warmup", "Vendredi 22:30 · QR join activé"],
+  ]);
+  const [eventName, setEventName] = useState("TD Outremeuse");
+  const [eventMeta, setEventMeta] = useState("Vendredi 22:30 · Liège");
+
   const channels = [
     ["# annonces", "Page publique et annonces importantes"],
     ["# staff-event", "QR pack, rôles terrain, checklists"],
     ["# comité-privé", "Discussion interne et passation"],
     ["# modération", "Demandes, accès, signalements"],
   ];
-  const posts = [
-    ["Prochaine guindaille", "TD Outremeuse · vendredi 22:30 · QR join activé"],
-    ["Dernier event TORÈ", "Afond Night · 244 entrées · recap post-event publié"],
-    ["Appel staff", "Besoin de 4 personnes entrée + 2 bar runners"],
-  ];
+  const createForum = () => {
+    setForumName(forumName.trim() || `Nouveau ${spaceType} TORÈ`);
+    setActivePanel("Gérer");
+  };
+
+  const createEvent = () => {
+    const title = eventName.trim();
+    if (!title) return;
+    setEvents([[title, `${eventMeta || "Date à confirmer"} · brouillon TORÈ`], ...events]);
+    setActivePanel("Events");
+  };
 
   return (
     <main style={{ minHeight: "100vh", background: "#050506", color: "#fff", padding: 24 }}>
@@ -48,18 +68,16 @@ export default function ForumPage() {
         <div style={{ ...card, background: "linear-gradient(135deg,#261018,#121217)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
             <div>
-              <h2 style={{ marginTop: 0 }}>Comité Saint-Torè</h2>
-              <p style={{ color: "#ccc" }}>
-                Page publique : description, bannière, prochaines soirées, liens utiles et membres visibles selon confidentialité.
-              </p>
+              <h2 style={{ marginTop: 0 }}>{forumName}</h2>
+              <p style={{ color: "#ccc" }}>{description}</p>
             </div>
             <span style={{ ...pill, background: "#BA1733" }}>PUBLIC</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
             {[
-              ["12", "soirées"],
+              [String(events.length), "events"],
               ["244", "entrées"],
-              ["68%", "participation bets"],
+              ["18", "membres"],
             ].map(([value, label]) => (
               <div key={label} style={{ ...card, background: "#050506", padding: 12 }}>
                 <strong style={{ fontSize: 24 }}>{value}</strong>
@@ -69,12 +87,28 @@ export default function ForumPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr .9fr", gap: 14 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {["Créer", "Gérer", "Events", "Salons"].map((panel) => (
+            <button
+              key={panel}
+              onClick={() => setActivePanel(panel)}
+              style={{
+                ...pill,
+                borderColor: activePanel === panel ? "#F4C430" : "#2A2631",
+                background: activePanel === panel ? "#241808" : "#121217",
+              }}
+            >
+              {panel}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr .9fr", gap: 14 }}>
           <section style={card}>
             <h2>Fil public</h2>
             <p style={{ color: "#bbb" }}>Une page façon réseau social : événements, annonces, souvenirs et liens utiles.</p>
             <div style={{ display: "grid", gap: 10 }}>
-              {posts.map(([title, body]) => (
+              {[...events, ["Appel staff", "Besoin de 4 personnes entrée + 2 bar runners"]].map(([title, body]) => (
                 <article key={title} style={{ ...card, background: "#050506", padding: 14 }}>
                   <strong>{title}</strong>
                   <p style={{ color: "#aaa", marginBottom: 0 }}>{body}</p>
@@ -84,48 +118,58 @@ export default function ForumPage() {
           </section>
 
           <section style={card}>
-            <h2>Salons privés</h2>
-            <p style={{ color: "#bbb" }}>Groupes de discussion type Discord, avec accès selon fonctions et grades.</p>
-            {channels.map(([title, body]) => (
-              <div key={title} style={{ borderTop: "1px solid #2A2631", padding: "10px 0" }}>
-                <strong>{title}</strong>
-                <div style={{ color: "#999", fontSize: 13 }}>{body}</div>
-              </div>
-            ))}
-          </section>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 14 }}>
-          <section style={card}>
-            <h2>Demande de création</h2>
-            <p style={{ color: "#bbb" }}>Comité, ordre, régionale ou rivageoise. Une demande acceptée crée l’espace officiel.</p>
-            <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-              <input placeholder="Nom du comité / cercle / ordre" style={{ padding: 12, borderRadius: 8, border: "1px solid #2A2631", background: "#050506", color: "#fff" }} />
-              <textarea placeholder="Description et justification" style={{ padding: 12, borderRadius: 8, border: "1px solid #2A2631", background: "#050506", color: "#fff", minHeight: 90 }} />
-            </div>
-            <button style={{ background: "#BA1733", color: "#fff", border: 0, borderRadius: 8, padding: "12px 14px", fontWeight: 800 }}>
-              Soumettre une demande
-            </button>
-          </section>
-
-          <section style={card}>
-            <h2>Gestion responsable</h2>
-            <ul style={{ color: "#bbb", lineHeight: 1.8 }}>
-              <li>Modifier les informations et la bannière</li>
-              <li>Gérer les membres et accès</li>
-              <li>Attribuer fonctions, rôles et grades</li>
-              <li>Définir les permissions</li>
-            </ul>
-          </section>
-
-          <section style={card}>
-            <h2>Stats événement</h2>
-            <ul style={{ color: "#bbb", lineHeight: 1.8 }}>
-              <li>Entrées, activité et modules activés</li>
-              <li>Tickets, ventes et commandes</li>
-              <li>Bets, hunts, battles et recap post-event</li>
-              <li>Historique des soirées organisées</li>
-            </ul>
+            {activePanel === "Créer" && (
+              <>
+                <h2>Demande de création</h2>
+                <p style={{ color: "#bbb" }}>Comité, cercle, ordre, régionale, rivageoise ou autre espace officiel.</p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                  {["Comité", "Cercle", "Ordre", "Régionale", "Rivageoise", "Autre"].map((type) => (
+                    <button key={type} onClick={() => setSpaceType(type)} style={{ ...pill, borderColor: spaceType === type ? "#F4C430" : "#2A2631" }}>
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                  <input value={forumName} onChange={(event) => setForumName(event.target.value)} placeholder="Nom du comité / cercle / ordre" style={{ padding: 12, borderRadius: 8, border: "1px solid #2A2631", background: "#050506", color: "#fff" }} />
+                  <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description et justification" style={{ padding: 12, borderRadius: 8, border: "1px solid #2A2631", background: "#050506", color: "#fff", minHeight: 90 }} />
+                </div>
+                <button onClick={createForum} style={{ background: "#BA1733", color: "#fff", border: 0, borderRadius: 8, padding: "12px 14px", fontWeight: 800 }}>
+                  Créer l’espace
+                </button>
+              </>
+            )}
+            {activePanel === "Gérer" && (
+              <>
+                <h2>Gestion responsable</h2>
+                {["Modifier infos et bannière", "Inviter ou retirer des membres", "Attribuer fonctions, rôles et grades", "Définir permissions et accès"].map((item) => (
+                  <div key={item} style={{ borderTop: "1px solid #2A2631", padding: "12px 0" }}>{item}</div>
+                ))}
+              </>
+            )}
+            {activePanel === "Events" && (
+              <>
+                <h2>Créer un event</h2>
+                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                  <input value={eventName} onChange={(event) => setEventName(event.target.value)} placeholder="Nom de l’event" style={{ padding: 12, borderRadius: 8, border: "1px solid #2A2631", background: "#050506", color: "#fff" }} />
+                  <input value={eventMeta} onChange={(event) => setEventMeta(event.target.value)} placeholder="Date · lieu" style={{ padding: 12, borderRadius: 8, border: "1px solid #2A2631", background: "#050506", color: "#fff" }} />
+                </div>
+                <button onClick={createEvent} style={{ background: "#BA1733", color: "#fff", border: 0, borderRadius: 8, padding: "12px 14px", fontWeight: 800 }}>
+                  Ajouter au forum
+                </button>
+              </>
+            )}
+            {activePanel === "Salons" && (
+              <>
+                <h2>Salons privés</h2>
+                <p style={{ color: "#bbb" }}>Groupes type Discord, avec accès selon fonctions et grades.</p>
+                {channels.map(([title, body]) => (
+                  <div key={title} style={{ borderTop: "1px solid #2A2631", padding: "10px 0" }}>
+                    <strong>{title}</strong>
+                    <div style={{ color: "#999", fontSize: 13 }}>{body}</div>
+                  </div>
+                ))}
+              </>
+            )}
           </section>
         </div>
       </section>
