@@ -16,6 +16,7 @@ const mainNavLinks = [
   { label: "Modules", href: "/#modules" },
   { label: "Forum", href: "/forum/public" },
   { label: "Studio", href: "/studio" },
+  { label: "Pilotage", href: "/control" },
   { label: "Roadmap", href: "/#roadmap" },
   { label: "Contact", href: "/#contact" },
 ];

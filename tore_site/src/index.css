@@ -295,6 +295,159 @@
 ::-webkit-scrollbar-thumb { background: hsl(var(--ember-deep)); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(var(--ember)); }
 
+.control-panel {
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 8px;
+  background: linear-gradient(145deg, hsl(var(--card) / 0.88), hsl(var(--background) / 0.96));
+  padding: 16px;
+  box-shadow: inset 0 1px 0 hsl(var(--accent) / 0.08);
+}
+
+.control-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--accent));
+}
+
+.control-panel-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.control-muted {
+  margin: 6px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+
+.control-input {
+  min-height: 42px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--background) / 0.9);
+  padding: 0 12px;
+  color: hsl(var(--foreground));
+  font-size: 14px;
+}
+
+.control-btn,
+.control-link,
+.control-icon-btn,
+.control-shortcuts a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--secondary) / 0.72);
+  color: hsl(var(--foreground));
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.control-btn-primary {
+  border-color: hsl(var(--accent) / 0.55);
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.control-icon-btn {
+  width: 38px;
+  padding: 0;
+  color: hsl(var(--accent));
+}
+
+.control-metric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--card) / 0.82);
+  padding: 14px;
+}
+
+.control-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: hsl(var(--background) / 0.7);
+}
+
+.control-metric p {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.control-metric strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 24px;
+}
+
+.control-metric-gold { border-color: hsl(var(--accent) / 0.42); }
+.control-metric-ruby { border-color: rgba(186, 23, 51, 0.55); }
+.control-metric-blue { border-color: rgba(85, 164, 255, 0.45); }
+.control-metric-green { border-color: rgba(74, 222, 128, 0.45); }
+
+.control-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 8px;
+  background: hsl(var(--background) / 0.58);
+  padding: 12px;
+}
+
+.control-row strong,
+.control-row p,
+.control-row small {
+  display: block;
+}
+
+.control-row p {
+  margin: 3px 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+
+.control-row small {
+  color: hsl(var(--muted-foreground) / 0.78);
+  font-size: 12px;
+}
+
+.control-row-actions,
+.control-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.control-empty {
+  border: 1px dashed hsl(var(--border));
+  border-radius: 8px;
+  padding: 14px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+
 
 .hero-heat-halo {
   background:

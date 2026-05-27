@@ -1,5 +1,5 @@
 INFO:root:BOOT commit=None
-INFO:     Started server process [51412]
+INFO:     Started server process [79292]
 INFO:     Waiting for application startup.
 INFO:app.utils.migrations:Running migrations (RUN_MIGRATIONS=1, MIGRATIONS_FATAL=1)
 INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
