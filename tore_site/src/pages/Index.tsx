@@ -58,7 +58,7 @@ const roadmapPhases = [
     badge: "Now",
     points: [
       "Création d'event et publication progressive",
-      "Défis, Polymarket, classements et ticker utile",
+      "Défis, rooms de prédiction, classements et ticker utile",
       "Ambiance visuelle par bar",
       "Comité OS, forum et archives",
     ],
@@ -76,12 +76,12 @@ const roadmapPhases = [
   {
     phase: "Phase 5 — Tickets & Ledger",
     badge: "Later",
-    points: ["Wallet opérationnel", "Top-up staff et gifts", "Ardoise optionnelle et ledger consolidé"],
+    points: ["Credits opérationnels", "Ajout staff et gifts", "Ardoise optionnelle et ledger consolidé"],
   },
   {
-    phase: "Phase 6 — Bets",
+    phase: "Phase 6 — Rooms",
     badge: "Later",
-    points: ["Formats auto-résolus", "Polymarket encadré", "Paramétrage comité et garde-fous"],
+    points: ["Formats auto-résolus", "Rooms encadrées", "Paramétrage comité et garde-fous"],
   },
   {
     phase: "Phase 7 — Hunts",

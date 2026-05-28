@@ -32,10 +32,10 @@ interface NavItem {
 }
 
 const bottomNav: NavItem[] = [
-  { id: "home", icon: Home, label: "Accueil" },
+  { id: "home", icon: Home, label: "Découvrir" },
   { id: "events", icon: Calendar, label: "Soirées" },
   { id: "ticker", icon: Radio, label: "Live" },
-  { id: "wallet", icon: TrendingUp, label: "Marchés" },
+  { id: "polymarket", icon: TrendingUp, label: "Rooms" },
   { id: "profile", icon: User, label: "Profil" },
 ];
 
@@ -124,7 +124,7 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
         {[
           { icon: Beer, label: "Bars", color: "bg-amber-500/10 border-amber-500/20", iconColor: "text-amber-400", screen: "bars" as ScreenId },
           { icon: Calendar, label: "Soirées", color: "bg-blue-500/10 border-blue-500/20", iconColor: "text-blue-400", screen: "events" as ScreenId },
-          { icon: TrendingUp, label: "Marchés", color: "bg-purple-500/10 border-purple-500/20", iconColor: "text-purple-400", screen: "polymarket" as ScreenId },
+          { icon: TrendingUp, label: "Rooms", color: "bg-purple-500/10 border-purple-500/20", iconColor: "text-purple-400", screen: "polymarket" as ScreenId },
           { icon: Wallet, label: "Mémoire", color: "bg-green-500/10 border-green-500/20", iconColor: "text-green-400", screen: "profile" as ScreenId },
         ].map((item) => (
           <button
@@ -294,7 +294,7 @@ function EventHubScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
       <div className="grid grid-cols-2 gap-3 px-4">
         {[
           { icon: UtensilsCrossed, label: "Menu", screen: "menu" as ScreenId, color: "border-amber-500/20 bg-amber-500/5" },
-          { icon: Wallet, label: "Wallet", screen: "wallet" as ScreenId, color: "border-green-500/20 bg-green-500/5" },
+          { icon: Wallet, label: "Credits", screen: "wallet" as ScreenId, color: "border-green-500/20 bg-green-500/5" },
           { icon: Radio, label: "Ticker", screen: "ticker" as ScreenId, color: "border-blue-500/20 bg-blue-500/5" },
           { icon: Trophy, label: "Classement", screen: "home" as ScreenId, color: "border-purple-500/20 bg-purple-500/5" },
         ].map((m) => (
@@ -386,18 +386,18 @@ function WalletScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
         <button onClick={() => onNavigate("home")}>
           <ArrowLeft size={18} className="text-white/60" />
         </button>
-        <h1 className="text-white font-bold text-base">Wallet</h1>
+        <h1 className="text-white font-bold text-base">Credits</h1>
       </div>
       <div className="mx-4 p-6 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 text-center mb-4">
-        <p className="text-white/40 text-[10px] uppercase tracking-wider">Solde</p>
-        <p className="text-white text-4xl font-black font-mono mt-1">24.50 €</p>
+        <p className="text-white/40 text-[10px] uppercase tracking-wider">Credits</p>
+        <p className="text-white text-4xl font-black font-mono mt-1">245</p>
       </div>
       <div className="px-4">
         <h3 className="text-white/40 text-[10px] uppercase tracking-wider mb-2">Historique</h3>
         {[
-          { label: "Bière pression ×2", amount: "-10.00", time: "21:15" },
-          { label: "Recharge", amount: "+30.00", time: "20:30" },
-          { label: "Shot vodka", amount: "-3.00", time: "20:45" },
+          { label: "Bière pression ×2", amount: "-100", time: "21:15" },
+          { label: "Ajout staff", amount: "+300", time: "20:30" },
+          { label: "Reward soirée", amount: "+50", time: "20:45" },
         ].map((tx) => (
           <div key={tx.label + tx.time} className="flex items-center justify-between py-2.5 border-b border-white/5">
             <div>
@@ -405,7 +405,7 @@ function WalletScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
               <p className="text-white/30 text-[10px] font-mono">{tx.time}</p>
             </div>
             <span className={`text-xs font-mono font-bold ${tx.amount.startsWith("+") ? "text-green-400" : "text-white/60"}`}>
-              {tx.amount} €
+              {tx.amount}
             </span>
           </div>
         ))}
@@ -427,7 +427,7 @@ function TickerScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
       <div className="px-4 space-y-2">
         {[
           { text: "🍺 Alex a commandé 3 bières", time: "il y a 2min", color: "border-amber-500/20" },
-          { text: "🎲 Nouveau bet : \"Le DJ passe du Daft Punk avant minuit\"", time: "il y a 5min", color: "border-purple-500/20" },
+          { text: "🎲 Nouvelle room : \"Le DJ passe du Daft Punk avant minuit\"", time: "il y a 5min", color: "border-purple-500/20" },
           { text: "📢 Happy hour prolongée jusqu'à 23h !", time: "il y a 8min", color: "border-red-500/20" },
           { text: "🏆 Marie est #1 au classement", time: "il y a 12min", color: "border-yellow-500/20" },
         ].map((e, i) => (
@@ -456,8 +456,8 @@ function MiniChart({ data, color }: { data: number[]; color: string }) {
 }
 
 function PolymarketScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
-  const [bets, setBets] = useState<Record<string, "yes" | "no" | null>>({});
-  const markets = [
+  const [picks, setPicks] = useState<Record<string, "yes" | "no" | null>>({});
+  const rooms = [
     { q: "Le DJ passe du Daft Punk avant minuit ?", yes: 72, chart: [30, 45, 55, 60, 58, 65, 72], hot: true },
     { q: "Plus de 200 personnes ce soir ?", yes: 45, chart: [50, 48, 42, 40, 38, 43, 45], hot: false },
     { q: "Happy hour prolongée après 23h ?", yes: 88, chart: [60, 65, 70, 78, 80, 85, 88], hot: true },
@@ -471,15 +471,15 @@ function PolymarketScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void })
         <button onClick={() => onNavigate("home")}>
           <ArrowLeft size={18} className="text-white/60" />
         </button>
-        <h1 className="text-white font-bold text-base">Polymarket</h1>
+        <h1 className="text-white font-bold text-base">Rooms</h1>
         <span className="ml-auto px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[9px] font-bold">BETA</span>
       </div>
 
       {/* Stats bar */}
       <div className="flex gap-3 px-4 mb-3">
         {[
-          { label: "Marchés", value: "5" },
-          { label: "Joueurs", value: "47" },
+          { label: "Rooms", value: "5" },
+          { label: "Participants", value: "47" },
           { label: "Mes points", value: "320" },
         ].map((s) => (
           <div key={s.label} className="flex-1 p-2 rounded-lg bg-white/5 text-center">
@@ -491,8 +491,8 @@ function PolymarketScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void })
 
       {/* Markets */}
       <div className="px-4 space-y-2 pb-2">
-        {markets.map((m, i) => {
-          const userBet = bets[m.q];
+        {rooms.map((m, i) => {
+          const userPick = picks[m.q];
           const yesColor = m.yes >= 60 ? "#22c55e" : m.yes >= 40 ? "#eab308" : "#ef4444";
           return (
             <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/10">
@@ -510,9 +510,9 @@ function PolymarketScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void })
               {/* Bet buttons */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setBets((b) => ({ ...b, [m.q]: b[m.q] === "yes" ? null : "yes" }))}
+                  onClick={() => setPicks((b) => ({ ...b, [m.q]: b[m.q] === "yes" ? null : "yes" }))}
                   className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                    userBet === "yes"
+                    userPick === "yes"
                       ? "bg-green-500 text-black"
                       : "bg-green-500/10 text-green-400 border border-green-500/20"
                   }`}
@@ -520,9 +520,9 @@ function PolymarketScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void })
                   Oui {m.yes}%
                 </button>
                 <button
-                  onClick={() => setBets((b) => ({ ...b, [m.q]: b[m.q] === "no" ? null : "no" }))}
+                  onClick={() => setPicks((b) => ({ ...b, [m.q]: b[m.q] === "no" ? null : "no" }))}
                   className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                    userBet === "no"
+                    userPick === "no"
                       ? "bg-red-500 text-white"
                       : "bg-red-500/10 text-red-400 border border-red-500/20"
                   }`}
@@ -570,11 +570,11 @@ const screens: Record<ScreenId, string> = {
   scanner: "QR contextuel",
   bars: "Bars",
   events: "Events",
-  eventHub: "Event Hub",
+  eventHub: "Hub soirée",
   menu: "Menu",
-  wallet: "Wallet",
+  wallet: "Credits",
   ticker: "Ticker",
-  polymarket: "Polymarket",
+  polymarket: "Rooms",
   profile: "Profil",
 };
 

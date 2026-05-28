@@ -23,7 +23,7 @@ const embuscadeMap = "https://maps.app.goo.gl/5tsL5yu1XdKA25js6";
 
 export default function ForumPublicPage() {
   const events = [
-    ["TD Outremeuse", "Ce soir · 22:30 · L’Embuscade · QR join actif"],
+    ["TD Outremeuse", "Ce soir · 22:30 · L’Embuscade · détail public actif"],
     ["Afond Night", "244 entrées · recap post-event publié"],
     ["Saint-Torè warmup", "Vendredi · staff en préparation"],
   ];
@@ -52,7 +52,7 @@ export default function ForumPublicPage() {
 
         <section style={{ ...card, background: "linear-gradient(135deg,#261018,#121217)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
-            {[["3", "events publics"], ["244", "entrées dernier event"], ["18", "membres visibles"], ["4", "salons privés"]].map(([value, label]) => (
+            {[["3", "events publics"], ["244", "entrées dernier event"], ["18", "membres visibles"], ["4", "archives privées"]].map(([value, label]) => (
               <div key={label} style={{ ...card, background: "#050506", padding: 12 }}>
                 <strong style={{ fontSize: 26 }}>{value}</strong>
                 <div style={{ color: "#999", fontSize: 12 }}>{label}</div>
@@ -96,9 +96,9 @@ export default function ForumPublicPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 10 }}>
             {[
               ["Fil public", "Annonces, events, souvenirs et liens utiles."],
-              ["Gestion event", "QR join, menu, staff, tickets, bets et recap."],
+              ["Gestion event", "Détail public, menu, staff, tickets, rooms et recap."],
               ["Salons privés", "Espaces type Discord selon rôles et permissions."],
-              ["Stats", "Entrées, activité, modules activés et historique."],
+              ["Archives", "Passation, traditions, décisions et historique annuel."],
             ].map(([title, body]) => (
               <article key={title} style={{ ...card, background: "#050506" }}>
                 <strong>{title}</strong>

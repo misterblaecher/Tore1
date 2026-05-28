@@ -102,12 +102,12 @@ const phases = [
   },
   {
     phase: 6,
-    title: "Bets",
+    title: "Rooms",
     status: "planned",
     icon: Gamepad2,
     description: "Paris sociaux entre amis, sans argent réel.",
     items: [
-      "Création de paris",
+      "Création de rooms encadrées",
       "Système de points",
       "Classements & badges",
       "Challenges de groupe",
@@ -337,7 +337,7 @@ export default function Roadmap() {
               <div className="mt-8 p-6 rounded-xl bg-muted/10 border border-border">
                 <h3 className="font-bold mb-3 text-muted-foreground">Plus tard :</h3>
                 <div className="flex flex-wrap gap-2">
-                  {["Tickets", "Paiements", "Cash-out", "Bets", "Hunts"].map((feature) => (
+                  {["Tickets", "Paiements", "Cash-out", "Rooms", "Hunts"].map((feature) => (
                     <span key={feature} className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm">
                       {feature}
                     </span>

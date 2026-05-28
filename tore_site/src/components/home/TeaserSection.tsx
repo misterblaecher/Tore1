@@ -4,8 +4,8 @@ import { CalendarDays, CheckCircle2 } from "lucide-react";
 const steps = [
   {
     title: "Soirée test 1",
-    subtitle: "Scanner • Comptage live • Dashboard",
-    note: "On valide le terrain. Pas de musique, pas de paris, pas de wallet.",
+    subtitle: "Découverte • Live • Dashboard",
+    note: "On valide le terrain. QR contextuel, rooms encadrées et credits activables selon besoin.",
   },
   {
     title: "Soirée test 2",

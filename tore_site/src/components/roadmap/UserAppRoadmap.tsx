@@ -7,7 +7,7 @@ import {
   UserPlus,
   LayoutDashboard,
   UtensilsCrossed,
-  Wallet,
+  WalletCards,
   Radio,
   TrendingUp,
   Gamepad2,
@@ -21,15 +21,15 @@ const screens = [
   { id: 3, name: "Détail soirée", icon: Calendar, description: "Description, organisateur, lieu, modules actifs, infos pratiques, rejoindre." },
   { id: 4, name: "Bars", icon: Beer, description: "Identité du lieu, ambiance visuelle, événements et modules actifs." },
   { id: 5, name: "Events (bar)", icon: Calendar, description: "Liste events d'un bar, filtres Live/Today/Upcoming, cards compactes." },
-  { id: 6, name: "Join Event", icon: UserPlus, description: "Étape détail obligatoire, puis rejoindre par bouton, code ou QR contextuel." },
-  { id: 7, name: "Event Hub", icon: LayoutDashboard, description: "Modules visibles selon activation, états discrets côté utilisateur." },
+  { id: 6, name: "Rejoindre", icon: UserPlus, description: "Étape détail obligatoire, puis rejoindre par bouton, code ou QR contextuel." },
+  { id: 7, name: "Hub soirée", icon: LayoutDashboard, description: "Modules visibles selon activation, états discrets côté utilisateur." },
   { id: 8, name: "Menu Event", icon: UtensilsCrossed, description: "Filtres sticky, liste dense, panier bottom bar, CTA CONFIRMER." },
-  { id: 9, name: "Wallet", icon: Wallet, description: "Solde en grand (mono), historique timeline, actions autorisées." },
-  { id: 10, name: "Ticker Live", icon: Radio, description: "Feed temps réel (commandes/bets/gifts), filtres + mode pause." },
-  { id: 11, name: "Polymarket Global", icon: TrendingUp, description: "Hub global hors soirée, marchés + filtres, charts + stats." },
-  { id: 12, name: "Polymarket Event", icon: Gamepad2, description: "Bets liés à la soirée, création par users, résolution animée." },
-  { id: 13, name: "Classement", icon: Trophy, description: "Top 3 en cards, liste dense, accessible via Hub/Ticker/Polymarket." },
-  { id: 14, name: "Profil & Settings", icon: Settings, description: "Privacy, thème auto, accessibilité, contraste renforcé." },
+  { id: 9, name: "Credits & rewards", icon: WalletCards, description: "Credits, rewards, historique timeline, actions autorisées." },
+  { id: 10, name: "Ticker Live", icon: Radio, description: "Feed temps réel (commandes/rooms/gifts), filtres + mode pause." },
+  { id: 11, name: "Rooms globales", icon: TrendingUp, description: "Hub global hors soirée, rooms + filtres, charts + stats." },
+  { id: 12, name: "Rooms soirée", icon: Gamepad2, description: "Prédictions liées à la soirée, création par users, résolution animée." },
+  { id: 13, name: "Classement", icon: Trophy, description: "Top 3 en cards, liste dense, accessible via Hub/Ticker/Rooms." },
+  { id: 14, name: "Profil & mémoire", icon: Settings, description: "Historique, badges, appartenances, privacy et accessibilité." },
 ];
 
 export default function UserAppRoadmap() {
@@ -61,7 +61,7 @@ export default function UserAppRoadmap() {
             <span>→</span>
             <span>Détail soirée</span>
             <span>→</span>
-            <span>Menu / Wallet / Bets</span>
+            <span>Menu / Credits / Rooms</span>
             <span>→</span>
             <span>Profil</span>
           </div>

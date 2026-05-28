@@ -24,7 +24,7 @@ export function ForWhoSection() {
               title: "Bars & Restaurants",
               items: [
                 "Page lieu avec identité visuelle, ambiance et soirées en cours",
-                "Modules bar activables : menu, commandes, wallet, événements",
+                "Modules bar activables : menu, commandes, credits, événements",
                 "Actions QR contextuelles pour entrée, staff ou accès sensible",
                 "Analytics et exports côté portail, pas de bruit côté utilisateur",
               ],
@@ -36,7 +36,7 @@ export function ForWhoSection() {
               items: [
                 "Créer, publier et animer une soirée avec détail avant join",
                 "Forum, archives, annonces et passation comité",
-                "Défis, Polymarket, ticker et classements selon modules actifs",
+                "Défis, rooms, ticker et classements selon modules actifs",
                 "Mémoire annuelle, badges et historique exploitable",
               ],
               href: "/comites",

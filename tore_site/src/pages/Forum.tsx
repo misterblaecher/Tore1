@@ -27,7 +27,7 @@ export default function ForumPage() {
   );
   const [activePanel, setActivePanel] = useState("Créer");
   const [events, setEvents] = useState([
-    ["Afond Night", "244 entrées · menu + bets + safe kit"],
+    ["Afond Night", "244 entrées · menu + rooms + safe kit"],
     ["Saint-Torè warmup", "Vendredi 22:30 · QR join activé"],
   ]);
   const [eventName, setEventName] = useState("TD Outremeuse");
@@ -62,11 +62,7 @@ export default function ForumPage() {
               Créez, modérez et reliez les forums de comités, ordres, régionales et rivageoises aux événements TORÈ.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link to="/forum/public" style={{ ...pill, borderColor: "#F4C430", color: "#F4C430" }}>Page publique</Link>
-            <Link to="/studio" style={{ ...pill, borderColor: "#F4C430", color: "#F4C430" }}>Studio event</Link>
-            <Link to="/profile" style={{ ...pill, textDecoration: "none" }}>Profil</Link>
-          </div>
+          <Link to="/profile" style={{ ...pill, textDecoration: "none" }}>Profil</Link>
         </div>
 
         <div style={{ ...card, background: "linear-gradient(135deg,#261018,#121217)" }}>

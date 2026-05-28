@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Archive, MapPin, Music2, Users, Dice5, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type ModuleKey = "discovery" | "bets" | "committee" | "map" | "memory";
+type ModuleKey = "discovery" | "rooms" | "committee" | "map" | "memory";
 
 const modules: Array<{
   key: ModuleKey;
@@ -18,11 +18,11 @@ const modules: Array<{
       "Soirées autour de soi dans le Carré, soirées à venir, filtres par bar, comité, type, date et proximité.",
   },
   {
-    key: "bets",
+    key: "rooms",
     icon: Dice5,
     title: "Soirées vivantes",
     description:
-      "Polymarket local ou global, défis, mini-jeux, classements, cadeaux P2P et live feed quand ça sert l’ambiance.",
+      "Rooms locales ou globales, défis, mini-jeux, classements, cadeaux P2P et live feed quand ça sert l’ambiance.",
   },
   {
     key: "committee",

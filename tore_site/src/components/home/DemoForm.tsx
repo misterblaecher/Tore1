@@ -156,7 +156,7 @@ export function DemoForm() {
                   <SelectItem value="ops">Gestion soirée (entrée / staff / dashboard)</SelectItem>
                   <SelectItem value="music">Musique (préférences + votes simples)</SelectItem>
                   <SelectItem value="map">Map pour se retrouver</SelectItem>
-                  <SelectItem value="bets">Paris fun (crédits internes)</SelectItem>
+                  <SelectItem value="bets">Rooms de prédiction (crédits internes)</SelectItem>
                   <SelectItem value="inventory">Inventaire pré/post soirée</SelectItem>
                 </SelectContent>
               </Select>

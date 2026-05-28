@@ -32,7 +32,7 @@ const productPillars = [
     step: "02",
     icon: Sparkles,
     title: "Vivre",
-    description: "Polymarket, défis, mini-jeux, classements, cadeaux P2P et interactions sociales en soirée.",
+    description: "Rooms de prédiction, défis, mini-jeux, classements, cadeaux P2P et interactions sociales en soirée.",
   },
   {
     step: "03",
@@ -58,7 +58,7 @@ const modulesList = [
   {
     icon: BarChart3,
     title: "Dynamisation live",
-    description: "Polymarket, défis, classements, ticker utile.",
+    description: "Rooms de prédiction, défis, classements, ticker utile.",
     active: true,
   },
   {
@@ -69,7 +69,7 @@ const modulesList = [
   },
   {
     icon: Settings,
-    title: "Commandes & wallet",
+    title: "Commandes & credits",
     description: "Paiement interne, cadeaux P2P, statuts.",
     active: false,
   },
