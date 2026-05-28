@@ -32,10 +32,10 @@ interface NavItem {
 }
 
 const bottomNav: NavItem[] = [
-  { id: "home", icon: Home, label: "Home" },
-  { id: "ticker", icon: Radio, label: "Ticker" },
-  { id: "scanner", icon: ScanLine, label: "Scan" },
-  { id: "wallet", icon: TrendingUp, label: "Market" },
+  { id: "home", icon: Home, label: "Accueil" },
+  { id: "events", icon: Calendar, label: "Soirées" },
+  { id: "ticker", icon: Radio, label: "Live" },
+  { id: "wallet", icon: TrendingUp, label: "Marchés" },
   { id: "profile", icon: User, label: "Profil" },
 ];
 
@@ -58,27 +58,18 @@ function BottomNav({ active, onNavigate }: { active: ScreenId; onNavigate: (s: S
   return (
     <div className="flex items-center justify-around py-2 bg-black/90 border-t border-white/10">
       {bottomNav.map((item) => {
-        const isScanner = item.id === "scanner";
         const isActive = active === item.id;
         return (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
             className={`flex flex-col items-center gap-0.5 transition-colors ${
-              isScanner
-                ? ""
-                : isActive
+              isActive
                 ? "text-red-500"
                 : "text-white/40 hover:text-white/70"
             }`}
           >
-            {isScanner ? (
-              <div className="w-10 h-10 -mt-4 rounded-full bg-red-600 flex items-center justify-center shadow-[0_0_15px_rgba(220,38,38,0.5)]">
-                <ScanLine size={18} className="text-white" />
-              </div>
-            ) : (
-              <item.icon size={18} />
-            )}
+            <item.icon size={18} />
             <span className="text-[9px]">{item.label}</span>
           </button>
         );
@@ -113,17 +104,17 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
         </div>
       </div>
 
-      {/* Scanner CTA */}
+      {/* Discovery CTA */}
       <button
-        onClick={() => onNavigate("scanner")}
+        onClick={() => onNavigate("events")}
         className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-r from-red-600/20 to-red-600/5 border border-red-600/30 flex items-center gap-3"
       >
         <div className="w-12 h-12 rounded-xl bg-red-600 flex items-center justify-center">
-          <ScanLine size={22} className="text-white" />
+          <Calendar size={22} className="text-white" />
         </div>
         <div className="text-left">
-          <p className="text-white font-semibold text-sm">Scanner un QR</p>
-          <p className="text-white/40 text-xs">Menu, event, entrée…</p>
+          <p className="text-white font-semibold text-sm">Soirées autour de toi</p>
+          <p className="text-white/40 text-xs">Carré, comités, bars, ce soir…</p>
         </div>
         <ChevronRight size={16} className="text-white/30 ml-auto" />
       </button>
@@ -132,9 +123,9 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
       <div className="grid grid-cols-2 gap-3 px-4 mb-4">
         {[
           { icon: Beer, label: "Bars", color: "bg-amber-500/10 border-amber-500/20", iconColor: "text-amber-400", screen: "bars" as ScreenId },
-          { icon: Calendar, label: "Events", color: "bg-blue-500/10 border-blue-500/20", iconColor: "text-blue-400", screen: "events" as ScreenId },
-          { icon: Wallet, label: "Wallet", color: "bg-green-500/10 border-green-500/20", iconColor: "text-green-400", screen: "wallet" as ScreenId },
-          { icon: TrendingUp, label: "Polymarket", color: "bg-purple-500/10 border-purple-500/20", iconColor: "text-purple-400", screen: "polymarket" as ScreenId },
+          { icon: Calendar, label: "Soirées", color: "bg-blue-500/10 border-blue-500/20", iconColor: "text-blue-400", screen: "events" as ScreenId },
+          { icon: TrendingUp, label: "Marchés", color: "bg-purple-500/10 border-purple-500/20", iconColor: "text-purple-400", screen: "polymarket" as ScreenId },
+          { icon: Wallet, label: "Mémoire", color: "bg-green-500/10 border-green-500/20", iconColor: "text-green-400", screen: "profile" as ScreenId },
         ].map((item) => (
           <button
             key={item.label}
@@ -576,7 +567,7 @@ function ProfileScreen({ onNavigate }: { onNavigate: (s: ScreenId) => void }) {
 const screens: Record<ScreenId, string> = {
   splash: "Splash",
   home: "Home",
-  scanner: "Scanner",
+  scanner: "QR contextuel",
   bars: "Bars",
   events: "Events",
   eventHub: "Event Hub",
@@ -613,7 +604,7 @@ export default function PhonePreview() {
       <div className="container">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6">
-            <ScanLine className="text-primary" size={18} />
+            <Calendar className="text-primary" size={18} />
             <span className="text-sm font-medium">Preview Interactive</span>
           </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">

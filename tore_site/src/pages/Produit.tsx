@@ -3,11 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { 
-  QrCode, 
   ArrowRight, 
-  Scan, 
-  Route, 
-  MousePointer,
+  CalendarSearch,
+  Sparkles,
+  BookOpenText,
+  Landmark,
   ToggleRight,
   Shield,
   Users,
@@ -21,32 +21,32 @@ import {
   Settings
 } from "lucide-react";
 
-const scannerSteps = [
+const productPillars = [
   {
     step: "01",
-    icon: Scan,
-    title: "Scan",
-    description: "L'utilisateur scanne le QR unique du lieu ou de l'event.",
+    icon: CalendarSearch,
+    title: "Découvrir",
+    description: "Soirées proches dans le Carré, soirées à venir et filtres par bar, comité, type, date ou proximité.",
   },
   {
     step: "02",
-    icon: Route,
-    title: "Routing intelligent",
-    description: "Le système détecte le contexte : menu, entrée, staff, commande…",
+    icon: Sparkles,
+    title: "Vivre",
+    description: "Polymarket, défis, mini-jeux, classements, cadeaux P2P et interactions sociales en soirée.",
   },
   {
     step: "03",
-    icon: MousePointer,
-    title: "Action",
-    description: "L'utilisateur accède directement à ce dont il a besoin. Zéro friction.",
+    icon: BookOpenText,
+    title: "Se souvenir",
+    description: "Profil, historique des soirées, badges, appartenance comité et mémoire collective de guindaille.",
   },
 ];
 
 const modulesList = [
   {
-    icon: QrCode,
-    title: "Menu QR",
-    description: "Carte digitale avec catégories, images, prix.",
+    icon: CalendarSearch,
+    title: "Découverte soirées",
+    description: "Autour de soi, à venir, détail avant de rejoindre.",
     active: true,
   },
   {
@@ -57,26 +57,26 @@ const modulesList = [
   },
   {
     icon: BarChart3,
-    title: "Tracking",
-    description: "Scans, vues items, analytics en temps réel.",
+    title: "Dynamisation live",
+    description: "Polymarket, défis, classements, ticker utile.",
     active: true,
   },
   {
-    icon: Shield,
-    title: "Rôles Staff",
-    description: "Permissions granulaires via QR révocables.",
+    icon: Landmark,
+    title: "Vie comité",
+    description: "Forum, annonces, archives, traditions.",
     active: true,
   },
   {
     icon: Settings,
-    title: "Commandes",
-    description: "Prise de commande sans paiement obligatoire.",
+    title: "Commandes & wallet",
+    description: "Paiement interne, cadeaux P2P, statuts.",
     active: false,
   },
   {
     icon: Crown,
-    title: "IA Assets",
-    description: "Génération auto de visuels et descriptions.",
+    title: "Mémoire guindaille",
+    description: "Badges, historique, appartenance, recap.",
     active: false,
   },
 ];
@@ -114,13 +114,13 @@ const portalFeatures = [
   },
   {
     icon: Globe,
-    title: "Zones & QR",
-    description: "Définir des zones (tables, terrasse) et générer les packs QR.",
+    title: "Lieux & modules",
+    description: "Configurer identité du lieu, modules actifs et actions contextuelles.",
   },
   {
     icon: BarChart3,
     title: "Analytics",
-    description: "Dashboards temps réel : scans, vues, conversions.",
+    description: "Dashboards temps réel : participation, modules, ventes, interactions.",
   },
   {
     icon: FileDown,
@@ -142,35 +142,35 @@ export default function Produit() {
           <div className="container relative z-10">
             <div className="text-center max-w-3xl mx-auto">
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6">
-                <QrCode className="text-primary" size={18} />
+                <Sparkles className="text-primary" size={18} />
                 <span className="text-sm font-medium">Le produit</span>
               </div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-                Un seul QR,<br />
-                <span className="text-primary neon-text">mille possibilités</span>
+                Découvrir, vivre,<br />
+                <span className="text-primary neon-text">se souvenir</span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground mb-8">
-                TORÈ centralise toutes vos opérations nightlife dans un scanner intelligent. 
-                Menu, entrées, staff, commandes — tout passe par le même QR.
+                TORÈ relie soirées, bars, comités, folklore et profil personnel.
+                Le QR reste un raccourci utile, mais l’expérience commence par la découverte.
               </p>
             </div>
           </div>
         </section>
 
-        {/* Scanner QR - 3 étapes */}
+        {/* Produit - 3 piliers */}
         <section className="py-16 md:py-24 bg-surface/50">
           <div className="container">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Scanner QR <span className="text-primary">universel</span>
+                Un parcours <span className="text-primary">soirée-first</span>
               </h2>
               <p className="text-muted-foreground max-w-lg mx-auto">
-                En 3 étapes, l'utilisateur accède exactement à ce dont il a besoin.
+                L’utilisateur choisit une soirée, comprend le contexte, puis rejoint avec le bon niveau d’engagement.
               </p>
             </div>
 
             <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-              {scannerSteps.map((step, index) => (
+              {productPillars.map((step, index) => (
                 <div key={step.step} className="relative">
                   <Card className="bg-card border-border hover:border-primary/50 transition-all h-full">
                     <CardContent className="p-6 text-center">
@@ -182,7 +182,7 @@ export default function Produit() {
                       <p className="text-muted-foreground text-sm">{step.description}</p>
                     </CardContent>
                   </Card>
-                  {index < scannerSteps.length - 1 && (
+                  {index < productPillars.length - 1 && (
                     <ArrowRight className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2 text-primary/40" size={24} />
                   )}
                 </div>
@@ -304,7 +304,7 @@ export default function Produit() {
                 Portail <span className="text-primary">Web</span>
               </h2>
               <p className="text-muted-foreground max-w-lg mx-auto">
-                Gérez tout depuis votre navigateur. Menu, zones, analytics, exports.
+                Gérez tout depuis votre navigateur. Lieux, modules, analytics, exports.
               </p>
             </div>
 
@@ -332,7 +332,7 @@ export default function Produit() {
                 Prêt à <span className="text-primary">digitaliser</span> votre lieu ?
               </h2>
               <p className="text-muted-foreground mb-8">
-                Choisissez votre parcours : onboardez votre bar en 10 minutes ou créez votre premier event.
+                Choisissez votre parcours : faire vivre un lieu, publier une soirée ou structurer un comité.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link to="/bars">

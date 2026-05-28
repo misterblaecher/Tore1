@@ -1,6 +1,6 @@
 import {
   Smartphone,
-  ScanLine,
+  Compass,
   Home,
   Beer,
   Calendar,
@@ -17,12 +17,12 @@ import {
 
 const screens = [
   { id: 1, name: "Splash / Boot", icon: Smartphone, description: "Logo TORÈ + animation glow rubis, loader, gestion offline." },
-  { id: 2, name: "Home / Hub", icon: Home, description: "Scanner QR en action reine, cards Bars/Events/Wallet/Polymarket." },
-  { id: 3, name: "QR Scanner", icon: ScanLine, description: "Plein écran caméra, cadre rubis, routing intelligent, auto-lampe." },
-  { id: 4, name: "Bars", icon: Beer, description: "Grille compacte, statuts OPEN/LIVE/CLOSED, icônes modules actifs." },
+  { id: 2, name: "Découverte", icon: Compass, description: "Soirées autour de soi, à venir, filtres bar/comité/type/date/proximité." },
+  { id: 3, name: "Détail soirée", icon: Calendar, description: "Description, organisateur, lieu, modules actifs, infos pratiques, rejoindre." },
+  { id: 4, name: "Bars", icon: Beer, description: "Identité du lieu, ambiance visuelle, événements et modules actifs." },
   { id: 5, name: "Events (bar)", icon: Calendar, description: "Liste events d'un bar, filtres Live/Today/Upcoming, cards compactes." },
-  { id: 6, name: "Join Event", icon: UserPlus, description: "Entrée via QR ou code, CTA JOIN, skip si QR déjà validé." },
-  { id: 7, name: "Event Hub", icon: LayoutDashboard, description: "Modules visibles selon activation, banners pause/réseau." },
+  { id: 6, name: "Join Event", icon: UserPlus, description: "Étape détail obligatoire, puis rejoindre par bouton, code ou QR contextuel." },
+  { id: 7, name: "Event Hub", icon: LayoutDashboard, description: "Modules visibles selon activation, états discrets côté utilisateur." },
   { id: 8, name: "Menu Event", icon: UtensilsCrossed, description: "Filtres sticky, liste dense, panier bottom bar, CTA CONFIRMER." },
   { id: 9, name: "Wallet", icon: Wallet, description: "Solde en grand (mono), historique timeline, actions autorisées." },
   { id: 10, name: "Ticker Live", icon: Radio, description: "Feed temps réel (commandes/bets/gifts), filtres + mode pause." },
@@ -46,7 +46,7 @@ export default function UserAppRoadmap() {
               Roadmap <span className="text-primary neon-text">UI Utilisateur</span>
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              14 écrans clés du parcours utilisateur — du lancement à la gamification.
+              14 écrans clés du parcours utilisateur — découverte, live, comités et mémoire.
               L'utilisateur ne voit que les modules activés.
             </p>
           </div>
@@ -57,9 +57,9 @@ export default function UserAppRoadmap() {
             <span>→</span>
             <span>Home</span>
             <span>→</span>
-            <span>Scanner</span>
+            <span>Découverte</span>
             <span>→</span>
-            <span>Event Hub</span>
+            <span>Détail soirée</span>
             <span>→</span>
             <span>Menu / Wallet / Bets</span>
             <span>→</span>
@@ -91,9 +91,9 @@ export default function UserAppRoadmap() {
           {/* Design principles */}
           <div className="mt-10 grid sm:grid-cols-3 gap-4">
             {[
-              { label: "Modules ON/OFF", desc: "L'user ne voit que ce qui est activé" },
-              { label: "Scanner QR central", desc: "Action reine, routing intelligent" },
-              { label: "Lisibilité premium", desc: "Densité contrôlée, animations courtes" },
+              { label: "Découverte-first", desc: "Soirées proches et détail avant join" },
+              { label: "QR contextuel", desc: "Join rapide, entrée, actions sensibles" },
+              { label: "Mémoire guindaille", desc: "Profil, badges, comités, archives" },
             ].map((p) => (
               <div key={p.label} className="p-4 rounded-xl bg-muted/10 border border-border text-center">
                 <p className="font-semibold text-sm text-primary mb-1">{p.label}</p>

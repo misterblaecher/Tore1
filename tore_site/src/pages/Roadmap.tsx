@@ -27,11 +27,11 @@ const phases = [
     title: "Fondations",
     status: "done",
     icon: Zap,
-    description: "Architecture de base, auth, scanner QR, routing intelligent.",
+    description: "Architecture de base, auth, découverte soirée-first et QR contextuel.",
     items: [
       "Infrastructure cloud scalable",
       "Système d'authentification sécurisé",
-      "Scanner QR universel + routing",
+      "Découverte soirées + QR contextuel",
       "Design system & composants UI",
     ],
   },
@@ -320,12 +320,12 @@ export default function Roadmap() {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 {[
-                  "Scanner QR universel",
-                  "Event comités (template + pack QR)",
+                  "Découverte des soirées",
+                  "Event comités (template + détail avant join)",
                   "Entrée & comptage temps réel",
                   "Rentabilité live + rapport",
-                  "Bar kit (menu + zones + tracking)",
-                  "Rôles staff via QR + révocation",
+                  "Bar kit (identité lieu + menu + modules)",
+                  "Rôles staff sécurisés + QR signé si utile",
                 ].map((feature) => (
                   <div key={feature} className="flex items-center gap-3 p-4 rounded-xl bg-card border border-border">
                     <CheckCircle2 className="text-green-500 shrink-0" size={20} />

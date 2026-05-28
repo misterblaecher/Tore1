@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
-import { BarChart3, MapPin, Music2, Package, Dice5, type LucideIcon } from "lucide-react";
+import { Archive, MapPin, Music2, Users, Dice5, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type ModuleKey = "music" | "bets" | "dashboard" | "map" | "inventory";
+type ModuleKey = "discovery" | "bets" | "committee" | "map" | "memory";
 
 const modules: Array<{
   key: ModuleKey;
@@ -11,39 +11,39 @@ const modules: Array<{
   description: string;
 }> = [
   {
-    key: "music",
-    icon: Music2,
-    title: "Contrôle musique (pré-soirée + live)",
+    key: "discovery",
+    icon: MapPin,
+    title: "Découverte des soirées",
     description:
-      "Les étudiants définissent leurs goûts avant l’event. Le comité/DJ voit un résumé clair + votes simples en live.",
+      "Soirées autour de soi dans le Carré, soirées à venir, filtres par bar, comité, type, date et proximité.",
   },
   {
     key: "bets",
     icon: Dice5,
-    title: "Paris fun pendant la soirée",
+    title: "Soirées vivantes",
     description:
-      "Des mini-paris sur la soirée (entrées, ambiance, défis). Crédits internes. Pas besoin d’être collé au téléphone.",
+      "Polymarket local ou global, défis, mini-jeux, classements, cadeaux P2P et live feed quand ça sert l’ambiance.",
   },
   {
-    key: "dashboard",
-    icon: BarChart3,
-    title: "Dashboard comité (terrain)",
+    key: "committee",
+    icon: Users,
+    title: "Vie comité & folklore",
     description:
-      "Entrées en live, capacité, stats de rush, export. Un cockpit simple pour gérer une all‑in sans stress.",
+      "Forum, infos nouveaux, traditions, archives, organisation interne et guides de guindaille selon permissions.",
   },
   {
     key: "map",
-    icon: MapPin,
-    title: "Map de la salle pour se retrouver",
+    icon: Music2,
+    title: "Ambiance bar contextualisée",
     description:
-      "Une carte simple (bar, toilettes, DJ, fumoir…). Les gens indiquent où ils sont — sans tracking automatique.",
+      "Quand tu entres dans un bar, TORÈ peut adapter logo, couleurs, fond dynamique et modules actifs du lieu.",
   },
   {
-    key: "inventory",
-    icon: Package,
-    title: "Inventaire pré / post soirée",
+    key: "memory",
+    icon: Archive,
+    title: "Mémoire guindaille",
     description:
-      "Checklist matériel (barrières, pompes, toilettes…), stock (fûts, soft, gobelets) et rapport fin de soirée.",
+      "Profil, historique de soirées, badges, événements vécus et appartenances à comités, régionales ou ordres.",
   },
 ];
 
@@ -64,9 +64,9 @@ export function FeaturesSection() {
     <section id="modules" className="py-20 md:py-28">
       <div className="container">
         <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-3">Les modules qu’on teste à Liège</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-3">L’écosystème qu’on teste à Liège</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            TORÈ se construit en conditions réelles : 1 module → 1 soirée test → feedback → amélioration.
+            TORÈ se construit en conditions réelles : découvrir, rejoindre, vivre, organiser, archiver.
           </p>
         </div>
 

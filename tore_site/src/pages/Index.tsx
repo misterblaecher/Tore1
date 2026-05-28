@@ -12,6 +12,7 @@ import {
   WAITLIST_URL,
   WHATSAPP_URL,
 } from "@/lib/external-links";
+import { API_BASE } from "@/lib/api";
 
 const modules = [
   {
@@ -46,20 +47,20 @@ const roadmapPhases = [
     phase: "Phase 0 — Fondations",
     badge: "Now",
     points: [
-      "Identité unifiée et QR universel",
-      "Modules activables ON/OFF",
-      "Mode réseau faible par défaut",
-      "Traçabilité opérationnelle minimale",
+      "Découverte des soirées autour de soi",
+      "Page détail obligatoire avant de rejoindre",
+      "QR contextuel et signé quand nécessaire",
+      "Réseau discret côté utilisateur",
     ],
   },
   {
     phase: "Phase 1 — Console Comités",
     badge: "Now",
     points: [
-      "Création d'event et cadrage terrain",
-      "Entrée, comptage et flux live",
-      "Rentabilité live par zone",
-      "Canal urgence piloté",
+      "Création d'event et publication progressive",
+      "Défis, Polymarket, classements et ticker utile",
+      "Ambiance visuelle par bar",
+      "Comité OS, forum et archives",
     ],
   },
   {
@@ -145,8 +146,6 @@ const extensions = [
   },
 ];
 
-const API_URL = import.meta.env.VITE_API_URL?.trim();
-
 type AccountRole = "student" | "committee" | "bar" | "dj";
 type AccountMode = "user" | "organizer" | "team";
 
@@ -169,7 +168,7 @@ const Index = () => {
   const [accountSuccess, setAccountSuccess] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AccountRole | "">("");
   const [selectedAccountMode, setSelectedAccountMode] = useState<AccountMode>("user");
-  const apiReady = Boolean(API_URL && API_URL.startsWith("http"));
+  const apiReady = Boolean(API_BASE && API_BASE.startsWith("http"));
 
   const safeParse = async (res: Response) => {
     const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
@@ -323,16 +322,16 @@ const Index = () => {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Solution TORÈ</p>
               <h2 className="text-3xl md:text-5xl font-semibold tracking-tight">Une infrastructure unifiée pour opérer le territoire étudiant.</h2>
               <p className="text-muted-foreground text-base md:text-lg leading-relaxed">
-                TORÈ transforme les opérations événementielles en architecture maîtrisée: accès unifiés, modules activables,
-                ledger consolidé et contrôle permanent.
+                TORÈ transforme la guindaille liégeoise en écosystème lisible: découverte des soirées, expérience live,
+                comités outillés, folklore transmis et mémoire personnelle.
               </p>
             </div>
             <div className="grid gap-4">
               {[
-                { title: "QR universel d'entrée", icon: ScanLine },
-                { title: "Activation modulaire des fonctions", icon: ShieldCheck },
-                { title: "Ledger territorial", icon: BookOpenText },
-                { title: "Contrôle opérationnel", icon: Network },
+                { title: "Découverte soirée-first", icon: ScanLine },
+                { title: "Modules live activables", icon: ShieldCheck },
+                { title: "Mémoire guindaille", icon: BookOpenText },
+                { title: "Pilotage comité & bar", icon: Network },
               ].map((item) => (
                 <article key={item.title} className="rounded-xl border border-border/60 bg-background/60 p-5 flex items-start gap-4 metal-edge-card">
                   <item.icon className="mt-0.5 text-accent" size={20} />
@@ -576,7 +575,7 @@ const Index = () => {
                   setAccountSuccess(null);
                   setAccountLoading(true);
 
-                  if (!API_URL || !API_URL.startsWith("http")) {
+                  if (!API_BASE || !API_BASE.startsWith("http")) {
                     const message = "Backend non configuré.";
                     setAccountError(message);
                     toast({ title: "Erreur", description: "Backend non configuré.", variant: "destructive", duration: 3200 });
@@ -584,7 +583,7 @@ const Index = () => {
                     return;
                   }
 
-                  const accountRequestUrl = `${API_URL.replace(/\/+$/, "")}/public/account-request`;
+                  const accountRequestUrl = `${API_BASE.replace(/\/+$/, "")}/public/account-request`;
                   const formData = new FormData(form);
                   const role = String(formData.get("role") || "") as AccountRole;
                   const payload = {

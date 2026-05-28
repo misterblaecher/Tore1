@@ -13,7 +13,7 @@ export function ForWhoSection() {
         <div className="text-center mb-12">
           <h2 className="font-ritual text-3xl md:text-4xl font-bold mb-4 tracking-wide">Pour qui ?</h2>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            TORÈ s'adapte à votre contexte. Bars ou comités, mêmes outils, usages différents.
+            TORÈ relie les étudiants, les bars, les comités et les organisateurs sans réduire l’expérience à un scan.
           </p>
         </div>
 
@@ -23,10 +23,10 @@ export function ForWhoSection() {
               icon: Beer,
               title: "Bars & Restaurants",
               items: [
-                "Menu QR dynamique par zone (table, terrasse, comptoir)",
-                "Tracking scans, vues items, comportements",
-                "Gestion staff via QR (pas d'app à installer)",
-                "Commandes optionnelles (sans paiement obligatoire)",
+                "Page lieu avec identité visuelle, ambiance et soirées en cours",
+                "Modules bar activables : menu, commandes, wallet, événements",
+                "Actions QR contextuelles pour entrée, staff ou accès sensible",
+                "Analytics et exports côté portail, pas de bruit côté utilisateur",
               ],
               href: "/bars",
             },
@@ -34,10 +34,10 @@ export function ForWhoSection() {
               icon: Users,
               title: "Comités & Organisateurs",
               items: [
-                "Création d'event en 2 minutes (templates inclus)",
-                "Entrée & comptage temps réel (mode estimation)",
-                "Rentabilité live vs coûts engagés",
-                "Rapport fin de soirée exportable",
+                "Créer, publier et animer une soirée avec détail avant join",
+                "Forum, archives, annonces et passation comité",
+                "Défis, Polymarket, ticker et classements selon modules actifs",
+                "Mémoire annuelle, badges et historique exploitable",
               ],
               href: "/comites",
             },

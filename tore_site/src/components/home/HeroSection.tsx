@@ -75,7 +75,7 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.6 }}
         >
-          L’app pour organiser et vivre les soirées étudiantes.
+          L’OS social et opérationnel de la guindaille liégeoise.
         </motion.p>
 
         {/* Séparateur doré */}
@@ -88,7 +88,8 @@ export function HeroSection() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.9 }}
         >
-          On construit TORÈ module par module, en testant sur de vraies soirées.
+          Découvre les soirées autour de toi, vis la soirée avec les modules actifs,
+          retrouve tes comités et garde une mémoire de ta guindaille.
           <br className="hidden md:block" />
           <span className="text-foreground font-medium">Tu veux tester ? Inscris‑toi à la bêta.</span>
         </motion.p>
@@ -131,9 +132,9 @@ export function HeroSection() {
           transition={{ duration: 0.6, delay: 1.4 }}
         >
           {[
-            { value: "Tests", label: "Soirées pilotes" },
-            { value: "Offline", label: "Réseau faible" },
-            { value: "Ops", label: "Pensé terrain" },
+            { value: "Carré", label: "Soirées proches" },
+            { value: "Live", label: "Défis & marchés" },
+            { value: "Mémoire", label: "Profil guindaille" },
           ].map((stat) => (
             <div key={stat.label} className="text-center group">
               <p className="text-2xl md:text-3xl font-bold text-foreground transition-all duration-300">

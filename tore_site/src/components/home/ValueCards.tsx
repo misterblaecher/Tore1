@@ -1,21 +1,21 @@
-import { Zap, Wifi, ToggleRight } from "lucide-react";
+import { CalendarSearch, Sparkles, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
 
 const valueCards = [
   {
-    icon: Zap,
-    title: "Setup bar < 10 min",
-    description: "Menu, zones, QR codes… votre bar est live en quelques minutes. Pas d'usine à gaz.",
+    icon: CalendarSearch,
+    title: "Découverte d’abord",
+    description: "Soirées proches, à venir, filtrées par lieu, comité, type, date et proximité.",
   },
   {
-    icon: Wifi,
-    title: "Soirée-proof",
-    description: "Mode réseau faible avec cache intelligent. Ça marche même quand la 4G lâche.",
+    icon: Sparkles,
+    title: "Expérience live",
+    description: "Défis, marchés, interactions sociales et modules activés selon l’ambiance de la soirée.",
   },
   {
-    icon: ToggleRight,
-    title: "Modules ON/OFF",
-    description: "Activez uniquement ce dont vous avez besoin. Menu seul, event, comptage, commandes…",
+    icon: BookOpen,
+    title: "Mémoire collective",
+    description: "Comités, archives, traditions, badges et historique personnel de guindaille.",
   },
 ];
 
@@ -28,7 +28,7 @@ export function ValueCards() {
             Pourquoi <span className="text-gradient-gold">TORÈ</span> ?
           </h2>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Une solution pensée pour la réalité du terrain. Simple, rapide, fiable.
+            Une app pensée pour la vie nocturne liégeoise : sociale, utile, vivante et fiable.
           </p>
         </div>
 
