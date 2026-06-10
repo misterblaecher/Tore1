@@ -20,16 +20,27 @@ import 'services/idempotency_store.dart';
 import 'services/network_state_resolver.dart';
 import 'services/remote_config.dart';
 import 'ui/module_catalog.dart';
+import 'ui/screens/access/access_quick_grid.dart';
+import 'ui/screens/access/access_scanner_screen.dart';
+import 'ui/screens/access/access_screen.dart';
 import 'ui/screens/bar/bar_screens.dart';
 import 'ui/screens/dev/diagnostics_screen.dart';
+import 'ui/screens/forum/forum_cards.dart';
+import 'ui/screens/forum/forum_screen.dart';
 import 'ui/screens/help/runbook_screens.dart';
+import 'ui/screens/home/hero_status_card.dart';
+import 'ui/screens/home/home_screen.dart';
+import 'ui/screens/home/quick_actions.dart';
+import 'ui/screens/home/ticker_preview.dart';
 import 'ui/screens/orga/orga_exports_screen.dart';
 import 'ui/screens/orga/orga_screens.dart';
 import 'ui/screens/showcase/showcase_screens.dart';
 import 'ui/screens/system/update_required_screen.dart';
 import 'ui/screens/user/user_screens.dart';
+import 'ui/shell/tore_app_shell.dart';
 import 'ui/theme/tore_theme.dart';
 import 'ui/widgets/primitives.dart';
+import 'ui/widgets/section_header.dart';
 
 class ToreRebuildApp extends StatefulWidget {
   const ToreRebuildApp({super.key});
@@ -66,7 +77,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
   bool _loading = true;
   bool _consented = false;
   int _selectedUserTab = 0;
-  _QuickAction? _activeHomeAction;
+  HomeQuickAction? _activeHomeAction;
   List<BarDto> _bars = const [];
   List<EventDto> _barEvents = const [];
   WalletDto? _wallet;
@@ -565,24 +576,155 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         network: _network,
       );
 
+  OrderDto? get _activeOrder {
+    const activeStatuses = {'NEW', 'IN_PROGRESS', 'READY'};
+    for (final order in _orders) {
+      if (activeStatuses.contains(order.status)) return order;
+    }
+    return null;
+  }
+
+  List<AccessQuickAction> _accessQuickActions() {
+    final actions = <AccessQuickAction>[
+      const AccessQuickAction(
+        label: 'Join',
+        subtitle: 'Entrer avec un code event',
+        icon: Icons.group_add,
+        route: AppRoutes.join,
+      ),
+      const AccessQuickAction(
+        label: 'Menu',
+        subtitle: 'Commander et montrer le QR',
+        icon: Icons.local_bar,
+        route: AppRoutes.menu,
+      ),
+      const AccessQuickAction(
+        label: 'Wallet',
+        subtitle: 'Solde et tickets',
+        icon: Icons.account_balance_wallet,
+        route: AppRoutes.wallet,
+      ),
+      const AccessQuickAction(
+        label: 'Events',
+        subtitle: 'Soirées et accès live',
+        icon: Icons.event,
+        route: AppRoutes.events,
+      ),
+      const AccessQuickAction(
+        label: 'Bars',
+        subtitle: 'Trouver les spots proches',
+        icon: Icons.storefront,
+        route: AppRoutes.bars,
+      ),
+      const AccessQuickAction(
+        label: 'Aide',
+        subtitle: 'Safe kit et support',
+        icon: Icons.health_and_safety,
+        route: AppRoutes.safeKit,
+      ),
+    ];
+    return actions;
+  }
+
+  void _openAccessScanner() {
+    Navigator.pushNamed(context, AppRoutes.scanner);
+  }
+
+  Widget _userTabContent(BuildContext context) {
+    switch (_selectedUserTab) {
+      case 1:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SectionHeader(
+              title: 'Ticker live',
+              actionLabel: 'Filtres',
+              onTap: () => ToreFeedback.success(
+                context,
+                'Filtres ticker: annonces, commandes, bets.',
+              ),
+            ),
+            TickerPreview(items: _ticker),
+          ],
+        );
+      case 2:
+        return AccessScreen(
+          onOpenScanner: _openAccessScanner,
+          onTorch: _openAccessScanner,
+          onManualCode: _openAccessScanner,
+          onHelp: _openAccessScanner,
+          onOpenRoute: (route) => Navigator.pushNamed(context, route),
+          quickActions: _accessQuickActions(),
+          activeOrder: _activeOrder,
+          zones: _zones,
+        );
+      case 3:
+        return MarketsTab(
+          global: _polyGlobal,
+          event: _polyEvent,
+          onGlobal: () => Navigator.pushNamed(context, AppRoutes.polymarketGlobal),
+          onEvent: () => Navigator.pushNamed(context, AppRoutes.polymarketEvent),
+        );
+      case 4:
+        return _isConnectedAccount
+            ? ForumScreen(
+                onOpenForum: () => Navigator.pushNamed(context, AppRoutes.forum),
+                onSubmitRequest: () => ToreFeedback.success(
+                  context,
+                  'Demande de forum envoyée à la modération TORÈ.',
+                ),
+              )
+            : const ConnectedOnlyForumPrompt();
+      default:
+        return HomeScreen(
+          activeAction: _activeHomeAction,
+          onOpenAction: (action) {
+            if (action.tabIndex != null) {
+              setState(() {
+                _activeHomeAction = null;
+                _selectedUserTab = action.tabIndex!;
+              });
+              return;
+            }
+            setState(() => _activeHomeAction = action);
+          },
+          onCloseAction: () => setState(() => _activeHomeAction = null),
+          eventName: _mobileBootstrap.eventName ?? 'Afond Night',
+          barName: _mobileBootstrap.barName ?? 'TORÈ Test Bar',
+          onOpenEventHub: () => Navigator.pushNamed(context, AppRoutes.eventHub),
+          onOpenEvents: () => Navigator.pushNamed(context, AppRoutes.events),
+          onOpenBars: () => Navigator.pushNamed(context, AppRoutes.bars),
+          onOpenExternalUrl: _openExternalUrl,
+        );
+    }
+  }
+
   Widget _shellBody(BuildContext context) {
     final currentEventState =
         _useShowcaseFixtures ? EventState.live : _eventContext?.eventState;
-    final cards = switch (_mode) {
-      ToreMode.user => _userTabCards(context),
-      ToreMode.orga => _modeCards(
-          title: 'Command Center',
-          subtitle:
-              'Pilotage orga live pour ${_mobileBootstrap.eventName ?? _mobileBootstrap.eventKey}',
-          mode: ToreMode.orga,
-          metric: '${_entryStats?.approvedCount ?? 0}',
-          metricLabel: 'entrées validées'),
-      ToreMode.bar => _modeCards(
-          title: 'Bar Ops',
-          subtitle: 'Commandes, zones et analytics du bar actif',
-          mode: ToreMode.bar,
-          metric: '${_orders.length}',
-          metricLabel: 'commandes live'),
+    final content = switch (_mode) {
+      ToreMode.user => _userTabContent(context),
+      ToreMode.orga => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _modeCards(
+            title: 'Command Center',
+            subtitle:
+                'Pilotage orga live pour ${_mobileBootstrap.eventName ?? _mobileBootstrap.eventKey}',
+            mode: ToreMode.orga,
+            metric: '${_entryStats?.approvedCount ?? 0}',
+            metricLabel: 'entrées validées',
+          ),
+        ),
+      ToreMode.bar => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _modeCards(
+            title: 'Bar Ops',
+            subtitle: 'Commandes, zones et analytics du bar actif',
+            mode: ToreMode.bar,
+            metric: '${_orders.length}',
+            metricLabel: 'commandes live',
+          ),
+        ),
     };
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -596,133 +738,28 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 108),
         children: [
           NetworkBanner(state: _network),
-          _HeroStatusCard(
+          HeroStatusCard(
             mode: _mode,
             eventName: _mobileBootstrap.eventName ?? _mobileBootstrap.eventKey,
             barName: _mobileBootstrap.barName ?? 'Bar actif',
             eventState: currentEventState ?? EventState.draft,
             syncedAt: _eventContext?.syncedAt,
+            walletBalance: _wallet?.balance ?? 0,
+            checkInCount: _entryStats?.approvedCount ?? 0,
+            orderCount: _orders.length,
           ),
           const SizedBox(height: ToreTokens.s16),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 260),
-            child: Column(
+            child: KeyedSubtree(
               key: ValueKey(
                   '${_mode.name}-$_selectedUserTab-${_activeHomeAction?.route ?? ''}'),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: cards,
+              child: content,
             ),
           ),
         ],
       ),
     );
-  }
-
-  List<Widget> _userTabCards(BuildContext context) {
-    switch (_selectedUserTab) {
-      case 1:
-        return [
-          _SectionHeader(
-              title: 'Ticker live',
-              actionLabel: 'Filtres',
-              onTap: () => ToreFeedback.success(
-                  context, 'Filtres ticker: annonces, commandes, bets.')),
-          _TickerPreview(items: _ticker),
-        ];
-      case 2:
-        return [
-          _ScannerTabCard(
-              onOpen: () => Navigator.pushNamed(context, AppRoutes.scanner)),
-        ];
-      case 3:
-        return [
-          _MarketsTab(
-              global: _polyGlobal,
-              event: _polyEvent,
-              onGlobal: () =>
-                  Navigator.pushNamed(context, AppRoutes.polymarketGlobal),
-              onEvent: () =>
-                  Navigator.pushNamed(context, AppRoutes.polymarketEvent)),
-        ];
-      case 4:
-        return [
-          if (_isConnectedAccount)
-            _ForumCommunitySurface(
-              onOpenForum: () => Navigator.pushNamed(context, AppRoutes.forum),
-              onSubmitRequest: () => ToreFeedback.success(
-                  context, 'Demande de forum envoyée à la modération TORÈ.'),
-            )
-          else
-            const _ConnectedOnlyForumPrompt(),
-        ];
-      default:
-        return [
-          _QuickActions(
-            onOpen: (action) {
-              if (action.tabIndex != null) {
-                setState(() {
-                  _activeHomeAction = null;
-                  _selectedUserTab = action.tabIndex!;
-                });
-                return;
-              }
-              setState(() => _activeHomeAction = action);
-            },
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            transitionBuilder: (child, animation) {
-              final offset = Tween<Offset>(
-                begin: const Offset(0, -0.06),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                  parent: animation, curve: Curves.easeOutCubic));
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(position: offset, child: child),
-              );
-            },
-            child: _activeHomeAction == null
-                ? const SizedBox.shrink()
-                : Padding(
-                    key: ValueKey(_activeHomeAction!.route),
-                    padding: const EdgeInsets.only(top: ToreTokens.s12),
-                    child: _HomeActionPanel(
-                      action: _activeHomeAction!,
-                      onOpenFull: () => Navigator.pushNamed(
-                          context, _activeHomeAction!.route),
-                      onClose: () => setState(() => _activeHomeAction = null),
-                    ),
-                  ),
-          ),
-          const SizedBox(height: ToreTokens.s16),
-          _SectionHeader(
-              title: 'Live maintenant',
-              actionLabel: 'Events',
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.events);
-              }),
-          _HomeEventCard(
-            title: _mobileBootstrap.eventName ?? 'Afond Night',
-            bar: _mobileBootstrap.barName ?? 'TORÈ Test Bar',
-            meta: 'Live maintenant · entrée gratuite',
-            onTap: () => Navigator.pushNamed(context, AppRoutes.eventHub),
-          ),
-          const SizedBox(height: ToreTokens.s16),
-          _NearbyEventsPreview(
-            onOpenEvent: () => Navigator.pushNamed(context, AppRoutes.events),
-          ),
-          const SizedBox(height: ToreTokens.s16),
-          _SectionHeader(
-              title: 'Bars proches',
-              actionLabel: 'Voir tout',
-              onTap: () => Navigator.pushNamed(context, AppRoutes.bars)),
-          _BarsPreview(
-            onBarTap: () => Navigator.pushNamed(context, AppRoutes.bars),
-            onOpenMap: _openExternalUrl,
-          ),
-        ];
-    }
   }
 
   List<Widget> _modeCards({
@@ -790,7 +827,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                 ..._moduleCards(ToreMode.user)
               ]),
         AppRoutes.scanner: (_) =>
-            QrScannerScreen(onResolve: _resolveQrPayload, network: _network),
+            AccessScannerScreen(onResolve: _resolveQrPayload, network: _network),
         AppRoutes.bars: (_) => BarsScreen(
             network: _network,
             children: _bars
@@ -933,7 +970,7 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
             ? ScreenScaffold(
                 title: 'Forum',
                 connectivity: _network,
-                body: _ForumCommunitySurface(
+                body: ForumScreen(
                   fullPage: true,
                   onOpenForum: () => ToreFeedback.success(
                       context, 'Page publique du forum ouverte.'),
@@ -1145,68 +1182,23 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                     _selectedUserTab = 0;
                   });
                 }))
-          : Scaffold(
-              appBar: AppBar(
-                title: Row(children: [
-                  Image.asset('assets/branding/logo_minimal.png',
-                      width: 32, height: 32),
-                  const SizedBox(width: ToreTokens.s8),
-                  const Text('TORÈ'),
-                ]),
-                actions: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: ToreTokens.s8),
-                    child: Center(
-                      child: ToreBadge(
-                          label: 'LIVE',
-                          color: _network == ConnectivityState.online
-                              ? ToreTokens.ruby
-                              : ToreTokens.warning),
-                    ),
-                  ),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _navigatorKey.currentState
-                        ?.pushNamed(AppRoutes.profile),
-                    child: const SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: Icon(Icons.person_outline),
-                    ),
-                  ),
-                ],
+          : ToreAppShell(
+              mode: _mode,
+              network: _network,
+              walletBalance: _wallet?.balance,
+              selectedUserTab: _selectedUserTab,
+              isConnectedAccount: _isConnectedAccount,
+              onOpenProfile: () => _navigatorKey.currentState?.pushNamed(AppRoutes.profile),
+              onOpenNotifications: () => ToreFeedback.success(
+                context,
+                'Centre notifications TORÈ bientôt synchronisé.',
               ),
-              floatingActionButton: _mode == ToreMode.user
-                  ? FloatingActionButton(
-                      onPressed: () => setState(() => _selectedUserTab = 2),
-                      child: const Icon(Icons.qr_code_scanner))
-                  : null,
-              bottomNavigationBar: _mode == ToreMode.user
-                  ? NavigationBar(
-                      selectedIndex: _isConnectedAccount
-                          ? _selectedUserTab
-                          : _selectedUserTab.clamp(0, 3),
-                      destinations: [
-                        const NavigationDestination(
-                            icon: Icon(Icons.home), label: 'Hub'),
-                        const NavigationDestination(
-                            icon: Icon(Icons.candlestick_chart),
-                            label: 'Ticker'),
-                        const NavigationDestination(
-                            icon: Icon(Icons.qr_code_scanner),
-                            label: 'Scanner'),
-                        const NavigationDestination(
-                            icon: Icon(Icons.show_chart), label: 'Bets'),
-                        if (_isConnectedAccount)
-                          const NavigationDestination(
-                              icon: Icon(Icons.forum), label: 'Forum'),
-                      ],
-                      onDestinationSelected: (i) {
-                        if (!mounted) return;
-                        setState(() => _selectedUserTab = i);
-                      },
-                    )
-                  : null,
+              onOpenWallet: () => _navigatorKey.currentState?.pushNamed(AppRoutes.wallet),
+              onOpenAccess: () => setState(() => _selectedUserTab = 2),
+              onSelectUserTab: (i) {
+                if (!mounted) return;
+                setState(() => _selectedUserTab = i);
+              },
               body: _shellBody(context),
             ),
       onGenerateRoute: (settings) {
@@ -1235,1280 +1227,6 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         }
         return null;
       },
-    );
-  }
-}
-
-class _HeroStatusCard extends StatelessWidget {
-  const _HeroStatusCard({
-    required this.mode,
-    required this.eventName,
-    required this.barName,
-    required this.eventState,
-    this.syncedAt,
-  });
-
-  final ToreMode mode;
-  final String eventName;
-  final String barName;
-  final EventState eventState;
-  final DateTime? syncedAt;
-
-  @override
-  Widget build(BuildContext context) {
-    final stateLabel = eventState.name.toUpperCase();
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF261018), ToreTokens.surface],
-        ),
-        border: Border.all(color: ToreTokens.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: ToreTokens.black,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: ToreTokens.ruby),
-              ),
-              child: const Icon(Icons.local_fire_department,
-                  color: ToreTokens.yellowCta),
-            ),
-            const SizedBox(width: ToreTokens.s12),
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(eventName,
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: ToreTokens.s4),
-                    Text('$barName · pass actif'),
-                  ]),
-            ),
-            ToreBadge(
-                label: stateLabel == 'LIVE' ? 'LIVE' : 'BETA',
-                color: eventState.isLive ? ToreTokens.ruby : Colors.orange),
-          ]),
-          const SizedBox(height: ToreTokens.s16),
-          Row(children: const [
-            Expanded(child: _HeroMetric(value: '€129', label: 'wallet')),
-            SizedBox(width: ToreTokens.s8),
-            Expanded(child: _HeroMetric(value: '244', label: 'check-ins')),
-            SizedBox(width: ToreTokens.s8),
-            Expanded(child: _HeroMetric(value: '03', label: 'orders')),
-          ]),
-        ]),
-      ),
-    );
-  }
-}
-
-class _HeroMetric extends StatelessWidget {
-  const _HeroMetric({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(ToreTokens.s8),
-      decoration: BoxDecoration(
-        color: ToreTokens.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ToreTokens.border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(value, style: ToreTypography.monoNumber(context, size: 18)),
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 11)),
-      ]),
-    );
-  }
-}
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.onOpen});
-
-  final void Function(_QuickAction action) onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = const [
-      _QuickAction('Scanner', Icons.qr_code_scanner, AppRoutes.scanner,
-          tabIndex: 2),
-      _QuickAction('Join', Icons.group_add, AppRoutes.join),
-      _QuickAction('Menu', Icons.local_bar, AppRoutes.menu),
-      _QuickAction('Wallet', Icons.account_balance_wallet, AppRoutes.wallet),
-    ];
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: actions.length,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 180,
-        mainAxisSpacing: ToreTokens.s8,
-        crossAxisSpacing: ToreTokens.s8,
-        childAspectRatio: 2.35,
-      ),
-      itemBuilder: (context, index) {
-        final action = actions[index];
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: Duration(milliseconds: 180 + index * 45),
-          curve: Curves.easeOutBack,
-          builder: (context, value, child) {
-            return Opacity(
-              opacity: value.clamp(0.0, 1.0),
-              child: Transform.translate(
-                offset: Offset(0, (1 - value) * 10),
-                child:
-                    Transform.scale(scale: 0.94 + value * 0.06, child: child),
-              ),
-            );
-          },
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onOpen(action),
-            child: Container(
-              decoration: BoxDecoration(
-                color: ToreTokens.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: ToreTokens.border),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(ToreTokens.s12),
-                child: Row(children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: ToreTokens.ruby,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(action.icon, color: Colors.white, size: 19),
-                  ),
-                  const SizedBox(width: ToreTokens.s8),
-                  Expanded(
-                    child: Text(
-                      action.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _TickerPreview extends StatelessWidget {
-  const _TickerPreview({required this.items});
-
-  final List<TickerItemDto> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = items.take(4).toList();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s12),
-        child: Column(children: [
-          for (var i = 0; i < visible.length; i++) ...[
-            Row(children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: ToreTokens.yellowCta,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: ToreTokens.s12),
-              Expanded(child: Text(visible[i].message)),
-              const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
-            ]),
-            if (i != visible.length - 1)
-              const Divider(color: ToreTokens.border, height: 22),
-          ],
-        ]),
-      ),
-    );
-  }
-}
-
-class _ScannerTabCard extends StatelessWidget {
-  const _ScannerTabCard({required this.onOpen});
-
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Container(
-            height: 220,
-            decoration: BoxDecoration(
-              color: ToreTokens.black,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: ToreTokens.yellowCta, width: 1.4),
-            ),
-            child: Stack(alignment: Alignment.center, children: const [
-              Icon(Icons.qr_code_scanner,
-                  size: 92, color: ToreTokens.yellowCta),
-              Positioned(
-                bottom: 18,
-                child: Text('QR event · menu · WiFi · invitation'),
-              ),
-            ]),
-          ),
-          const SizedBox(height: ToreTokens.s12),
-          FilledButton.icon(
-            onPressed: onOpen,
-            icon: const Icon(Icons.center_focus_strong),
-            label: const Text('Ouvrir le scanner'),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _MarketsTab extends StatelessWidget {
-  const _MarketsTab({
-    required this.global,
-    required this.event,
-    required this.onGlobal,
-    required this.onEvent,
-  });
-
-  final List<PolymarketDto> global;
-  final List<PolymarketDto> event;
-  final VoidCallback onGlobal;
-  final VoidCallback onEvent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _SectionHeader(
-          title: 'Bets globaux', actionLabel: 'Ouvrir', onTap: onGlobal),
-      for (final item in global)
-        _BetCard(title: item.title, odds: '62%', onTap: onGlobal),
-      const SizedBox(height: ToreTokens.s12),
-      _SectionHeader(title: 'Bets soirée', actionLabel: 'Live', onTap: onEvent),
-      for (final item in event)
-        _BetCard(title: item.title, odds: '1.8x', onTap: onEvent),
-    ]);
-  }
-}
-
-class _BetCard extends StatelessWidget {
-  const _BetCard(
-      {required this.title, required this.odds, required this.onTap});
-
-  final String title;
-  final String odds;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: ToreTokens.s8),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(ToreTokens.s12),
-            child: Row(children: [
-              const Icon(Icons.show_chart, color: ToreTokens.yellowCta),
-              const SizedBox(width: ToreTokens.s12),
-              Expanded(
-                  child: Text(title,
-                      style: Theme.of(context).textTheme.titleMedium)),
-              ToreBadge(label: odds, color: ToreTokens.rubyDeep),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeActionPanel extends StatelessWidget {
-  const _HomeActionPanel({
-    required this.action,
-    required this.onOpenFull,
-    required this.onClose,
-  });
-
-  final _QuickAction action;
-  final VoidCallback onOpenFull;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final copy = _HomeActionCopy.forRoute(action.route);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onOpenFull,
-      child: Card(
-        color: ToreTokens.surfaceAlt,
-        child: Padding(
-          padding: const EdgeInsets.all(ToreTokens.s16),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: ToreTokens.ruby.withValues(alpha: 0.22),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(action.icon, color: ToreTokens.yellowCta),
-              ),
-              const SizedBox(width: ToreTokens.s12),
-              Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(copy.title,
-                          style: Theme.of(context).textTheme.titleMedium),
-                      Text(copy.subtitle),
-                    ]),
-              ),
-              IconButton(
-                tooltip: 'Fermer',
-                onPressed: onClose,
-                icon: const Icon(Icons.close),
-              ),
-            ]),
-            const SizedBox(height: ToreTokens.s12),
-            Wrap(
-              spacing: ToreTokens.s8,
-              runSpacing: ToreTokens.s8,
-              children: [
-                for (final chip in copy.chips)
-                  Chip(
-                    label: Text(chip),
-                    backgroundColor: ToreTokens.black,
-                    side: const BorderSide(color: ToreTokens.ruby),
-                  ),
-              ],
-            ),
-            const SizedBox(height: ToreTokens.s12),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onOpenFull,
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 46),
-                decoration: BoxDecoration(
-                  color: ToreTokens.ruby,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(copy.ctaIcon, color: Colors.white),
-                    const SizedBox(width: ToreTokens.s8),
-                    Text(
-                      copy.cta,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeActionCopy {
-  const _HomeActionCopy({
-    required this.title,
-    required this.subtitle,
-    required this.chips,
-    required this.cta,
-    required this.ctaIcon,
-  });
-
-  final String title;
-  final String subtitle;
-  final List<String> chips;
-  final String cta;
-  final IconData ctaIcon;
-
-  static _HomeActionCopy forRoute(String route) {
-    switch (route) {
-      case AppRoutes.join:
-        return const _HomeActionCopy(
-          title: 'Rejoindre la soirée',
-          subtitle: 'QR valide ou code manuel. Accès en un geste.',
-          chips: ['Afond Night', 'Entrée gratuite', 'Pass actif'],
-          cta: 'Ouvrir le join',
-          ctaIcon: Icons.group_add,
-        );
-      case AppRoutes.menu:
-        return const _HomeActionCopy(
-          title: 'Menu express',
-          subtitle: 'Ajoute au panier, confirme, puis montre le QR au bar.',
-          chips: ['2 taps max', 'Panier inline', 'QR commande'],
-          cta: 'Commander',
-          ctaIcon: Icons.local_bar,
-        );
-      case AppRoutes.wallet:
-        return const _HomeActionCopy(
-          title: 'Wallet',
-          subtitle: 'Solde, tickets et historique de la soirée.',
-          chips: ['€129.20', 'Tickets prêts', 'Top-up'],
-          cta: 'Voir le wallet',
-          ctaIcon: Icons.account_balance_wallet,
-        );
-      case AppRoutes.safeKit:
-        return const _HomeActionCopy(
-          title: 'Safe Kit',
-          subtitle: 'Aide discrète, buddy check et contact staff.',
-          chips: ['Alerte discrète', 'Buddy OK', 'Staff 2 min'],
-          cta: 'Ouvrir Safe Kit',
-          ctaIcon: Icons.health_and_safety,
-        );
-      case AppRoutes.ranking:
-        return const _HomeActionCopy(
-          title: 'Ranking live',
-          subtitle: 'Classement de la soirée et progression équipe.',
-          chips: ['#12', '+3 places', '940 pts'],
-          cta: 'Voir le classement',
-          ctaIcon: Icons.leaderboard,
-        );
-      default:
-        return const _HomeActionCopy(
-          title: 'Action TORÈ',
-          subtitle: 'Module prêt pour la soirée.',
-          chips: ['LIVE', 'BETA'],
-          cta: 'Ouvrir',
-          ctaIcon: Icons.arrow_forward,
-        );
-    }
-  }
-}
-
-class _HomeEventCard extends StatelessWidget {
-  const _HomeEventCard({
-    required this.title,
-    required this.bar,
-    required this.meta,
-    required this.onTap,
-  });
-
-  final String title;
-  final String bar;
-  final String meta;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(ToreTokens.s16),
-          child: Row(children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: ToreTokens.rubyDeep,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.local_fire_department,
-                  color: ToreTokens.yellowCta),
-            ),
-            const SizedBox(width: ToreTokens.s12),
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: ToreTokens.s4),
-                    Text(bar, style: const TextStyle(color: Colors.white70)),
-                    Text(meta,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12)),
-                  ]),
-            ),
-            const Icon(Icons.arrow_forward_ios,
-                color: ToreTokens.yellowCta, size: 16),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _NearbyEventsPreview extends StatelessWidget {
-  const _NearbyEventsPreview({required this.onOpenEvent});
-
-  final VoidCallback onOpenEvent;
-
-  @override
-  Widget build(BuildContext context) {
-    final events = const [
-      (
-        title: 'TD Outremeuse',
-        place: 'L’Embuscade',
-        distance: '450 m',
-        time: 'Ce soir · 22:30',
-        status: 'QR join'
-      ),
-      (
-        title: 'Rooftop After',
-        place: 'Bar B',
-        distance: '900 m',
-        time: '23:45',
-        status: '128 intéressés'
-      ),
-    ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s12),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            Text('Soirées près de toi',
-                style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            const ToreBadge(label: 'Liège', color: ToreTokens.ruby),
-          ]),
-          const SizedBox(height: ToreTokens.s8),
-          for (final event in events)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading:
-                  const Icon(Icons.local_activity, color: ToreTokens.yellowCta),
-              title: Text(event.title),
-              subtitle:
-                  Text('${event.place} · ${event.distance} · ${event.time}'),
-              trailing: TextButton(
-                onPressed: onOpenEvent,
-                child: Text(event.status),
-              ),
-            ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _BarsPreview extends StatelessWidget {
-  const _BarsPreview({required this.onBarTap, required this.onOpenMap});
-
-  final VoidCallback onBarTap;
-  final ValueChanged<String> onOpenMap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bars = const [
-      (
-        name: 'L’Embuscade',
-        meta: 'Ouvert · 450 m · 2 soirées',
-        mapUrl: 'https://maps.app.goo.gl/5tsL5yu1XdKA25js6'
-      ),
-      (
-        name: 'TORÈ Test Bar',
-        meta: 'Live · 700 m · 1 event',
-        mapUrl:
-            'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar'
-      ),
-      (
-        name: 'Bar B',
-        meta: 'Happy hour · 900 m',
-        mapUrl:
-            'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar%20B'
-      ),
-    ];
-    return Column(
-      children: [
-        for (var index = 0; index < bars.length; index++) ...[
-          _PartnerBarTile(
-            name: bars[index].name,
-            meta: bars[index].meta,
-            onTap: onBarTap,
-            onOpenMap: () => onOpenMap(bars[index].mapUrl),
-          ),
-          if (index != bars.length - 1) const SizedBox(height: ToreTokens.s8),
-        ],
-      ],
-    );
-  }
-}
-
-class _PartnerBarTile extends StatelessWidget {
-  const _PartnerBarTile({
-    required this.name,
-    required this.meta,
-    required this.onTap,
-    required this.onOpenMap,
-  });
-
-  final String name;
-  final String meta;
-  final VoidCallback onTap;
-  final VoidCallback onOpenMap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s12),
-        child: Row(children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: ToreTokens.ruby.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.storefront,
-                  color: ToreTokens.yellowCta, size: 22),
-            ),
-          ),
-          const SizedBox(width: ToreTokens.s12),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: ToreTokens.s4),
-              Text(meta,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            ]),
-          ),
-          IconButton.filledTonal(
-            tooltip: 'Ouvrir dans Google Maps',
-            onPressed: onOpenMap,
-            icon: const Icon(Icons.map),
-          ),
-          const SizedBox(width: ToreTokens.s4),
-          IconButton(
-            tooltip: 'Voir les soirées',
-            onPressed: onTap,
-            icon: const Icon(Icons.chevron_right),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ForumCommunitySurface extends StatefulWidget {
-  const _ForumCommunitySurface({
-    required this.onOpenForum,
-    required this.onSubmitRequest,
-    this.fullPage = false,
-  });
-
-  final VoidCallback onOpenForum;
-  final VoidCallback onSubmitRequest;
-  final bool fullPage;
-
-  @override
-  State<_ForumCommunitySurface> createState() => _ForumCommunitySurfaceState();
-}
-
-class _ForumCommunitySurfaceState extends State<_ForumCommunitySurface> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _eventNameController;
-  late final TextEditingController _eventPlaceController;
-  late final TextEditingController _eventDateController;
-
-  String _spaceType = 'Comité';
-  String _forumName = 'Comité Saint-Torè';
-  String _forumDescription = 'Espace public · Liège · folklore étudiant';
-  bool _spaceCreated = true;
-  int _selectedPanel = 0;
-
-  final List<({String title, String detail})> _events = [
-    (
-      title: 'Afond Night',
-      detail: 'Live · 244 entrées · menu + bets + safe kit'
-    ),
-    (title: 'Saint-Torè warmup', detail: 'Vendredi 22:30 · QR join activé'),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: _forumName);
-    _descriptionController = TextEditingController(
-        text:
-            'Accueil officiel du comité : description, bannière, événements, liens utiles et membres visibles.');
-    _eventNameController = TextEditingController(text: 'TD Outremeuse');
-    _eventPlaceController =
-        TextEditingController(text: 'Liège · salle à confirmer');
-    _eventDateController = TextEditingController(text: 'Vendredi · 22:30');
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _eventNameController.dispose();
-    _eventPlaceController.dispose();
-    _eventDateController.dispose();
-    super.dispose();
-  }
-
-  void _submitRequest() {
-    final name = _nameController.text.trim();
-    setState(() {
-      _spaceCreated = true;
-      _forumName = name.isEmpty ? 'Nouveau $_spaceType TORÈ' : name;
-      _forumDescription = '$_spaceType · demande acceptée · espace officiel';
-      _selectedPanel = 1;
-    });
-    widget.onSubmitRequest();
-    ToreFeedback.success(context, 'Espace créé : $_forumName');
-  }
-
-  void _createEvent() {
-    final title = _eventNameController.text.trim();
-    if (title.isEmpty) {
-      ToreFeedback.error(context, 'Ajoute un nom d’événement.');
-      return;
-    }
-    final place = _eventPlaceController.text.trim();
-    final date = _eventDateController.text.trim();
-    setState(() {
-      _events.insert(0, (
-        title: title,
-        detail:
-            '${date.isEmpty ? 'Date à confirmer' : date} · ${place.isEmpty ? 'Lieu à confirmer' : place} · brouillon TORÈ'
-      ));
-      _selectedPanel = 2;
-    });
-    ToreFeedback.success(context, 'Event créé dans le forum.');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final panels = ['Créer', 'Gérer', 'Events', 'Salons'];
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _SectionHeader(
-          title: 'Forum TORÈ',
-          actionLabel: widget.fullPage ? null : 'Page publique',
-          onTap: widget.onOpenForum),
-      Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: ToreTokens.border),
-          color: ToreTokens.surface,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(ToreTokens.s16),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: ToreTokens.rubyDeep,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: ToreTokens.yellowCta),
-                ),
-                child: const Icon(Icons.forum, color: ToreTokens.yellowCta),
-              ),
-              const SizedBox(width: ToreTokens.s12),
-              Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_forumName,
-                          style: Theme.of(context).textTheme.titleLarge),
-                      Text(_forumDescription),
-                    ]),
-              ),
-              ToreBadge(
-                  label: _spaceCreated ? 'ACTIF' : 'BROUILLON',
-                  color: _spaceCreated ? ToreTokens.ruby : ToreTokens.border),
-            ]),
-            const SizedBox(height: ToreTokens.s12),
-            Text(_descriptionController.text.trim().isEmpty
-                ? 'Page publique du forum : description, bannière, événements, liens utiles et membres publics.'
-                : _descriptionController.text.trim()),
-            const SizedBox(height: ToreTokens.s12),
-            Row(children: [
-              Expanded(
-                  child:
-                      _ForumStat(value: '${_events.length}', label: 'events')),
-              const SizedBox(width: ToreTokens.s8),
-              Expanded(
-                  child: _ForumStat(
-                      value: _spaceCreated ? '18' : '0', label: 'membres')),
-              const SizedBox(width: ToreTokens.s8),
-              Expanded(
-                  child: _ForumStat(
-                      value: _spaceCreated ? '4' : '0', label: 'salons')),
-            ]),
-            const SizedBox(height: ToreTokens.s12),
-            Row(children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: widget.onOpenForum,
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Page publique'),
-                ),
-              ),
-              const SizedBox(width: ToreTokens.s8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => setState(() => _selectedPanel = 1),
-                  icon: const Icon(Icons.settings),
-                  label: const Text('Gérer'),
-                ),
-              ),
-            ]),
-          ]),
-        ),
-      ),
-      const SizedBox(height: ToreTokens.s12),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(children: [
-          for (var i = 0; i < panels.length; i++) ...[
-            ChoiceChip(
-              label: Text(panels[i]),
-              selected: _selectedPanel == i,
-              onSelected: (_) => setState(() => _selectedPanel = i),
-            ),
-            const SizedBox(width: ToreTokens.s8),
-          ],
-        ]),
-      ),
-      const SizedBox(height: ToreTokens.s12),
-      AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        child: switch (_selectedPanel) {
-          0 => _ForumRequestCard(
-              key: const ValueKey('create'),
-              nameController: _nameController,
-              descriptionController: _descriptionController,
-              selectedType: _spaceType,
-              onTypeChanged: (value) => setState(() => _spaceType = value),
-              onSubmit: _submitRequest,
-            ),
-          1 => _ForumAdminCard(
-              key: const ValueKey('admin'), forumName: _forumName),
-          2 => _ForumEventsManagerCard(
-              key: const ValueKey('events'),
-              events: _events,
-              eventNameController: _eventNameController,
-              eventPlaceController: _eventPlaceController,
-              eventDateController: _eventDateController,
-              onCreateEvent: _createEvent,
-            ),
-          _ => const _ForumPrivateChannelsCard(key: ValueKey('channels')),
-        },
-      ),
-      const SizedBox(height: ToreTokens.s12),
-      _ForumFeedCard(events: _events),
-      const SizedBox(height: ToreTokens.s12),
-      const _ForumStatsCard(),
-    ]);
-  }
-}
-
-class _ForumStat extends StatelessWidget {
-  const _ForumStat({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(ToreTokens.s8),
-      decoration: BoxDecoration(
-        color: ToreTokens.black.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ToreTokens.border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(value, style: ToreTypography.monoNumber(context, size: 18)),
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 11)),
-      ]),
-    );
-  }
-}
-
-class _ForumFeedCard extends StatelessWidget {
-  const _ForumFeedCard({required this.events});
-
-  final List<({String title, String detail})> events;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Fil public', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ToreTokens.s8),
-          const Text(
-              'Comme une page communautaire : annonces, events, souvenirs et liens utiles.'),
-          const SizedBox(height: ToreTokens.s12),
-          for (final event in events.take(3))
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event, color: ToreTokens.yellowCta),
-              title: Text(event.title),
-              subtitle: Text(event.detail),
-              trailing: const Icon(Icons.chevron_right),
-            ),
-          const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.campaign, color: ToreTokens.yellowCta),
-            title: Text('Annonce comité'),
-            subtitle: Text('Les inscriptions staff sont ouvertes.'),
-            trailing: Icon(Icons.chevron_right),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ForumRequestCard extends StatelessWidget {
-  const _ForumRequestCard({
-    super.key,
-    required this.nameController,
-    required this.descriptionController,
-    required this.selectedType,
-    required this.onTypeChanged,
-    required this.onSubmit,
-  });
-
-  final TextEditingController nameController;
-  final TextEditingController descriptionController;
-  final String selectedType;
-  final ValueChanged<String> onTypeChanged;
-  final VoidCallback onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    final types = const [
-      'Comité',
-      'Cercle',
-      'Ordre',
-      'Régionale',
-      'Rivageoise',
-      'Autre',
-    ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Demander un espace',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ToreTokens.s8),
-          const Text(
-              'Comité, ordre, régionale ou rivageoise : la demande est modérée avant création.'),
-          const SizedBox(height: ToreTokens.s12),
-          FilledButton.icon(
-              onPressed: onSubmit,
-              icon: const Icon(Icons.add_circle),
-              label: const Text('Créer l’espace')),
-          const SizedBox(height: ToreTokens.s12),
-          Wrap(spacing: ToreTokens.s8, runSpacing: ToreTokens.s8, children: [
-            for (final type in types)
-              ChoiceChip(
-                label: Text(type),
-                selected: selectedType == type,
-                onSelected: (_) => onTypeChanged(type),
-              ),
-          ]),
-          const SizedBox(height: ToreTokens.s12),
-          TextField(
-            controller: nameController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-                labelText: 'Nom du $selectedType',
-                prefixIcon: const Icon(Icons.badge)),
-          ),
-          const SizedBox(height: ToreTokens.s12),
-          TextField(
-            controller: descriptionController,
-            style: const TextStyle(color: Colors.white),
-            minLines: 2,
-            maxLines: 3,
-            decoration: const InputDecoration(
-                labelText: 'Description / justification',
-                prefixIcon: Icon(Icons.description)),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ForumEventsManagerCard extends StatelessWidget {
-  const _ForumEventsManagerCard({
-    super.key,
-    required this.events,
-    required this.eventNameController,
-    required this.eventPlaceController,
-    required this.eventDateController,
-    required this.onCreateEvent,
-  });
-
-  final List<({String title, String detail})> events;
-  final TextEditingController eventNameController;
-  final TextEditingController eventPlaceController;
-  final TextEditingController eventDateController;
-  final VoidCallback onCreateEvent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Créer un event TORÈ',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ToreTokens.s8),
-          const Text(
-              'L’event est ajouté au forum, prêt pour QR join, menu, staff, bets et recap.'),
-          const SizedBox(height: ToreTokens.s12),
-          FilledButton.icon(
-              onPressed: onCreateEvent,
-              icon: const Icon(Icons.add),
-              label: const Text('Créer l’event')),
-          const SizedBox(height: ToreTokens.s12),
-          TextField(
-            controller: eventNameController,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-                labelText: 'Nom de l’event', prefixIcon: Icon(Icons.event)),
-          ),
-          const SizedBox(height: ToreTokens.s8),
-          TextField(
-            controller: eventDateController,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-                labelText: 'Date / heure', prefixIcon: Icon(Icons.schedule)),
-          ),
-          const SizedBox(height: ToreTokens.s8),
-          TextField(
-            controller: eventPlaceController,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-                labelText: 'Lieu', prefixIcon: Icon(Icons.place)),
-          ),
-          const SizedBox(height: ToreTokens.s12),
-          for (final event in events)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading:
-                  const Icon(Icons.local_activity, color: ToreTokens.yellowCta),
-              title: Text(event.title),
-              subtitle: Text(event.detail),
-              trailing: const ToreBadge(label: 'TORÈ'),
-            ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ForumPrivateChannelsCard extends StatelessWidget {
-  const _ForumPrivateChannelsCard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final channels = const [
-      ('# annonces', 'Lecture publique, écriture responsables'),
-      ('# staff-event', 'Préparation, QR pack, rôles terrain'),
-      ('# comité-privé', 'Discussion interne et passation'),
-      ('# modération', 'Signalements, permissions, accès'),
-    ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Salons privés', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ToreTokens.s8),
-          const Text(
-              'Des groupes de discussion type Discord, reliés aux rôles TORÈ et aux events.'),
-          const SizedBox(height: ToreTokens.s12),
-          for (final channel in channels)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.tag, color: ToreTokens.yellowCta),
-              title: Text(channel.$1),
-              subtitle: Text(channel.$2),
-              trailing: const ToreBadge(label: 'PRIVÉ'),
-            ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ForumAdminCard extends StatelessWidget {
-  const _ForumAdminCard({super.key, required this.forumName});
-
-  final String forumName;
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = const [
-      ('Infos forum', 'Description, bannière, liens utiles'),
-      ('Membres', 'Invitations, visibilité publique'),
-      ('Fonctions & grades', 'Rôles, permissions, accès'),
-      ('Accès', 'Lecture, écriture, modération'),
-    ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Gestion responsable',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ToreTokens.s4),
-          Text(forumName, style: const TextStyle(color: Colors.white70)),
-          const SizedBox(height: ToreTokens.s8),
-          for (final row in rows)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.admin_panel_settings,
-                  color: ToreTokens.yellowCta),
-              title: Text(row.$1),
-              subtitle: Text(row.$2),
-              trailing: const Icon(Icons.chevron_right),
-            ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ForumStatsCard extends StatelessWidget {
-  const _ForumStatsCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = const [
-      ('Afond Night', '244 entrées · menu + bets + safe kit'),
-      ('Rooftop After', '128 entrées · tickets + hunts'),
-      ('Saint-Torè warmup', 'Post-event exporté'),
-    ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(ToreTokens.s16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Statistiques TORÈ',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: ToreTokens.s8),
-          const Text(
-              'Résumé post-event, modules activés, tickets, ventes et participation aux bets/hunts/battles.'),
-          const SizedBox(height: ToreTokens.s12),
-          for (final row in rows)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.insights, color: ToreTokens.yellowCta),
-              title: Text(row.$1),
-              subtitle: Text(row.$2),
-            ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ConnectedOnlyForumPrompt extends StatelessWidget {
-  const _ConnectedOnlyForumPrompt();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(ToreTokens.s16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.lock, color: ToreTokens.yellowCta),
-          SizedBox(height: ToreTokens.s12),
-          Text('Forum disponible après connexion',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          SizedBox(height: ToreTokens.s8),
-          Text(
-              'Connecte-toi pour rejoindre un comité, demander un espace ou gérer les rôles folkloriques.'),
-        ]),
-      ),
-    );
-  }
-}
-
-class _QuickAction {
-  const _QuickAction(this.label, this.icon, this.route, {this.tabIndex});
-
-  final String label;
-  final IconData icon;
-  final String route;
-  final int? tabIndex;
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.actionLabel, this.onTap});
-
-  final String title;
-  final String? actionLabel;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(
-          top: ToreTokens.s8, bottom: ToreTokens.s8, left: ToreTokens.s4),
-      child: Row(children: [
-        Expanded(
-          child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-        ),
-        if (actionLabel != null)
-          TextButton(onPressed: onTap, child: Text(actionLabel!)),
-      ]),
     );
   }
 }
