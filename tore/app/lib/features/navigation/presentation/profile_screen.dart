@@ -62,13 +62,34 @@ class ProfileScreen extends ConsumerWidget {
           error: (e, _) => Center(child: Text('Erreur profil: $e')),
           data: (me) {
             if (me.displayName.trim().isEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                      builder: (_) => const CompleteProfileScreen()),
-                );
-              });
-              return const SizedBox.shrink();
+              return ListView(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                children: [
+                  ToreCard(
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Ajoute un pseudo pour terminer ton profil.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        ToreButton.primary(
+                          label: 'Compléter le profil',
+                          icon: Icons.person_add_alt_1_outlined,
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const CompleteProfileScreen(),
+                              ),
+                            );
+                            ref.invalidate(meProvider);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
             }
             return _AuthedProfile(me: me);
           },
@@ -124,6 +145,15 @@ class _AuthedProfile extends ConsumerWidget {
                         padding: const EdgeInsets.only(top: AppSpacing.xs),
                         child: Text(me.bio, style: AppTextStyles.muted),
                       ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Rôle · ${_modeLabel(me.accountMode)}',
+                      style: AppTextStyles.muted,
+                    ),
+                    Text(
+                      'Visibilité · ${_visibilityLabel(me.visibility)}',
+                      style: AppTextStyles.muted,
+                    ),
                   ],
                 ),
               ),
@@ -153,6 +183,19 @@ class _AuthedProfile extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               ToreButton.secondary(
+                label: 'Modifier le profil',
+                icon: Icons.edit_outlined,
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CompleteProfileScreen(user: me),
+                    ),
+                  );
+                  ref.invalidate(meProvider);
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ToreButton.secondary(
                 label: 'Déconnexion',
                 icon: Icons.logout,
                 onPressed: () =>
@@ -163,5 +206,27 @@ class _AuthedProfile extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  String _modeLabel(AccountMode mode) {
+    switch (mode) {
+      case AccountMode.user:
+        return 'Utilisateur';
+      case AccountMode.organizer:
+        return 'Organisateur';
+      case AccountMode.team:
+        return 'Équipe bar';
+    }
+  }
+
+  String _visibilityLabel(String value) {
+    switch (value) {
+      case 'private':
+        return 'Privé';
+      case 'tore_users':
+        return 'Utilisateurs TORÈ';
+      default:
+        return 'Public';
+    }
   }
 }

@@ -3,10 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tore/theme/theme.dart';
 import 'package:tore/ui/components/components.dart';
 
-import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
 import '../../../shared/models/event_summary.dart';
-import '../../events/presentation/event_hub_screen.dart';
+import '../../events/presentation/event_detail_screen.dart';
 import 'bars_providers.dart';
 
 class BarEventsScreen extends ConsumerWidget {
@@ -30,7 +29,8 @@ class BarEventsScreen extends ConsumerWidget {
             message: ErrorMapper.message(error),
             onRetry: () => ref.invalidate(barEventsProvider(barId)),
           ),
-          data: (events) {
+          data: (result) {
+            final events = result.items;
             final grouped = _groupEvents(events);
             final hasItems = grouped.live.isNotEmpty ||
                 grouped.today.isNotEmpty ||
@@ -76,19 +76,9 @@ class BarEventsScreen extends ConsumerWidget {
     required WidgetRef ref,
     required EventSummary event,
   }) {
-    ref
-        .read(appContextProvider.notifier)
-        .setBar(barId: barId, barName: barName);
-    ref.read(appContextProvider.notifier).enterEvent(
-          eventId: event.id,
-          eventName: event.name,
-          activeEventModules: event.modulesOn,
-        );
-
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            EventHubScreen(eventId: event.id, eventName: event.name),
+        builder: (_) => EventDetailScreen(eventId: event.id),
       ),
     );
   }

@@ -410,3 +410,25 @@ def test_email_request_otp_migration_bootstrap_creates_table(monkeypatch):
 
     assert res.status_code == 200
     assert res.json().get("ok") is True
+
+
+def test_profile_patch_persists_bio_and_tore_users_visibility():
+    client = TestClient(app)
+    guest = client.post("/auth/guest", json={"display_name": "Profil MVP"})
+    assert guest.status_code == 200
+    token = guest.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    patched = client.patch(
+        "/auth/me",
+        json={"bio": "Bio réelle", "visibility": "tore_users"},
+        headers=headers,
+    )
+    fetched = client.get("/auth/me", headers=headers)
+
+    assert patched.status_code == 200
+    assert patched.json()["bio"] == "Bio réelle"
+    assert patched.json()["visibility"] == "tore_users"
+    assert fetched.status_code == 200
+    assert fetched.json()["bio"] == "Bio réelle"
+    assert fetched.json()["visibility"] == "tore_users"

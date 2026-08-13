@@ -35,7 +35,8 @@ class TopIconButton extends StatelessWidget {
                 top: -6,
                 right: -8,
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  constraints:
+                      const BoxConstraints(minWidth: 18, minHeight: 18),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
                     color: ToreTokens.ruby,

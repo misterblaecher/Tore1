@@ -60,13 +60,17 @@ class HomeScreen extends StatelessWidget {
                   padding: const EdgeInsets.only(top: ToreTokens.s12),
                   child: HomeActionPanel(
                     action: activeAction!,
-                    onOpenFull: () => Navigator.pushNamed(context, activeAction!.route),
+                    onOpenFull: () =>
+                        Navigator.pushNamed(context, activeAction!.route),
                     onClose: onCloseAction,
                   ),
                 ),
         ),
         const SizedBox(height: ToreTokens.s16),
-        SectionHeader(title: 'Live maintenant', actionLabel: 'Events', onTap: onOpenEvents),
+        SectionHeader(
+            title: 'Live maintenant',
+            actionLabel: 'Events',
+            onTap: onOpenEvents),
         HomeEventCard(
           title: eventName,
           bar: barName,
@@ -76,7 +80,8 @@ class HomeScreen extends StatelessWidget {
         const SizedBox(height: ToreTokens.s16),
         NearbyEventsPreview(onOpenEvent: onOpenEvents),
         const SizedBox(height: ToreTokens.s16),
-        SectionHeader(title: 'Bars proches', actionLabel: 'Voir tout', onTap: onOpenBars),
+        SectionHeader(
+            title: 'Bars proches', actionLabel: 'Voir tout', onTap: onOpenBars),
         BarsPreview(onBarTap: onOpenBars, onOpenMap: onOpenExternalUrl),
       ],
     );
@@ -102,18 +107,26 @@ class MarketsTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(title: 'Bets globaux', actionLabel: 'Ouvrir', onTap: onGlobal),
-        for (final item in global) BetCard(title: item.title, odds: '62%', onTap: onGlobal),
+        SectionHeader(
+            title: 'Bets globaux', actionLabel: 'Ouvrir', onTap: onGlobal),
+        for (final item in global)
+          BetCard(title: item.title, odds: '62%', onTap: onGlobal),
         const SizedBox(height: ToreTokens.s12),
-        SectionHeader(title: 'Bets soirée', actionLabel: 'Live', onTap: onEvent),
-        for (final item in event) BetCard(title: item.title, odds: '1.8x', onTap: onEvent),
+        SectionHeader(
+            title: 'Bets soirée', actionLabel: 'Live', onTap: onEvent),
+        for (final item in event)
+          BetCard(title: item.title, odds: '1.8x', onTap: onEvent),
       ],
     );
   }
 }
 
 class BetCard extends StatelessWidget {
-  const BetCard({super.key, required this.title, required this.odds, required this.onTap});
+  const BetCard(
+      {super.key,
+      required this.title,
+      required this.odds,
+      required this.onTap});
 
   final String title;
   final String odds;
@@ -134,7 +147,8 @@ class BetCard extends StatelessWidget {
                 const Icon(Icons.show_chart, color: ToreTokens.yellowCta),
                 const SizedBox(width: ToreTokens.s12),
                 Expanded(
-                  child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(title,
+                      style: Theme.of(context).textTheme.titleMedium),
                 ),
                 ToreBadge(label: odds, color: ToreTokens.rubyDeep),
               ],
@@ -187,7 +201,8 @@ class HomeActionPanel extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(copy.title, style: Theme.of(context).textTheme.titleMedium),
+                        Text(copy.title,
+                            style: Theme.of(context).textTheme.titleMedium),
                         Text(copy.subtitle),
                       ],
                     ),
@@ -346,7 +361,8 @@ class HomeEventCard extends StatelessWidget {
                   color: ToreTokens.rubyDeep,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.local_fire_department, color: ToreTokens.yellowCta),
+                child: const Icon(Icons.local_fire_department,
+                    color: ToreTokens.yellowCta),
               ),
               const SizedBox(width: ToreTokens.s12),
               Expanded(
@@ -356,11 +372,14 @@ class HomeEventCard extends StatelessWidget {
                     Text(title, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: ToreTokens.s4),
                     Text(bar, style: const TextStyle(color: Colors.white70)),
-                    Text(meta, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text(meta,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, color: ToreTokens.yellowCta, size: 16),
+              const Icon(Icons.arrow_forward_ios,
+                  color: ToreTokens.yellowCta, size: 16),
             ],
           ),
         ),

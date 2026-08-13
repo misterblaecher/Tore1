@@ -53,7 +53,8 @@ class ToreShellTopBar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 0,
       title: Row(
         children: [
-          Image.asset('assets/branding/logo_minimal.png', width: 28, height: 28),
+          Image.asset('assets/branding/logo_minimal.png',
+              width: 28, height: 28),
           const SizedBox(width: ToreTokens.s8),
           const Text('TORÈ'),
         ],
@@ -64,8 +65,9 @@ class ToreShellTopBar extends StatelessWidget implements PreferredSizeWidget {
           child: Center(
             child: ToreBadge(
               label: network == ConnectivityState.online ? 'LIVE' : 'OFFLINE',
-              color:
-                  network == ConnectivityState.online ? ToreTokens.ruby : ToreTokens.warning,
+              color: network == ConnectivityState.online
+                  ? ToreTokens.ruby
+                  : ToreTokens.warning,
             ),
           ),
         ),

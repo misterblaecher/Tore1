@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/tore_theme.dart';
 
 class SectionHeader extends StatelessWidget {
-  const SectionHeader({super.key, required this.title, this.actionLabel, this.onTap});
+  const SectionHeader(
+      {super.key, required this.title, this.actionLabel, this.onTap});
 
   final String title;
   final String? actionLabel;

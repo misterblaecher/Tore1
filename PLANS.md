@@ -1,0 +1,219 @@
+# TORÈ — Convergence MVP et contenu public
+
+Date d'audit : 13 août 2026
+Périmètre actif : `tore/app` + contrats publics de `tore-backend`
+
+## Décisions structurantes
+
+- `lib/rebuild/` reste la direction visuelle, mais ne doit plus posséder sa propre session, son propre client réseau ni ses propres données métier.
+- Riverpod, `core/network/ApiClient`, `AuthSessionNotifier`, les repositories de `features/` et `shared/cache/CacheStore` deviennent les frontières actives de l'application.
+- Le premier lot remplace le bootstrap du rebuild par un shell discovery-first réel : accès invité/connexion, Home, détail événement, join, bars, profil et scanner contextuel.
+- Les endpoints publics de discovery ne retournent que les événements `PUBLIC` + `PUBLISHED`; les événements terminés sont exclus par défaut.
+- Les données absentes restent absentes dans l'UI. Aucun nom, identifiant, solde, statistique ou événement de démonstration ne sert de fallback de production.
+- Le Portail Structures reste une surface web séparée. Le prototype Forum du rebuild n'entre pas dans le shell MVP.
+- Aucun ancien fichier n'est supprimé dans ce lot. Les références et remplacements seront prouvés avant nettoyage.
+
+## Matrice d'état au début du lot
+
+| Fonctionnalité | État constaté | Décision de convergence |
+|---|---|---|
+| Session email / Google / invité | Réelle mais non accessible depuis le rebuild | Brancher le shell racine sur `authSessionProvider` |
+| Client HTTP authentifié + refresh | Réel mais non utilisé par le rebuild | Utiliser exclusivement `core/network/ApiClient` |
+| Rôles USER / ORGA / BAR | Partiellement connectés dans l'ancien code, mode rebuild forcé à USER | Hors du chemin critique MVP; dériver ensuite des capabilities serveur |
+| Home rebuild | Démonstration locale | Remplacer par une Home Riverpod alimentée par `EventsRepository` et `BarsRepository` |
+| Discovery globale | Endpoint `/events` réel mais contrat trop pauvre et non filtré | Étendre le contrat public avec filtres réels et métadonnées disponibles |
+| Recherche / filtres | Absents du rebuild réel | Recherche, statut, date, bar et structure via query params backend |
+| Event Detail | Ancien écran partiellement connecté | Enrichir le modèle et rendre le détail obligatoire avant join |
+| Join | Endpoint réel et idempotent, UI partielle | Reuse `/join_public`, même clé par intention, double tap bloqué, erreurs explicites |
+| Bars | Repository réel avec cache, écran non accessible | Intégrer la liste et une page bar réelle au shell MVP |
+| Profil | API réelle, écran ancien partiel | Rendre l'édition pseudo, bio, photo URL et visibilité accessible; affiliations/historique au lot suivant |
+| Scanner | Réel mais dominant dans le rebuild | Conserver comme onglet secondaire/raccourci contextuel |
+| Connectivité / offline | Provider réel non branché au rebuild | Afficher une bannière discrète et bloquer les writes hors ligne |
+| Cache events/bars | Partiel | Normaliser les résultats avec source cache + date de synchronisation |
+| Forum mobile rebuild | Démonstration locale | Retirer du shell production; Portail web séparé |
+| Wallet / ticker / Rooms / commandes | Réel ou partiel selon module, mais fixtures silencieuses dans le rebuild | Exclure du shell MVP jusqu'à connexion et critères propres |
+| Identité Android | Nom/bundle configurés, icône à vérifier | Hors du lot vertical; finalisation plateforme dans un lot dédié |
+| Identité iOS | Nom et bundle Flutter par défaut | Risque connu; finalisation plateforme dans un lot dédié |
+
+## Doublons à résorber progressivement
+
+- Clients réseau : `lib/rebuild/services/api_client.dart`, `lib/core/network/api_client.dart`, façade `lib/api.dart`.
+- Caches : `lib/rebuild/services/cache_store.dart` et `lib/shared/cache/cache_store.dart`.
+- Événements : DTOs rebuild, `shared/models/event.dart`, `EventSummary`, `EventPublicView` et maps de `lib/api.dart`.
+- Thèmes/composants : `lib/rebuild/ui/theme`, `lib/theme`, `lib/ui`, `lib/shared/widgets`.
+- Shells/navigation : `ToreRebuildApp`, `AppShell` et écrans de navigation historiques.
+
+La convergence se fait par adoption dans le chemin actif, puis suppression ultérieure après preuve de non-référence.
+
+## Architecture cible
+
+```text
+main.dart
+  ProviderScope
+    Auth/session gate
+      MVP presentation shell
+        Riverpod providers
+          repositories
+            core ApiClient + auth interceptor
+            shared cache
+              backend commun
+```
+
+Les widgets ne font pas de requêtes réseau directes. Les repositories exposent des résultats typés comprenant la fraîcheur du cache. Les écritures sensibles reçoivent une clé d'idempotence stable pour l'intention courante.
+
+## Lots de migration
+
+1. **Lot vertical MVP Discovery** — shell authentifié/invité, Home réelle, filtres, Event Detail, join idempotent, bars, profil et scanner contextuel dans l'AppBar. **Implémenté dans ce jalon.**
+2. **Profil et rôles** — profil V2 complet, affiliations serveur, visibilité, historique opt-in, mode switch capability-driven.
+3. **Offline explicite** — cache daté homogène, invalidation, états dégradés, politique par opération.
+4. **Identité plateforme** — icônes, splash, nom et bundle iOS, revue Android.
+5. **Nettoyage prouvé** — supprimer les branches rebuild/legacy devenues sans référence, après couverture de navigation et tests.
+
+## Dépendances et contrats
+
+- `/auth/guest`, `/auth/email/*`, `/auth/google`, `/auth/me`
+- `GET /events` avec filtres publics et pagination/limite bornée
+- `GET /events/{id}/public`
+- `POST /events/{id}/join_public` avec `Idempotency-Key`
+- `GET /bars` et `GET /bars/{id}/events`
+- `GET/PATCH /auth/me` et `GET/PUT /me/profile`
+
+Champs encore absents du modèle de données backend pour un Event Detail complet : image/bannière dédiée, description publique persistable, capacité/places et type d'événement. Le contrat expose explicitement `description: null` tant que le schéma ne permet pas de la renseigner; l'UI affiche alors un état absent sans l'inventer.
+
+## Risques
+
+- Le singleton historique `ApiClient` complique les overrides de tests; ne pas multiplier les instances en production.
+- Les anciens endpoints et modèles utilisent plusieurs conventions de nommage.
+- Le backend monolithique rend les petites évolutions de contrat sensibles aux régressions.
+- Le mode invité possède un vrai token backend; il doit rester clairement présenté comme invité et non comme faux compte.
+- La base actuelle ne permet pas tous les filtres roadmap (quartier/type/proximité précise) sans évolution de schéma.
+
+## Critères d'acceptation du lot vertical
+
+- Un utilisateur choisit invité ou connexion avant d'entrer dans le shell.
+- La Home et la liste affichent uniquement les événements renvoyés par le repository, ou un état loading/empty/error/cache explicite.
+- Recherche et filtres réellement supportés modifient la requête backend.
+- Toute carte ouvre Event Detail avant le join.
+- Le join utilise le backend, conserve sa clé pendant l'intention et ignore les doubles taps.
+- Les erreurs 401/403/404/409/429/5xx et l'offline n'affichent jamais un faux succès.
+- Les bars et leurs événements sont issus du backend/cache.
+- Le scanner reste accessible sans dominer la Home.
+- Aucune fixture rebuild n'est accessible dans le shell de production.
+
+## Validation
+
+```text
+dart format lib test
+flutter analyze
+flutter test
+flutter build apk --debug --flavor dev
+
+tore-backend/.venv/Scripts/python.exe -m pytest -q \
+  tests/test_discovery_events.py \
+  tests/test_join_event_flow.py \
+  tests/test_bar_events_endpoint.py \
+  tests/test_auth_real.py
+```
+
+## Résultat du jalon
+
+- `flutter analyze` : aucun problème.
+- `flutter test` : 124 tests réussis après le Lot 2.
+- Backend : 341 tests réussis après le Lot 2; les avertissements restants concernent les dépréciations historiques `datetime.utcnow()` et FastAPI `on_event`.
+- Android : APK dev et prod debug générés dans `tore/app/build/app/outputs/flutter-apk/`.
+- Contrôle production : le point d'entrée actif ne référence plus `ToreRebuildApp`, ses fixtures, `_applyShowcaseDefaults()` ni `fetchMeSnapshot()`.
+
+Limites encore reportées : filtre quartier/proximité GPS (aucune permission de localisation ni calcul de distance fiable), historique de profil opt-in, affiliations détaillées et sélecteur ORGA/BAR. L'identité visuelle iOS est migrée; seul son bundle reste en attente de confirmation Apple (`com.example.mobile` → `be.tore.app`).
+
+## Portail factuel avant Lot 2 — 13 août 2026
+
+Le flux d'exécution actif a été suivi depuis `main.dart` jusqu'aux appels HTTP :
+
+- `ProviderScope` démarre `ToreMvpApp`, puis le gate de session réel choisit connexion, invité ou shell.
+- Discovery appelle réellement `GET /events`; le détail appelle `GET /events/{id}/public`; le join appelle `POST /events/{id}/join_public` avec une clé d'idempotence stable.
+- L'écran de join bloque le double tap, l'absence de session et l'offline avant toute écriture.
+- Les événements privés, brouillons ou terminés restent absents des lectures publiques.
+- Bars et profil proviennent des repositories réels; les caches datent leur dernière synchronisation.
+- Le point d'entrée ne référence aucune donnée de showcase. Le dernier import visuel situé sous `rebuild/` a été remplacé par le thème central actif.
+
+Preuves ajoutées au gate : interaction invité jusqu'à la frontière repository, premier succès réseau puis relecture cache, Home vide/erreur, et garde statique anti-fixtures. Le libellé « Structures suivies » a été corrigé en « Structures », car le backend ne fournit pas encore ce sous-ensemble dans cette vue.
+
+## Lot 2 — contenu public Event et Bar
+
+### Schéma et compatibilité
+
+La migration additive `0007_public_content_branding` enrichit les lignes existantes sans les recréer :
+
+- Event : description complète/courte, bannière, vignette, type, capacité déclarée, type d'accès, devise, adresse, ville et coordonnées. Le prix existant `entry_price_cents` reste la source de vérité.
+- Bar : description, logo, bannière, couleurs, adresse, informations pratiques, lien carte, modules publics, statut partenaire et visibilité publique.
+- Les anciens événements reçoivent `EUR`; les anciens bars restent `ACTIVE` et `PUBLIC`. Les médias et autres métadonnées facultatives restent `null` et l'UI affiche alors un fallback graphique, jamais une donnée inventée.
+
+Les URLs publiques acceptent uniquement HTTP(S), les couleurs suivent `#RRGGBB`, les coordonnées et capacités sont bornées. Les écritures bar exigent le rôle manager du bar. Les écritures événement exigent le propriétaire utilisateur ou un OWNER/MANAGER de la structure hôte.
+
+### Contrats et cache mobile
+
+- `GET /events`, `GET /events/{id}/public` et `GET /bars/{id}/events` exposent les métadonnées riches réellement persistées.
+- `GET /bars/{id}/public` alimente la page publique du bar.
+- `PATCH /partner/portal/bar`, les créations/mises à jour événement du portail et `PATCH /events/{id}/public-content` portent les écritures autorisées.
+- Clés de cache migrées : `discovery_events_v2_*`, `event_detail_v3_*`, `bars_v2_list`, `bar_v2_detail_*`, `bar_v2_events_*`. Une ancienne forme ne peut donc pas être relue sous le nouveau contrat.
+- Le mobile revalide URL et couleur avant rendu; une image inaccessible retombe sur un visuel TORÈ sobre.
+
+### Surfaces produit
+
+- Home : recherche, catégories Tout/Live/Ce soir/À venir, filtre ville réel, raccourcis Bars et Structures, états chargement/vide/erreur/cache.
+- Event Detail : média réel ou fallback, titre/type/état, horaires, lieu/adresse, organisateur, prix/devise, accès, capacité déclarée, description, modules, page bar, join puis partage.
+- Bar : identité et bannière réelles, logo, description, informations pratiques, modules, carte et soirées publiques à venir. La page recharge son propre modèle par identifiant, sans dépendre d'un résumé de navigation.
+
+### Design et identité native
+
+- Le thème actif utilise les tokens TORÈ centraux : nuit, rubis, or, surfaces, espacements et rayons cohérents; aucune dépendance active au thème du showcase rebuild.
+- Android : `be.tore.app` en production, `be.tore.app.dev` en dev, nom TORÈ/TORÈ Dev, icônes classiques/rondes/adaptatives TORÈ, splash nuit, schéma `tore://` et App Link `https://app.tore.be/open`.
+- iOS : nom affiché TORÈ, icônes TORÈ sans alpha, splash nuit, schéma `tore://`, entitlement `applinks:app.tore.be` et texte caméra explicite.
+- Le bundle iOS reste temporairement `com.example.mobile`. La consigne impose une confirmation Apple explicite avant de le remplacer par `be.tore.app`; cette confirmation n'est pas déductible du dépôt.
+
+## Critères Lot 2 et statut
+
+- [x] Migration additive et compatibilité d'une ligne historique testées.
+- [x] Lectures publiques riches sans exposition d'événements privés/brouillons/terminés.
+- [x] Écritures Event/Bar réellement autorisées et entrées invalides rejetées.
+- [x] Modèles et caches versionnés côté Flutter.
+- [x] Home, Event Detail et Bar Detail utilisent uniquement des données réelles ou des fallbacks graphiques explicites.
+- [x] Identité Android complète et identité visuelle iOS complète.
+- [ ] Bundle iOS final : attente de confirmation Apple pour `be.tore.app`.
+- [ ] Build iOS : à exécuter sur macOS/Xcode; indisponible depuis l'environnement Windows actuel.
+
+Validation finale Lot 2 : `flutter analyze` sans problème, 124 tests Flutter réussis, 341 tests backend réussis, migration Alembic jusqu'à `0007_public_content_branding (head)` vérifiée sur une base neuve, métadonnées XML/plist valides, 15 icônes iOS sans canal alpha, et APK debug dev/prod générés.
+
+## Lot 3 — audit d'identité et matrice de convergence (avant schéma)
+
+Audit établi le 13 août 2026 avant toute migration Lot 3. Principe directeur : `AppUser.id` reste l'identifiant TORÈ immuable; aucune saisie de profil ne crée un droit. Les capacités sont recalculées côté serveur depuis les appartenances actives à chaque requête protégée.
+
+| Entité existante | Source d'autorité actuelle | Champs sains | Manques / doublons constatés | Compatibilité | Décision de convergence |
+|---|---|---|---|---|---|
+| `AppUser` | Auth app + token haché en base | UUID, affichage, avatar, bio, création, email/téléphone privés, suppression | Pas de pseudo unique, ville dédiée, `updated_at`, statut explicite ni rôle global; `address_text` ne doit pas devenir public | Bonne; extensions nullables possibles | Identité TORÈ canonique. Ajouter pseudo, ville, dates/statut et rôle global administré; conserver les champs privés hors des serializers publics. |
+| `AppUserPrivacySetting` + anciens booléens `AppUser` | Propriétaire via `/auth/me` | Une ligne par user, consentements Bar, visibilité grossière | Visibilités dupliquées (`profile_visibility`, `visibility`, `show_*`); pas de politique par section; défaut historique trop public | À normaliser avec fallback conservateur | Étendre cette table, niveaux `PUBLIC`/`TORE_USERS`/`PRIVATE`, privé par défaut, historique explicitement opt-in. Les valeurs inconnues sont interprétées `PRIVATE`. |
+| `/auth/me` et `/me/profile` | Session app | Lecture/écriture de champs profil | Deux contrats, exposition mêlée de préférences et mode; schémas `dict`; ancien `/users/{id}` trop pauvre | Maintenir les routes anciennes | Créer des contrats profil owner/public/contextuel dédiés; garder `/auth/me` compatible mais sans en faire la preuve d'autorisation. |
+| `account_mode` + `RoleUpgradeRequest` | Code partagé + approbation admin historique | Mode UI persisté | Confond mode et permission; noms `organizer/team`; secret statique; le client en déduit ORGA/BAR | À déprécier sans suppression | `account_mode` devient un simple héritage non autorisant. Les modes disponibles viennent exclusivement de `/me/capabilities`. |
+| `Organization` | Créateur et responsables de structure | Identité publique, visibilité, workflow d'adhésion/invitation | Aucun logo propre (ancien `logoUrl` écrit dans `website_url`) | Bonne | Structure canonique pour les affiliations du profil. Ne pas créer de nouvelle table Structure. |
+| `OrganizationMembership` | Invitation, join policy ou responsable `MANAGER+` | Lien user/structure, rôle, statut, audit de création | Dates de mandat/fin/révocation, visibilité, validateur et origine absents; rôles `OWNER/MANAGER/MEMBER/FOLLOWER` plus courts que la cible | Très bonne, additive | Devient l'affiliation canonique. Étendre la ligne; `ACTIVE` seul autorise, `ENDED/REVOKED/REJECTED/PENDING` restent descriptifs. Mapper `MANAGER` vers fonctions de bureau sans inventer un titre. |
+| `CommitteeMembership` / invites Committee | Responsables Committee | Membre, rôle, année et invitation | Second modèle de structure, `is_active` au lieu d'un statut riche | Historique compatible | Conserver pour les modules Committee; exposer plus tard comme affiliation legacy non autorisante tant qu'aucun lien fiable Organization↔Committee n'existe. |
+| `EventStaff` | Invitation Event ou hôte autorisé | User app, event, rôle, activation et révocation | Pas d'expiration; nomenclature `entry/bar/manager/helper` | Bonne, additive | Source contextuelle Event. Ajouter expiration; mapper vers `ENTRY_STAFF`, `BAR_STAFF`, `EVENT_MANAGER`, `EVENT_STAFF`; contrôle serveur à chaque accès. |
+| `EventStaffAssignment` et QR/invites Staff | Hôte / partenaire autorisé | Rôle, création, expiration des invitations, révocation d'assignment | Lié surtout à `PartnerUser`, chevauche `EventStaff` | À conserver | Workflow d'émission; une acceptation app converge vers `EventStaff`. Ne pas créer de troisième système Event. |
+| `PartnerUser`, `PartnerBarAccess`, `PartnerMembership` | Auth partenaire PIN/magic link + responsables Bar | Rôles owner/manager/staff/bartender, activation | Identité partenaire entière séparée de `AppUser`; deux tables Bar proches | Nécessite un pont nullable | Conserver l'autorité Bar existante. Ajouter un lien optionnel contrôlé `PartnerUser.app_user_id`; seule une liaison validée peut produire des capacités Bar dans la session app. |
+| Tokens app/refresh et auth interceptor Flutter | Hash serveur; jetons bruts côté appareil | Rotation refresh, révocation serveur | Jetons stockés dans `SharedPreferences`; cache privé non invalidé; traces partielles de token en debug | À corriger immédiatement | Utiliser `flutter_secure_storage`; migrer/supprimer les anciennes clés; vider tous les namespaces privés au logout/401. |
+| Caches Flutter partagés/Community | `SharedPreferences` | TTL et caches publics disponibles | Pas de namespace user systématique; caches owner/capabilities/affiliations absents; plusieurs stores | Compatible | Cache public séparé; quatre espaces explicites public/owner/capabilities/affiliations, privés préfixés par user ID et invalidables ensemble. |
+| Guards/providers Flutter | `AuthSessionNotifier`, `meProvider`, plusieurs providers métier | Session centralisée et signal 401 | UI déduit ORGA/BAR de `accountMode`; `tryMe` assimile aussi 403 à session invalide | À normaliser | Un provider capabilities serveur pilote uniquement l'accès visuel; le backend reste l'autorité. Un 401 purge secrets/caches; un 403 métier ne détruit pas la session. |
+| Audit logs existants | `write_audit_log` | Acteur, action, entité, scope et payload | Couverture inégale des changements d'identité/affiliation | Bonne | Réutiliser le journal existant pour confidentialité, rôle global, validation et révocation; aucune donnée sensible dans le payload. |
+
+### Matrice de visibilité retenue
+
+Chaque section a son niveau propre. `PRIVATE` autorise uniquement le propriétaire et un rôle global `SUPPORT`/`ADMIN`; `TORE_USERS` ajoute les sessions app authentifiées non invitées; `PUBLIC` ajoute les visiteurs anonymes. Le profil général conditionne toute la réponse, puis la règle de chaque section restreint encore les champs. Photo, bio, affiliations et badges sont privés par défaut après migration. Historique d'événements, participations et statistiques restent masqués tant que leur opt-in n'est pas vrai, même si leur niveau vaut `PUBLIC`. Les affiliations non `ACTIVE`, les mandats internes et toute ligne marquée `PRIVATE` ne sont jamais publiés. Email, téléphone, adresse, tokens, paiements, modération et sécurité ne figurent dans aucun schéma public.
+
+### Correspondance des rôles sans rupture
+
+- Global : nouveau `USER` (défaut), `SUPPORT`, `ADMIN`; modification réservée aux procédures administratives.
+- Structure : `OWNER` reste owner; `MANAGER` couvre provisoirement les fonctions autorisées de bureau; `MEMBER` et `FOLLOWER` restent inchangés. Les intitulés `PRESIDENT`, `BUREAU`, `TRESORIER`, `STAFF`, `ALUMNI` sont acceptés dans le contrat étendu, sans promotion automatique d'une ancienne chaîne libre.
+- Event : `manager` → `EVENT_MANAGER`, `entry` → `ENTRY_STAFF`, `bar` → `BAR_STAFF`, `helper` → `EVENT_STAFF`.
+- Bar : `PartnerBarAccess`/`PartnerMembership` restent l'autorité; `owner|manager` ouvre la gestion Bar et `staff|bartender` une capacité staff, uniquement si le partenaire est explicitement relié au même `AppUser`.
+
+Les rôles temporaires expirés et les affiliations révoquées sont filtrés au moment de calculer les capacités. Aucune capacité n'est embarquée durablement dans le token : une révocation devient donc effective à la requête suivante.

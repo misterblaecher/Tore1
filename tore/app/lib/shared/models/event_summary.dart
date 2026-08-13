@@ -12,6 +12,18 @@ class EventSummary {
     this.shortName,
     this.eventState,
     this.modulesOn,
+    this.shortDescription,
+    this.bannerUrl,
+    this.thumbnailUrl,
+    this.eventType,
+    this.capacity,
+    this.accessType,
+    this.priceCents = 0,
+    this.currency = 'EUR',
+    this.address,
+    this.city,
+    this.lat,
+    this.lng,
   });
 
   final int id;
@@ -24,6 +36,20 @@ class EventSummary {
   final String? shortName;
   final String? eventState;
   final Map<String, bool>? modulesOn;
+  final String? shortDescription;
+  final String? bannerUrl;
+  final String? thumbnailUrl;
+  final String? eventType;
+  final int? capacity;
+  final String? accessType;
+  final int priceCents;
+  final String currency;
+  final String? address;
+  final String? city;
+  final double? lat;
+  final double? lng;
+
+  String? get imageUrl => bannerUrl ?? thumbnailUrl;
 
   factory EventSummary.fromJson(Map<String, dynamic> json) {
     final startRaw = json['startAt'] ?? json['starts_at'] ?? json['startsAt'];
@@ -46,6 +72,18 @@ class EventSummary {
       shortName: _optionalText(json['shortName'] ?? json['short_name']),
       eventState: _optionalText(json['eventState'] ?? json['event_state']),
       modulesOn: _readModulesOn(json['modulesOn'] ?? json['modules_on']),
+      shortDescription: _optionalText(json['shortDescription']),
+      bannerUrl: _httpUrl(json['bannerUrl']),
+      thumbnailUrl: _httpUrl(json['thumbnailUrl']),
+      eventType: _optionalText(json['eventType']),
+      capacity: (json['capacity'] as num?)?.toInt(),
+      accessType: _optionalText(json['accessType']),
+      priceCents: (json['priceCents'] as num?)?.toInt() ?? 0,
+      currency: _optionalText(json['currency'])?.toUpperCase() ?? 'EUR',
+      address: _optionalText(json['address']),
+      city: _optionalText(json['city']),
+      lat: (json['lat'] as num?)?.toDouble(),
+      lng: (json['lng'] as num?)?.toDouble(),
     );
   }
 
@@ -66,6 +104,14 @@ class EventSummary {
   static String? _optionalText(dynamic value) {
     final text = value?.toString() ?? '';
     return text.trim().isEmpty ? null : text;
+  }
+
+  static String? _httpUrl(dynamic value) {
+    final text = _optionalText(value);
+    final uri = text == null ? null : Uri.tryParse(text);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https')
+        ? uri.toString()
+        : null;
   }
 
   static Map<String, bool>? _readModulesOn(dynamic value) {

@@ -90,15 +90,18 @@ class _AccessScannerScreenState extends State<AccessScannerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Entrer un code', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('Entrer un code',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: ToreTokens.s8),
             TextField(
               controller: controller,
-              decoration: const InputDecoration(hintText: 'Code alphanumérique'),
+              decoration:
+                  const InputDecoration(hintText: 'Code alphanumérique'),
             ),
             const SizedBox(height: ToreTokens.s12),
             FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
               icon: const Icon(Icons.check),
               label: const Text('Valider'),
             ),
@@ -121,7 +124,8 @@ class _AccessScannerScreenState extends State<AccessScannerScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Aide scan', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+              const Text('Aide scan',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
               const SizedBox(height: ToreTokens.s8),
               const Text(
                 'Centre le QR dans le cadre doré. Active la lampe si la scène est sombre, ou passe par le code manuel.',
@@ -180,7 +184,8 @@ class _AccessScannerScreenState extends State<AccessScannerScreen> {
                       ),
                       child: const Text(
                         'OFFLINE',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 11),
                       ),
                     ),
                 ],
@@ -204,7 +209,8 @@ class _AccessScannerScreenState extends State<AccessScannerScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('ACCÈS', style: Theme.of(context).textTheme.headlineSmall),
+                        Text('ACCÈS',
+                            style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: ToreTokens.s4),
                         const Text(
                           'Scanne un code TORÈ, invitation, menu, WiFi ou pass staff.',

@@ -205,3 +205,66 @@ def test_partner_portal_event_patch_partial():
         assert event.ticket_mode is True
     finally:
         s.close()
+
+
+def test_partner_manager_writes_public_bar_and_event_content():
+    bar_id, token = _seed_partner_user(role="manager")
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    bar_response = client.patch(
+        "/partner/portal/bar",
+        json={
+            "public_description": "Un lieu ouvert à tous.",
+            "logo_url": "https://cdn.tore.be/bar-logo.png",
+            "banner_url": "https://cdn.tore.be/bar-banner.jpg",
+            "primary_color": "#ba1733",
+            "secondary_color": "#f4c430",
+            "address": "12 quai TORÈ",
+            "public_modules": {"menu": True, "wallet": False},
+        },
+        headers=headers,
+    )
+    assert bar_response.status_code == 200
+    assert bar_response.json()["primary_color"] == "#BA1733"
+
+    event_response = client.post(
+        "/partner/portal/events",
+        json={
+            "name": "Nuit publique",
+            "public_description": "Description complète et réelle.",
+            "short_description": "Une nuit à découvrir.",
+            "banner_url": "https://cdn.tore.be/event.jpg",
+            "event_type": "soirée",
+            "capacity": 450,
+            "access_type": "TICKET",
+            "currency": "eur",
+            "city": "Liège",
+        },
+        headers=headers,
+    )
+    assert event_response.status_code == 200
+    event_payload = event_response.json()
+    assert event_payload["capacity"] == 450
+    assert event_payload["currency"] == "EUR"
+
+    invalid = client.patch(
+        "/partner/portal/bar",
+        json={"primary_color": "ruby", "logo_url": "javascript:alert(1)"},
+        headers=headers,
+    )
+    assert invalid.status_code == 422
+
+    public_bar = client.get(f"/bars/{bar_id}/public")
+    assert public_bar.status_code == 200
+    assert public_bar.json()["modules"] == ["menu"]
+
+
+def test_partner_public_content_writes_reject_non_manager():
+    _, token = _seed_partner_user(role="bartender")
+    response = TestClient(app).patch(
+        "/partner/portal/bar",
+        json={"public_description": "interdit"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403

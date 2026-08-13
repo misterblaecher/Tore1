@@ -865,6 +865,7 @@ def _user_snapshot(db: Session, user: AppUser) -> Dict[str, Any]:
         "address_text": user.address_text,
         "show_address": user.show_address,
         "show_avatar": user.show_avatar,
+        "bio": user.bio or "",
         "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
         "visibility": (settings.visibility if settings and settings.visibility else "public"),
         "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
@@ -1764,6 +1765,34 @@ class CreateEventIn(BaseModel):
     host_id: Optional[str] = None
     modulesOn: Optional[dict] = None
     rulesFlags: Optional[dict] = None
+    public_description: Optional[str] = Field(default=None, max_length=10000)
+    short_description: Optional[str] = Field(default=None, max_length=280)
+    banner_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    thumbnail_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    event_type: Optional[str] = Field(default=None, max_length=64)
+    capacity: Optional[int] = Field(default=None, ge=1)
+    access_type: Optional[Literal["OPEN", "TICKET", "INVITE", "APPROVAL"]] = None
+    currency: str = Field(default="EUR", min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    address: Optional[str] = Field(default=None, max_length=255)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
+    entry_price_cents: int = Field(default=0, ge=0)
+
+
+class EventPublicContentPatchIn(BaseModel):
+    public_description: Optional[str] = Field(default=None, max_length=10000)
+    short_description: Optional[str] = Field(default=None, max_length=280)
+    banner_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    thumbnail_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    event_type: Optional[str] = Field(default=None, max_length=64)
+    capacity: Optional[int] = Field(default=None, ge=1)
+    access_type: Optional[Literal["OPEN", "TICKET", "INVITE", "APPROVAL"]] = None
+    entry_price_cents: Optional[int] = Field(default=None, ge=0)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    address: Optional[str] = Field(default=None, max_length=255)
+    city: Optional[str] = Field(default=None, max_length=120)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class EventRuntimeOut(BaseModel):
@@ -1904,6 +1933,25 @@ class EventSummaryOut(BaseModel):
     entry_price_cents: int
     ticket_mode: bool
     ticket_value_cents: int
+    status: str
+    eventState: str
+    venue: Optional[str] = None
+    barName: Optional[str] = None
+    city: Optional[str] = None
+    host: dict[str, Any]
+    modulesOn: list[str]
+    visibility: str
+    publicationStatus: str
+    shortDescription: Optional[str] = None
+    bannerUrl: Optional[str] = None
+    thumbnailUrl: Optional[str] = None
+    eventType: Optional[str] = None
+    capacity: Optional[int] = None
+    accessType: Optional[str] = None
+    currency: str = "EUR"
+    address: Optional[str] = None
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class JoinByCodeIn(BaseModel):
@@ -2080,6 +2128,18 @@ class PartnerEventCreateIn(BaseModel):
     end_at: Optional[datetime] = None
     entry_price_cents: Optional[int] = Field(default=None, ge=0)
     tickets_enabled: Optional[bool] = None
+    public_description: Optional[str] = Field(default=None, max_length=10000)
+    short_description: Optional[str] = Field(default=None, max_length=280)
+    banner_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    thumbnail_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    event_type: Optional[str] = Field(default=None, max_length=64)
+    capacity: Optional[int] = Field(default=None, ge=1)
+    access_type: Optional[Literal["OPEN", "TICKET", "INVITE", "APPROVAL"]] = None
+    currency: str = Field(default="EUR", min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    address: Optional[str] = Field(default=None, max_length=255)
+    city: Optional[str] = Field(default=None, max_length=120)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class PartnerEventUpdateIn(BaseModel):
@@ -2089,6 +2149,18 @@ class PartnerEventUpdateIn(BaseModel):
     entry_price_cents: Optional[int] = Field(default=None, ge=0)
     tickets_enabled: Optional[bool] = None
     entry_enabled: Optional[bool] = None
+    public_description: Optional[str] = Field(default=None, max_length=10000)
+    short_description: Optional[str] = Field(default=None, max_length=280)
+    banner_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    thumbnail_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    event_type: Optional[str] = Field(default=None, max_length=64)
+    capacity: Optional[int] = Field(default=None, ge=1)
+    access_type: Optional[Literal["OPEN", "TICKET", "INVITE", "APPROVAL"]] = None
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    address: Optional[str] = Field(default=None, max_length=255)
+    city: Optional[str] = Field(default=None, max_length=120)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class PartnerEventOut(BaseModel):
@@ -2100,6 +2172,18 @@ class PartnerEventOut(BaseModel):
     entry_price_cents: int
     tickets_enabled: bool
     entry_enabled: bool
+    public_description: Optional[str] = None
+    short_description: Optional[str] = None
+    banner_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    event_type: Optional[str] = None
+    capacity: Optional[int] = None
+    access_type: Optional[str] = None
+    currency: str = "EUR"
+    address: Optional[str] = None
+    city: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 class PartnerEventDrinkOut(BaseModel):
@@ -2226,6 +2310,35 @@ class PartnerBarOut(BaseModel):
     city: str
     lat: Optional[float] = None
     lng: Optional[float] = None
+    public_description: Optional[str] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    address: Optional[str] = None
+    practical_info: Optional[str] = None
+    map_url: Optional[str] = None
+    public_modules: dict[str, bool] = Field(default_factory=dict)
+    partner_status: str = "ACTIVE"
+    public_visibility: str = "PUBLIC"
+
+
+class PartnerBarPatchIn(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=180)
+    city: Optional[str] = Field(default=None, max_length=120)
+    public_description: Optional[str] = Field(default=None, max_length=10000)
+    logo_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    banner_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    primary_color: Optional[str] = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    secondary_color: Optional[str] = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    address: Optional[str] = Field(default=None, max_length=255)
+    practical_info: Optional[str] = Field(default=None, max_length=10000)
+    map_url: Optional[str] = Field(default=None, max_length=512, pattern=r"^https?://")
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
+    public_modules: Optional[dict[str, bool]] = None
+    partner_status: Optional[Literal["ACTIVE", "INACTIVE"]] = None
+    public_visibility: Optional[Literal["PUBLIC", "HIDDEN"]] = None
 
 
 class QrPackOut(BaseModel):
@@ -2400,13 +2513,28 @@ def partner_portal_bar(
     bar = db.get(Bar, identity["bar_id"])
     if not bar:
         raise HTTPException(404, "Bar not found")
-    return PartnerBarOut(
-        id=bar.id,
-        name=bar.name,
-        city=bar.city,
-        lat=bar.lat,
-        lng=bar.lng,
-    )
+    return _partner_bar_out(bar)
+
+
+@app.patch("/partner/portal/bar", response_model=PartnerBarOut)
+def partner_portal_bar_update(
+    payload: PartnerBarPatchIn,
+    identity=Depends(current_partner_identity),
+    db: Session = Depends(get_db),
+):
+    _require_partner_role(identity, "manager")
+    bar = db.get(Bar, identity["bar_id"])
+    if not bar:
+        raise HTTPException(404, "Bar not found")
+    for field in payload.model_fields_set:
+        value = getattr(payload, field)
+        if field in {"primary_color", "secondary_color", "partner_status", "public_visibility"} and value is not None:
+            value = value.upper()
+        setattr(bar, field, value)
+    db.add(bar)
+    db.commit()
+    db.refresh(bar)
+    return _partner_bar_out(bar)
 
 
 @app.get("/partner/portal/events", response_model=List[PartnerEventOut])
@@ -2479,6 +2607,18 @@ def partner_portal_event_create(
         ends_at=ends_at,
         entry_price_cents=entry_price_cents,
         ticket_mode=ticket_mode,
+        public_description=payload.public_description,
+        short_description=payload.short_description,
+        banner_url=payload.banner_url,
+        thumbnail_url=payload.thumbnail_url,
+        event_type=payload.event_type,
+        capacity=payload.capacity,
+        access_type=payload.access_type,
+        currency=payload.currency.upper(),
+        address=payload.address,
+        city=payload.city or bar.city,
+        lat=payload.lat,
+        lng=payload.lng,
     )
     db.add(event)
     db.commit()
@@ -3319,6 +3459,56 @@ def _partner_event_out(event: Event, config: Optional[EventConfig]) -> PartnerEv
         entry_price_cents=event.entry_price_cents,
         tickets_enabled=event.ticket_mode,
         entry_enabled=config.entry_enabled if config else False,
+        public_description=event.public_description,
+        short_description=event.short_description,
+        banner_url=event.banner_url,
+        thumbnail_url=event.thumbnail_url,
+        event_type=event.event_type,
+        capacity=event.capacity,
+        access_type=event.access_type,
+        currency=(event.currency or "EUR").upper(),
+        address=event.address,
+        city=event.city,
+        lat=event.lat,
+        lng=event.lng,
+    )
+
+
+_EVENT_PUBLIC_CONTENT_FIELDS = {
+    "public_description", "short_description", "banner_url", "thumbnail_url",
+    "event_type", "capacity", "access_type", "entry_price_cents", "currency",
+    "address", "city", "lat", "lng",
+}
+
+
+def _apply_event_public_content(event: Event, payload: BaseModel) -> None:
+    fields_set = payload.model_fields_set
+    for field in _EVENT_PUBLIC_CONTENT_FIELDS.intersection(fields_set):
+        value = getattr(payload, field)
+        if field in {"access_type", "currency"} and value is not None:
+            value = value.upper()
+        setattr(event, field, value)
+    event.last_updated_at = now_utc()
+
+
+def _partner_bar_out(bar: Bar) -> PartnerBarOut:
+    return PartnerBarOut(
+        id=bar.id,
+        name=bar.name,
+        city=bar.city,
+        lat=bar.lat,
+        lng=bar.lng,
+        public_description=bar.public_description,
+        logo_url=bar.logo_url,
+        banner_url=bar.banner_url,
+        primary_color=bar.primary_color,
+        secondary_color=bar.secondary_color,
+        address=bar.address,
+        practical_info=bar.practical_info,
+        map_url=bar.map_url,
+        public_modules=bar.public_modules or {},
+        partner_status=(bar.partner_status or "ACTIVE").upper(),
+        public_visibility=(bar.public_visibility or "PUBLIC").upper(),
     )
 
 
@@ -3669,6 +3859,7 @@ def partner_portal_event_update(
         event.entry_price_cents = payload.entry_price_cents
     if payload.tickets_enabled is not None:
         event.ticket_mode = payload.tickets_enabled
+    _apply_event_public_content(event, payload)
 
     config = None
     if payload.entry_enabled is not None:
@@ -4268,7 +4459,7 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
                 settings = AppUserPrivacySetting(user_id=u.id)
             if payload.show_identity_to_staff is not None:
                 settings.show_identity_to_staff = payload.show_identity_to_staff
-            if payload.visibility in {"public", "private"}:
+            if payload.visibility in {"public", "tore_users", "private"}:
                 settings.visibility = payload.visibility
             if payload.show_identity_in_bar is not None:
                 settings.show_identity_in_bar = payload.show_identity_in_bar
@@ -4308,6 +4499,7 @@ def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
             "address_text": u.address_text,
             "show_address": u.show_address,
             "show_avatar": u.show_avatar,
+            "bio": u.bio or "",
             "show_identity_to_staff": bool(refreshed_settings and refreshed_settings.show_identity_to_staff),
             "visibility": (refreshed_settings.visibility if refreshed_settings and refreshed_settings.visibility else "public"),
             "show_identity_in_bar": bool(refreshed_settings and (refreshed_settings.show_identity_in_bar or refreshed_settings.show_identity_to_staff)),
@@ -4571,14 +4763,43 @@ def _bar_status_from_events(now: datetime, events: list[Event]) -> str | None:
     return "CLOSED"
 
 
+def _is_public_event_available(event: Event, *, now: Optional[datetime] = None) -> bool:
+    current = now or now_utc()
+    return (
+        (event.visibility or "PRIVATE").upper() == "PUBLIC"
+        and (event.publication_status or "DRAFT").upper() == "PUBLISHED"
+        and (event.ends_at is None or event.ends_at >= current)
+    )
+
+
 @app.get("/bars")
 def list_bars(limit: int = Query(100, ge=1, le=300), db: Session = Depends(get_db)):
     now = now_utc()
-    rows = db.query(Bar).order_by(Bar.id.asc()).limit(limit).all()
+    rows = (
+        db.query(Bar)
+        .filter(
+            func.upper(Bar.partner_status) == "ACTIVE",
+            func.upper(Bar.public_visibility) == "PUBLIC",
+        )
+        .order_by(Bar.id.asc())
+        .limit(limit)
+        .all()
+    )
     output: list[dict[str, Any]] = []
 
     for row in rows:
-        events = db.query(Event).filter(Event.bar_id == row.id).order_by(Event.starts_at.desc()).limit(8).all()
+        events = (
+            db.query(Event)
+            .filter(
+                Event.bar_id == row.id,
+                func.upper(Event.visibility) == "PUBLIC",
+                func.upper(Event.publication_status) == "PUBLISHED",
+                Event.ends_at >= now,
+            )
+            .order_by(Event.starts_at.desc())
+            .limit(8)
+            .all()
+        )
         last_event = events[0] if events else None
         status = _bar_status_from_events(now, events)
         ticker_line = None
@@ -4597,6 +4818,17 @@ def list_bars(limit: int = Query(100, ge=1, le=300), db: Session = Depends(get_d
                 "status": status,
                 "location": {"city": row.city} if row.city else None,
                 "ticker_line": ticker_line,
+                "description": row.public_description,
+                "logoUrl": row.logo_url,
+                "bannerUrl": row.banner_url,
+                "primaryColor": row.primary_color,
+                "secondaryColor": row.secondary_color,
+                "address": row.address,
+                "practicalInfo": row.practical_info,
+                "mapUrl": row.map_url,
+                "lat": row.lat,
+                "lng": row.lng,
+                "modules": sorted([key for key, enabled in (row.public_modules or {}).items() if enabled]),
                 "lastEvent": (
                     {
                         "id": last_event.id,
@@ -4617,7 +4849,17 @@ def list_bar_events(bar_id: int, db: Session = Depends(get_db)):
     if not bar:
         raise HTTPException(404, "Bar not found")
     now = now_utc()
-    rows = db.query(Event).filter(Event.bar_id == bar_id).order_by(Event.starts_at.asc()).all()
+    rows = (
+        db.query(Event)
+        .filter(
+            Event.bar_id == bar_id,
+            func.upper(Event.visibility) == "PUBLIC",
+            func.upper(Event.publication_status) == "PUBLISHED",
+            Event.ends_at >= now,
+        )
+        .order_by(Event.starts_at.asc())
+        .all()
+    )
     output: list[dict[str, Any]] = []
     for row in rows:
         runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == row.id).first()
@@ -4657,6 +4899,18 @@ def list_bar_events(bar_id: int, db: Session = Depends(get_db)):
                 "shortName": bar.name,
                 "eventState": ((runtime.state if runtime else None) or "LIVE").upper(),
                 "modulesOn": modules_on,
+                "shortDescription": row.short_description,
+                "bannerUrl": row.banner_url,
+                "thumbnailUrl": row.thumbnail_url,
+                "eventType": row.event_type,
+                "capacity": row.capacity,
+                "accessType": row.access_type,
+                "priceCents": row.entry_price_cents,
+                "currency": (row.currency or "EUR").upper(),
+                "address": row.address or bar.address,
+                "city": row.city or bar.city,
+                "lat": row.lat if row.lat is not None else bar.lat,
+                "lng": row.lng if row.lng is not None else bar.lng,
             }
         )
 
@@ -4692,13 +4946,13 @@ def _event_modules_on(db: Session, event_id: int) -> dict[str, bool]:
         "wallet": wallet_enabled,
         "ticker": menu_enabled or wallet_enabled or polymarket_enabled,
         "entry": bool(cfg.entry_enabled),
-        "checkin": bool(cfg.checkin_enabled),
+        "checkin": bool(getattr(cfg, "checkin_enabled", cfg.checkins_enabled)),
         "battles": bool(cfg.battles_enabled),
         "hunt": bool(cfg.hunt_enabled),
-        "report": bool(cfg.report_enabled),
+        "report": bool(getattr(cfg, "report_enabled", cfg.safety_enabled)),
         "polymarket": polymarket_enabled,
         "polymarket_event": polymarket_enabled,
-        "classement": bool(cfg.report_enabled),
+        "classement": bool(getattr(cfg, "report_enabled", cfg.safety_enabled)),
         "music_vote": False,
         "broadcast": False,
         "map": bool(event_modules.get("map", False)),
@@ -5087,26 +5341,166 @@ def _apply_event_join(
 @app.get("/events", response_model=List[EventSummaryOut])
 def list_all_events(
     limit: int = Query(50, ge=1, le=200),
+    query: Optional[str] = Query(default=None, max_length=120),
+    status: Optional[Literal["LIVE", "TONIGHT", "UPCOMING"]] = None,
+    city: Optional[str] = Query(default=None, max_length=120),
+    bar_id: Optional[int] = Query(default=None, ge=1),
+    structure_id: Optional[int] = Query(default=None, ge=1),
     db: Session = Depends(get_db),
 ):
-    rows = db.query(Event).order_by(Event.starts_at.desc()).limit(limit).all()
-    return [
-        EventSummaryOut(
-            id=row.id,
-            bar_id=row.bar_id,
-            name=row.name,
-            starts_at=row.starts_at,
-            ends_at=row.ends_at,
-            entry_price_cents=row.entry_price_cents,
-            ticket_mode=row.ticket_mode,
-            ticket_value_cents=row.ticket_value_cents,
+    now = now_utc()
+    request = db.query(Event).filter(
+        func.upper(Event.visibility) == "PUBLIC",
+        func.upper(Event.publication_status) == "PUBLISHED",
+        Event.ends_at >= now,
+    )
+    if bar_id is not None:
+        request = request.filter(Event.bar_id == bar_id)
+    normalized_city = (city or "").strip()
+    if normalized_city:
+        matching_city_bar_ids = select(Bar.id).where(
+            func.lower(func.replace(Bar.city, "è", "e"))
+            == normalized_city.lower().replace("è", "e")
         )
-        for row in rows
-    ]
+        request = request.filter(Event.bar_id.in_(matching_city_bar_ids))
+    if structure_id is not None:
+        request = request.filter(
+            func.lower(Event.host_type) == "orga",
+            Event.host_id == str(structure_id),
+        )
+    normalized_query = (query or "").strip()
+    if normalized_query:
+        like = f"%{normalized_query}%"
+        matching_bar_ids = select(Bar.id).where(
+            or_(Bar.name.ilike(like), Bar.city.ilike(like))
+        )
+        matching_org_ids = select(func.cast(Organization.id, String)).where(
+            or_(
+                Organization.name.ilike(like),
+                Organization.description.ilike(like),
+                Organization.city.ilike(like),
+            )
+        )
+        request = request.filter(
+            or_(
+                Event.name.ilike(like),
+                Event.venue.ilike(like),
+                Event.host_display_name.ilike(like),
+                Event.bar_id.in_(matching_bar_ids),
+                and_(
+                    func.lower(Event.host_type) == "orga",
+                    Event.host_id.in_(matching_org_ids),
+                ),
+            )
+        )
+
+    if status == "LIVE":
+        request = request.filter(Event.starts_at <= now, Event.ends_at >= now)
+    elif status == "TONIGHT":
+        aware_now = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+        local_now = aware_now.astimezone(ZoneInfo("Europe/Brussels"))
+        local_end = (local_now + timedelta(days=1)).replace(
+            hour=7, minute=0, second=0, microsecond=0
+        )
+        if local_now.hour < 7:
+            local_start = (local_now - timedelta(days=1)).replace(
+                hour=17, minute=0, second=0, microsecond=0
+            )
+        else:
+            local_start = local_now.replace(hour=17, minute=0, second=0, microsecond=0)
+        start_utc = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+        end_utc = local_end.astimezone(timezone.utc).replace(tzinfo=None)
+        request = request.filter(
+            Event.starts_at < end_utc,
+            Event.ends_at > start_utc,
+        )
+    elif status == "UPCOMING":
+        request = request.filter(Event.starts_at > now)
+
+    rows = request.order_by(Event.starts_at.asc()).limit(limit).all()
+    bar_ids = {row.bar_id for row in rows if row.bar_id is not None}
+    bars_by_id = (
+        {bar.id: bar for bar in db.query(Bar).filter(Bar.id.in_(bar_ids)).all()}
+        if bar_ids
+        else {}
+    )
+    output: list[EventSummaryOut] = []
+    for row in rows:
+        runtime = db.query(EventRuntimeState).filter(
+            EventRuntimeState.event_id == row.id
+        ).first()
+        runtime_state = (
+            (runtime.state if runtime else None) or row.event_state or "LIVE"
+        ).upper()
+        timing_status = "LIVE" if row.starts_at <= now <= row.ends_at else "UPCOMING"
+        bar = bars_by_id.get(row.bar_id)
+        output.append(
+            EventSummaryOut(
+                id=row.id,
+                bar_id=row.bar_id,
+                name=row.name,
+                starts_at=row.starts_at,
+                ends_at=row.ends_at,
+                entry_price_cents=row.entry_price_cents,
+                ticket_mode=row.ticket_mode,
+                ticket_value_cents=row.ticket_value_cents,
+                status=timing_status,
+                eventState=runtime_state,
+                venue=row.venue or (bar.name if bar else None),
+                barName=bar.name if bar else None,
+                city=bar.city if bar else None,
+                host=_event_public_host_summary(db, row),
+                modulesOn=_compact_public_modules(db, row.id),
+                visibility=(row.visibility or "PRIVATE").upper(),
+                publicationStatus=(row.publication_status or "DRAFT").upper(),
+                shortDescription=row.short_description,
+                bannerUrl=row.banner_url,
+                thumbnailUrl=row.thumbnail_url,
+                eventType=row.event_type,
+                capacity=row.capacity,
+                accessType=row.access_type,
+                currency=(row.currency or "EUR").upper(),
+                address=row.address or (bar.address if bar else None),
+                lat=row.lat if row.lat is not None else (bar.lat if bar else None),
+                lng=row.lng if row.lng is not None else (bar.lng if bar else None),
+            )
+        )
+    return output
+
+
+def _public_bar_payload(bar: Bar) -> dict[str, Any]:
+    return {
+        "id": bar.id,
+        "name": bar.name,
+        "city": bar.city,
+        "description": bar.public_description,
+        "logoUrl": bar.logo_url,
+        "bannerUrl": bar.banner_url,
+        "primaryColor": bar.primary_color,
+        "secondaryColor": bar.secondary_color,
+        "address": bar.address,
+        "practicalInfo": bar.practical_info,
+        "mapUrl": bar.map_url,
+        "lat": bar.lat,
+        "lng": bar.lng,
+        "modules": sorted([key for key, enabled in (bar.public_modules or {}).items() if enabled]),
+    }
+
+
+@app.get("/bars/{bar_id}/public")
+def get_bar_public(bar_id: int, db: Session = Depends(get_db)):
+    bar = db.get(Bar, bar_id)
+    if (
+        bar is None
+        or (bar.partner_status or "ACTIVE").upper() != "ACTIVE"
+        or (bar.public_visibility or "PUBLIC").upper() != "PUBLIC"
+    ):
+        raise HTTPException(404, "Bar not found")
+    return _public_bar_payload(bar)
 
 
 @app.get("/events/{event_id}")
-def get_event(event_id: int):
+def get_event(event_id: int, _user: AppUser = Depends(get_current_user)):
     s = get_session()
     try:
         e = s.get(Event, event_id)
@@ -5168,12 +5562,35 @@ def _event_public_payload(db: Session, event: Event) -> dict[str, Any]:
         "startAt": event.starts_at.isoformat() if event.starts_at else None,
         "endAt": event.ends_at.isoformat() if event.ends_at else None,
         "venue": {
-            "name": event.venue,
+            "name": event.venue or (bar.name if bar else None),
             "barName": (bar.name if bar else None),
+            "barId": (bar.id if bar else None),
+            "address": event.address or (bar.address if bar else None),
+            "city": event.city or (bar.city if bar else None),
+            "lat": event.lat if event.lat is not None else (bar.lat if bar else None),
+            "lng": event.lng if event.lng is not None else (bar.lng if bar else None),
+            "mapUrl": (bar.map_url if bar else None),
         },
         "host": _event_public_host_summary(db, event),
         "modulesOn": _compact_public_modules(db, event.id),
         "eventState": runtime_state,
+        "pricing": {
+            "entryPriceCents": event.entry_price_cents,
+            "isFree": event.entry_price_cents <= 0,
+            "currency": (event.currency or "EUR").upper(),
+        },
+        "accessPolicy": {
+            "visibility": (event.visibility or "PRIVATE").upper(),
+            "type": (event.access_type or ("TICKET" if event.ticket_mode else "OPEN")).upper(),
+            "charterRequired": bool(event.charter_enabled),
+            "charterVersion": event.charter_version,
+        },
+        "description": event.public_description,
+        "shortDescription": event.short_description,
+        "bannerUrl": event.banner_url,
+        "thumbnailUrl": event.thumbnail_url,
+        "eventType": event.event_type,
+        "capacity": event.capacity,
         "links": {
             "webUrl": f"{public_base}/event/{event.id}",
             "openUrl": f"{public_base}/open?type=event&id={event.id}",
@@ -5206,7 +5623,7 @@ def get_event_public(event_id: int, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
-    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+    if not _is_public_event_available(event):
         raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
     return _event_public_payload(db, event)
 
@@ -5221,7 +5638,7 @@ def preview_join_code(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail={"reason": "invalid_code"})
     if (event.visibility or "PRIVATE").upper() == "PRIVATE":
         return _join_code_private_preview(event)
-    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+    if not _is_public_event_available(event):
         raise HTTPException(status_code=404, detail={"reason": "invalid_code"})
     return {
         "exists": True,
@@ -5279,7 +5696,7 @@ def join_event_public(
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
-    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+    if not _is_public_event_available(event):
         raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
     key = ensure_idempotency_key(idempotency_key)
     if event.charter_enabled and payload.accepted_charter_version != event.charter_version:
@@ -7870,6 +8287,19 @@ def create_event(
         host_display_name=user.display_name,
         visibility=visibility,
         publication_status="DRAFT",
+        public_description=payload.public_description,
+        short_description=payload.short_description,
+        banner_url=payload.banner_url,
+        thumbnail_url=payload.thumbnail_url,
+        event_type=payload.event_type,
+        capacity=payload.capacity,
+        access_type=payload.access_type,
+        entry_price_cents=payload.entry_price_cents,
+        currency=payload.currency.upper(),
+        address=payload.address or (payload.venue.address if payload.venue else None),
+        city=payload.city,
+        lat=payload.lat if payload.lat is not None else (payload.venue.lat if payload.venue else None),
+        lng=payload.lng if payload.lng is not None else (payload.venue.lng if payload.venue else None),
     )
     db.add(event)
     db.flush()
@@ -7906,6 +8336,37 @@ def create_event(
     )
     db.commit()
     return response
+
+
+@app.patch("/events/{event_id}/public-content")
+def update_event_public_content(
+    event_id: int,
+    payload: EventPublicContentPatchIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    _require_event_host_write_perms(db, event, user)
+    _apply_event_public_content(event, payload)
+    db.add(event)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role="app_user",
+        action="event.public_content.update",
+        entity_type="event",
+        entity_id=str(event.id),
+        event_id=event.id,
+        bar_id=event.bar_id,
+        idempotency_key=None,
+        payload={"fields": sorted(payload.model_fields_set)},
+    )
+    db.commit()
+    db.refresh(event)
+    return _event_public_payload(db, event)
 
 
 @app.post("/events/{event_id}/publish", response_model=EventPublishOut)
@@ -7961,16 +8422,16 @@ def get_event_share(
     raw = _extract_bearer_token(authorization)
     if raw:
         user = _resolve_app_user_from_token(raw, db)
-    visibility = (event.visibility or "PRIVATE").upper()
-    if visibility != "PUBLIC" and user is None:
-        raise HTTPException(status_code=401, detail={"reason": "auth_required"})
     include_staff = False
     if user is not None:
         try:
             _require_event_host_write_perms(db, event, user)
             include_staff = True
         except HTTPException:
-            include_staff = False
+            if not _is_public_event_available(event):
+                raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
+    if user is None and not _is_public_event_available(event):
+        raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
     return _app_event_share_payload(event, include_staff=include_staff)
 
 
@@ -8223,8 +8684,13 @@ def resolve_open_link(
         event = db.get(Event, target_id)
         if event is None:
             raise HTTPException(status_code=404, detail="Event not found")
-        if (event.visibility or "PRIVATE").upper() != "PUBLIC" and user is None:
-            raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+        if not _is_public_event_available(event):
+            if user is None:
+                raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
+            try:
+                _require_event_host_write_perms(db, event, user)
+            except HTTPException:
+                raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
         deeplink = f"tore://open?type=event&id={event.id}"
         web_fallback = f"{_public_app_base_url()}/open?type=event&id={event.id}"
         target = {"event_id": event.id, "name": event.name}
@@ -9134,8 +9600,9 @@ def get_event_share_pack(
             _require_event_host_write_perms(db, event, user)
             include_staff = True
         except HTTPException:
-            include_staff = False
-    elif (event.visibility or "PRIVATE").upper() != "PUBLIC":
+            if not _is_public_event_available(event):
+                raise HTTPException(status_code=404, detail={"reason": "public_event_not_available"})
+    elif not _is_public_event_available(event):
         raise HTTPException(status_code=401, detail={"reason": "auth_required"})
 
     payload = _event_share_pack_payload(db, event, include_staff=include_staff)
@@ -9164,7 +9631,7 @@ def get_public_event_share_pack(
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if (event.visibility or "PRIVATE").upper() != "PUBLIC" or (event.publication_status or "DRAFT").upper() != "PUBLISHED":
+    if not _is_public_event_available(event):
         raise HTTPException(status_code=404, detail={"reason": "public_share_pack_not_available"})
 
     payload = _public_event_share_pack_payload(db, event)

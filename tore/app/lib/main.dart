@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'rebuild/tore_rebuild_app.dart';
+import 'tore_mvp_app.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ToreRebuildApp());
+  runApp(const ProviderScope(child: ToreMvpApp()));
 }

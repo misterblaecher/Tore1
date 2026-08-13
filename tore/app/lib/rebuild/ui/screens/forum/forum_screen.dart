@@ -54,7 +54,8 @@ class _ForumScreenState extends State<ForumScreen> {
           'Accueil officiel du comité : description, bannière, événements, liens utiles et membres visibles.',
     );
     _eventNameController = TextEditingController(text: 'TD Outremeuse');
-    _eventPlaceController = TextEditingController(text: 'Liège · salle à confirmer');
+    _eventPlaceController =
+        TextEditingController(text: 'Liège · salle à confirmer');
     _eventDateController = TextEditingController(text: 'Vendredi · 22:30');
   }
 
@@ -131,21 +132,24 @@ class _ForumScreenState extends State<ForumScreen> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: ToreTokens.yellowCta),
                       ),
-                      child: const Icon(Icons.forum, color: ToreTokens.yellowCta),
+                      child:
+                          const Icon(Icons.forum, color: ToreTokens.yellowCta),
                     ),
                     const SizedBox(width: ToreTokens.s12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_forumName, style: Theme.of(context).textTheme.titleLarge),
+                          Text(_forumName,
+                              style: Theme.of(context).textTheme.titleLarge),
                           Text(_forumDescription),
                         ],
                       ),
                     ),
                     ToreBadge(
                       label: _spaceCreated ? 'ACTIF' : 'BROUILLON',
-                      color: _spaceCreated ? ToreTokens.ruby : ToreTokens.border,
+                      color:
+                          _spaceCreated ? ToreTokens.ruby : ToreTokens.border,
                     ),
                   ],
                 ),
@@ -158,11 +162,18 @@ class _ForumScreenState extends State<ForumScreen> {
                 const SizedBox(height: ToreTokens.s12),
                 Row(
                   children: [
-                    Expanded(child: ForumStat(value: '${_events.length}', label: 'events')),
+                    Expanded(
+                        child: ForumStat(
+                            value: '${_events.length}', label: 'events')),
                     const SizedBox(width: ToreTokens.s8),
-                    Expanded(child: ForumStat(value: _spaceCreated ? '18' : '0', label: 'membres')),
+                    Expanded(
+                        child: ForumStat(
+                            value: _spaceCreated ? '18' : '0',
+                            label: 'membres')),
                     const SizedBox(width: ToreTokens.s8),
-                    Expanded(child: ForumStat(value: _spaceCreated ? '4' : '0', label: 'salons')),
+                    Expanded(
+                        child: ForumStat(
+                            value: _spaceCreated ? '4' : '0', label: 'salons')),
                   ],
                 ),
                 const SizedBox(height: ToreTokens.s12),

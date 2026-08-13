@@ -18,7 +18,8 @@ class QuickActions extends StatelessWidget {
   final ValueChanged<HomeQuickAction> onOpen;
 
   static const actions = [
-    HomeQuickAction('Scanner', Icons.qr_code_scanner, AppRoutes.scanner, tabIndex: 2),
+    HomeQuickAction('Scanner', Icons.qr_code_scanner, AppRoutes.scanner,
+        tabIndex: 2),
     HomeQuickAction('Join', Icons.group_add, AppRoutes.join),
     HomeQuickAction('Menu', Icons.local_bar, AppRoutes.menu),
     HomeQuickAction('Wallet', Icons.account_balance_wallet, AppRoutes.wallet),
@@ -47,7 +48,8 @@ class QuickActions extends StatelessWidget {
               opacity: value.clamp(0.0, 1.0),
               child: Transform.translate(
                 offset: Offset(0, (1 - value) * 10),
-                child: Transform.scale(scale: 0.94 + value * 0.06, child: child),
+                child:
+                    Transform.scale(scale: 0.94 + value * 0.06, child: child),
               ),
             );
           },

@@ -68,7 +68,8 @@ class HeroStatusCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(eventName, style: Theme.of(context).textTheme.headlineSmall),
+                      Text(eventName,
+                          style: Theme.of(context).textTheme.headlineSmall),
                       const SizedBox(height: ToreTokens.s4),
                       Text(
                         mode == ToreMode.user
@@ -98,7 +99,8 @@ class HeroStatusCard extends StatelessWidget {
                   child: HeroMetric(value: '$checkInCount', label: 'check-ins'),
                 ),
                 const SizedBox(width: ToreTokens.s8),
-                Expanded(child: HeroMetric(value: '$orderCount', label: 'orders')),
+                Expanded(
+                    child: HeroMetric(value: '$orderCount', label: 'orders')),
               ],
             ),
             const SizedBox(height: ToreTokens.s12),

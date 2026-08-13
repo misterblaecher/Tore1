@@ -29,7 +29,8 @@ class TickerPreview extends StatelessWidget {
                   ),
                   const SizedBox(width: ToreTokens.s12),
                   Expanded(child: Text(visible[i].message)),
-                  const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
+                  const Icon(Icons.chevron_right,
+                      color: Colors.white38, size: 18),
                 ],
               ),
               if (i != visible.length - 1)

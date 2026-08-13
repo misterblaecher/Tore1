@@ -121,3 +121,59 @@ def test_publish_requires_host_perms_and_idempotent_and_share_has_links():
         assert audit.idempotency_key == 'pub-ok-1'
     finally:
         s.close()
+
+
+def test_event_public_content_patch_is_authorized_and_exposed():
+    Base.metadata.create_all(engine)
+    client = TestClient(app)
+    owner_id, owner_token = _seed_user(client, f'content-owner-{secrets.token_hex(3)}')
+    _, outsider_token = _seed_user(client, f'content-outsider-{secrets.token_hex(3)}')
+    start = datetime.utcnow().replace(microsecond=0)
+    created = client.post(
+        '/events',
+        json={
+            'name': 'Public Content Event',
+            'startAt': start.isoformat() + 'Z',
+            'endAt': (start + timedelta(hours=3)).isoformat() + 'Z',
+            'host_type': 'user',
+            'host_id': owner_id,
+            'visibility': 'PUBLIC',
+        },
+        headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': 'content-create-1'},
+    )
+    event_id = created.json()['event_id']
+
+    denied = client.patch(
+        f'/events/{event_id}/public-content',
+        json={'short_description': 'interdit'},
+        headers={'Authorization': f'Bearer {outsider_token}'},
+    )
+    assert denied.status_code == 403
+
+    updated = client.patch(
+        f'/events/{event_id}/public-content',
+        json={
+            'public_description': 'Le récit complet.',
+            'short_description': 'Le résumé public.',
+            'banner_url': 'https://cdn.tore.be/public-event.jpg',
+            'capacity': 320,
+            'access_type': 'OPEN',
+            'entry_price_cents': 750,
+            'currency': 'eur',
+            'address': '4 rue TORÈ',
+            'city': 'Liège',
+            'lat': 50.64,
+            'lng': 5.57,
+        },
+        headers={'Authorization': f'Bearer {owner_token}'},
+    )
+    assert updated.status_code == 200
+    assert updated.json()['pricing']['currency'] == 'EUR'
+    assert updated.json()['capacity'] == 320
+
+    invalid = client.patch(
+        f'/events/{event_id}/public-content',
+        json={'banner_url': 'file:///secret', 'capacity': 0, 'lat': 100},
+        headers={'Authorization': f'Bearer {owner_token}'},
+    )
+    assert invalid.status_code == 422

@@ -39,6 +39,12 @@ def test_event_public_share_and_open_resolve_return_weburl_and_deeplink():
     assert created.status_code == 200
     event_id = created.json()['event_id']
 
+    published = client.post(
+        f'/events/{event_id}/publish',
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': f'event-publish-{secrets.token_hex(2)}'},
+    )
+    assert published.status_code == 200
+
     share = client.get(f'/events/{event_id}/share')
     assert share.status_code == 200
     payload = share.json()

@@ -10,13 +10,17 @@ final barsRepositoryProvider = Provider<BarsRepository>((ref) {
   return BarsRepository(client.dio);
 });
 
-final barsFutureProvider = FutureProvider<List<Bar>>((ref) async {
+final barsFutureProvider = FutureProvider<BarsResult<Bar>>((ref) async {
   final repo = ref.watch(barsRepositoryProvider);
   return repo.fetchBars();
 });
 
 final barEventsProvider =
-    FutureProvider.family<List<EventSummary>, int>((ref, barId) async {
+    FutureProvider.family<BarsResult<EventSummary>, int>((ref, barId) async {
   final repo = ref.watch(barsRepositoryProvider);
   return repo.getBarEvents(barId);
+});
+
+final barDetailProvider = FutureProvider.family<Bar, int>((ref, barId) async {
+  return ref.watch(barsRepositoryProvider).fetchBar(barId);
 });

@@ -35,7 +35,8 @@ class NearbyEventsPreview extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('Soirées près de toi', style: Theme.of(context).textTheme.titleMedium),
+                Text('Soirées près de toi',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
                 const ToreBadge(label: 'Liège', color: ToreTokens.ruby),
               ],
@@ -44,10 +45,13 @@ class NearbyEventsPreview extends StatelessWidget {
             for (final event in events)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.local_activity, color: ToreTokens.yellowCta),
+                leading: const Icon(Icons.local_activity,
+                    color: ToreTokens.yellowCta),
                 title: Text(event.title),
-                subtitle: Text('${event.place} · ${event.distance} · ${event.time}'),
-                trailing: TextButton(onPressed: onOpenEvent, child: Text(event.status)),
+                subtitle:
+                    Text('${event.place} · ${event.distance} · ${event.time}'),
+                trailing: TextButton(
+                    onPressed: onOpenEvent, child: Text(event.status)),
               ),
           ],
         ),

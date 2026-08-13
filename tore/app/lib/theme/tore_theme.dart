@@ -1,38 +1,47 @@
 import 'package:flutter/material.dart';
-import 'tore_colors.dart';
+import 'tokens.dart' as tokens;
 
 class ToreTheme {
   static ThemeData dark() {
     final base = ThemeData.dark(useMaterial3: true);
 
     return base.copyWith(
-      scaffoldBackgroundColor: ToreColors.bg,
+      scaffoldBackgroundColor: tokens.ToreSemantic.bg,
       colorScheme: const ColorScheme.dark(
-        primary: ToreColors.rubine,
-        secondary: ToreColors.jaune,
-        surface: ToreColors.surface,
-        onSurface: ToreColors.text,
+        primary: tokens.ToreSemantic.accentPrimary,
+        secondary: tokens.ToreSemantic.accentAuthority,
+        surface: tokens.ToreSemantic.surfaceBase,
+        onSurface: tokens.ToreSemantic.textPrimary,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: ToreColors.bg,
-        foregroundColor: ToreColors.text,
+        backgroundColor: tokens.ToreSemantic.bg,
+        foregroundColor: tokens.ToreSemantic.textPrimary,
         elevation: 0,
       ),
 
       // IMPORTANT: CardThemeData (sinon erreur de compile)
       cardTheme: const CardThemeData(
-        color: ToreColors.surface,
+        color: tokens.ToreSemantic.surfaceCard,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-          side: BorderSide(color: ToreColors.border),
+          borderRadius: BorderRadius.all(Radius.circular(tokens.ToreRadii.md)),
+          side: BorderSide(color: tokens.ToreSemantic.divider),
         ),
       ),
-      dividerTheme:
-          DividerThemeData(color: ToreColors.border.withValues(alpha: 0.6)),
+      dividerTheme: DividerThemeData(color: tokens.ToreSemantic.divider),
       listTileTheme: const ListTileThemeData(
-        iconColor: ToreColors.subtext,
-        textColor: ToreColors.text,
+        iconColor: tokens.ToreSemantic.textSecondary,
+        textColor: tokens.ToreSemantic.textPrimary,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: tokens.ToreSemantic.accentAuthority,
+          foregroundColor: tokens.ToreColors.goldInk,
+          minimumSize: const Size.fromHeight(48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(tokens.ToreRadii.sm),
+          ),
+        ),
       ),
     );
   }

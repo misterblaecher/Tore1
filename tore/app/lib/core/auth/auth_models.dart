@@ -95,6 +95,10 @@ class AppUser {
     };
   }
 
+  bool get canUseOrganizerMode => accountMode == AccountMode.organizer;
+
+  bool get canUseBarMode => accountMode == AccountMode.team;
+
   AppUser copyWith({
     String? displayName,
     String? avatarUrl,

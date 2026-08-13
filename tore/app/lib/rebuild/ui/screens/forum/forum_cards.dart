@@ -24,7 +24,8 @@ class ForumStat extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(value, style: ToreTypography.monoNumber(context, size: 18)),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 11)),
         ],
       ),
     );
@@ -90,14 +91,22 @@ class ForumRequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const types = ['Comité', 'Cercle', 'Ordre', 'Régionale', 'Rivageoise', 'Autre'];
+    const types = [
+      'Comité',
+      'Cercle',
+      'Ordre',
+      'Régionale',
+      'Rivageoise',
+      'Autre'
+    ];
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(ToreTokens.s16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Demander un espace', style: Theme.of(context).textTheme.titleMedium),
+            Text('Demander un espace',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: ToreTokens.s8),
             const Text(
               'Comité, ordre, régionale ou rivageoise : la demande est modérée avant création.',
@@ -172,7 +181,8 @@ class ForumEventsManagerCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Créer un event TORÈ', style: Theme.of(context).textTheme.titleMedium),
+            Text('Créer un event TORÈ',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: ToreTokens.s8),
             const Text(
               'L’event est ajouté au forum, prêt pour QR join, menu, staff, bets et recap.',
@@ -214,7 +224,8 @@ class ForumEventsManagerCard extends StatelessWidget {
             for (final event in events)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.local_activity, color: ToreTokens.yellowCta),
+                leading: const Icon(Icons.local_activity,
+                    color: ToreTokens.yellowCta),
                 title: Text(event.title),
                 subtitle: Text(event.detail),
                 trailing: const ToreBadge(label: 'TORÈ'),
@@ -243,7 +254,8 @@ class ForumPrivateChannelsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Salons privés', style: Theme.of(context).textTheme.titleMedium),
+            Text('Salons privés',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: ToreTokens.s8),
             const Text(
               'Des groupes de discussion type Discord, reliés aux rôles TORÈ et aux events.',
@@ -283,14 +295,16 @@ class ForumAdminCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Gestion responsable', style: Theme.of(context).textTheme.titleMedium),
+            Text('Gestion responsable',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: ToreTokens.s4),
             Text(forumName, style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: ToreTokens.s8),
             for (final row in rows)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.admin_panel_settings, color: ToreTokens.yellowCta),
+                leading: const Icon(Icons.admin_panel_settings,
+                    color: ToreTokens.yellowCta),
                 title: Text(row.$1),
                 subtitle: Text(row.$2),
                 trailing: const Icon(Icons.chevron_right),
@@ -318,7 +332,8 @@ class ForumStatsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Statistiques TORÈ', style: Theme.of(context).textTheme.titleMedium),
+            Text('Statistiques TORÈ',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: ToreTokens.s8),
             const Text(
               'Résumé post-event, modules activés, tickets, ventes et participation aux bets/hunts/battles.',
@@ -327,7 +342,8 @@ class ForumStatsCard extends StatelessWidget {
             for (final row in rows)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.insights, color: ToreTokens.yellowCta),
+                leading:
+                    const Icon(Icons.insights, color: ToreTokens.yellowCta),
                 title: Text(row.$1),
                 subtitle: Text(row.$2),
               ),

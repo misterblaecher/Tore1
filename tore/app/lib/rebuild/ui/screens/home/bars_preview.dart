@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../theme/tore_theme.dart';
 
 class BarsPreview extends StatelessWidget {
-  const BarsPreview({super.key, required this.onBarTap, required this.onOpenMap});
+  const BarsPreview(
+      {super.key, required this.onBarTap, required this.onOpenMap});
 
   final VoidCallback onBarTap;
   final ValueChanged<String> onOpenMap;
@@ -19,12 +20,14 @@ class BarsPreview extends StatelessWidget {
       (
         name: 'TORÈ Test Bar',
         meta: 'Live · 700 m · 1 event',
-        mapUrl: 'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar',
+        mapUrl:
+            'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar',
       ),
       (
         name: 'Bar B',
         meta: 'Happy hour · 900 m',
-        mapUrl: 'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar%20B',
+        mapUrl:
+            'https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar%20B',
       ),
     ];
 
@@ -75,7 +78,8 @@ class PartnerBarTile extends StatelessWidget {
                   color: ToreTokens.ruby.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.storefront, color: ToreTokens.yellowCta, size: 22),
+                child: const Icon(Icons.storefront,
+                    color: ToreTokens.yellowCta, size: 22),
               ),
             ),
             const SizedBox(width: ToreTokens.s12),
@@ -85,7 +89,9 @@ class PartnerBarTile extends StatelessWidget {
                 children: [
                   Text(name, style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: ToreTokens.s4),
-                  Text(meta, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(meta,
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 12)),
                 ],
               ),
             ),

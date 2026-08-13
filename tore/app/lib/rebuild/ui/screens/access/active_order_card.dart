@@ -18,8 +18,14 @@ class ActiveOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enabledZones = zones.where((zone) => zone.enabled).take(2).map((zone) => zone.name).toList();
-    final zoneLabel = enabledZones.isEmpty ? 'retirez au bar actif' : enabledZones.join(' · ');
+    final enabledZones = zones
+        .where((zone) => zone.enabled)
+        .take(2)
+        .map((zone) => zone.name)
+        .toList();
+    final zoneLabel = enabledZones.isEmpty
+        ? 'retirez au bar actif'
+        : enabledZones.join(' · ');
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -35,17 +41,21 @@ class ActiveOrderCard extends StatelessWidget {
                   color: ToreTokens.rubyDeep,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.receipt_long, color: ToreTokens.yellowCta),
+                child:
+                    const Icon(Icons.receipt_long, color: ToreTokens.yellowCta),
               ),
               const SizedBox(width: ToreTokens.s12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Commande en cours', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Commande en cours',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: ToreTokens.s4),
                     Text('N°${order.id} · ${order.status}'),
-                    Text(zoneLabel, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    Text(zoneLabel,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
                   ],
                 ),
               ),

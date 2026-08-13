@@ -662,13 +662,16 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
         return MarketsTab(
           global: _polyGlobal,
           event: _polyEvent,
-          onGlobal: () => Navigator.pushNamed(context, AppRoutes.polymarketGlobal),
-          onEvent: () => Navigator.pushNamed(context, AppRoutes.polymarketEvent),
+          onGlobal: () =>
+              Navigator.pushNamed(context, AppRoutes.polymarketGlobal),
+          onEvent: () =>
+              Navigator.pushNamed(context, AppRoutes.polymarketEvent),
         );
       case 4:
         return _isConnectedAccount
             ? ForumScreen(
-                onOpenForum: () => Navigator.pushNamed(context, AppRoutes.forum),
+                onOpenForum: () =>
+                    Navigator.pushNamed(context, AppRoutes.forum),
                 onSubmitRequest: () => ToreFeedback.success(
                   context,
                   'Demande de forum envoyée à la modération TORÈ.',
@@ -691,7 +694,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
           onCloseAction: () => setState(() => _activeHomeAction = null),
           eventName: _mobileBootstrap.eventName ?? 'Afond Night',
           barName: _mobileBootstrap.barName ?? 'TORÈ Test Bar',
-          onOpenEventHub: () => Navigator.pushNamed(context, AppRoutes.eventHub),
+          onOpenEventHub: () =>
+              Navigator.pushNamed(context, AppRoutes.eventHub),
           onOpenEvents: () => Navigator.pushNamed(context, AppRoutes.events),
           onOpenBars: () => Navigator.pushNamed(context, AppRoutes.bars),
           onOpenExternalUrl: _openExternalUrl,
@@ -826,8 +830,8 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
                     userSnapshot: _userSnapshot, eventContext: _eventContext),
                 ..._moduleCards(ToreMode.user)
               ]),
-        AppRoutes.scanner: (_) =>
-            AccessScannerScreen(onResolve: _resolveQrPayload, network: _network),
+        AppRoutes.scanner: (_) => AccessScannerScreen(
+            onResolve: _resolveQrPayload, network: _network),
         AppRoutes.bars: (_) => BarsScreen(
             network: _network,
             children: _bars
@@ -1188,12 +1192,14 @@ class _ToreRebuildAppState extends State<ToreRebuildApp> {
               walletBalance: _wallet?.balance,
               selectedUserTab: _selectedUserTab,
               isConnectedAccount: _isConnectedAccount,
-              onOpenProfile: () => _navigatorKey.currentState?.pushNamed(AppRoutes.profile),
+              onOpenProfile: () =>
+                  _navigatorKey.currentState?.pushNamed(AppRoutes.profile),
               onOpenNotifications: () => ToreFeedback.success(
                 context,
                 'Centre notifications TORÈ bientôt synchronisé.',
               ),
-              onOpenWallet: () => _navigatorKey.currentState?.pushNamed(AppRoutes.wallet),
+              onOpenWallet: () =>
+                  _navigatorKey.currentState?.pushNamed(AppRoutes.wallet),
               onOpenAccess: () => setState(() => _selectedUserTab = 2),
               onSelectUserTab: (i) {
                 if (!mounted) return;

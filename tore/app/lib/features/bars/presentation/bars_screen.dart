@@ -6,6 +6,8 @@ import 'package:tore/ui/components/components.dart';
 import '../../../core/app_context/app_context.dart';
 import '../../../core/network/error_mapper.dart';
 import '../../../shared/models/bar.dart';
+import '../../../shared/widgets/public_media.dart';
+import 'bar_detail_screen.dart';
 import 'bars_providers.dart';
 
 class BarsScreen extends ConsumerWidget {
@@ -16,16 +18,7 @@ class BarsScreen extends ConsumerWidget {
     final barsAsync = ref.watch(barsFutureProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bars'),
-        actions: [
-          IconButton(
-            tooltip: 'Search',
-            onPressed: () {},
-            icon: const Icon(Icons.search),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Bars')),
       body: RefreshIndicator(
         onRefresh: () async => ref.refresh(barsFutureProvider.future),
         child: barsAsync.when(
@@ -44,7 +37,8 @@ class BarsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          data: (bars) {
+          data: (result) {
+            final bars = result.items;
             if (bars.isEmpty) {
               return ListView(
                 children: const [
@@ -54,12 +48,21 @@ class BarsScreen extends ConsumerWidget {
               );
             }
 
-            return ListView.separated(
+            return ListView(
               padding: const EdgeInsets.all(ToreSpace.s4),
-              itemCount: bars.length,
-              separatorBuilder: (_, __) => const SizedBox(height: ToreSpace.s3),
-              itemBuilder: (context, index) =>
-                  _BarCompactCard(bar: bars[index]),
+              children: [
+                if (result.fromCache)
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.cloud_off_outlined),
+                      title: Text('Bars affichés depuis le cache'),
+                    ),
+                  ),
+                for (final bar in bars) ...[
+                  _BarCompactCard(bar: bar),
+                  const SizedBox(height: ToreSpace.s3),
+                ],
+              ],
             );
           },
         ),
@@ -89,13 +92,24 @@ class _BarCompactCard extends ConsumerWidget {
               barId: bar.id,
               barName: bar.name,
             );
-        Navigator.of(context)
-            .pushNamed('/bars/${bar.id}/events', arguments: bar.name);
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => BarDetailScreen(
+            barId: bar.id,
+          ),
+        ));
       },
       child: ToreCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            PublicMedia(
+              imageUrl: bar.bannerUrl,
+              height: 100,
+              icon: Icons.local_bar_outlined,
+              borderRadius:
+                  const BorderRadius.all(Radius.circular(ToreRadii.sm)),
+            ),
+            const SizedBox(height: ToreSpace.s3),
             ToreListRow(
               title: bar.name,
               subtitle: metadata.isEmpty
