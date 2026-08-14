@@ -4,3 +4,5 @@ tore-portal/dist/
 __pycache__/
 .env
 .seed.env
+*.apk
+*.aab

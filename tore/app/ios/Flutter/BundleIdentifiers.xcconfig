@@ -1,0 +1,4 @@
+// Temporary identifiers. The production value must be confirmed and reserved
+// in Apple Developer before changing it to be.tore.app.
+TORE_BUNDLE_IDENTIFIER_DEV=com.example.mobile.dev
+TORE_BUNDLE_IDENTIFIER_PROD=com.example.mobile

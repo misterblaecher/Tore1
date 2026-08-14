@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
-import 'dart:convert';
 import 'api.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_models.dart';
@@ -12,7 +11,6 @@ import 'core/network/providers.dart';
 import 'features/health/presentation/health_providers.dart';
 import 'shared/cache/cache_providers.dart';
 import 'features/health/data/health_repository.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppBootStatus { ready }
 
@@ -169,48 +167,10 @@ final meProvider = FutureProvider<AppUser>((ref) async {
     throw ApiException('Connexion requise', statusCode: 401);
   }
   if (session.isGuest) {
-    final guestId = await ref
-        .read(authRepositoryProvider)
-        .api
-        .tokenStorage
-        .readGuestDeviceId();
-    return AppUser(
-      id: guestId ?? 'guest',
-      displayName: 'Invité',
-      avatarUrl: null,
-      addressText: null,
-      showAddress: false,
-      showAvatar: true,
-      showIdentityToStaff: false,
-      bio: '',
-      visibility: 'public',
-      showIdentityInBar: false,
-      accountMode: AccountMode.user,
-    );
+    throw ApiException('Profil indisponible en mode invité', statusCode: 403);
   }
   final auth = ref.read(authRepositoryProvider);
-  try {
-    final me = await auth.getMe();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        'cached_me',
-        jsonEncode(me.toPatchJson()
-          ..addAll({
-            'id': me.id,
-            'account_mode': accountModeToJson(me.accountMode)
-          })));
-    return me;
-  } catch (e) {
-    if (e is DioException || e is ApiException) {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('cached_me');
-      if (raw != null && raw.isNotEmpty) {
-        final data = (jsonDecode(raw) as Map).cast<String, dynamic>();
-        return AppUser.fromJson(data);
-      }
-    }
-    rethrow;
-  }
+  return auth.getMe();
 });
 
 /// ✅ Juste l'id (string) dérivé de meProvider

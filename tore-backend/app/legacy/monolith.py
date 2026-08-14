@@ -72,6 +72,8 @@ from models import (
     RefreshToken,
     AuthMagicLink,
     AuthOtpCode,
+    PartnerUser,
+    PartnerBarAccess,
     PartnerMembership,
     Wallet,
     WalletTx,
@@ -771,6 +773,14 @@ def _normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
 
+def _is_safe_public_url(value: str) -> bool:
+    try:
+        parsed = urlparse((value or "").strip())
+    except Exception:
+        return False
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
 def _mask_email_target(email: str) -> str:
     if "@" not in email:
         return "***"
@@ -943,6 +953,9 @@ def _active_sanction_for_user(db: Session, user_id: str) -> Optional[UserSanctio
 def _enforce_user_sanctions(db: Session, user: AppUser) -> None:
     if bool(getattr(user, "is_deleted", False)):
         raise HTTPException(status_code=403, detail={"reason": "ACCOUNT_DELETED"})
+    status = (getattr(user, "account_status", None) or "ACTIVE").upper()
+    if status not in {"ACTIVE", "LEGACY"}:
+        raise HTTPException(status_code=403, detail={"reason": "ACCOUNT_INACTIVE", "status": status})
     sanction = _active_sanction_for_user(db, user.id)
     if sanction and sanction.type in {"SUSPEND", "BAN"}:
         raise HTTPException(
@@ -1015,7 +1028,14 @@ def _resolve_app_user_from_token(raw: str, db: Session) -> Optional[AppUser]:
     )
     if not tok:
         return None
-    return db.get(AppUser, tok.user_id)
+    user = db.get(AppUser, tok.user_id)
+    if user is None:
+        return None
+    try:
+        _enforce_user_sanctions(db, user)
+    except HTTPException:
+        return None
+    return user
 
 
 def _resolve_partner_identity_from_token(raw: str, db: Session) -> Optional[Dict[str, Any]]:
@@ -1226,7 +1246,12 @@ def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
         .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
         .first()
     )
-    if not staff or staff.is_active is False:
+    if (
+        not staff
+        or staff.is_active is False
+        or staff.revoked_at is not None
+        or (staff.expires_at is not None and staff.expires_at <= now_utc())
+    ):
         return "guest"
     role = (staff.role or "").lower()
     if role == "admin":
@@ -1406,6 +1431,8 @@ class WhatsAppOtpProvider:
 
 
 class PatchMeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
     address_text: Optional[str] = None
@@ -1416,6 +1443,38 @@ class PatchMeIn(BaseModel):
     visibility: Optional[str] = None
     show_identity_in_bar: Optional[bool] = None
     account_mode: Optional[Literal["user", "organizer", "team"]] = None
+
+
+class ProfilePatchIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    username: Optional[str] = Field(default=None, min_length=3, max_length=40)
+    display_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    avatar_url: Optional[str] = Field(default=None, max_length=512)
+    bio: Optional[str] = Field(default=None, max_length=280)
+    city: Optional[str] = Field(default=None, max_length=120)
+
+
+class ProfilePrivacyPatchIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    profile: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    photo: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    bio: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    affiliations: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    badges: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    event_history: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    participations: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    gamification: Optional[Literal["PUBLIC", "TORE_USERS", "PRIVATE"]] = None
+    event_history_opt_in: Optional[bool] = None
+    participations_opt_in: Optional[bool] = None
+    gamification_opt_in: Optional[bool] = None
+
+
+class AffiliationRevokeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str = Field(min_length=1, max_length=280)
 
 
 class RoleUpgradeRequestIn(BaseModel):
@@ -4102,6 +4161,7 @@ def auth_guest(payload: GuestIn):
             display_name=(payload.display_name or ""),
             show_address=False,
             show_avatar=True,
+            is_guest=True,
         )
         s.add(u)
         s.flush()
@@ -4127,6 +4187,7 @@ def auth_google(payload: GoogleAuthIn, db: Session = Depends(get_db)):
             email=email,
             show_address=False,
             show_avatar=True,
+            is_guest=False,
         )
         db.add(user)
         db.flush()
@@ -4248,7 +4309,7 @@ def auth_email_verify_otp(payload: EmailOtpVerifyIn, request: Request, db: Sessi
     if not user:
         created = True
         suffix = secrets.token_hex(2)
-        user = AppUser(id=secrets.token_hex(16), display_name=f"User-{suffix}", email=email)
+        user = AppUser(id=secrets.token_hex(16), display_name=f"User-{suffix}", email=email, is_guest=False)
         db.add(user)
         db.flush()
 
@@ -4294,6 +4355,7 @@ def auth_password_register(payload: PasswordRegisterIn, db: Session = Depends(ge
         last_name=payload.last_name.strip()[:120],
         nickname=nickname[:120],
         password_hash=password_hash,
+        is_guest=False,
     )
     db.add(user)
     db.flush()
@@ -4429,6 +4491,8 @@ def me(
 
 @app.patch("/auth/me")
 def patch_me(payload: PatchMeIn, user: AppUser = Depends(get_current_user)):
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
     s = get_session()
     try:
         u = s.get(AppUser, user.id)
@@ -8211,11 +8275,8 @@ def _require_event_host_write_perms(db: Session, event: Event, user: AppUser) ->
         return
     if host_type == "orga":
         org_id = int(host_id or "0")
-        membership = db.query(OrganizationMembership).filter(
-            OrganizationMembership.organization_id == org_id,
-            OrganizationMembership.user_id == user.id,
-        ).first()
-        if membership is None or (membership.role or "").upper() not in {"OWNER", "MANAGER"}:
+        membership = _membership_for(db, org_id=org_id, user_id=user.id)
+        if membership is None or (membership.role or "").upper() not in {"OWNER", "PRESIDENT", "MANAGER", "BUREAU", "TRESORIER"}:
             raise HTTPException(status_code=403, detail={"reason": "forbidden_host_orga"})
         return
     raise HTTPException(status_code=400, detail={"reason": "invalid_host_type"})
@@ -9037,11 +9098,15 @@ def consume_code(
                     membership = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_invite.org_id, OrganizationMembership.user_id == user.id).first()
                     already = membership is not None and membership.status == 'ACTIVE' and _ORGA_ROLE_RANK.get((membership.role or 'FOLLOWER').upper(), 0) >= _ORGA_ROLE_RANK.get(target_role, 0)
                     if membership is None:
-                        membership = OrganizationMembership(organization_id=org_invite.org_id, user_id=user.id, role=target_role, status='ACTIVE', joined_at=now, updated_at=now, created_by_user_id=org_invite.created_by_user_id, created_at=now)
+                        membership = OrganizationMembership(organization_id=org_invite.org_id, user_id=user.id, role=target_role, status='ACTIVE', joined_at=now, starts_at=now, updated_at=now, created_by_user_id=org_invite.created_by_user_id, validation_source='INVITE', validated_by_user_id=org_invite.created_by_user_id, validated_at=now, created_at=now)
                         db.add(membership)
                     elif not already:
                         membership.role = target_role
                         membership.status = 'ACTIVE'
+                        membership.validation_source = 'INVITE'
+                        membership.validated_by_user_id = org_invite.created_by_user_id
+                        membership.validated_at = now
+                        membership.revoked_at = None
                         membership.updated_at = now
                     response = {'ok': True, 'kind': kind, 'status': ('already-consumed' if already else 'consumed'), 'organization_id': org_invite.org_id, 'role': membership.role}
             else:
@@ -11418,6 +11483,8 @@ class OrgaPostCreateIn(BaseModel):
 
 
 class MeProfilePutIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
     display_name: str = Field(min_length=1, max_length=120)
     photo_url: Optional[str] = Field(default=None, max_length=512)
     bio: Optional[str] = Field(default=None, max_length=2000)
@@ -11506,7 +11573,17 @@ def _slugify_orga_name(db: Session, base_name: str) -> str:
     return slug
 
 
-_ORGA_ROLE_RANK = {"FOLLOWER": 0, "MEMBER": 1, "STAFF": 2, "MANAGER": 3, "OWNER": 4}
+_ORGA_ROLE_RANK = {
+    "FOLLOWER": 0,
+    "ALUMNI": 1,
+    "MEMBER": 1,
+    "STAFF": 2,
+    "TRESORIER": 3,
+    "BUREAU": 3,
+    "PRESIDENT": 4,
+    "MANAGER": 4,
+    "OWNER": 5,
+}
 _ORGA_INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 _ORGA_INVITE_TYPES = {"MEMBER", "MANAGER", "STAFF", "FOLLOWER"}
 
@@ -11528,10 +11605,14 @@ def _orga_invite_target_role(invite_type: str) -> str:
 
 
 def _membership_for(db: Session, *, org_id: int, user_id: str) -> Optional[OrganizationMembership]:
+    now = now_utc()
     return db.query(OrganizationMembership).filter(
         OrganizationMembership.organization_id == org_id,
         OrganizationMembership.user_id == user_id,
         OrganizationMembership.status == "ACTIVE",
+        OrganizationMembership.revoked_at.is_(None),
+        or_(OrganizationMembership.starts_at.is_(None), OrganizationMembership.starts_at <= now),
+        or_(OrganizationMembership.ends_at.is_(None), OrganizationMembership.ends_at > now),
     ).first()
 
 
@@ -11597,6 +11678,10 @@ def create_organization(
         role="OWNER",
         status="ACTIVE",
         joined_at=now_utc(),
+        starts_at=now_utc(),
+        validation_source="OWNER_CREATION",
+        validated_by_user_id=user.id,
+        validated_at=now_utc(),
         updated_at=now_utc(),
         created_by_user_id=user.id,
         created_at=now_utc(),
@@ -11830,14 +11915,10 @@ def _event_role_for_user(db: Session, *, event: Event, user_id: str) -> tuple[st
             org_id = int(host_id)
         except ValueError:
             org_id = 0
-        membership = db.query(OrganizationMembership).filter(
-            OrganizationMembership.organization_id == org_id,
-            OrganizationMembership.user_id == user_id,
-            OrganizationMembership.status == "ACTIVE",
-        ).first()
+        membership = _membership_for(db, org_id=org_id, user_id=user_id)
         if membership is not None:
             role = (membership.role or "MEMBER").upper()
-            if role in {"OWNER", "MANAGER", "STAFF", "MEMBER", "FOLLOWER"}:
+            if role in _ORGA_ROLE_RANK:
                 orga_role = role
             else:
                 orga_role = "MEMBER"
@@ -11846,15 +11927,17 @@ def _event_role_for_user(db: Session, *, event: Event, user_id: str) -> tuple[st
         EventStaff.event_id == event.id,
         EventStaff.user_id == user_id,
         EventStaff.is_active == True,  # noqa: E712
+        EventStaff.revoked_at.is_(None),
+        or_(EventStaff.expires_at.is_(None), EventStaff.expires_at > now_utc()),
     ).first()
     staff_role = None
     if staff is not None:
         raw = (staff.role or "").lower()
         staff_role = "MANAGER" if raw == "admin" else "STAFF"
 
-    if orga_role == "OWNER":
+    if orga_role in {"OWNER", "PRESIDENT"}:
         return "OWNER", True
-    if orga_role == "MANAGER":
+    if orga_role in {"MANAGER", "BUREAU", "TRESORIER"}:
         return "MANAGER", True
     if staff_role == "MANAGER":
         return "MANAGER", True
@@ -11916,10 +11999,18 @@ def my_events(user: AppUser = Depends(get_current_user), db: Session = Depends(g
     memberships = db.query(OrganizationMembership).filter(
         OrganizationMembership.user_id == user.id,
         OrganizationMembership.status == "ACTIVE",
+        OrganizationMembership.revoked_at.is_(None),
+        or_(OrganizationMembership.starts_at.is_(None), OrganizationMembership.starts_at <= now),
+        or_(OrganizationMembership.ends_at.is_(None), OrganizationMembership.ends_at > now),
     ).all()
     org_ids = [str(m.organization_id) for m in memberships]
 
-    staff_event_ids = [row[0] for row in db.query(EventStaff.event_id).filter(EventStaff.user_id == user.id, EventStaff.is_active == True).all()]  # noqa: E712
+    staff_event_ids = [row[0] for row in db.query(EventStaff.event_id).filter(
+        EventStaff.user_id == user.id,
+        EventStaff.is_active == True,  # noqa: E712
+        EventStaff.revoked_at.is_(None),
+        or_(EventStaff.expires_at.is_(None), EventStaff.expires_at > now),
+    ).all()]
 
     filters = [
         ((Event.host_type == "user") & (Event.host_id == user.id)),
@@ -11963,13 +12054,12 @@ def my_events(user: AppUser = Depends(get_current_user), db: Session = Depends(g
 
 @app.post("/events/{event_id}/checkin")
 def app_event_team_checkin(event_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    mode = (user.account_mode or "user").lower()
-    if mode not in {"team", "organizer"}:
-        raise HTTPException(status_code=403, detail="Non autorisé")
-
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event introuvable")
+    role, can_manage = _event_role_for_user(db, event=event, user_id=user.id)
+    if not can_manage and role != "STAFF":
+        raise HTTPException(status_code=403, detail="Non autorisé")
 
     already = db.query(EventSafetyCheckin).filter(
         EventSafetyCheckin.event_id == event_id,
@@ -12141,6 +12231,10 @@ def join_orga_by_code(
         role=invite.role,
         status="ACTIVE",
         joined_at=now,
+        starts_at=now,
+        validation_source="INVITE",
+        validated_by_user_id=invite.created_by_user_id,
+        validated_at=now,
         updated_at=now,
         created_by_user_id=invite.created_by_user_id,
         created_at=now,
@@ -12383,6 +12477,10 @@ def join_orga_by_invite(
             role=target_role,
             status="ACTIVE",
             joined_at=now,
+            starts_at=now,
+            validation_source="INVITE",
+            validated_by_user_id=invite.created_by_user_id,
+            validated_at=now,
             updated_at=now,
             created_by_user_id=invite.created_by_user_id,
             created_at=now,
@@ -12497,12 +12595,21 @@ def upsert_orga_member(org_id: int, payload: OrgaMemberUpsertIn, user: AppUser =
     if idem:
         return idem.response_json
     row = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id, OrganizationMembership.user_id == payload.user_id).first()
+    target_role = payload.role.upper()
+    if target_role == "OWNER" and (actor.role or "").upper() != "OWNER":
+        raise HTTPException(status_code=403, detail={"reason": "owner_only"})
+    if payload.user_id == user.id and _ORGA_ROLE_RANK.get(target_role, -1) > _ORGA_ROLE_RANK.get((actor.role or "MEMBER").upper(), -1):
+        raise HTTPException(status_code=403, detail={"reason": "cannot_self_promote"})
     if row:
-        row.role = payload.role
+        row.role = target_role
         row.status = "ACTIVE"
+        row.validation_source = "AUTHORIZED_APPROVAL"
+        row.validated_by_user_id = user.id
+        row.validated_at = now_utc()
+        row.revoked_at = None
         row.updated_at = now_utc()
     else:
-        row = OrganizationMembership(organization_id=org_id, user_id=payload.user_id, role=payload.role, status="ACTIVE", joined_at=now_utc(), updated_at=now_utc(), created_by_user_id=user.id, created_at=now_utc())
+        row = OrganizationMembership(organization_id=org_id, user_id=payload.user_id, role=target_role, status="ACTIVE", joined_at=now_utc(), starts_at=now_utc(), updated_at=now_utc(), created_by_user_id=user.id, validation_source="AUTHORIZED_APPROVAL", validated_by_user_id=user.id, validated_at=now_utc(), created_at=now_utc())
         db.add(row)
     response = {"ok": True, "idempotent": False, "organization_id": org_id, "user_id": payload.user_id, "role": row.role}
     db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
@@ -12541,9 +12648,11 @@ def join_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Sessio
     target_status = "PENDING" if join_mode == "REQUEST_TO_JOIN" else "ACTIVE"
 
     row = _membership_any_status(db, org_id=org_id, user_id=user.id)
+    if row is not None and ((row.status or "").upper() == "REVOKED" or row.revoked_at is not None):
+        raise HTTPException(status_code=403, detail={"reason": "affiliation_revoked"})
     idempotent = False
     if row is None:
-        row = OrganizationMembership(organization_id=org_id, user_id=user.id, role=target_role, status=target_status, joined_at=now, updated_at=now, created_by_user_id=user.id, created_at=now)
+        row = OrganizationMembership(organization_id=org_id, user_id=user.id, role=target_role, status=target_status, joined_at=now, starts_at=now, updated_at=now, created_by_user_id=user.id, validation_source=("SELF_REQUEST" if target_status == "PENDING" else "JOIN_POLICY"), validated_at=(None if target_status == "PENDING" else now), created_at=now)
         db.add(row)
         db.flush()
     else:
@@ -12574,6 +12683,7 @@ def leave_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Sessi
         response = {"ok": True, "idempotent": True, "organization_id": org_id}
     else:
         row.status = "LEFT"
+        row.ends_at = row.ends_at or now_utc()
         row.updated_at = now_utc()
         response = {"ok": True, "idempotent": False, "organization_id": org_id, "membership": _membership_snapshot(row)}
     db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))
@@ -12598,6 +12708,11 @@ def approve_orga_membership(org_id: int, member_user_id: str, payload: Membershi
         idempotent = True
     else:
         row.status = "ACTIVE"
+        row.starts_at = row.starts_at or now_utc()
+        row.validation_source = "AUTHORIZED_APPROVAL"
+        row.validated_by_user_id = user.id
+        row.validated_at = now_utc()
+        row.revoked_at = None
         row.updated_at = now_utc()
         idempotent = False
     response = {"ok": True, "idempotent": idempotent, "organization_id": org_id, "membership": _membership_snapshot(row)}
@@ -12662,6 +12777,10 @@ def set_orga_membership_role(
     idempotent = (row.role or "").upper() == target_role and (row.status or "ACTIVE").upper() == "ACTIVE"
     row.role = target_role
     row.status = "ACTIVE"
+    row.validation_source = "AUTHORIZED_APPROVAL"
+    row.validated_by_user_id = user.id
+    row.validated_at = now_utc()
+    row.revoked_at = None
     row.updated_at = now_utc()
 
     response = {"ok": True, "idempotent": idempotent, "organization_id": org_id, "membership": _membership_snapshot(row)}
@@ -12707,6 +12826,7 @@ def remove_orga_membership(
 
     idempotent = (row.status or "ACTIVE").upper() == "LEFT"
     row.status = "LEFT"
+    row.ends_at = row.ends_at or now_utc()
     row.updated_at = now_utc()
 
     response = {"ok": True, "idempotent": idempotent, "organization_id": org_id, "membership": _membership_snapshot(row)}
@@ -12741,7 +12861,7 @@ def follow_orga(org_id: int, user: AppUser = Depends(get_current_user), db: Sess
         response = {"ok": True, "idempotent": True, "organization_id": org_id, "role": "FOLLOWER"}
     else:
         if not row:
-            row = OrganizationMembership(organization_id=org_id, user_id=user.id, role="FOLLOWER", status="ACTIVE", joined_at=now_utc(), updated_at=now_utc(), created_by_user_id=user.id, created_at=now_utc())
+            row = OrganizationMembership(organization_id=org_id, user_id=user.id, role="FOLLOWER", status="ACTIVE", joined_at=now_utc(), starts_at=now_utc(), updated_at=now_utc(), created_by_user_id=user.id, validation_source="FOLLOW_POLICY", validated_at=now_utc(), created_at=now_utc())
             db.add(row)
         else:
             row.role = "FOLLOWER"
@@ -12844,34 +12964,384 @@ def delete_orga_post(org_id: int, post_id: int, user: AppUser = Depends(get_curr
     return response
 
 
+_PROFILE_VISIBILITIES = {"PUBLIC", "TORE_USERS", "PRIVATE"}
+_STRUCTURE_AUTH_ROLES = {"OWNER", "PRESIDENT", "BUREAU", "TRESORIER", "MANAGER", "STAFF"}
+
+
+def _normalized_visibility(value: Optional[str]) -> str:
+    normalized = (value or "PRIVATE").upper()
+    return normalized if normalized in _PROFILE_VISIBILITIES else "PRIVATE"
+
+
+def _profile_privacy(db: Session, user_id: str) -> AppUserPrivacySetting:
+    row = db.query(AppUserPrivacySetting).filter(AppUserPrivacySetting.user_id == user_id).first()
+    if row is None:
+        row = AppUserPrivacySetting(user_id=user_id)
+    return row
+
+
+def _optional_app_user(authorization: Optional[str], db: Session) -> Optional[AppUser]:
+    raw = _extract_bearer_token(authorization)
+    return _resolve_app_user_from_token(raw, db) if raw else None
+
+
+def _viewer_kind(*, target: AppUser, viewer: Optional[AppUser], forced: Optional[str] = None) -> str:
+    if forced:
+        return forced
+    if viewer and viewer.id == target.id:
+        return "OWNER"
+    if viewer and (viewer.global_role or "USER").upper() in {"ADMIN", "SUPPORT"}:
+        return "ADMIN"
+    if viewer and not bool(viewer.is_guest):
+        return "TORE_USER"
+    return "PUBLIC"
+
+
+def _can_see(level: Optional[str], viewer_kind: str) -> bool:
+    if viewer_kind in {"OWNER", "ADMIN"}:
+        return True
+    normalized = _normalized_visibility(level)
+    if normalized == "PUBLIC":
+        return True
+    return normalized == "TORE_USERS" and viewer_kind == "TORE_USER"
+
+
+def _affiliation_payload(row: OrganizationMembership, org: Organization) -> dict[str, Any]:
+    status = (row.status or "PENDING").upper()
+    if row.revoked_at is not None:
+        status = "REVOKED"
+    elif row.ends_at is not None and row.ends_at <= now_utc():
+        status = "ENDED"
+    elif status == "LEFT":
+        status = "ENDED"
+    return {
+        "id": row.id,
+        "structure": {
+            "id": org.id,
+            "name": org.name,
+            "slug": org.slug,
+            "city": org.city,
+            "public_path": f"/orgas/{org.id}",
+        },
+        "role": (row.role or "MEMBER").upper(),
+        "status": status,
+        "starts_at": _serialize_dt(row.starts_at or row.joined_at),
+        "ends_at": _serialize_dt(row.ends_at),
+        "mandate": row.mandate_label,
+        "visibility": _normalized_visibility(row.visibility),
+        "validation_source": row.validation_source or "LEGACY",
+        "revoked_at": _serialize_dt(row.revoked_at),
+    }
+
+
+def _profile_affiliations(db: Session, user_id: str) -> list[tuple[OrganizationMembership, Organization]]:
+    return db.execute(
+        select(OrganizationMembership, Organization)
+        .join(Organization, Organization.id == OrganizationMembership.organization_id)
+        .where(OrganizationMembership.user_id == user_id)
+        .order_by(OrganizationMembership.starts_at.desc(), OrganizationMembership.id.desc())
+    ).all()
+
+
+def _serialize_profile(
+    db: Session,
+    *,
+    target: AppUser,
+    viewer: Optional[AppUser],
+    forced_viewer_kind: Optional[str] = None,
+) -> dict[str, Any]:
+    privacy = _profile_privacy(db, target.id)
+    kind = _viewer_kind(target=target, viewer=viewer, forced=forced_viewer_kind)
+    if not _can_see(privacy.visibility, kind):
+        raise HTTPException(status_code=403, detail={"reason": "profile_private"})
+
+    result: dict[str, Any] = {
+        "id": target.id,
+        "username": target.username,
+        "display_name": target.display_name,
+        "city": target.city,
+        "created_at": _serialize_dt(target.created_at),
+        "updated_at": _serialize_dt(target.updated_at),
+        "viewer_context": kind,
+    }
+    if _can_see(privacy.photo_visibility, kind):
+        result["avatar_url"] = target.avatar_url
+    if _can_see(privacy.bio_visibility, kind):
+        result["bio"] = target.bio or ""
+
+    if _can_see(privacy.affiliations_visibility, kind):
+        affiliations = []
+        for membership, org in _profile_affiliations(db, target.id):
+            if kind not in {"OWNER", "ADMIN"}:
+                if (membership.status or "").upper() != "ACTIVE" or membership.revoked_at is not None:
+                    continue
+                if not _can_see(membership.visibility, kind):
+                    continue
+            affiliations.append(_affiliation_payload(membership, org))
+        result["affiliations"] = affiliations
+
+    if privacy.event_history_opt_in and _can_see(privacy.event_history_visibility, kind):
+        joined = db.execute(
+            select(EventJoin, Event)
+            .join(Event, Event.id == EventJoin.event_id)
+            .where(EventJoin.user_id == target.id)
+            .order_by(Event.starts_at.desc())
+            .limit(25)
+        ).all()
+        result["event_history"] = [
+            {"id": event.id, "name": event.name, "starts_at": _serialize_dt(event.starts_at)}
+            for _, event in joined
+            if kind in {"OWNER", "ADMIN"}
+            or ((event.visibility or "PRIVATE").upper() == "PUBLIC" and (event.publication_status or "DRAFT").upper() == "PUBLISHED")
+        ]
+
+    # Badges and gamification are intentionally absent until backed by real data.
+    return result
+
+
+def _owner_profile(db: Session, user: AppUser) -> dict[str, Any]:
+    privacy = _profile_privacy(db, user.id)
+    return {
+        **_serialize_profile(db, target=user, viewer=user),
+        "account_status": (user.account_status or "ACTIVE").upper(),
+        "privacy": {
+            "profile": _normalized_visibility(privacy.visibility),
+            "photo": _normalized_visibility(privacy.photo_visibility),
+            "bio": _normalized_visibility(privacy.bio_visibility),
+            "affiliations": _normalized_visibility(privacy.affiliations_visibility),
+            "badges": _normalized_visibility(privacy.badges_visibility),
+            "event_history": _normalized_visibility(privacy.event_history_visibility),
+            "participations": _normalized_visibility(privacy.participations_visibility),
+            "gamification": _normalized_visibility(privacy.gamification_visibility),
+            "event_history_opt_in": bool(privacy.event_history_opt_in),
+            "participations_opt_in": bool(privacy.participations_opt_in),
+            "gamification_opt_in": bool(privacy.gamification_opt_in),
+        },
+    }
+
+
+def _effective_capabilities(db: Session, user: AppUser) -> dict[str, Any]:
+    now = now_utc()
+    global_role = (user.global_role or "USER").upper()
+    if global_role not in {"USER", "SUPPORT", "ADMIN"}:
+        global_role = "USER"
+    global_roles = ["USER"] if global_role == "USER" else ["USER", global_role]
+    memberships = db.query(OrganizationMembership).filter(
+        OrganizationMembership.user_id == user.id,
+        OrganizationMembership.status == "ACTIVE",
+        OrganizationMembership.revoked_at.is_(None),
+        or_(OrganizationMembership.starts_at.is_(None), OrganizationMembership.starts_at <= now),
+        or_(OrganizationMembership.ends_at.is_(None), OrganizationMembership.ends_at > now),
+    ).all()
+    structures = [
+        {
+            "organization_id": row.organization_id,
+            "role": (row.role or "MEMBER").upper(),
+            "can_manage": (row.role or "MEMBER").upper() in _STRUCTURE_AUTH_ROLES,
+            "expires_at": _serialize_dt(row.ends_at),
+        }
+        for row in memberships
+    ]
+    staff_rows = db.query(EventStaff).filter(
+        EventStaff.user_id == user.id,
+        EventStaff.is_active == True,  # noqa: E712
+        EventStaff.revoked_at.is_(None),
+        or_(EventStaff.expires_at.is_(None), EventStaff.expires_at > now),
+    ).all()
+    event_role_map = {"admin": "EVENT_MANAGER", "manager": "EVENT_MANAGER", "entry": "ENTRY_STAFF", "bar": "BAR_STAFF"}
+    events = [
+        {
+            "event_id": row.event_id,
+            "role": event_role_map.get((row.role or "").lower(), "EVENT_STAFF"),
+            "expires_at": _serialize_dt(row.expires_at),
+        }
+        for row in staff_rows
+    ]
+    hosted_events = db.query(Event).filter(Event.host_type == "user", Event.host_id == user.id).all()
+    events.extend({"event_id": event.id, "role": "EVENT_MANAGER", "expires_at": None} for event in hosted_events)
+
+    partner = db.query(PartnerUser).filter(PartnerUser.app_user_id == user.id, PartnerUser.is_active == True).first()  # noqa: E712
+    bars: list[dict[str, Any]] = []
+    if partner is not None:
+        seen: set[int] = set()
+        accesses = db.query(PartnerBarAccess).filter(PartnerBarAccess.partner_user_id == partner.id, PartnerBarAccess.is_active == True).all()  # noqa: E712
+        for access in accesses:
+            bars.append({"bar_id": access.bar_id, "role": (access.role or "staff").upper()})
+            seen.add(access.bar_id)
+        legacy_memberships = db.query(PartnerMembership).filter(PartnerMembership.user_id == partner.id).all()
+        for membership in legacy_memberships:
+            if membership.bar_id not in seen:
+                bars.append({"bar_id": membership.bar_id, "role": (membership.role or "bartender").upper()})
+
+    can_orga = global_role in {"ADMIN", "SUPPORT"} or any(item["can_manage"] for item in structures) or any(item["role"] == "EVENT_MANAGER" for item in events)
+    can_bar = global_role in {"ADMIN", "SUPPORT"} or bool(bars) or any(item["role"] == "BAR_STAFF" for item in events)
+    return {
+        "user_id": user.id,
+        "global_roles": global_roles,
+        "structures": structures,
+        "events": events,
+        "bars": bars,
+        "modes": {"organizer": can_orga, "bar": can_bar},
+        "evaluated_at": _serialize_dt(now),
+    }
+
+
+@app.get("/profiles/{user_id}")
+def get_contextual_user_profile(
+    user_id: str,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+    db: Session = Depends(get_db),
+):
+    target = db.get(AppUser, user_id)
+    if target is None or target.is_deleted:
+        raise HTTPException(404, "User not found")
+    viewer = _optional_app_user(authorization, db)
+    return _serialize_profile(db, target=target, viewer=viewer)
+
+
 @app.get("/users/{user_id}")
 def get_public_user_profile(user_id: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     target = db.get(AppUser, user_id)
-    if not target:
+    if target is None or target.is_deleted:
         raise HTTPException(404, "User not found")
-    if (target.profile_visibility or "PUBLIC") == "PRIVATE" and (not user or user.id != target.id):
-        raise HTTPException(403, "Forbidden")
-    orgas = db.execute(select(OrganizationMembership, Organization).join(Organization, Organization.id == OrganizationMembership.organization_id).where(OrganizationMembership.user_id == target.id, OrganizationMembership.status == "ACTIVE", OrganizationMembership.role != "FOLLOWER")).all()
-    my_events = db.query(Event).filter(Event.created_by_user_id == target.id).order_by(Event.starts_at.desc()).limit(25).all()
-    return {
-        "id": target.id,
-        "display_name": target.display_name,
-        "photo_url": target.avatar_url,
-        "bio": target.bio,
-        "instagram_handle": target.instagram_handle,
-        "visibility": target.profile_visibility or "PUBLIC",
-        "orgas": [{"id": org.id, "name": org.name, "role": m.role} for m, org in orgas],
-        "events": [{"id": e.id, "name": e.name, "startAt": _serialize_dt(e.starts_at)} for e in my_events],
-    }
+    return _serialize_profile(db, target=target, viewer=user)
 
 
 @app.get("/me/profile")
 def me_profile(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    return get_public_user_profile(user.id, user, db)
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
+    return _owner_profile(db, user)
+
+
+@app.patch("/me/profile")
+def patch_me_profile(payload: ProfilePatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
+    row = db.get(AppUser, user.id)
+    if row is None:
+        raise HTTPException(404, "User not found")
+    if payload.username is not None:
+        username = payload.username.strip().lower()
+        if not re.fullmatch(r"[a-z0-9._]{3,40}", username):
+            raise HTTPException(status_code=422, detail={"reason": "invalid_username"})
+        conflict = db.query(AppUser.id).filter(func.lower(AppUser.username) == username, AppUser.id != row.id).first()
+        if conflict:
+            raise HTTPException(status_code=409, detail={"reason": "username_already_used"})
+        row.username = username
+    if payload.display_name is not None:
+        display_name = payload.display_name.strip()
+        if not display_name:
+            raise HTTPException(status_code=422, detail={"reason": "invalid_display_name"})
+        row.display_name = display_name
+    if payload.avatar_url is not None:
+        value = payload.avatar_url.strip()
+        if value and not _is_safe_public_url(value):
+            raise HTTPException(status_code=422, detail={"reason": "invalid_avatar_url"})
+        row.avatar_url = value or None
+    if payload.bio is not None:
+        row.bio = payload.bio.strip() or None
+    if payload.city is not None:
+        row.city = payload.city.strip() or None
+    row.updated_at = now_utc()
+    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role="USER", action="user.profile.update", entity_type="app_user", entity_id=user.id, event_id=None, bar_id=None, payload={"fields": sorted(payload.model_fields_set)})
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"reason": "username_already_used"})
+    db.refresh(row)
+    return _owner_profile(db, row)
+
+
+@app.patch("/me/privacy")
+def patch_me_privacy(payload: ProfilePrivacyPatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
+    privacy = _profile_privacy(db, user.id)
+    db.add(privacy)
+    mapping = {
+        "profile": "visibility", "photo": "photo_visibility", "bio": "bio_visibility",
+        "affiliations": "affiliations_visibility", "badges": "badges_visibility",
+        "event_history": "event_history_visibility", "participations": "participations_visibility",
+        "gamification": "gamification_visibility", "event_history_opt_in": "event_history_opt_in",
+        "participations_opt_in": "participations_opt_in", "gamification_opt_in": "gamification_opt_in",
+    }
+    for field in payload.model_fields_set:
+        value = getattr(payload, field)
+        if value is None:
+            raise HTTPException(status_code=422, detail={"reason": "null_privacy_value", "field": field})
+        setattr(privacy, mapping[field], value)
+    privacy.updated_at = now_utc()
+    user.updated_at = now_utc()
+    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role="USER", action="user.privacy.update", entity_type="app_user_privacy", entity_id=user.id, event_id=None, bar_id=None, payload={"fields": sorted(payload.model_fields_set)})
+    db.commit()
+    return _owner_profile(db, user)
+
+
+@app.get("/me/affiliations")
+def my_affiliations(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
+    return {"items": [_affiliation_payload(row, org) for row, org in _profile_affiliations(db, user.id)]}
+
+
+@app.get("/me/capabilities")
+def my_capabilities(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.is_guest:
+        return {"user_id": user.id, "global_roles": [], "structures": [], "events": [], "bars": [], "modes": {"organizer": False, "bar": False}, "evaluated_at": _serialize_dt(now_utc())}
+    return _effective_capabilities(db, user)
+
+
+@app.get("/me/profile/preview")
+def preview_my_profile(
+    as_viewer: Literal["PUBLIC", "TORE_USER", "OWNER"] = Query(default="PUBLIC", alias="as"),
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
+    try:
+        return {"visible": True, "profile": _serialize_profile(db, target=user, viewer=user, forced_viewer_kind=as_viewer)}
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return {"visible": False, "profile": None, "viewer_context": as_viewer}
+        raise
+
+
+@app.post("/affiliations/{affiliation_id}/revoke")
+def revoke_affiliation(
+    affiliation_id: int,
+    payload: AffiliationRevokeIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.get(OrganizationMembership, affiliation_id)
+    if row is None:
+        raise HTTPException(404, "Affiliation not found")
+    actor = _membership_for(db, org_id=row.organization_id, user_id=user.id)
+    global_role = (user.global_role or "USER").upper()
+    if global_role not in {"ADMIN", "SUPPORT"}:
+        if actor is None or (actor.role or "MEMBER").upper() not in {"OWNER", "PRESIDENT", "MANAGER"}:
+            raise HTTPException(status_code=403, detail={"reason": "forbidden"})
+        if (row.role or "MEMBER").upper() == "OWNER":
+            raise HTTPException(status_code=400, detail={"reason": "cannot_revoke_owner"})
+    now = now_utc()
+    row.status = "REVOKED"
+    row.revoked_at = now
+    row.revoked_by_user_id = user.id
+    row.revoke_reason = payload.reason.strip()
+    row.ends_at = row.ends_at or now
+    row.updated_at = now
+    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=global_role, action="organization.affiliation.revoke", entity_type="organization_membership", entity_id=str(row.id), event_id=None, bar_id=None, payload={"organization_id": row.organization_id, "reason": payload.reason.strip()})
+    db.commit()
+    return {"affiliation": _affiliation_payload(row, db.get(Organization, row.organization_id)), "capabilities_effective_immediately": True}
 
 
 @app.put("/me/profile")
 def put_me_profile(payload: MeProfilePutIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    if user.is_guest:
+        raise HTTPException(status_code=403, detail={"reason": "registered_account_required"})
     key = ensure_idempotency_key(idempotency_key)
     action = "me_profile_put"
     idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)

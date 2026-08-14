@@ -44,7 +44,7 @@ class AuthRepository {
       return await getMe();
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
-      if (statusCode == 401 || statusCode == 403) return null;
+      if (statusCode == 401) return null;
       rethrow;
     }
   }
@@ -130,7 +130,6 @@ class AuthRepository {
     String? bio,
     String? visibility,
     bool? showIdentityInBar,
-    AccountMode? accountMode,
   }) async {
     final payload = <String, dynamic>{
       if (displayName != null) 'display_name': displayName,
@@ -143,7 +142,6 @@ class AuthRepository {
       if (bio != null) 'bio': bio,
       if (visibility != null) 'visibility': visibility,
       if (showIdentityInBar != null) 'show_identity_in_bar': showIdentityInBar,
-      if (accountMode != null) 'account_mode': accountModeToJson(accountMode),
     };
 
     final r = await api.dio.patch(ApiEndpoints.authMe, data: payload);

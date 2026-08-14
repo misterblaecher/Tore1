@@ -37,11 +37,8 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    final shouldSkipAuth = err.requestOptions.extra['skipAuth'] == true;
-    final isUnauthorized = err.response?.statusCode == 401;
-    if (!shouldSkipAuth && isUnauthorized) {
-      await tokenStorage.clearAuthToken();
-    }
+    // Session refresh and final invalidation are centralized in ApiClient.
+    // Clearing here would erase the refresh token before rotation can run.
     handler.next(err);
   }
 }

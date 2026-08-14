@@ -15,6 +15,12 @@ class ApiEndpoints {
   static const authRefresh = '/auth/refresh';
   static const authUpgradeGuest = '/auth/upgrade_guest';
   static const authRoleRequestUpgrade = '/auth/role/request-upgrade';
+  static const meProfile = '/me/profile';
+  static const mePrivacy = '/me/privacy';
+  static const meAffiliations = '/me/affiliations';
+  static const meCapabilities = '/me/capabilities';
+  static const meProfilePreview = '/me/profile/preview';
+  static String profile(String userId) => '/profiles/$userId';
 
   // ✅ Polymarket
   static String eventMenu(int eventId) => '/events/$eventId/menu';

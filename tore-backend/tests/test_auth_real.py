@@ -418,6 +418,10 @@ def test_profile_patch_persists_bio_and_tore_users_visibility():
     assert guest.status_code == 200
     token = guest.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
+    with get_session() as db:
+        row = db.query(AppUser).filter(AppUser.display_name == "Profil MVP").one()
+        row.is_guest = False
+        db.commit()
 
     patched = client.patch(
         "/auth/me",

@@ -5,6 +5,7 @@ import secrets
 from db import Base, engine, get_session
 from main import app
 from models import (
+    AppUser,
     AppUserPrivacySetting,
     AuditLog,
     Bar,
@@ -63,6 +64,10 @@ def test_auth_me_patch_privacy_and_audit_contract():
 
     guest = client.post('/auth/guest', json={'display_name': 'Alice'})
     token = guest.json()['token']
+    with get_session() as s:
+        row = s.get(AppUser, guest.json()['user']['id'])
+        row.is_guest = False
+        s.commit()
 
     patched = client.patch(
         '/auth/me',
@@ -102,6 +107,8 @@ def test_mode_c_flow_smoke_with_entry_and_exports():
 
     s = get_session()
     try:
+        user = s.get(AppUser, user_id)
+        user.is_guest = False
         s.add(EventStaff(event_id=event_id, user_id=user_id, role='admin', is_active=True))
         s.commit()
     finally:

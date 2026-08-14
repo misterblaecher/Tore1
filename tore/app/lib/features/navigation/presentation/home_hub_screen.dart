@@ -18,7 +18,7 @@ import 'package:tore/features/ticker/ticker_providers.dart';
 import 'package:tore/features/wallet/presentation/wallet_screen.dart';
 import 'package:tore/features/map_calendar/presentation/calendar_screen.dart';
 import 'package:tore/state.dart';
-import 'package:tore/core/auth/auth_models.dart';
+import 'package:tore/features/profile/presentation/profile_providers.dart';
 import 'package:tore/ui/components/components.dart'
     show ToreChip, ToreChipVariant, ToreDivider;
 import 'package:tore/shared/utils/write_gate.dart';
@@ -46,8 +46,9 @@ class HomeHubScreen extends ConsumerWidget {
         .maybeWhen(data: (m) => m, orElse: () => const <String, dynamic>{});
     final committeesModule = modules['committee_os'] == true;
     final glossaryModule = modules['folklore_glossary'] == true;
-    final me = ref.watch(meProvider).valueOrNull;
-    final accountMode = me?.accountMode ?? AccountMode.user;
+    final capabilities = ref.watch(effectiveCapabilitiesProvider).valueOrNull;
+    final canOrganize = capabilities?.canUseOrganizerMode == true;
+    final canUseBar = capabilities?.canUseBarMode == true;
 
     final menuOn = config?.menuEnabled ?? false;
     final walletOn = config?.walletEnabled ?? false;
@@ -102,7 +103,7 @@ class HomeHubScreen extends ConsumerWidget {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (accountMode == AccountMode.organizer)
+          if (canOrganize)
             FloatingActionButton.extended(
               heroTag: 'create-event-fab',
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(
@@ -162,15 +163,14 @@ class HomeHubScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const ds.SectionTitle('Mode soirée'),
-                Text('Mode actif: ${accountMode.name}',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const Text('Accès vérifiés par TORÈ',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                if (accountMode == AccountMode.user)
+                if (!canOrganize && !canUseBar)
                   const Text('Découvrir et participer aux events.'),
-                if (accountMode == AccountMode.organizer)
+                if (canOrganize)
                   const Text("Créer et gérer des events depuis l'app."),
-                if (accountMode == AccountMode.team)
-                  const Text('Scanner QR et gérer les check-ins.'),
+                if (canUseBar) const Text('Scanner QR et gérer les check-ins.'),
               ],
             ),
           ),
@@ -191,7 +191,7 @@ class HomeHubScreen extends ConsumerWidget {
                 ],
               ),
             ),
-          if (accountMode == AccountMode.organizer)
+          if (canOrganize)
             _ModuleCard(
               icon: Icons.event,
               title: 'Mes events',
@@ -199,7 +199,7 @@ class HomeHubScreen extends ConsumerWidget {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const SoireeOpsScreen(organizerMode: true))),
             ),
-          if (accountMode == AccountMode.organizer)
+          if (canOrganize)
             _ModuleCard(
               icon: Icons.add_circle_outline,
               title: 'Créer un event',
@@ -207,7 +207,7 @@ class HomeHubScreen extends ConsumerWidget {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const SoireeOpsScreen(organizerMode: true))),
             ),
-          if (accountMode == AccountMode.team)
+          if (canUseBar)
             _ModuleCard(
               icon: Icons.qr_code_scanner_outlined,
               title: 'Scanner QR (check-in)',

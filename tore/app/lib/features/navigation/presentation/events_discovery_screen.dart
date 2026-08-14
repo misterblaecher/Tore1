@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/auth/auth_models.dart';
 import '../../../core/auth/providers.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../../../state.dart';
 import '../../../ui/app_design_system.dart';
 import '../../../shared/widgets/ui_fallbacks.dart';
@@ -21,9 +21,12 @@ class _EventsDiscoveryScreenState extends ConsumerState<EventsDiscoveryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final me = ref.watch(meProvider).valueOrNull;
     final session = ref.watch(authSessionProvider);
-    final organizer = me?.accountMode == AccountMode.organizer;
+    final organizer = ref
+            .watch(effectiveCapabilitiesProvider)
+            .valueOrNull
+            ?.canUseOrganizerMode ==
+        true;
     final api = ref.read(apiProvider);
 
     return Scaffold(

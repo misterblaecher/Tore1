@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session
 from main import app
-from models import AuditLog, OrganizationMembership
+from models import AppUser, AuditLog, OrganizationMembership
 
 client = TestClient(app)
 
@@ -54,6 +54,11 @@ def test_follow_unfollow_and_profile_idempotency_with_audit():
     user_token = _guest('profile-user')
     owner = _guest('org-owner')
     org_id = _create_orga(owner)
+    with get_session() as s:
+        user_id = client.get('/auth/me', headers={'Authorization': f'Bearer {user_token}'}).json()['id']
+        row = s.get(AppUser, user_id)
+        row.is_guest = False
+        s.commit()
 
     follow1 = client.post(f'/orgas/{org_id}/follow', headers={'Authorization': f'Bearer {user_token}', 'Idempotency-Key': 'follow-1'})
     follow2 = client.post(f'/orgas/{org_id}/follow', headers={'Authorization': f'Bearer {user_token}', 'Idempotency-Key': 'follow-1'})

@@ -27,7 +27,7 @@ def test_public_content_migration_preserves_legacy_rows(tmp_path: Path, monkeypa
         )
 
     command.stamp(config, "0006_music_committee_v1_tables")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0007_public_content_branding")
     columns = {column["name"] for column in inspect(engine).get_columns("events")}
     assert {"banner_url", "capacity", "currency", "access_type"}.issubset(columns)
     with engine.connect() as connection:

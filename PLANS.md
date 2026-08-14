@@ -217,3 +217,53 @@ Chaque section a son niveau propre. `PRIVATE` autorise uniquement le propriétai
 - Bar : `PartnerBarAccess`/`PartnerMembership` restent l'autorité; `owner|manager` ouvre la gestion Bar et `staff|bartender` une capacité staff, uniquement si le partenaire est explicitement relié au même `AppUser`.
 
 Les rôles temporaires expirés et les affiliations révoquées sont filtrés au moment de calculer les capacités. Aucune capacité n'est embarquée durablement dans le token : une révocation devient donc effective à la requête suivante.
+
+## Lot 3 — réalisation et validation finale
+
+### Convergence livrée
+
+- `AppUser` reste l'identité TORÈ unique. Il porte désormais pseudo unique, ville, mise à jour, statut de compte, rôle global administré et distinction explicite invité/compte enregistré.
+- `AppUserPrivacySetting` est la source des niveaux de visibilité par section. Tout profil ancien ou toute valeur inconnue migre vers `PRIVATE`.
+- `OrganizationMembership` est l'affiliation canonique : mandat, dates, visibilité, origine/validateur et révocation auditée. Les anciennes chaînes libres restent `LEGACY`, privées et non autorisantes.
+- `EventStaff` reste la source des rôles Event et reçoit une expiration. L'autorité Bar existante est préservée via un pont nullable validé entre `PartnerUser` et `AppUser`.
+- `account_mode` reste lisible pour rétrocompatibilité mais ne prouve plus aucune permission. Les modes ORGA/BAR actifs proviennent exclusivement des capabilities recalculées par le serveur.
+
+### Migration et contrats
+
+La migration additive `0008_unified_profile_affiliations` étend les tables existantes sans en créer un système parallèle. Elle est idempotente face à la baseline historique, garde les anciens profils privés, ne transforme aucun intitulé libre en rôle et possède un downgrade testé vers `0007_public_content_branding`.
+
+Endpoints ajoutés ou normalisés :
+
+- `GET /me/profile`, `PATCH /me/profile`, `PATCH /me/privacy` ;
+- `GET /profiles/{user_id}` et compatibilité contextuelle de `GET /users/{user_id}` ;
+- `GET /me/affiliations`, `GET /me/capabilities` ;
+- `GET /me/profile/preview?as=PUBLIC|TORE_USER|OWNER` ;
+- `POST /affiliations/{affiliation_id}/revoke` ;
+- workflows Organization existants réutilisés pour invitation, demande, approbation et adhésion selon la politique de la structure.
+
+Les payloads profil refusent tout champ inconnu, notamment rôles, admin, capabilities et affiliations. Les changements de profil/confidentialité et révocations produisent un `AuditLog` sans donnée d'authentification.
+
+### Visibilité exacte
+
+Le profil général est le premier verrou; chaque section ne peut qu'être aussi restrictive ou davantage. `PUBLIC` autorise l'anonyme, `TORE_USERS` un compte TORÈ authentifié non invité, `PRIVATE` uniquement propriétaire et `SUPPORT`/`ADMIN`. Photo, bio, affiliations, badges, historique, participations et gamification sont privés par défaut. Historique, participations et gamification exigent en plus leur opt-in. Un historique visible ne publie aux tiers que des événements eux-mêmes `PUBLIC` et `PUBLISHED`. Une affiliation publique doit être `ACTIVE`, non révoquée et explicitement visible. Les réponses contextuelles n'exposent jamais email, téléphone, adresse, token, paiement, modération ou sécurité.
+
+### Flutter et sécurité locale
+
+Le Profil V2 actif couvre invité, session expirée, chargement, erreur, profil minimal/complet, édition persistée, conflit de pseudo, confidentialité, aperçu serveur, affiliations, cache daté et rôles réels. Les sections XP, victoires, classements, badges et gamification sont absentes faute de données réelles. Home et Discovery consomment le provider de capabilities serveur.
+
+Les tokens ont migré de `SharedPreferences` vers `flutter_secure_storage`; les anciennes clés sont supprimées. Les caches public, owner, capabilities et affiliations sont séparés; les trois espaces privés sont namespacés par user ID et purgés au logout ou après échec de refresh. Une capability relue offline ne peut jamais rouvrir un mode opérationnel.
+
+### Résultats au 13 août 2026
+
+- Checkpoint Lots 1–2 : commit local `cfea0e2` (`feat: checkpoint TORÈ lots 1 et 2`), non poussé.
+- Backend complet : 353 tests réussis. Les avertissements sont les dépréciations historiques FastAPI `on_event` et `datetime.utcnow()`.
+- Flutter : `dart format lib test`, `flutter analyze` sans problème et 141 tests réussis.
+- Migration : base neuve jusqu'à `0008_unified_profile_affiliations`, montée depuis `0007` avec profil/affiliation legacy, valeur inconnue conservatrice, et downgrade vers `0007` réussis.
+- Android : `app-dev-debug.apk` et `app-prod-debug.apk` générés, tous deux ignorés par Git.
+- iOS : identifiants préparés dans `BundleIdentifiers.xcconfig` (`com.example.mobile.dev` / `com.example.mobile`). L'identifiant production `be.tore.app` reste à confirmer et réserver dans Apple Developer. Aucun build iOS n'est déclaré depuis Windows.
+
+### Dette et prochain lot
+
+Le backend demeure un monolithe et conserve les anciennes routes `account_mode`/role-upgrade uniquement pour compatibilité; elles devront être dépréciées puis supprimées après migration de tous les consommateurs. `CommitteeMembership` ne peut pas encore converger automatiquement sans lien fiable Committee↔Organization. Le singleton Flutter `ApiClient` complique toujours l'isolation des tests. Les warnings de dates UTC et de lifespan sont historiques.
+
+Prochain lot recommandé : surfaces ORGA/BAR minimales pilotées par `/me/capabilities`, avec navigation refusée par défaut, revalidation serveur à chaque écriture, acceptation d'invitations app→Event/Bar, et aucun dashboard complet avant stabilisation de ces contrats.

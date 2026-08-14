@@ -7,6 +7,7 @@ import 'api_exception.dart';
 import 'auth_interceptor.dart';
 import 'retry_interceptor.dart';
 import 'token_storage.dart';
+import '../../shared/cache/cache_store.dart';
 
 class ApiClient {
   static ApiClient? _instance;
@@ -57,6 +58,7 @@ class ApiClient {
               debugPrint(
                   '[auth][401] no token in storage -> keep session, propagate unauthenticated error');
             }
+            await _instance?._clearSessionOnce();
             handler.next(e);
             return;
           }
@@ -98,8 +100,8 @@ class ApiClient {
       dio.interceptors.add(
         LogInterceptor(
           requestHeader: false,
-          requestBody: true,
-          responseBody: true,
+          requestBody: false,
+          responseBody: false,
         ),
       );
     }
@@ -159,6 +161,7 @@ class ApiClient {
         debugPrint(
             '[auth][refresh] failed -> clear session and notify unauthenticated');
       await tokenStorage.clearAuthToken();
+      await CacheStore().clearAllPrivate();
       AuthStateSignal.instance.notifyUnauthenticated();
     } finally {
       _isClearingSession = false;

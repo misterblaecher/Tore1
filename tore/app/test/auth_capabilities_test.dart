@@ -1,23 +1,38 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tore/core/auth/auth_models.dart';
+import 'package:tore/features/profile/domain/profile_models.dart';
 
 void main() {
-  AppUser userWithMode(String mode) => AppUser.fromJson({
-        'id': 'user-1',
-        'display_name': 'Alex',
-        'account_mode': mode,
-      });
+  test('account_mode is not treated as an authorization capability', () {
+    final legacy = AppUser.fromJson({
+      'id': 'user-1',
+      'display_name': 'Alex',
+      'account_mode': 'organizer',
+    });
+    expect(legacy.accountMode, AccountMode.organizer);
 
-  test('mode capabilities are derived from the server account mode', () {
-    final user = userWithMode('user');
-    final organizer = userWithMode('organizer');
-    final team = userWithMode('team');
+    final capabilities = EffectiveCapabilities.fromJson({
+      'global_roles': ['USER'],
+      'structures': [],
+      'events': [],
+      'bars': [],
+      'modes': {'organizer': false, 'bar': false},
+    });
+    expect(capabilities.canUseOrganizerMode, isFalse);
+    expect(capabilities.canUseBarMode, isFalse);
+  });
 
-    expect(user.canUseOrganizerMode, isFalse);
-    expect(user.canUseBarMode, isFalse);
-    expect(organizer.canUseOrganizerMode, isTrue);
-    expect(organizer.canUseBarMode, isFalse);
-    expect(team.canUseOrganizerMode, isFalse);
-    expect(team.canUseBarMode, isTrue);
+  test('mode access is read from the effective capabilities endpoint', () {
+    final capabilities = EffectiveCapabilities.fromJson({
+      'global_roles': ['USER'],
+      'structures': [
+        {'organization_id': 7, 'role': 'OWNER', 'can_manage': true}
+      ],
+      'events': [],
+      'bars': [],
+      'modes': {'organizer': true, 'bar': false},
+    });
+    expect(capabilities.canUseOrganizerMode, isTrue);
+    expect(capabilities.canUseBarMode, isFalse);
   });
 }

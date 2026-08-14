@@ -10,6 +10,7 @@ import 'auth_state_signal.dart';
 import '../network/api_endpoints.dart';
 import '../network/providers.dart';
 import '../network/token_storage.dart';
+import '../../shared/cache/cache_store.dart';
 import 'auth_models.dart';
 import 'auth_repository.dart';
 
@@ -48,11 +49,12 @@ class AuthSessionState {
 }
 
 class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
-  AuthSessionNotifier(this.ref) : super(const AuthSessionState.unknown()) {
+  AuthSessionNotifier(this.ref, {bool autoBootstrap = true})
+      : super(const AuthSessionState.unknown()) {
     _signalSub = AuthStateSignal.instance.onUnauthenticated.listen((_) {
       markUnauthenticated();
     });
-    bootstrap();
+    if (autoBootstrap) bootstrap();
   }
 
   final Ref ref;
@@ -83,7 +85,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
           onTimeout: () => throw TimeoutException('auth bootstrap timeout'));
       if (me == null) {
         debugPrint('[auth][bootstrap] /auth/me unauthenticated');
-        state = const AuthSessionState.unauthenticated();
+        await markUnauthenticated();
       } else {
         debugPrint('[auth][bootstrap] /auth/me ok');
         state = AuthSessionState.authenticated(me);
@@ -167,6 +169,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
   Future<void> logout() async {
     final guestId = await _storage.readGuestDeviceId();
     await _storage.clear();
+    await CacheStore().clearAllPrivate();
     if (guestId != null && guestId.isNotEmpty) {
       await _storage.writeGuestDeviceId(guestId);
     }
@@ -176,6 +179,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
   Future<void> markUnauthenticated() async {
     final guestId = await _storage.readGuestDeviceId();
     await _storage.clearAuthToken();
+    await CacheStore().clearAllPrivate();
     if (guestId != null && guestId.isNotEmpty) {
       await _storage.writeGuestDeviceId(guestId);
     }
@@ -188,6 +192,10 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
         accessToken: tokens.accessToken, refreshToken: tokens.refreshToken);
     await _storage.writeGuestModeEnabled(false);
     final me = await _repo.tryMe();
+    if (me == null) {
+      await markUnauthenticated();
+      return;
+    }
     state = AuthSessionState.authenticated(me);
   }
 

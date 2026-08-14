@@ -4,7 +4,7 @@ import secrets
 
 from db import Base, engine, get_session
 from main import app
-from models import AppUserPrivacySetting, Bar, BarPrivacySetting, MenuCategory, MenuItem, Order, PartnerMembership, PartnerUser
+from models import AppUser, AppUserPrivacySetting, Bar, BarPrivacySetting, MenuCategory, MenuItem, Order, PartnerMembership, PartnerUser
 from partner_auth import _make_token
 
 
@@ -39,6 +39,10 @@ def test_order_client_qr_scan_is_idempotent_and_updates_status():
     assert guest.status_code == 200
     user_token = guest.json()['token']
     user_id = guest.json()['user']['id']
+    with get_session() as s:
+        row = s.get(AppUser, user_id)
+        row.is_guest = False
+        s.commit()
 
     order = client.post('/orders', json={
         'bar_id': bar_id,
@@ -83,6 +87,10 @@ def test_identity_consent_requires_bar_and_user_toggle():
     guest = client.post('/auth/guest', json={'display_name': 'Bob'})
     user_token = guest.json()['token']
     user_id = guest.json()['user']['id']
+    with get_session() as s:
+        row = s.get(AppUser, user_id)
+        row.is_guest = False
+        s.commit()
 
     order = client.post('/orders', json={
         'bar_id': bar_id,

@@ -830,6 +830,7 @@ class EventStaff(Base):
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     revoked_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
 
 
 class EventJoin(Base):
@@ -1275,6 +1276,9 @@ class PartnerUser(Base):
     __tablename__ = "partner_users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    app_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("app_users.id"), nullable=True, unique=True, index=True
+    )
 
     # PIN-based partner auth (nom d'affichage + code PIN hashé)
     display_name: Mapped[str] = mapped_column(String(80), index=True, default="")
@@ -1375,10 +1379,13 @@ class AppUser(Base):
     __tablename__ = "app_users"
     id: Mapped[str] = mapped_column(String, primary_key=True)  # uuid string
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
     display_name: Mapped[str] = mapped_column(String, default="")
+    username: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, unique=True, index=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     address_text: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     instagram_handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     profile_visibility: Mapped[str] = mapped_column(String(16), default="PUBLIC", index=True)
@@ -1392,6 +1399,9 @@ class AppUser(Base):
     show_avatar: Mapped[bool] = mapped_column(Boolean, default=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    account_status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    global_role: Mapped[str] = mapped_column(String(16), default="USER", index=True)
+    is_guest: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     anonymized_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
@@ -1896,9 +1906,24 @@ class OrganizationMembership(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
-    role: Mapped[str] = mapped_column(String(16), default="MEMBER", index=True)
+    role: Mapped[str] = mapped_column(String(24), default="MEMBER", index=True)
     status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    mandate_label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE", index=True)
+    validation_source: Mapped[str] = mapped_column(String(32), default="LEGACY", index=True)
+    validated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("app_users.id"), nullable=True, index=True
+    )
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    revoked_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("app_users.id"), nullable=True
+    )
+    revoke_reason: Mapped[Optional[str]] = mapped_column(String(280), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
@@ -2275,8 +2300,18 @@ class AppUserPrivacySetting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
     show_identity_to_staff: Mapped[bool] = mapped_column(Boolean, default=False)
-    visibility: Mapped[str] = mapped_column(String(16), default="public")
+    visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
     show_identity_in_bar: Mapped[bool] = mapped_column(Boolean, default=False)
+    photo_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    bio_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    affiliations_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    badges_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    event_history_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    participations_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    gamification_visibility: Mapped[str] = mapped_column(String(16), default="PRIVATE")
+    event_history_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    participations_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    gamification_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 

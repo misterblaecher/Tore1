@@ -1,1 +1,3 @@
+#include "BundleIdentifiers.xcconfig"
 #include "Generated.xcconfig"
+TORE_BUNDLE_IDENTIFIER=$(TORE_BUNDLE_IDENTIFIER_DEV)

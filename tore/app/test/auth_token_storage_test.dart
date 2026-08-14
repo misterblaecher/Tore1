@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tore/core/network/token_storage.dart';
@@ -8,6 +9,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   test('stores and reads access/refresh tokens', () async {
@@ -40,5 +42,28 @@ void main() {
     await storage.writeGuestDeviceId('guest-uuid-1');
 
     expect(await storage.readGuestDeviceId(), 'guest-uuid-1');
+  });
+
+  test('tokens are never persisted in SharedPreferences', () async {
+    final storage = TokenStorage();
+    await storage.writeTokens(
+        accessToken: 'secure-access', refreshToken: 'secure-refresh');
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('auth_token'), isNull);
+    expect(prefs.getString('auth_refresh_token'), isNull);
+    expect(await storage.readToken(), 'secure-access');
+    expect(await storage.readRefreshToken(), 'secure-refresh');
+  });
+
+  test('legacy SharedPreferences token is migrated and removed', () async {
+    SharedPreferences.setMockInitialValues({'auth_token': 'legacy-access'});
+    FlutterSecureStorage.setMockInitialValues({});
+    final storage = TokenStorage();
+
+    expect(await storage.readToken(), 'legacy-access');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('auth_token'), isNull);
+    expect(await storage.readToken(), 'legacy-access');
   });
 }

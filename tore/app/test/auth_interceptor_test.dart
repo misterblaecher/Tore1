@@ -31,7 +31,7 @@ class _CompletingErrorHandler extends ErrorInterceptorHandler {
 }
 
 void main() {
-  test('clears token on 401 response error', () async {
+  test('leaves 401 refresh and invalidation to ApiClient', () async {
     final storage = _FakeTokenStorage();
     final interceptor = AuthInterceptor(storage);
 
@@ -47,7 +47,7 @@ void main() {
     interceptor.onError(error, handler);
     await handler.completed;
 
-    expect(storage.cleared, isTrue);
+    expect(storage.cleared, isFalse);
   });
 
   test('does not clear token for skipAuth requests', () async {
