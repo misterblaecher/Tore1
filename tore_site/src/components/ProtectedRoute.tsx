@@ -45,7 +45,8 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!isAllowed) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    const loginPath = location.pathname.startsWith('/forum') || location.pathname === '/compte' ? '/forum/login' : '/login';
+    return <Navigate to={loginPath} replace state={{ from: location.pathname + location.search + location.hash }} />;
   }
 
   return <>{children}</>;

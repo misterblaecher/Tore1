@@ -73,8 +73,9 @@ For backward compatibility, `VITE_API_URL` is still supported as fallback.
 
 ## Auth routes
 
-- `/login`: requests email link/OTP via backend `/auth/email/request_link`
-- `/auth/callback`: verifies token via `/auth/email/verify_link`, stores token(s), then calls `/auth/me`
+- `/login`: creates or opens the single TORÈ account with password auth or email OTP via `/auth/email/request_otp`
+- `/compte`: protected account/profile space shared with the Forum
+- `/auth/callback`: verifies an email token via `/auth/email/verify_link`, stores token(s), then calls `/auth/me`
 
 ## How can I deploy this project?
 

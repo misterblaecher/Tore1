@@ -811,7 +811,7 @@ def _build_magic_redirect_url(redirect_url: Optional[str], email: str, code: str
     return parsed._replace(query=query).geturl()
 
 
-def _send_email(subject: str, body: str, to_email: str) -> None:
+def _send_email(subject: str, body: str, to_email: str, reply_to: Optional[str] = None) -> None:
     host = (os.getenv("SMTP_HOST") or "").strip()
     if not host:
         logging.info("email.skip.no_smtp subject=%s to=%s", subject, to_email)
@@ -828,6 +828,8 @@ def _send_email(subject: str, body: str, to_email: str) -> None:
     msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = target
+    if reply_to and "@" in reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(body)
 
     try:
@@ -876,6 +878,14 @@ def _user_snapshot(db: Session, user: AppUser) -> Dict[str, Any]:
         "show_address": user.show_address,
         "show_avatar": user.show_avatar,
         "bio": user.bio or "",
+        "oripeaux": user.oripeaux or "",
+        "username": user.username,
+        "city": user.city,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "nickname": user.nickname,
+        "phone": user.phone,
+        "instagram_handle": user.instagram_handle,
         "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
         "visibility": (settings.visibility if settings and settings.visibility else "public"),
         "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
@@ -1241,6 +1251,15 @@ def _role_rank(role: str) -> int:
 
 
 def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
+    event = db.get(Event, event_id)
+    if event is None or (event.ends_at is not None and event.ends_at <= now_utc()):
+        return "guest"
+    if event.host_type == "user" and event.host_id == user_id:
+        return "admin"
+    if event.host_type == "orga" and str(event.host_id or "").isdigit():
+        membership = _membership_for(db, org_id=int(event.host_id), user_id=user_id)
+        if membership is not None and (membership.role or "").upper() in _STRUCTURE_AUTH_ROLES:
+            return "admin"
     staff = (
         db.query(EventStaff)
         .filter(EventStaff.event_id == event_id, EventStaff.user_id == user_id)
@@ -1254,7 +1273,7 @@ def resolve_event_role(db: Session, user_id: str, event_id: int) -> str:
     ):
         return "guest"
     role = (staff.role or "").lower()
-    if role == "admin":
+    if role in {"admin", "manager"}:
         return "admin"
     if role == "entry":
         return "entry"
@@ -1453,6 +1472,7 @@ class ProfilePatchIn(BaseModel):
     avatar_url: Optional[str] = Field(default=None, max_length=512)
     bio: Optional[str] = Field(default=None, max_length=280)
     city: Optional[str] = Field(default=None, max_length=120)
+    oripeaux: Optional[str] = Field(default=None, max_length=500)
 
 
 class ProfilePrivacyPatchIn(BaseModel):
@@ -2520,6 +2540,8 @@ from app.routers.event_wifi import router as event_wifi_router
 from app.routers.safety_v1 import router as safety_v1_router
 from app.routers.map_calendar import router as map_calendar_router
 from app.routers.account_request import router as account_request_router
+from app.routers.operational_access import router as operational_access_router
+from app.routers.forum import router as forum_router
 app.include_router(orders_router)
 app.include_router(wallet_router)
 app.include_router(analytics_router)
@@ -2542,6 +2564,8 @@ app.include_router(event_wifi_router)
 app.include_router(safety_v1_router)
 app.include_router(map_calendar_router)
 app.include_router(account_request_router)
+app.include_router(operational_access_router)
+app.include_router(forum_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -4452,12 +4476,21 @@ def me(
         return {
             "id": user.id,
             "display_name": user.display_name,
+            "email": user.email,
             "avatar_url": user.avatar_url,
             "address_text": user.address_text,
             "show_address": user.show_address,
             "show_avatar": user.show_avatar,
             "show_identity_to_staff": bool(settings and settings.show_identity_to_staff),
             "bio": user.bio,
+            "oripeaux": user.oripeaux,
+            "username": user.username,
+            "city": user.city,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "nickname": user.nickname,
+            "phone": user.phone,
+            "instagram_handle": user.instagram_handle,
             "visibility": (settings.visibility if settings and settings.visibility else "public"),
             "show_identity_in_bar": bool(settings and (settings.show_identity_in_bar or settings.show_identity_to_staff)),
             "bar_show_identity_to_staff": (
@@ -11489,6 +11522,7 @@ class MeProfilePutIn(BaseModel):
     photo_url: Optional[str] = Field(default=None, max_length=512)
     bio: Optional[str] = Field(default=None, max_length=2000)
     instagram_handle: Optional[str] = Field(default=None, max_length=64)
+    oripeaux: Optional[str] = Field(default=None, max_length=500)
     visibility: Literal["PUBLIC", "PRIVATE"] = "PUBLIC"
 
 
@@ -13064,6 +13098,17 @@ def _serialize_profile(
         "updated_at": _serialize_dt(target.updated_at),
         "viewer_context": kind,
     }
+    if kind == "OWNER":
+        result.update({
+            "email": target.email,
+            "first_name": target.first_name,
+            "last_name": target.last_name,
+            "nickname": target.nickname,
+            "phone": target.phone,
+            "instagram_handle": target.instagram_handle,
+            "address_text": target.address_text,
+            "oripeaux": target.oripeaux or "",
+        })
     if _can_see(privacy.photo_visibility, kind):
         result["avatar_url"] = target.avatar_url
     if _can_see(privacy.bio_visibility, kind):
@@ -13121,69 +13166,9 @@ def _owner_profile(db: Session, user: AppUser) -> dict[str, Any]:
 
 
 def _effective_capabilities(db: Session, user: AppUser) -> dict[str, Any]:
-    now = now_utc()
-    global_role = (user.global_role or "USER").upper()
-    if global_role not in {"USER", "SUPPORT", "ADMIN"}:
-        global_role = "USER"
-    global_roles = ["USER"] if global_role == "USER" else ["USER", global_role]
-    memberships = db.query(OrganizationMembership).filter(
-        OrganizationMembership.user_id == user.id,
-        OrganizationMembership.status == "ACTIVE",
-        OrganizationMembership.revoked_at.is_(None),
-        or_(OrganizationMembership.starts_at.is_(None), OrganizationMembership.starts_at <= now),
-        or_(OrganizationMembership.ends_at.is_(None), OrganizationMembership.ends_at > now),
-    ).all()
-    structures = [
-        {
-            "organization_id": row.organization_id,
-            "role": (row.role or "MEMBER").upper(),
-            "can_manage": (row.role or "MEMBER").upper() in _STRUCTURE_AUTH_ROLES,
-            "expires_at": _serialize_dt(row.ends_at),
-        }
-        for row in memberships
-    ]
-    staff_rows = db.query(EventStaff).filter(
-        EventStaff.user_id == user.id,
-        EventStaff.is_active == True,  # noqa: E712
-        EventStaff.revoked_at.is_(None),
-        or_(EventStaff.expires_at.is_(None), EventStaff.expires_at > now),
-    ).all()
-    event_role_map = {"admin": "EVENT_MANAGER", "manager": "EVENT_MANAGER", "entry": "ENTRY_STAFF", "bar": "BAR_STAFF"}
-    events = [
-        {
-            "event_id": row.event_id,
-            "role": event_role_map.get((row.role or "").lower(), "EVENT_STAFF"),
-            "expires_at": _serialize_dt(row.expires_at),
-        }
-        for row in staff_rows
-    ]
-    hosted_events = db.query(Event).filter(Event.host_type == "user", Event.host_id == user.id).all()
-    events.extend({"event_id": event.id, "role": "EVENT_MANAGER", "expires_at": None} for event in hosted_events)
+    from app.services.operational_access_service import effective_capabilities_payload
 
-    partner = db.query(PartnerUser).filter(PartnerUser.app_user_id == user.id, PartnerUser.is_active == True).first()  # noqa: E712
-    bars: list[dict[str, Any]] = []
-    if partner is not None:
-        seen: set[int] = set()
-        accesses = db.query(PartnerBarAccess).filter(PartnerBarAccess.partner_user_id == partner.id, PartnerBarAccess.is_active == True).all()  # noqa: E712
-        for access in accesses:
-            bars.append({"bar_id": access.bar_id, "role": (access.role or "staff").upper()})
-            seen.add(access.bar_id)
-        legacy_memberships = db.query(PartnerMembership).filter(PartnerMembership.user_id == partner.id).all()
-        for membership in legacy_memberships:
-            if membership.bar_id not in seen:
-                bars.append({"bar_id": membership.bar_id, "role": (membership.role or "bartender").upper()})
-
-    can_orga = global_role in {"ADMIN", "SUPPORT"} or any(item["can_manage"] for item in structures) or any(item["role"] == "EVENT_MANAGER" for item in events)
-    can_bar = global_role in {"ADMIN", "SUPPORT"} or bool(bars) or any(item["role"] == "BAR_STAFF" for item in events)
-    return {
-        "user_id": user.id,
-        "global_roles": global_roles,
-        "structures": structures,
-        "events": events,
-        "bars": bars,
-        "modes": {"organizer": can_orga, "bar": can_bar},
-        "evaluated_at": _serialize_dt(now),
-    }
+    return effective_capabilities_payload(db, user)
 
 
 @app.get("/profiles/{user_id}")
@@ -13243,6 +13228,8 @@ def patch_me_profile(payload: ProfilePatchIn, user: AppUser = Depends(get_curren
         row.bio = payload.bio.strip() or None
     if payload.city is not None:
         row.city = payload.city.strip() or None
+    if payload.oripeaux is not None:
+        row.oripeaux = payload.oripeaux.strip() or None
     row.updated_at = now_utc()
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role="USER", action="user.profile.update", entity_type="app_user", entity_id=user.id, event_id=None, bar_id=None, payload={"fields": sorted(payload.model_fields_set)})
     try:
@@ -13289,7 +13276,7 @@ def my_affiliations(user: AppUser = Depends(get_current_user), db: Session = Dep
 @app.get("/me/capabilities")
 def my_capabilities(user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     if user.is_guest:
-        return {"user_id": user.id, "global_roles": [], "structures": [], "events": [], "bars": [], "modes": {"organizer": False, "bar": False}, "evaluated_at": _serialize_dt(now_utc())}
+        return {"user_id": user.id, "global_roles": [], "structures": [], "events": [], "bars": [], "capabilities": [], "modes": {"organizer": False, "bar": False}, "evaluated_at": _serialize_dt(now_utc()), "cache_ttl_seconds": 0}
     return _effective_capabilities(db, user)
 
 
@@ -13356,6 +13343,8 @@ def put_me_profile(payload: MeProfilePutIn, user: AppUser = Depends(get_current_
     row.avatar_url = (payload.photo_url or "").strip() or None
     row.bio = (payload.bio or "").strip() or None
     row.instagram_handle = (payload.instagram_handle or "").strip() or None
+    if payload.oripeaux is not None:
+        row.oripeaux = payload.oripeaux.strip() or None
     row.profile_visibility = payload.visibility
     response = {
         "id": row.id,
@@ -13363,6 +13352,7 @@ def put_me_profile(payload: MeProfilePutIn, user: AppUser = Depends(get_current_
         "photo_url": row.avatar_url,
         "bio": row.bio,
         "instagram_handle": row.instagram_handle,
+        "oripeaux": row.oripeaux,
         "visibility": row.profile_visibility,
     }
     db.add(OrganizationWriteIdempotency(actor_user_id=user.id, action=action, idempotency_key=key, response_json=response))

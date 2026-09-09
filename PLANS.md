@@ -267,3 +267,62 @@ Les tokens ont migré de `SharedPreferences` vers `flutter_secure_storage`; les 
 Le backend demeure un monolithe et conserve les anciennes routes `account_mode`/role-upgrade uniquement pour compatibilité; elles devront être dépréciées puis supprimées après migration de tous les consommateurs. `CommitteeMembership` ne peut pas encore converger automatiquement sans lien fiable Committee↔Organization. Le singleton Flutter `ApiClient` complique toujours l'isolation des tests. Les warnings de dates UTC et de lifespan sont historiques.
 
 Prochain lot recommandé : surfaces ORGA/BAR minimales pilotées par `/me/capabilities`, avec navigation refusée par défaut, revalidation serveur à chaque écriture, acceptation d'invitations app→Event/Bar, et aucun dashboard complet avant stabilisation de ces contrats.
+
+## Lot 4 — audit opérationnel avant schéma
+
+Audit établi le 14 août 2026 après le checkpoint Lot 3 `5116675`. Le Lot 4 réutilise les autorités existantes et ne crée ni second registre de staff, ni seconde table de commandes.
+
+| Domaine | Existant | Autorité | Réutilisable | Manquant / risque | Décision Lot 4 |
+|---|---|---|---|---|---|
+| Staff Event | `EventStaff`, rôles `admin/manager/entry/bar/helper`, révocation et expiration | Session AppUser + ligne Event scopée | Oui, table canonique | Le resolver historique ignore `manager` et l'hôte; événement terminé encore visible | Centraliser le calcul d'actions Event, filtrer expiration/révocation/fin d'Event et garder `EventStaff` comme seul droit opérationnel. |
+| Invitations Event principales | `EventStaffInviteCode`, idempotence, expiration, rotation et audit | Hôte Event / responsable de structure | Oui, même table et même workflow | Code brut, non ciblé, réutilisable, statut `ACTIVE` trop pauvre | Étendre additivement la table avec hash, cible, actions, acceptation et usage unique. Les routes legacy restent compatibles mais ne servent pas au nouveau parcours sécurisé. |
+| Invitations/QR historiques | `StaffInviteToken`, `EventQrToken`, codes backup hashés | Staff/admin Partner ou App | Partiel | `StaffInviteToken` stocke le brut; systèmes plus anciens et multi-usages | Classer `StaffInviteToken` legacy. Réutiliser le hashing des backup codes et ne jamais journaliser le token du nouveau parcours. |
+| Entrée | `EventStaff`, `/events/{id}/entry/checkin`, compteurs/logs, idempotence et audit | Backend Event + feature `entry_enabled` | Oui | L'ancien écran met les scans en queue et affiche `PENDING SYNC`; context global non autorisant | Réutiliser le service/check-in réel, imposer l'Event du contexte validé et bloquer totalement les scans offline dans le parcours Lot 4. |
+| Anti-double scan | `EntryLog` par idempotency key, `EntryScanLog` par hash/scan ID, suppression locale courte | Backend | Oui | Plusieurs endpoints historiques | Le hub Lot 4 appelle le check-in idempotent existant; double détection locale et décision serveur restent cumulées. |
+| Accès Bar | `PartnerUser`, `PartnerBarAccess`, `PartnerMembership`, pont `app_user_id` | Auth Partner + lien AppUser explicite | Oui | Validité, source, actions, statut et révocation absents de `PartnerBarAccess` | Étendre `PartnerBarAccess`; conserver `PartnerMembership` comme source legacy compatible et non modifiable depuis le profil. |
+| Invitations Bar | `PartnerInvite` | Portail Partner | Partiel | Pas de claim sécurisé AppUser et aucun besoin minimal si un accès relié existe déjà | Ne pas créer un second workflow dans ce lot. Le parcours mobile exige un `PartnerUser.app_user_id` et un accès Bar actif existant. |
+| Commandes | `Order`, `OrderStatusTransitionIdempotency`, services Orders et routes Partner | Bar de la commande + rôle Partner | Oui | Aucune route AppUser bridgée; transition idempotente enfermée dans le router Partner | Extraire/réutiliser la transition idempotente et exposer des routes AppUser strictement scopées au Bar autorisé. |
+| Isolation commandes | `_assert_order_bar_access`, `patch_order_status` | `order.bar_id == bar autorisé` | Oui | Preuve actuellement liée au token Partner | Réutiliser la même comparaison côté service avec capability AppUser recalculée; l'ID fourni ne suffit jamais. |
+| Capabilities | `/me/capabilities` Lot 3 | Backend à chaque requête | Oui | Réponse par rôles, actions et origine incomplètes; Event terminé non filtré | Ajouter une liste uniforme de capabilities stables et scopées, garder les agrégats `events/bars/structures` pour compatibilité. |
+| Contextes Flutter | `AppContextController` et quelques caches rebuild | Sélection locale | Partiel | Clés globales, non namespacées, restauration sans revalidation | Créer un contexte opérationnel user-namespacé; la sélection n'accorde jamais un droit et disparaît au logout/révocation. |
+| Modes/guards Flutter | capabilities Lot 3, anciens `RouteGuards` rebuild | Mélange serveur/client | Partiel | Rebuild contient fixtures et `account_mode`; pas adapté au shell actif | Nouveau guard pur deny-by-default fondé sur capability+scope. Ne pas réactiver le rebuild/showcase. |
+| Deep links/QR | parser, resolver, scanner gate, routes rebuild | Payload puis backend | Partiel | Paramètres route/ID pourraient être pris comme preuve | Toute route opérationnelle attend session, capabilities fraîches, action et scope concordants avant navigation. |
+| Caches opérationnels | `CacheStore` privé Lot 3 et cache rebuild | SharedPreferences | Partiel | Pas de namespace mode/scope | Ajouter clés `ops.<user>.<type>.<scope>`; purge avec les caches privés et aucune réouverture de droit depuis l'offline. |
+| Audit/idempotence | `AuditLog`, `EventAuditLog`, plusieurs tables idempotency | Backend | Oui | Conventions fragmentées | Réutiliser `AuditLog` et les tables existantes; token brut exclu des payloads. |
+
+### Architecture retenue avant implémentation
+
+- `app/services/operational_access_service.py` portera le calcul des capabilities et les guards Event/Bar testables sans FastAPI.
+- `app/services/event_staff_invitation_service.py` portera émission hashée, acceptation idempotente, replay/expiration/cible et révocation sur `EventStaffInviteCode`/`EventStaff`.
+- Un router fin `app/routers/operational_access.py` exposera hubs, staff, invitations et commandes AppUser; chaque endpoint revalidera le scope.
+- La state machine Order reste celle de `orders_service`; son chemin idempotent sera partagé avec les routes Partner existantes.
+- Flutter recevra un domaine `features/operations/` avec modèles, repository, contexte namespacé, guard central et hubs minimaux. Les widgets n'interpréteront jamais `account_mode`.
+- Offline Entry : refus explicite. Aucun QR/ticket brut n'est ajouté à une queue locale par le nouveau parcours.
+
+## Lot 4 — réalisation et validation finale
+
+### Autorité et parcours livrés
+
+- `/me/capabilities` expose désormais des objets uniformes `EVENT` et `BAR` avec scope, actions, source, activation, expiration, statut et mise à jour. Les listes scopées sont l'autorité opérationnelle; le booléen historique `modes.organizer` reste seulement compatible avec le Lot 3 et `operational_modes` reflète strictement les contextes utilisables.
+- Le workflow Event sécurisé étend `EventStaffInviteCode` : cible AppUser, token opaque stocké uniquement sous SHA-256, expiration obligatoire, usage unique, acceptation idempotente, déclin, révocation et audit sans token brut. L'acceptation active la ligne canonique `EventStaff`.
+- Le mode USER demeure le défaut. Le shell actif n'affiche ORGA ou BAR qu'à partir d'une capability scopée fraîche, demande le contexte si plusieurs existent et persiste seulement la sélection dans `tore_cache.operations.<user>.<type>.<scope>`.
+- Les hubs lisent les données réelles : Event/état/horaires/rôle/actions/entrées/staff/invitations et Bar/identité/statut/rôle/actions/commandes. Aucune donnée financière, statistique ou showcase n'a été ajoutée.
+- Le parcours Entry existant est conservé mais toute validation ou correction est bloquée hors ligne. Une panne ne produit plus `PENDING SYNC`, n'incrémente plus l'affichage et ne conserve plus de QR dans la queue depuis cet écran.
+- Les transitions Order partagent la state machine et l'idempotence existantes. Les écritures AppUser vérifient capability, `bar_id`, état Event et transition; l'interface verrouille une commande pendant l'écriture et rafraîchit après confirmation serveur.
+
+### Revalidation et refus par défaut
+
+Les capabilities sont relues à la connexion, après acceptation/révocation, au changement de mode, au retour au premier plan, au retour réseau et après `401/403`. Le cache des données de hub est court (5 minutes), séparé par utilisateur/type/scope et strictement en lecture seule offline. Les capabilities opérationnelles ne sont jamais restaurées depuis ce cache. Toute sélection devenue absente repasse immédiatement à USER et supprime le contexte. Les routes nommées/deep links `event-staff-invite`, `/ops/event/{id}` et `/ops/bar/{id}` passent par session, capabilities, action et scope avant affichage.
+
+### Résultats au 14 août 2026
+
+- Checkpoint Lot 3 : commit local `5116675` (`feat: add unified profiles privacy and affiliations`), non poussé.
+- Backend complet : 363 tests réussis; 7 931 avertissements historiques de dépréciation, aucun échec.
+- Flutter complet : 154 tests réussis; `flutter analyze` sans problème.
+- Migrations : base neuve jusqu'à `0009_scoped_operational_access`, montée depuis `0008` avec ligne Partner legacy préservée et downgrade vers `0008` réussis.
+- Android release : `app-dev-release.apk` et `app-prod-release.apk` générés (96,9 Mo chacun), ignorés par Git.
+- Contrôles finaux : `git diff --check` propre; aucun APK/AAB suivi; aucun secret, fixture/showcase ou nouvel usage autorisant de `account_mode` dans le Lot 4.
+
+### Dette conservée
+
+Les anciennes invitations QR/code et routes Partner restent en place pour compatibilité et devront être dépréciées progressivement. `PartnerMembership` reste un fallback Bar sans période explicite faute de métadonnée legacy; son lien AppUser explicite et l'état actif du Bar restent obligatoires. Le backend historique demeure volumineux et produit encore de nombreux warnings `datetime.utcnow()`/FastAPI, mais les nouvelles règles Lot 4 sont isolées dans des services dédiés.

@@ -183,6 +183,14 @@ class EventStaffInviteCode(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     revoked_reason: Mapped[Optional[str]] = mapped_column(String(280), nullable=True)
+    token_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    target_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+    actions_json: Mapped[list] = mapped_column(JSON, default=list)
+    max_uses: Mapped[int] = mapped_column(Integer, default=1)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    accepted_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class EventStaffInviteIdempotency(Base):
@@ -1311,6 +1319,14 @@ class PartnerBarAccess(Base):
 
     role: Mapped[str] = mapped_column(String, default="owner")  # owner, manager, staff, ...
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    actions_json: Mapped[list] = mapped_column(JSON, default=list)
+    starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(32), default="PARTNER_ADMIN", index=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    revoked_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("app_users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     partner_user: Mapped["PartnerUser"] = relationship(back_populates="bar_accesses")
@@ -1393,6 +1409,7 @@ class AppUser(Base):
     first_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     nickname: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    oripeaux: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     show_address: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -1890,6 +1907,16 @@ class Organization(Base):
     org_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     website_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     instagram_handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    logo_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    banner_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    primary_color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    secondary_color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    social_links_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    public_content_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    visibility_settings_json: Mapped[dict] = mapped_column(JSON, default=dict)
     visibility: Mapped[str] = mapped_column(String(16), default="PUBLIC", index=True)
     join_mode: Mapped[str] = mapped_column(String(24), default="OPEN_MEMBERSHIP", index=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
@@ -2011,6 +2038,136 @@ class OrgaPost(Base):
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class StructureDiscussionCategory(Base):
+    __tablename__ = "structure_discussion_categories"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "slug", name="uq_structure_discussion_category_slug"),
+        Index("ix_structure_discussion_categories_org_order", "organization_id", "order_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(120))
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class StructureDiscussionChannel(Base):
+    __tablename__ = "structure_discussion_channels"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "slug", name="uq_structure_discussion_channel_slug"),
+        Index("ix_structure_discussion_channels_category", "category_id", "is_archived"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("structure_discussion_categories.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(120))
+    visibility: Mapped[str] = mapped_column(String(24), default="STRUCTURE_MEMBERS", index=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class StructureDiscussionPost(Base):
+    __tablename__ = "structure_discussion_posts"
+    __table_args__ = (
+        Index("ix_structure_discussion_posts_feed", "organization_id", "channel_id", "is_archived", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("structure_discussion_channels.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    body: Mapped[str] = mapped_column(Text)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class StructureDocument(Base):
+    __tablename__ = "structure_documents"
+    __table_args__ = (
+        Index("ix_structure_documents_org_visibility", "organization_id", "visibility", "archived_at"),
+        Index("ix_structure_documents_org_folder", "organization_id", "folder"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_url: Mapped[str] = mapped_column(String(1000))
+    folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
+    tags_json: Mapped[list] = mapped_column(JSON, default=list)
+    visibility: Mapped[str] = mapped_column(String(24), default="STRUCTURE_MEMBERS", index=True)
+    uploaded_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class StructureAlbum(Base):
+    __tablename__ = "structure_albums"
+    __table_args__ = (
+        Index("ix_structure_albums_org_status", "organization_id", "status", "visibility"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cover_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(24), default="STRUCTURE_MEMBERS", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="DRAFT", index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class StructureMedia(Base):
+    __tablename__ = "structure_media"
+    __table_args__ = (
+        Index("ix_structure_media_album_order", "album_id", "sort_order"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    album_id: Mapped[int] = mapped_column(ForeignKey("structure_albums.id"), index=True)
+    media_url: Mapped[str] = mapped_column(String(1000))
+    media_type: Mapped[str] = mapped_column(String(24), default="IMAGE")
+    caption: Mapped[Optional[str]] = mapped_column(String(280), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class StructurePage(Base):
+    __tablename__ = "structure_pages"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "slug", name="uq_structure_pages_org_slug"),
+        Index("ix_structure_pages_org_visibility", "organization_id", "visibility", "published_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    slug: Mapped[str] = mapped_column(String(180))
+    content: Mapped[str] = mapped_column(Text, default="")
+    visibility: Mapped[str] = mapped_column(String(24), default="STRUCTURE_MEMBERS", index=True)
+    category: Mapped[str] = mapped_column(String(24), default="OTHER", index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    updated_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
 
 
 class AuditLog(Base):

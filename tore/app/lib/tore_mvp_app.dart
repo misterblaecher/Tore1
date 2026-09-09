@@ -1,12 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_context/app_context.dart';
 import 'core/auth/providers.dart';
+import 'core/network/network_state_provider.dart';
 import 'features/auth/presentation/welcome_screen.dart';
 import 'features/bars/presentation/bars_screen.dart';
 import 'features/discovery/presentation/discovery_screen.dart';
 import 'features/navigation/presentation/profile_screen.dart';
+import 'features/operations/domain/operational_models.dart';
+import 'features/operations/presentation/bar_operational_hub_screen.dart';
+import 'features/operations/presentation/event_operational_hub_screen.dart';
+import 'features/operations/presentation/operational_mode_switcher.dart';
+import 'features/operations/presentation/operational_providers.dart';
+import 'features/operations/presentation/operational_route_gate.dart';
 import 'features/qr/presentation/qr_scanner_gate_screen.dart';
 import 'theme/tore_theme.dart';
 import 'shared/widgets/network_banner.dart';
@@ -21,6 +30,35 @@ class ToreMvpApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: ToreTheme.dark(),
       home: const _SessionGate(),
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri == null) return null;
+        if (uri.path == '/event-staff-invite' ||
+            uri.host == 'event-staff-invite') {
+          final token = uri.queryParameters['token'] ?? '';
+          return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => OperationalInvitationRouteGate(token: token));
+        }
+        final segments = uri.host == 'ops'
+            ? <String>['ops', ...uri.pathSegments]
+            : uri.pathSegments;
+        if (segments.length == 3 && segments.first == 'ops') {
+          final scopeId = int.tryParse(segments.last);
+          final mode = segments[1] == 'event'
+              ? OperationalMode.orga
+              : segments[1] == 'bar'
+                  ? OperationalMode.bar
+                  : null;
+          if (scopeId != null && mode != null) {
+            return MaterialPageRoute(
+                settings: settings,
+                builder: (_) =>
+                    ScopedOperationalRouteGate(mode: mode, scopeId: scopeId));
+          }
+        }
+        return null;
+      },
     );
   }
 }
@@ -56,12 +94,50 @@ class ToreMvpShell extends ConsumerStatefulWidget {
   ConsumerState<ToreMvpShell> createState() => _ToreMvpShellState();
 }
 
-class _ToreMvpShellState extends ConsumerState<ToreMvpShell> {
+class _ToreMvpShellState extends ConsumerState<ToreMvpShell>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
+  Timer? _capabilityTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _capabilityTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      ref.invalidate(operationalCapabilitiesProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _capabilityTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(operationalCapabilitiesProvider);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     ref.watch(appContextInitProvider);
+    ref.listen<NetworkSnapshot>(networkStateProvider, (previous, next) {
+      if (next.state == NetworkState.online &&
+          previous?.state != NetworkState.online) {
+        ref.invalidate(operationalCapabilitiesProvider);
+      }
+    });
+    ref.listen<AsyncValue<OperationalCapabilities>>(
+        operationalCapabilitiesProvider, (previous, next) {
+      next.whenData((capabilities) => ref
+          .read(operationalSelectionProvider.notifier)
+          .revalidate(capabilities));
+    });
+    final operational = ref.watch(operationalSelectionProvider);
     final pages = <Widget>[
       Scaffold(
         appBar: AppBar(
@@ -94,38 +170,49 @@ class _ToreMvpShellState extends ConsumerState<ToreMvpShell> {
       const BarsScreen(),
       const ProfileScreen(),
     ];
+    final operationalBody = operational.mode == OperationalMode.orga &&
+            operational.capability != null
+        ? EventOperationalHubScreen(capability: operational.capability!)
+        : operational.mode == OperationalMode.bar &&
+                operational.capability != null
+            ? BarOperationalHubScreen(capability: operational.capability!)
+            : null;
     return Scaffold(
       body: Column(
         children: [
           const ToreNetworkBanner(),
+          const OperationalModeSwitcher(),
           Expanded(
-            child: IndexedStack(index: _selectedIndex, children: pages),
+            child: operationalBody ??
+                IndexedStack(index: _selectedIndex, children: pages),
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _selectedIndex = index),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Accueil'),
-          NavigationDestination(
-              icon: Icon(Icons.event_outlined),
-              selectedIcon: Icon(Icons.event),
-              label: 'Soirées'),
-          NavigationDestination(
-              icon: Icon(Icons.local_bar_outlined),
-              selectedIcon: Icon(Icons.local_bar),
-              label: 'Bars'),
-          NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Profil'),
-        ],
-      ),
+      bottomNavigationBar: operationalBody == null
+          ? NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) =>
+                  setState(() => _selectedIndex = index),
+              destinations: const [
+                NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Accueil'),
+                NavigationDestination(
+                    icon: Icon(Icons.event_outlined),
+                    selectedIcon: Icon(Icons.event),
+                    label: 'Soirées'),
+                NavigationDestination(
+                    icon: Icon(Icons.local_bar_outlined),
+                    selectedIcon: Icon(Icons.local_bar),
+                    label: 'Bars'),
+                NavigationDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person),
+                    label: 'Profil'),
+              ],
+            )
+          : null,
     );
   }
 

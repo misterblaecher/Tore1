@@ -162,6 +162,7 @@ class ToreProfile {
   final String? username;
   final String displayName;
   final String? avatarUrl;
+  final String? oripeaux;
   final String bio;
   final String? city;
   final String? createdAt;
@@ -176,6 +177,7 @@ class ToreProfile {
     this.username,
     required this.displayName,
     this.avatarUrl,
+    this.oripeaux,
     required this.bio,
     this.city,
     this.createdAt,
@@ -193,6 +195,7 @@ class ToreProfile {
         username: json['username']?.toString(),
         displayName: (json['display_name'] ?? '').toString(),
         avatarUrl: json['avatar_url']?.toString(),
+        oripeaux: json['oripeaux']?.toString(),
         bio: (json['bio'] ?? '').toString(),
         city: json['city']?.toString(),
         createdAt: json['created_at']?.toString(),
@@ -217,6 +220,7 @@ class ToreProfile {
         'username': username,
         'display_name': displayName,
         'avatar_url': avatarUrl,
+        'oripeaux': oripeaux,
         'bio': bio,
         'city': city,
         'created_at': createdAt,

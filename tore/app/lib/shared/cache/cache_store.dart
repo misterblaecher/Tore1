@@ -76,12 +76,20 @@ class CacheStore {
   String affiliationsKey(String userId) =>
       'tore_cache.affiliations.$userId.list';
 
+  String operationsKey(
+          String userId, String scopeType, int scopeId, String resource) =>
+      'tore_cache.operations.$userId.$scopeType.$scopeId.$resource';
+
+  String operationsContextKey(String userId) =>
+      'tore_cache.operations.$userId.selection';
+
   Future<void> clearPrivateForUser(String userId) async {
     final prefs = await _prefs;
     final prefixes = <String>[
       'tore_cache.owner.$userId.',
       'tore_cache.capabilities.$userId.',
       'tore_cache.affiliations.$userId.',
+      'tore_cache.operations.$userId.',
     ];
     final keys = prefs.getKeys().where(
           (key) => prefixes.any(key.startsWith),
@@ -97,6 +105,7 @@ class CacheStore {
       'tore_cache.owner.',
       'tore_cache.capabilities.',
       'tore_cache.affiliations.',
+      'tore_cache.operations.',
     ];
     final keys = prefs.getKeys().where(
           (key) => prefixes.any(key.startsWith),

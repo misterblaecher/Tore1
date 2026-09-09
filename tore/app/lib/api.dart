@@ -2171,6 +2171,7 @@ class Api {
     String? photoUrl,
     String? bio,
     String? instagramHandle,
+    String? oripeaux,
     String visibility = 'PUBLIC',
     required String idempotencyKey,
   }) async {
@@ -2181,6 +2182,7 @@ class Api {
         'photo_url': photoUrl,
         'bio': bio,
         'instagram_handle': instagramHandle,
+        'oripeaux': oripeaux,
         'visibility': visibility,
       },
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),

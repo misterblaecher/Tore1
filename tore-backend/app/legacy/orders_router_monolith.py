@@ -30,7 +30,7 @@ from app.schemas.orders import (
 )
 from app.services.audit_service import write_audit_log
 from app.services.order_client_qr_service import decode_order_client_token, issue_order_client_token
-from app.services.orders_service import create_order, order_out, patch_order_status
+from app.services.orders_service import create_order, order_out, patch_order_status, transition_order_status_idempotent
 from app.services.authz_service import ensure_partner_role
 from app.services.idempotency_service import ensure_idempotency_key
 from app.services.rate_limit_service import enforce_rate_limit
@@ -474,65 +474,18 @@ def _transition_order_status(
     identity: dict,
     reason: Optional[str] = None,
 ) -> dict[str, Any]:
-    existing = (
-        db.query(OrderStatusTransitionIdempotency)
-        .filter(
-            OrderStatusTransitionIdempotency.order_id == order.id,
-            OrderStatusTransitionIdempotency.action == action,
-            OrderStatusTransitionIdempotency.idempotency_key == idempotency_key,
-        )
-        .first()
-    )
-    if existing:
-        payload = dict(existing.response_json or {})
-        payload["idempotent"] = True
-        return payload
-
-    if order.status not in expected_from:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "ORDER_STATE_CONFLICT", "current_status": ORDER_STATUS_TO_LIVE.get(order.status, order.status.lower())},
-        )
-
-    previous = order.status
-    order.status = next_status
-    order.updated_at = now_utc()
-    db.add(order)
-
-    response = {
-        "id": order.id,
-        "status": ORDER_STATUS_TO_LIVE.get(order.status, order.status.lower()),
-        "previousStatus": ORDER_STATUS_TO_LIVE.get(previous, previous.lower()),
-        "idempotent": False,
-    }
-    stamp = OrderStatusTransitionIdempotency(
-        order_id=order.id,
-        action=action,
-        idempotency_key=idempotency_key,
-        from_status=previous,
-        to_status=next_status,
-        response_json=response,
-    )
-    db.add(stamp)
-
-    write_audit_log(
+    return transition_order_status_idempotent(
         db,
+        order=order,
+        action=action,
+        expected_from=expected_from,
+        next_status=next_status,
+        idempotency_key=idempotency_key,
         actor_partner_id=identity.get("user_id"),
         actor_role=identity.get("role"),
-        action=f"orders.live.{action}",
-        entity_type="order",
-        entity_id=str(order.id),
-        event_id=order.event_id,
-        bar_id=order.bar_id,
-        payload={
-            "from": previous,
-            "to": next_status,
-            "idempotency_key": idempotency_key,
-            "reason": reason,
-        },
+        reason=reason,
+        response_statuses=ORDER_STATUS_TO_LIVE,
     )
-    db.commit()
-    return response
 
 
 @router.get("/partner/portal/bar/events/{event_id}/orders/live", response_model=BarLiveOrdersOut)

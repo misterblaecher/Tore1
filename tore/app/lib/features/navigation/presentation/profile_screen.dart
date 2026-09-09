@@ -387,6 +387,7 @@ class _ProfileActions extends ConsumerWidget {
             username: values['username'],
             displayName: values['display_name'],
             avatarUrl: values['avatar_url'],
+            oripeaux: values['oripeaux'],
             bio: values['bio'],
             city: values['city'],
           );
@@ -606,6 +607,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
   late final TextEditingController username;
   late final TextEditingController displayName;
   late final TextEditingController avatar;
+  late final TextEditingController oripeaux;
   late final TextEditingController bio;
   late final TextEditingController city;
   final formKey = GlobalKey<FormState>();
@@ -616,6 +618,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
     username = TextEditingController(text: widget.profile.username);
     displayName = TextEditingController(text: widget.profile.displayName);
     avatar = TextEditingController(text: widget.profile.avatarUrl);
+    oripeaux = TextEditingController(text: widget.profile.oripeaux);
     bio = TextEditingController(text: widget.profile.bio);
     city = TextEditingController(text: widget.profile.city);
   }
@@ -625,6 +628,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
     username.dispose();
     displayName.dispose();
     avatar.dispose();
+    oripeaux.dispose();
     bio.dispose();
     city.dispose();
     super.dispose();
@@ -658,6 +662,11 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
                     controller: avatar,
                     decoration: const InputDecoration(labelText: 'URL photo')),
                 TextFormField(
+                    controller: oripeaux,
+                    maxLength: 500,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Oripeaux associés')),
+                TextFormField(
                   controller: bio,
                   maxLength: 280,
                   maxLines: 3,
@@ -681,6 +690,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
                 'username': username.text.trim().toLowerCase(),
                 'display_name': displayName.text.trim(),
                 'avatar_url': avatar.text.trim(),
+                'oripeaux': oripeaux.text.trim(),
                 'bio': bio.text.trim(),
                 'city': city.text.trim(),
               });

@@ -11,7 +11,6 @@ import '../../../core/qr/qr_parser.dart';
 import '../../../core/qr/qr_validator.dart';
 import '../../events/presentation/staff_backup_join_screen.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
-import '../data/entry_offline_queue.dart';
 import '../data/entry_service.dart';
 
 class EntryModeScreen extends ConsumerStatefulWidget {
@@ -27,7 +26,6 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   int _delta10 = 0;
   bool _loading = true;
   bool _manualMode = false;
-  bool _pendingEstimate = false;
   String _manualReason = 'QR illisible';
   final TextEditingController _noteCtrl = TextEditingController();
   String _banner = 'Prêt à scanner';
@@ -41,27 +39,20 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     'autre…'
   ];
 
-  Timer? _syncTimer;
-  List<EntryQueueItem> _queue = [];
-
   @override
   void initState() {
     super.initState();
     unawaited(_load());
-    _syncTimer = Timer.periodic(
-        const Duration(seconds: 8), (_) => unawaited(_syncPending()));
   }
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
     _noteCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     if (widget.eventId == null) return;
-    _queue = await ref.read(entryOfflineQueueStoreProvider).load();
     await _refreshStats();
     if (!mounted) return;
     setState(() => _loading = false);
@@ -73,16 +64,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       final count =
           await ref.read(entryServiceProvider).getEntryCount(widget.eventId!);
       if (!mounted) return;
-      final pending = _queue
-          .where((q) =>
-              q.eventId == widget.eventId &&
-              q.status == 'pending' &&
-              q.delta > 0)
-          .fold<int>(0, (a, b) => a + b.delta);
-      setState(() {
-        _total = (count['entryCount'] ?? 0) as int;
-        _pendingEstimate = pending > 0;
-      });
+      setState(() => _total = (count['entryCount'] ?? 0) as int);
     } catch (_) {}
     try {
       final stats =
@@ -114,33 +96,26 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     final eventId = widget.eventId;
     if (eventId == null) return;
     final scannedAt = DateTime.now();
-    final item = EntryQueueItem(
-      id: '$eventId-${scannedAt.millisecondsSinceEpoch}-${raw.hashCode}',
-      eventId: eventId,
-      type: 'CHECKIN',
-      rawQr: raw,
-      scannedAt: scannedAt,
-      idempotencyKey:
-          'entry-$eventId-${scannedAt.millisecondsSinceEpoch}-${raw.hashCode}',
-    );
     if (ref.read(networkStatusProvider) != NetworkState.online) {
-      await _enqueue(item, 'PENDING SYNC');
-      return _feedback('pending', '+1 ajouté (PENDING SYNC)', type: 'QR');
+      return _feedback('invalid', 'Serveur indisponible — entrée non validée',
+          type: 'QR');
     }
+    final idempotencyKey =
+        'entry-$eventId-${scannedAt.millisecondsSinceEpoch}-${raw.hashCode}';
     try {
       final res = await ref.read(entryServiceProvider).checkin(
           eventId: eventId,
           rawQr: raw,
           deviceId: 'orga-mobile',
-          idempotencyKey: item.idempotencyKey,
+          idempotencyKey: idempotencyKey,
           scannedAt: scannedAt);
       _feedback((res['status'] ?? 'accepted').toString(),
           'QR ${(res['status'] ?? 'accepted').toString()}',
           type: 'QR');
       unawaited(_refreshStats());
     } catch (_) {
-      await _enqueue(item, 'PENDING SYNC');
-      _feedback('pending', '+1 ajouté (PENDING SYNC)', type: 'QR');
+      _feedback('invalid', 'Serveur indisponible — entrée non validée',
+          type: 'QR');
     }
   }
 
@@ -170,84 +145,27 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     }
 
     final now = DateTime.now();
-    final item = EntryQueueItem(
-      id: 'manual-$eventId-${now.millisecondsSinceEpoch}-$delta',
-      eventId: eventId,
-      type: 'MANUAL',
-      scannedAt: now,
-      idempotencyKey: 'manual-$eventId-${now.millisecondsSinceEpoch}-$delta',
-      delta: delta,
-      reason: _manualReason,
-      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-    );
-
     if (ref.read(networkStatusProvider) != NetworkState.online) {
-      await _enqueue(item, 'PENDING SYNC');
       return _feedback(
-          'pending', '${delta > 0 ? '+' : ''}$delta ajouté (PENDING SYNC)',
+          'invalid', 'Serveur indisponible — correction non enregistrée',
           type: 'MANUAL');
     }
+    final idempotencyKey =
+        'manual-$eventId-${now.millisecondsSinceEpoch}-$delta';
+    final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
     try {
       await ref.read(entryServiceProvider).manualIncrement(
           eventId: eventId,
           delta: delta.abs(),
           reason: _manualReason,
-          note: item.note,
-          idempotencyKey: item.idempotencyKey);
+          note: note,
+          idempotencyKey: idempotencyKey);
       _feedback('accepted', '${delta > 0 ? '+' : ''}$delta ajouté',
           type: 'MANUAL');
       unawaited(_refreshStats());
     } catch (_) {
-      await _enqueue(item, 'PENDING SYNC');
-      _feedback(
-          'pending', '${delta > 0 ? '+' : ''}$delta ajouté (PENDING SYNC)',
+      _feedback('invalid', 'Serveur indisponible — correction non enregistrée',
           type: 'MANUAL');
-    }
-  }
-
-  Future<void> _enqueue(EntryQueueItem item, String reason) async {
-    item.lastError = reason;
-    _queue.insert(0, item);
-    await ref.read(entryOfflineQueueStoreProvider).save(_queue);
-    await _refreshStats();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _syncPending() async {
-    if (widget.eventId == null ||
-        ref.read(networkStatusProvider) != NetworkState.online) return;
-    bool updated = false;
-    for (final item in _queue
-        .where((i) => i.status == 'pending' && i.eventId == widget.eventId)) {
-      try {
-        if (item.type == 'MANUAL') {
-          await ref.read(entryServiceProvider).manualIncrement(
-                eventId: item.eventId,
-                delta: item.delta.abs(),
-                reason: item.reason ?? 'file rush',
-                note: item.note,
-                idempotencyKey: item.idempotencyKey,
-              );
-        } else {
-          await ref.read(entryServiceProvider).checkin(
-                eventId: item.eventId,
-                rawQr: item.rawQr ?? '',
-                deviceId: 'orga-mobile',
-                idempotencyKey: item.idempotencyKey,
-                scannedAt: item.scannedAt,
-              );
-        }
-        item.status = 'synced';
-        updated = true;
-      } catch (e) {
-        item.status = 'failed';
-        item.lastError = e.toString();
-      }
-    }
-    if (updated) {
-      await ref.read(entryOfflineQueueStoreProvider).save(_queue);
-      await _refreshStats();
-      if (mounted) setState(() {});
     }
   }
 
@@ -286,11 +204,6 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     final net = ref.watch(networkStatusProvider);
-    final pending = _queue
-        .where((q) => q.status == 'pending' && q.eventId == widget.eventId)
-        .toList();
-    final totalDisplay = _total +
-        pending.fold<int>(0, (a, b) => a + (b.delta > 0 ? b.delta : 0));
     final recents = ref.watch(entryUiStateProvider).recent;
 
     return Scaffold(
@@ -358,7 +271,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
-                              '${_pendingEstimate ? '~' : ''}$totalDisplay',
+                              '$_total',
                               style: const TextStyle(
                                   fontSize: 96, fontWeight: FontWeight.w900),
                             ),
@@ -390,16 +303,24 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                             const SizedBox(height: 8),
                             Wrap(spacing: 8, runSpacing: 8, children: [
                               FilledButton(
-                                  onPressed: () => _manualIncrement(1),
+                                  onPressed: net == NetworkState.online
+                                      ? () => _manualIncrement(1)
+                                      : null,
                                   child: const Text('+1')),
                               FilledButton(
-                                  onPressed: () => _manualIncrement(5),
+                                  onPressed: net == NetworkState.online
+                                      ? () => _manualIncrement(5)
+                                      : null,
                                   child: const Text('+5')),
                               FilledButton(
-                                  onPressed: () => _manualIncrement(10),
+                                  onPressed: net == NetworkState.online
+                                      ? () => _manualIncrement(10)
+                                      : null,
                                   child: const Text('+10')),
                               OutlinedButton(
-                                  onPressed: () => _manualIncrement(-1),
+                                  onPressed: net == NetworkState.online
+                                      ? () => _manualIncrement(-1)
+                                      : null,
                                   child: const Text('-1')),
                             ]),
                           ],
@@ -413,9 +334,9 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text('Status: ${net.name.toUpperCase()}'),
-                  Text('Queue: ${pending.length}'),
-                  TextButton(
-                      onPressed: _syncPending, child: const Text('Sync now')),
+                  Text(net == NetworkState.online
+                      ? 'Validation serveur requise'
+                      : 'Entrées bloquées hors ligne'),
                 ],
               ),
               Container(

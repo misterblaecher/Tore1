@@ -27,7 +27,7 @@ def test_unified_profile_migration_fresh_database(tmp_path: Path, monkeypatch):
         column["name"] for column in inspect(engine).get_columns("organization_memberships")
     }
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0008_unified_profile_affiliations"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_scoped_operational_access"
 
 
 def test_upgrade_from_0007_keeps_legacy_private_and_unknown_visibility_private(tmp_path: Path, monkeypatch):

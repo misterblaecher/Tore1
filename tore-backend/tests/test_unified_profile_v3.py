@@ -82,10 +82,12 @@ def test_owner_profile_patch_unique_username_and_mass_assignment_rejected():
             "display_name": "First User",
             "bio": "A real short bio",
             "city": "Liège",
+            "oripeaux": "Tablier rubis · épitoge",
         },
     )
     assert updated.status_code == 200
     assert updated.json()["username"] == "first.user"
+    assert updated.json()["oripeaux"] == "Tablier rubis · épitoge"
 
     privacy_updated = client.patch(
         "/me/privacy",
@@ -126,7 +128,7 @@ def test_owner_profile_patch_unique_username_and_mass_assignment_rejected():
         assert row.global_role == "USER"
         audit = db.query(AuditLog).filter(AuditLog.action == "user.profile.update").first()
         assert audit is not None
-        assert audit.payload_json == {"fields": ["bio", "city", "display_name", "username"]}
+        assert audit.payload_json == {"fields": ["bio", "city", "display_name", "oripeaux", "username"]}
         privacy_audit = db.query(AuditLog).filter(AuditLog.action == "user.privacy.update").first()
         assert privacy_audit is not None
         assert privacy_audit.payload_json == {"fields": ["bio", "event_history_opt_in"]}

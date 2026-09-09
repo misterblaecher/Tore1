@@ -16,7 +16,7 @@ describe("account request form", () => {
   });
 
   const fillAndSubmit = async () => {
-    const { default: Index } = await import("@/pages/Index");
+    const { default: Index } = await import("@/pages/Join");
     render(
       <MemoryRouter>
         <Index />
@@ -28,7 +28,7 @@ describe("account request form", () => {
     fireEvent.change(screen.getByLabelText("Téléphone"), { target: { value: "+32470001122" } });
     fireEvent.change(screen.getByLabelText("Rôle"), { target: { value: "student" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Créer mon compte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Demander un accès pro" }));
   };
 
   it("does not show error toast when request succeeds", async () => {

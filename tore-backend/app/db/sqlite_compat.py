@@ -148,6 +148,7 @@ def ensure_sqlite_compat(engine: Engine) -> None:
     ensure_event_battles_v1_tables(engine)
     ensure_event_safety_v1_tables(engine)
     ensure_organization_tables(engine)
+    ensure_forum_tables(engine)
     ensure_auth_tables(engine)
     ensure_shortlink_tables(engine)
 
@@ -344,6 +345,175 @@ def ensure_organization_tables(engine: Engine) -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organization_posts_feed ON organization_posts (organization_id, deleted_at, pinned, created_at)"))
+
+
+def ensure_forum_tables(engine: Engine) -> None:
+    """Keep the incremental Forum schema usable on legacy local SQLite databases."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as conn:
+        organization_columns = [row[1] for row in conn.execute(text("PRAGMA table_info(organizations)"))]
+        additions = {
+            "logo_url": "VARCHAR(512)",
+            "banner_url": "VARCHAR(512)",
+            "primary_color": "VARCHAR(7)",
+            "secondary_color": "VARCHAR(7)",
+            "address": "VARCHAR(255)",
+            "contact_email": "VARCHAR(255)",
+            "contact_phone": "VARCHAR(64)",
+            "social_links_json": "JSON DEFAULT '{}' NOT NULL",
+            "public_content_json": "JSON DEFAULT '{}' NOT NULL",
+            "visibility_settings_json": "JSON DEFAULT '{}' NOT NULL",
+        }
+        for name, definition in additions.items():
+            if name not in organization_columns:
+                conn.execute(text(f"ALTER TABLE organizations ADD COLUMN {name} {definition}"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_discussion_categories (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                slug VARCHAR(120) NOT NULL,
+                order_index INTEGER DEFAULT 0 NOT NULL,
+                is_archived BOOLEAN DEFAULT 0 NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_structure_discussion_category_slug UNIQUE (organization_id, slug),
+                FOREIGN KEY(organization_id) REFERENCES organizations (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_categories_organization_id ON structure_discussion_categories (organization_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_categories_org_order ON structure_discussion_categories (organization_id, order_index)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_categories_is_archived ON structure_discussion_categories (is_archived)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_discussion_channels (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                category_id INTEGER NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                slug VARCHAR(120) NOT NULL,
+                visibility VARCHAR(24) DEFAULT 'STRUCTURE_MEMBERS' NOT NULL,
+                is_archived BOOLEAN DEFAULT 0 NOT NULL,
+                created_at DATETIME,
+                CONSTRAINT uq_structure_discussion_channel_slug UNIQUE (organization_id, slug),
+                FOREIGN KEY(organization_id) REFERENCES organizations (id),
+                FOREIGN KEY(category_id) REFERENCES structure_discussion_categories (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_channels_organization_id ON structure_discussion_channels (organization_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_channels_category ON structure_discussion_channels (category_id, is_archived)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_channels_visibility ON structure_discussion_channels (visibility)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_discussion_posts (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                channel_id INTEGER NOT NULL,
+                title VARCHAR(180) NOT NULL,
+                body TEXT NOT NULL,
+                created_by_user_id VARCHAR NOT NULL,
+                is_pinned BOOLEAN DEFAULT 0 NOT NULL,
+                is_archived BOOLEAN DEFAULT 0 NOT NULL,
+                created_at DATETIME,
+                updated_at DATETIME,
+                FOREIGN KEY(organization_id) REFERENCES organizations (id),
+                FOREIGN KEY(channel_id) REFERENCES structure_discussion_channels (id),
+                FOREIGN KEY(created_by_user_id) REFERENCES app_users (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_posts_organization_id ON structure_discussion_posts (organization_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_posts_channel_id ON structure_discussion_posts (channel_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_discussion_posts_feed ON structure_discussion_posts (organization_id, channel_id, is_archived, created_at)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_documents (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                title VARCHAR(180) NOT NULL,
+                description TEXT,
+                file_url VARCHAR(1000) NOT NULL,
+                folder VARCHAR(120),
+                tags_json JSON DEFAULT '[]' NOT NULL,
+                visibility VARCHAR(24) DEFAULT 'STRUCTURE_MEMBERS' NOT NULL,
+                uploaded_by_user_id VARCHAR NOT NULL,
+                event_id INTEGER,
+                created_at DATETIME,
+                updated_at DATETIME,
+                archived_at DATETIME,
+                FOREIGN KEY(organization_id) REFERENCES organizations (id),
+                FOREIGN KEY(uploaded_by_user_id) REFERENCES app_users (id),
+                FOREIGN KEY(event_id) REFERENCES events (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_documents_organization_id ON structure_documents (organization_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_documents_org_visibility ON structure_documents (organization_id, visibility, archived_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_documents_org_folder ON structure_documents (organization_id, folder)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_documents_event_id ON structure_documents (event_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_albums (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                event_id INTEGER,
+                title VARCHAR(180) NOT NULL,
+                description TEXT,
+                cover_url VARCHAR(1000),
+                visibility VARCHAR(24) DEFAULT 'STRUCTURE_MEMBERS' NOT NULL,
+                status VARCHAR(16) DEFAULT 'DRAFT' NOT NULL,
+                created_by_user_id VARCHAR NOT NULL,
+                created_at DATETIME,
+                updated_at DATETIME,
+                archived_at DATETIME,
+                FOREIGN KEY(organization_id) REFERENCES organizations (id),
+                FOREIGN KEY(event_id) REFERENCES events (id),
+                FOREIGN KEY(created_by_user_id) REFERENCES app_users (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_albums_organization_id ON structure_albums (organization_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_albums_org_status ON structure_albums (organization_id, status, visibility)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_albums_event_id ON structure_albums (event_id)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_media (
+                id INTEGER NOT NULL PRIMARY KEY,
+                album_id INTEGER NOT NULL,
+                media_url VARCHAR(1000) NOT NULL,
+                media_type VARCHAR(24) DEFAULT 'IMAGE' NOT NULL,
+                caption VARCHAR(280),
+                sort_order INTEGER DEFAULT 0 NOT NULL,
+                created_at DATETIME,
+                FOREIGN KEY(album_id) REFERENCES structure_albums (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_media_album_id ON structure_media (album_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_media_album_order ON structure_media (album_id, sort_order)"))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS structure_pages (
+                id INTEGER NOT NULL PRIMARY KEY,
+                organization_id INTEGER NOT NULL,
+                title VARCHAR(180) NOT NULL,
+                slug VARCHAR(180) NOT NULL,
+                content TEXT DEFAULT '' NOT NULL,
+                visibility VARCHAR(24) DEFAULT 'STRUCTURE_MEMBERS' NOT NULL,
+                category VARCHAR(24) DEFAULT 'OTHER' NOT NULL,
+                created_by_user_id VARCHAR NOT NULL,
+                updated_by_user_id VARCHAR NOT NULL,
+                version INTEGER DEFAULT 1 NOT NULL,
+                published_at DATETIME,
+                created_at DATETIME,
+                updated_at DATETIME,
+                CONSTRAINT uq_structure_pages_org_slug UNIQUE (organization_id, slug),
+                FOREIGN KEY(organization_id) REFERENCES organizations (id),
+                FOREIGN KEY(created_by_user_id) REFERENCES app_users (id),
+                FOREIGN KEY(updated_by_user_id) REFERENCES app_users (id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_pages_organization_id ON structure_pages (organization_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_pages_org_visibility ON structure_pages (organization_id, visibility, published_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_structure_pages_category ON structure_pages (category)"))
 
 
 

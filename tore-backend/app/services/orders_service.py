@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem, Zone
+from models import Bar, Event, MenuItem, MenuItemVariant, Order, OrderItem, OrderStatusTransitionIdempotency, Zone
 from app.schemas.orders import OrderItemOut, OrderOut
 from app.services.audit_service import write_audit_log
 from app.services.market_service import apply_order_market_impact
@@ -291,3 +291,68 @@ def patch_order_status(
     db.commit()
     db.refresh(order)
     return order
+
+
+def transition_order_status_idempotent(
+    db: Session,
+    *,
+    order: Order,
+    action: str,
+    expected_from: set[str],
+    next_status: str,
+    idempotency_key: str,
+    actor_partner_id: Optional[int] = None,
+    actor_user_id: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    reason: Optional[str] = None,
+    response_statuses: Optional[dict[str, str]] = None,
+) -> dict[str, Any]:
+    def response_status(value: str) -> str:
+        if response_statuses is not None:
+            return response_statuses.get(value, value.lower())
+        return _status_alias(value)
+
+    existing = db.query(OrderStatusTransitionIdempotency).filter(
+        OrderStatusTransitionIdempotency.order_id == order.id,
+        OrderStatusTransitionIdempotency.action == action,
+        OrderStatusTransitionIdempotency.idempotency_key == idempotency_key,
+    ).first()
+    if existing is not None:
+        return {**dict(existing.response_json or {}), "idempotent": True}
+    if order.status not in expected_from:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ORDER_STATE_CONFLICT", "current_status": response_status(order.status)},
+        )
+    previous = order.status
+    order.status = next_status
+    order.updated_at = now_utc()
+    response = {
+        "id": order.id,
+        "status": response_status(next_status),
+        "previousStatus": response_status(previous),
+        "idempotent": False,
+    }
+    db.add(OrderStatusTransitionIdempotency(
+        order_id=order.id,
+        action=action,
+        idempotency_key=idempotency_key,
+        from_status=previous,
+        to_status=next_status,
+        response_json=response,
+    ))
+    write_audit_log(
+        db,
+        actor_partner_id=actor_partner_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        action=f"orders.live.{action}",
+        entity_type="order",
+        entity_id=str(order.id),
+        event_id=order.event_id,
+        bar_id=order.bar_id,
+        idempotency_key=idempotency_key,
+        payload={"from": previous, "to": next_status, "reason": reason},
+    )
+    db.commit()
+    return response

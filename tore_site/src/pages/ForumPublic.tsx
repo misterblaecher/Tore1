@@ -1,113 +1,82 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, CalendarDays, ExternalLink, Images, MapPin, Users } from "lucide-react";
+import ForumPage from "./Forum";
+import { apiFetch, ApiError } from "@/lib/api";
+import "@/styles/forum.css";
 
-const card: CSSProperties = {
-  background: "#121217",
-  border: "1px solid #2A2631",
-  borderRadius: 8,
-  padding: 18,
+type EventItem = { id: number; name: string; startsAt?: string | null; endsAt?: string | null; venue?: string | null; city?: string | null; description?: string | null };
+type PublicPage = { id: number; title: string; slug: string; category: string; content?: string; publishedAt?: string | null };
+type Album = { id: number; title: string; description?: string | null; coverUrl?: string | null; media?: { id: number; url: string; caption?: string | null }[] };
+type PublicPayload = {
+  structure: { name: string; slug: string; type: string; description?: string | null; city?: string | null; address?: string | null; contactEmail?: string | null; contactPhone?: string | null; websiteUrl?: string | null; instagramHandle?: string | null; logoUrl?: string | null; bannerUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null; history?: string | null; sponsors?: string[] };
+  visibility: Record<string, string>;
+  events: EventItem[];
+  members: { id: number; displayName: string; avatarUrl?: string | null; role: string }[];
+  albums: Album[];
+  pages: PublicPage[];
+  stats: { members: number; publicEvents: number; publicAlbums: number } | null;
 };
 
-const pill: CSSProperties = {
-  display: "inline-flex",
-  border: "1px solid #2A2631",
-  borderRadius: 6,
-  padding: "5px 9px",
-  color: "#fff",
-  fontSize: 12,
-  fontWeight: 800,
-  textDecoration: "none",
-};
-
-const embuscadeMap = "https://maps.app.goo.gl/5tsL5yu1XdKA25js6";
+function formatDate(value?: string | null) {
+  if (!value) return "Date à confirmer";
+  return new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
 
 export default function ForumPublicPage() {
-  const events = [
-    ["TD Outremeuse", "Ce soir · 22:30 · L’Embuscade · détail public actif"],
-    ["Afond Night", "244 entrées · recap post-event publié"],
-    ["Saint-Torè warmup", "Vendredi · staff en préparation"],
-  ];
-  const bars = [
-    ["L’Embuscade", "450 m · ouvert · 2 soirées cette semaine", embuscadeMap],
-    ["TORÈ Test Bar", "700 m · live · menu TORÈ actif", "https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar"],
-    ["Bar B", "900 m · happy hour · 1 event", "https://www.google.com/maps/search/?api=1&query=Li%C3%A8ge%20bar%20B"],
-  ];
+  const { slug } = useParams();
+  if (!slug) return <ForumPage />;
+  return <PublicStructure slug={slug} />;
+}
 
+function PublicStructure({ slug }: { slug: string }) {
+  const [data, setData] = useState<PublicPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch<PublicPayload>(`/forum/structures/${encodeURIComponent(slug)}`)
+      .then((payload) => { if (active) setData(payload); })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof ApiError ? reason.message : "Cette page publique est indisponible."); });
+    return () => { active = false; };
+  }, [slug]);
+
+  if (error) {
+    return <div className="min-h-screen bg-background"><main className="forum-page"><div className="forum-container"><div className="forum-alert">{error}</div><Link className="forum-button forum-button--ghost" to="/forum/structures"><ArrowLeft size={16} /> Retour aux structures</Link></div></main></div>;
+  }
+  if (!data) return <div className="min-h-screen bg-background"><main className="forum-page"><div className="forum-container"><div className="forum-empty">Chargement de la page officielle…</div></div></main></div>;
+
+  const { structure, events, members, albums, pages, stats } = data;
   return (
-    <main style={{ minHeight: "100vh", background: "#050506", color: "#fff", padding: "88px 24px 32px" }}>
-      <section style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gap: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <p style={{ margin: 0, color: "#F4C430", fontWeight: 900 }}>Forum public TORÈ</p>
-            <h1 style={{ margin: "6px 0", fontSize: 40 }}>Comité Saint-Torè</h1>
-            <p style={{ color: "#bbb", maxWidth: 680 }}>
-              Page publique du comité : soirées, bars partenaires, liens utiles, membres visibles et stats TORÈ.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link to="/studio" style={{ ...pill, borderColor: "#F4C430", color: "#F4C430" }}>Créer un comité/event</Link>
-            <Link to="/forum" style={{ ...pill, borderColor: "#BA1733", background: "#BA1733" }}>Gérer le forum</Link>
-          </div>
-        </div>
+    <div className="min-h-screen bg-background">
 
-        <section style={{ ...card, background: "linear-gradient(135deg,#261018,#121217)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
-            {[["3", "events publics"], ["244", "entrées dernier event"], ["18", "membres visibles"], ["4", "archives privées"]].map(([value, label]) => (
-              <div key={label} style={{ ...card, background: "#050506", padding: 12 }}>
-                <strong style={{ fontSize: 26 }}>{value}</strong>
-                <div style={{ color: "#999", fontSize: 12 }}>{label}</div>
-              </div>
-            ))}
+      <main className="forum-page" style={{ "--structure-primary": structure.primaryColor ?? "#ba1733", "--structure-secondary": structure.secondaryColor ?? "#f4c430" } as CSSProperties}>
+        <div className="forum-container">
+        <Link className="forum-back-link" to="/forum/structures"><ArrowLeft size={15} /> Toutes les structures</Link>
+        <section className="forum-public-hero" style={{ backgroundImage: structure.bannerUrl ? `linear-gradient(90deg, rgba(8,8,9,.95) 0%, rgba(8,8,9,.65) 55%, rgba(8,8,9,.35) 100%), url(${structure.bannerUrl})` : undefined }}>
+          <div className="forum-public-hero__identity">
+            <div className="forum-public-logo" style={{ backgroundImage: structure.logoUrl ? `url(${structure.logoUrl})` : undefined }}>{!structure.logoUrl ? structure.name.slice(0, 1).toUpperCase() : null}</div>
+            <div><span className="forum-eyebrow">Page officielle TORÈ · {structure.type}</span><h1>{structure.name}</h1><p>{structure.description || "Structure officielle de la communauté TORÈ."}</p>{structure.city ? <span className="forum-location"><MapPin size={14} /> {structure.city}{structure.address ? ` · ${structure.address}` : ""}</span> : null}</div>
           </div>
+          <div className="forum-public-hero__actions"><Link className="forum-button forum-button--primary" to={`/forum/structures/${structure.slug}/dashboard`}>Espace membre <ArrowRight size={16} /></Link></div>
         </section>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.35fr .95fr", gap: 14 }}>
-          <section style={card}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-              <h2 style={{ marginTop: 0 }}>Soirées près de toi</h2>
-              <span style={{ ...pill, color: "#F4C430" }}>Liège</span>
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {events.map(([title, body]) => (
-                <article key={title} style={{ ...card, background: "#050506", padding: 14 }}>
-                  <strong>{title}</strong>
-                  <p style={{ color: "#aaa", marginBottom: 0 }}>{body}</p>
-                </article>
-              ))}
-            </div>
-          </section>
+        <div className="forum-public-stats"><div><strong>{stats?.publicEvents ?? "Privé"}</strong><span>events publics</span></div><div><strong>{stats?.members ?? "Privé"}</strong><span>membres visibles selon réglages</span></div><div><strong>{stats?.publicAlbums ?? "Privé"}</strong><span>albums publiés</span></div></div>
 
-          <section style={card}>
-            <h2 style={{ marginTop: 0 }}>Bars partenaires</h2>
-            {bars.map(([name, meta, url]) => (
-              <div key={name} style={{ borderTop: "1px solid #2A2631", padding: "12px 0", display: "grid", gap: 6 }}>
-                <strong>{name}</strong>
-                <span style={{ color: "#999", fontSize: 13 }}>{meta}</span>
-                <a href={url} target="_blank" rel="noreferrer" style={{ ...pill, width: "fit-content", borderColor: "#F4C430", color: "#F4C430" }}>
-                  Google Maps
-                </a>
-              </div>
-            ))}
-          </section>
-        </div>
-
-        <section style={card}>
-          <h2 style={{ marginTop: 0 }}>Forum lié à TORÈ</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 10 }}>
-            {[
-              ["Fil public", "Annonces, events, souvenirs et liens utiles."],
-              ["Gestion event", "Détail public, menu, staff, tickets, rooms et recap."],
-              ["Salons privés", "Espaces type Discord selon rôles et permissions."],
-              ["Archives", "Passation, traditions, décisions et historique annuel."],
-            ].map(([title, body]) => (
-              <article key={title} style={{ ...card, background: "#050506" }}>
-                <strong>{title}</strong>
-                <p style={{ color: "#aaa", marginBottom: 0 }}>{body}</p>
-              </article>
-            ))}
-          </div>
+        <section className="forum-public-grid">
+          <div className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Agenda</span><h2>Prochains événements</h2></div><CalendarDays size={20} /></div><div className="forum-list">{events.length ? events.map((event) => <article className="forum-row" key={event.id}><div><strong>{event.name}</strong><p>{formatDate(event.startsAt)}{event.venue || event.city ? ` · ${event.venue || event.city}` : ""}</p>{event.description ? <small>{event.description}</small> : null}</div><ArrowRight size={16} /></article>) : <div className="forum-empty">Aucun événement public annoncé.</div>}</div></div>
+          <div className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Contact</span><h2>Liens utiles</h2></div><ExternalLink size={20} /></div><div className="forum-public-links">{structure.websiteUrl ? <a href={structure.websiteUrl} target="_blank" rel="noreferrer">Site web <ExternalLink size={14} /></a> : null}{structure.instagramHandle ? <a href={`https://instagram.com/${structure.instagramHandle.replace(/^@/, "")}`} target="_blank" rel="noreferrer">Instagram <ExternalLink size={14} /></a> : null}{structure.contactEmail ? <a href={`mailto:${structure.contactEmail}`}>Email <ExternalLink size={14} /></a> : null}{structure.contactPhone ? <a href={`tel:${structure.contactPhone}`}>Téléphone <ExternalLink size={14} /></a> : null}{!structure.websiteUrl && !structure.instagramHandle && !structure.contactEmail && !structure.contactPhone ? <span className="forum-muted">Cette structure n’a pas encore renseigné de lien public.</span> : null}</div></div>
         </section>
-      </section>
-    </main>
+
+        {structure.history ? <section className="forum-card forum-public-copy"><span className="forum-eyebrow">Histoire</span><h2>Une structure, une mémoire</h2><p>{structure.history}</p></section> : null}
+        {members.length ? <section className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Collectif</span><h2>Membres visibles</h2></div><Users size={20} /></div><div className="forum-members-grid">{members.map((member) => <div className="forum-member" key={member.id}><div className="forum-avatar" style={{ backgroundImage: member.avatarUrl ? `url(${member.avatarUrl})` : undefined }}>{!member.avatarUrl ? member.displayName.slice(0, 1).toUpperCase() : null}</div><div><strong>{member.displayName}</strong><span>{member.role}</span></div></div>)}</div></section> : null}
+        {albums.length ? <section className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Souvenirs</span><h2>Albums publiés</h2></div><Images size={20} /></div><div className="forum-album-grid">{albums.map((album) => <article className="forum-album" key={album.id}>{album.coverUrl ? <img src={album.coverUrl} alt="" /> : <div className="forum-album__placeholder"><Images size={22} /></div>}<div><strong>{album.title}</strong>{album.description ? <p>{album.description}</p> : null}<small>{album.media?.length ?? 0} média{album.media?.length === 1 ? "" : "s"}</small></div></article>)}</div></section> : null}
+        {pages.length ? <section className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Folklore</span><h2>Pages de mémoire</h2></div></div><div className="forum-list">{pages.map((page) => <article className="forum-public-copy forum-page-preview" key={page.id}><span className="forum-badge">{page.category}</span><h3>{page.title}</h3><p>{page.content}</p></article>)}</div></section> : null}
+        {structure.sponsors?.length ? <section className="forum-card"><span className="forum-eyebrow">Partenaires</span><h2>Sponsors & partenaires</h2><div className="forum-hero-tags">{structure.sponsors.map((sponsor) => <span key={sponsor}>{sponsor}</span>)}</div></section> : null}
+        </div>
+      </main>
+
+    </div>
   );
 }

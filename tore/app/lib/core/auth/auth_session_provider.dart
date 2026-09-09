@@ -148,7 +148,15 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
   }
 
   Future<void> loginWithGoogle() async {
-    final googleSignIn = GoogleSignIn(scopes: const ['email']);
+    const webClientId = String.fromEnvironment('TORE_GOOGLE_WEB_CLIENT_ID');
+    if (kIsWeb && webClientId.isEmpty) {
+      throw Exception(
+          'Connexion Google non configurée sur cette version. Continue en invité ou par email.');
+    }
+    final googleSignIn = GoogleSignIn(
+      scopes: const ['email'],
+      clientId: kIsWeb ? webClientId : null,
+    );
     final account = await googleSignIn.signIn();
     if (account == null) {
       throw Exception('Connexion Google annulée.');
@@ -202,7 +210,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
   String _newGuestDeviceId() {
     final r = Random();
     final stamp = DateTime.now().millisecondsSinceEpoch;
-    return 'guest-$stamp-${r.nextInt(1 << 32).toRadixString(16)}';
+    return 'guest-$stamp-${r.nextInt(0x100000000).toRadixString(16)}';
   }
 
   @override

@@ -22,6 +22,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch, ApiError } from "@/lib/api";
 
 const formSchema = z.object({
   firstName: z.string().min(2, "Prénom requis"),
@@ -67,6 +68,7 @@ const faqs = [
 
 export default function Contact() {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -79,13 +81,32 @@ export default function Contact() {
   });
 
   const onSubmit = async (data: FormData) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log("Contact form:", data);
-    setIsSubmitted(true);
-    toast({
-      title: "Message envoyé !",
-      description: "Nous vous répondons sous 24h.",
-    });
+    setSubmitError(null);
+    try {
+      await apiFetch<{ ok: boolean }>("/public/contact", {
+        method: "POST",
+        body: JSON.stringify({
+          first_name: data.firstName,
+          last_name: data.lastName,
+          email: data.email,
+          phone: data.phone || null,
+          company: data.company || null,
+          role: data.role,
+          type: data.type,
+          city: data.city,
+          subject: data.subject,
+          message: data.message,
+        }),
+      });
+      setIsSubmitted(true);
+      toast({ title: "Message envoyé !", description: "Nous vous répondons sous 24h." });
+    } catch (error) {
+      const message = error instanceof ApiError && error.status === 503
+        ? "Le service email est momentanément indisponible."
+        : "Impossible d’envoyer le message pour le moment.";
+      setSubmitError(message);
+      toast({ title: "Envoi impossible", description: message, variant: "destructive" });
+    }
   };
 
   return (
@@ -272,6 +293,7 @@ export default function Contact() {
                           <p className="text-xs text-destructive">{errors.subject.message}</p>
                         )}
                       </div>
+                      {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
 
                       {/* Message */}
                       <div className="space-y-2">

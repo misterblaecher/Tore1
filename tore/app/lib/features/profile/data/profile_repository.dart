@@ -56,6 +56,7 @@ class ProfileRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? oripeaux,
     String? bio,
     String? city,
   }) async {
@@ -63,6 +64,7 @@ class ProfileRepository {
       if (username != null) 'username': username,
       if (displayName != null) 'display_name': displayName,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
+      if (oripeaux != null) 'oripeaux': oripeaux,
       if (bio != null) 'bio': bio,
       if (city != null) 'city': city,
     });

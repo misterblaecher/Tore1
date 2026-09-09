@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 from datetime import timedelta
@@ -9,6 +10,7 @@ from typing import Iterator
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from app.services.rate_limit_service import standard_rate_limit_http_exception
+from app.services.rate_limit_service import RateLimitExceeded, enforce_rate_limit
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -88,6 +90,48 @@ class AccountRequestIn(BaseModel):
 class AccountRequestOut(BaseModel):
     ok: bool
     id: int
+    message: str
+
+
+class ContactIn(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone: str | None = None
+    company: str | None = None
+    role: str
+    type: str
+    city: str
+    subject: str
+    message: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_contact_email(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not _EMAIL_RE.match(cleaned):
+            raise ValueError("Email invalide")
+        return cleaned
+
+    @field_validator("first_name", "last_name", "role", "type", "city", "subject", "message")
+    @classmethod
+    def validate_contact_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Champ requis")
+        return cleaned
+
+    @field_validator("message")
+    @classmethod
+    def validate_contact_message(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 10:
+            raise ValueError("Message trop court")
+        return cleaned[:8000]
+
+
+class ContactOut(BaseModel):
+    ok: bool
     message: str
 
 
@@ -191,7 +235,53 @@ def create_account_request(
     db.commit()
     db.refresh(row)
 
+    notify_to = (os.getenv("CONTACT_TO_EMAIL") or os.getenv("SMTP_USERNAME") or "").strip()
+    if notify_to:
+        try:
+            from app.legacy.monolith import _send_email
+
+            _send_email(
+                subject=f"Nouvelle demande d’accès TORÈ · {payload.role}",
+                body=(
+                    f"Nom : {payload.name}\nEmail : {payload.email}\nTéléphone : {payload.phone}\n"
+                    f"Rôle : {payload.role}\nComité : {payload.committee_name or '-'}\n"
+                    f"Source : {payload.source or 'tore_site'}\nDemande : {row.id}\n"
+                ),
+                to_email=notify_to,
+                reply_to=payload.email,
+            )
+        except Exception:
+            logging.exception("account_request.notify.failed request_id=%s", row.id)
+
     return AccountRequestOut(ok=True, id=row.id, message="Account request created")
+
+
+@router.post("/public/contact", response_model=ContactOut)
+def create_contact_message(payload: ContactIn, request: Request):
+    actor_ip = request.client.host if request.client else "unknown"
+    try:
+        enforce_rate_limit("public_contact", actor_ip)
+    except RateLimitExceeded as exc:
+        raise standard_rate_limit_http_exception(scope=exc.scope, retry_after_seconds=exc.retry_after_seconds)
+
+    notify_to = (os.getenv("CONTACT_TO_EMAIL") or os.getenv("SMTP_USERNAME") or "").strip()
+    if not notify_to:
+        raise HTTPException(status_code=503, detail={"reason": "email_provider_missing"})
+
+    from app.legacy.monolith import _send_email
+
+    _send_email(
+        subject=f"Contact TORÈ · {payload.subject}",
+        body=(
+            f"Nom : {payload.first_name} {payload.last_name}\nEmail : {payload.email}\n"
+            f"Téléphone : {payload.phone or '-'}\nEntreprise / structure : {payload.company or '-'}\n"
+            f"Rôle : {payload.role}\nType : {payload.type}\nVille : {payload.city}\n"
+            f"Sujet : {payload.subject}\n\n{payload.message}\n"
+        ),
+        to_email=notify_to,
+        reply_to=payload.email,
+    )
+    return ContactOut(ok=True, message="Contact message sent")
 
 
 @router.get("/admin/account-requests", response_model=AccountRequestAdminListOut, tags=["admin-account"])
