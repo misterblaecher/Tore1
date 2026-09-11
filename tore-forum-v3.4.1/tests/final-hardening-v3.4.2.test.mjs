@@ -29,27 +29,31 @@ const thomas=repo.listForStructure('members','s_lembuscade').find(m=>m.userId===
 services.members.update(thomas.id,{roleId:managerRole.id});
 
 use('u_thomas');
-assert.throws(()=>services.roles.create({name:'Escalated admin',permissions:['structure.admin']}),/déléguer|permission|refus/i,'cannot grant structure.admin');
-assert.throws(()=>services.roles.create({name:'Escalated owner transfer',permissions:['ownership.transfer']}),/déléguer|permission|refus/i,'cannot grant ownership.transfer');
-assert.throws(()=>services.roles.create({name:'Escalated unlock',permissions:['accounting.unlock']}),/déléguer|permission|refus/i,'cannot grant accounting.unlock');
+assert.throws(()=>services.roles.create({name:'Escalated admin',permissions:['structure.admin']}),/déléguer|permission|refus|non délégable/i,'cannot grant structure.admin');
+assert.throws(()=>services.roles.create({name:'Escalated owner transfer',permissions:['ownership.transfer']}),/déléguer|permission|refus|non délégable/i,'cannot grant ownership.transfer');
+assert.throws(()=>services.roles.create({name:'Escalated unlock',permissions:['accounting.unlock']}),/déléguer|permission|refus|non délégable/i,'cannot grant accounting.unlock');
 
-// Update path is protected too.
+// Even Owner cannot put system-only permissions into an ordinary custom role.
 use('u_owner');
+assert.throws(()=>services.roles.create({name:'Owner-created transfer role',permissions:['ownership.transfer']}),/non délégable|système/i,'ownership.transfer is never grantable to a custom role');
+assert.throws(()=>services.roles.create({name:'Owner-created unlock role',permissions:['accounting.unlock']}),/non délégable|système/i,'accounting.unlock is never grantable to a custom role');
+
+// Update and assignment paths are protected too. Legacy bad data is injected as a fixture only.
 const ordinaryRole=services.roles.create({name:'Ordinary custom',audienceLevel:'Membres',permissions:['members.view']});
-const privilegedRole=services.roles.create({name:'Privileged custom',audienceLevel:'Privé',permissions:['members.view','members.manage','roles.manage','ownership.transfer','accounting.unlock']});
+const privilegedRole={id:'r_fixture_privileged',structureId:'s_lembuscade',name:'Legacy Privileged',systemRole:false,audienceLevel:'Staff',permissions:['members.view','members.manage','roles.manage','ownership.transfer','accounting.unlock','events.view']};
+repo.insertForStructure('roles','s_lembuscade',privilegedRole);
 use('u_thomas');
-assert.throws(()=>services.roles.update(ordinaryRole.id,{permissions:['members.view','structure.admin']}),/déléguer|permission|refus/i,'role update cannot escalate');
+assert.throws(()=>services.roles.update(ordinaryRole.id,{permissions:['members.view','structure.admin']}),/déléguer|permission|refus|non délégable/i,'role update cannot escalate');
 assert.throws(()=>services.members.update(repo.listForStructure('members','s_lembuscade').find(m=>m.userId==='u_emma').id,{roleId:privilegedRole.id}),/déléguer|non délégable|permission/i,'role assignment cannot bypass ceiling');
 assert.throws(()=>services.members.invite({email:'ceiling@example.be',roleId:privilegedRole.id}),/déléguer|non délégable|permission/i,'invitation cannot bypass ceiling');
 assert.throws(()=>services.structure.transferOwnership('u_emma'),/propriétaire principal|refus/i,'non-owner cannot transfer ownership');
 
-// Even an actor who somehow already has a non-delegable permission cannot re-delegate it.
-use('u_owner');
-const contaminated=services.roles.create({name:'Legacy privileged manager',audienceLevel:'Staff',permissions:['members.view','members.manage','roles.manage','ownership.transfer','accounting.unlock','events.view']});
-services.members.update(thomas.id,{roleId:contaminated.id});
-use('u_thomas');
-assert.throws(()=>services.roles.create({name:'Copy ownership transfer',permissions:['ownership.transfer']}),/non délégable|Owner/i,'ownership.transfer is non-delegable');
-assert.throws(()=>services.roles.create({name:'Copy accounting unlock',permissions:['accounting.unlock']}),/non délégable|Owner/i,'accounting.unlock is non-delegable');
+// A contaminated legacy actor cannot re-delegate the non-delegable permission it already has.
+thomas.roleId=privilegedRole.id;repo.save();
+assert.equal(auth.hasPermission('ownership.transfer','u_thomas','s_lembuscade'),true,'fixture actor is contaminated');
+assert.throws(()=>services.roles.create({name:'Copy ownership transfer',permissions:['ownership.transfer']}),/non délégable|système|Owner/i,'ownership.transfer is non-delegable');
+assert.throws(()=>services.roles.create({name:'Copy accounting unlock',permissions:['accounting.unlock']}),/non délégable|système|Owner/i,'accounting.unlock is non-delegable');
+assert.throws(()=>services.structure.transferOwnership('u_emma'),/propriétaire principal|refus/i,'permission contamination still cannot transfer ownership');
 
 // Event detail must remain readable when stats.view is absent.
 assert.equal(auth.hasPermission('events.view','u_thomas','s_lembuscade'),true);
@@ -81,7 +85,6 @@ assert.equal(services.publicData.posts('s_lembuscade','Public').some(p=>p.id===m
 assert.equal(services.publicData.posts('s_lembuscade','Membres').some(p=>p.id===memberPost.id),true,'members post visible to members');
 assert.equal(services.publicData.posts('s_lembuscade','Membres').some(p=>p.id===bureauPost.id),false,'bureau post hidden from members');
 assert.equal(services.publicData.posts('s_lembuscade','Bureau').some(p=>p.id===bureauPost.id),true,'bureau post visible to bureau');
-
 services.visibility.set('publications','Privé');
 assert.equal(services.publicData.posts('s_lembuscade','Public').length,0,'publications section policy overrides public post visibility');
 
