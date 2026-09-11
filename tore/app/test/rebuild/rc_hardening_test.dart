@@ -7,7 +7,7 @@ import 'package:tore/rebuild/models/rebuild_types.dart';
 import 'package:tore/rebuild/routing/app_routes.dart';
 import 'package:tore/rebuild/routing/qr_router.dart';
 import 'package:tore/rebuild/services/client_log.dart';
-import 'package:tore/rebuild/ui/theme/tore_theme.dart';
+import 'package:tore/theme/tokens.dart';
 
 void main() {
   test('scrubber redacts auth headers, jwt, query params, and contact fields',
@@ -55,10 +55,10 @@ void main() {
     expect(EventState.live.isLive, isTrue);
     expect(EventState.paused.isLive, isFalse);
 
-    expect(ToreTokens.s8, 8.0);
-    expect(ToreTokens.s12, 12.0);
-    expect(ToreTokens.s16, 16.0);
-    expect(ToreTokens.s24, 24.0);
+    expect(ToreSpace.s2, 8.0);
+    expect(ToreSpace.s3, 12.0);
+    expect(ToreSpace.s4, 16.0);
+    expect(ToreSpace.s6, 24.0);
   });
 
   test('QR router no-throw fallback under fuzzed partial payloads', () {
