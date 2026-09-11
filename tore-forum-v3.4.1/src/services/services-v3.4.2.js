@@ -72,7 +72,9 @@ export function createServices(repo, blobRepo, audit, permissionsOrAuth){
 
   const baseMemberUpdate = services.members.update.bind(services.members);
   services.members.update = (id, patch = {}) => {
-    if(patch.roleId){
+    const currentMember = repo.getForStructure('members', sid(), id);
+    const roleChanged = Boolean(patch.roleId && patch.roleId !== currentMember?.roleId);
+    if(roleChanged){
       const role = repo.getForStructure('roles', sid(), patch.roleId);
       if(!role) throw new AuthorizationError('Rôle absent ou hors structure');
       if(role.systemRole) throw new AuthorizationError('Un rôle système ne peut être assigné que par son workflow dédié');
