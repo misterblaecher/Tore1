@@ -21,7 +21,9 @@ services:
       context: ./tore-backend
     environment:
       DATABASE_URL: postgresql://tore:tore@postgres:5432/tore
+      TORE_ENV: "DEV"
       TORE_AUTO_DB_BOOTSTRAP: "0"
+      TORE_EMAIL_OTP_DEV_MODE: "1"
       TORE_CORS_ORIGINS: "http://localhost:5173"
     depends_on:
       postgres:
