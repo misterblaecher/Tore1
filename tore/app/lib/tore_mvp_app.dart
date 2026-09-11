@@ -34,21 +34,30 @@ class ToreMvpApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final remoteConfig = ref.watch(remoteConfigProvider).asData?.value;
     final buildInfo = BuildInfo.fromEnvironment();
-    final updateRequired = remoteConfig != null &&
-        requiresRemoteUpdate(remoteConfig, buildInfo);
+    final blockingConfig = remoteConfig != null &&
+            requiresRemoteUpdate(remoteConfig, buildInfo)
+        ? remoteConfig
+        : null;
+
+    Widget updateScreen() => UpdateRequiredScreen(
+          message: _updateRequiredMessage(blockingConfig!),
+          currentVersion: buildInfo.semver,
+          currentBuild: buildInfo.buildNumber,
+        );
 
     return MaterialApp(
       title: 'TORÈ',
       debugShowCheckedModeBanner: false,
       theme: ToreTheme.dark(),
-      home: updateRequired
-          ? UpdateRequiredScreen(
-              message: _updateRequiredMessage(remoteConfig),
-              currentVersion: buildInfo.semver,
-              currentBuild: buildInfo.buildNumber,
-            )
-          : const _SessionGate(),
+      home: blockingConfig != null ? updateScreen() : const _SessionGate(),
       onGenerateRoute: (settings) {
+        if (blockingConfig != null) {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => updateScreen(),
+          );
+        }
+
         final rawRoute = settings.name ?? '';
         final uri = Uri.tryParse(rawRoute);
         if (uri == null) return null;
