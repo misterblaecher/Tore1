@@ -1,8 +1,8 @@
-"""Typed Forum v2 endpoints that replace legacy-compatible route definitions.
+"""Typed Forum v2 endpoints that replace or extend compatibility route definitions.
 
 These routes are composed in ``app.main`` after the original Forum router has
-had the replaced route objects removed.  Keeping the replacement isolated lets
-us harden the public contract without duplicating domain logic.
+had the replaced route objects removed. Keeping the replacement isolated lets
+us harden the public contract without duplicating the broader router.
 """
 
 from __future__ import annotations
@@ -12,21 +12,50 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, StructureDiscussionPost
-from app.forum_models import StructureGovernance, StructurePublicPage
+from app.forum_models import StructureDocumentVersion, StructureGovernance, StructurePublicPage
 from app.legacy.monolith import get_current_user, get_db
-from app.schemas.forum_backend import MessageCreateIn, PublicPagePatchIn
+from app.schemas.forum_backend import DocumentOut, DocumentPatchIn, MessageCreateIn, PublicPagePatchIn
 from app.routers.forum_backend import (
     _channel_scoped,
     _ctx,
     _document_scoped,
+    _event_scoped,
     _limit,
     _organization,
 )
-from app.services.forum_authorization import AuthorizationService
+from app.services.forum_authorization import AuthorizationService, normalize_visibility
 from app.services.forum_audit import write_structure_audit
 
 
 router = APIRouter(prefix="/forum/v2", tags=["forum-v2"])
+
+
+def _document_out(db: Session, organization_id: int, doc) -> dict:
+    versions = db.query(StructureDocumentVersion).filter_by(
+        document_id=doc.id,
+        organization_id=organization_id,
+    ).order_by(StructureDocumentVersion.version_number.desc()).all()
+    return {
+        "id": doc.id,
+        "title": doc.title,
+        "description": doc.description,
+        "folder": doc.folder,
+        "tags": list(doc.tags_json or []),
+        "visibility": normalize_visibility(doc.visibility),
+        "eventId": doc.event_id,
+        "currentVersion": versions[0].version_number if versions else 0,
+        "versions": [
+            {
+                "version": version.version_number,
+                "name": version.original_name,
+                "mimeType": version.mime_type,
+                "size": version.size_bytes,
+                "checksum": version.checksum_sha256,
+                "createdAt": version.created_at.isoformat(),
+            }
+            for version in versions
+        ],
+    }
 
 
 @router.patch("/structures/{slug}/public-page")
@@ -140,3 +169,63 @@ def post_message(
         "parentMessageId": row.parent_id,
         "createdAt": row.created_at.isoformat(),
     }
+
+
+@router.get("/structures/{slug}/documents/{document_id}", response_model=DocumentOut)
+def get_document_metadata(
+    slug: str,
+    document_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    org = _organization(db, slug)
+    ctx = _ctx(db, org, user, "documents.view")
+    doc = _document_scoped(db, org.id, document_id)
+    if not AuthorizationService.can_read_document(ctx, doc):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return _document_out(db, org.id, doc)
+
+
+@router.patch("/structures/{slug}/documents/{document_id}", response_model=DocumentOut)
+def patch_document_metadata(
+    slug: str,
+    document_id: int,
+    payload: DocumentPatchIn,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    org = _organization(db, slug)
+    ctx = _ctx(db, org, user, "documents.manage")
+    doc = _document_scoped(db, org.id, document_id)
+    before = _document_out(db, org.id, doc)
+    values = payload.model_dump(exclude_unset=True)
+    if values.get("event_id") is not None:
+        _event_scoped(db, org.id, values["event_id"])
+    if "title" in values and values["title"] is not None:
+        doc.title = values["title"].strip()
+    if "description" in values:
+        doc.description = values["description"]
+    if "folder" in values:
+        doc.folder = values["folder"]
+    if "tags" in values and values["tags"] is not None:
+        doc.tags_json = [tag.strip() for tag in values["tags"] if tag.strip()]
+    if "visibility" in values and values["visibility"] is not None:
+        doc.visibility = values["visibility"]
+    if "event_id" in values:
+        doc.event_id = values["event_id"]
+    doc.updated_at = now_utc()
+    after = _document_out(db, org.id, doc)
+    write_structure_audit(
+        db,
+        organization_id=org.id,
+        actor_user_id=user.id,
+        actor_role=ctx.role.name,
+        action="forum.document.update",
+        resource_type="document",
+        resource_id=str(doc.id),
+        before=before,
+        after=after,
+        event_id=doc.event_id,
+    )
+    db.commit()
+    return after
