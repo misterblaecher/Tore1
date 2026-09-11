@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import Event, EventRuntimeState, Organization, OrganizationMembership
+from models import AppUser, Event, EventRuntimeState, Organization, OrganizationMembership
 from app.forum_models import (
     AccountingEntry,
     EventStructure,
@@ -164,6 +164,16 @@ class StructureService:
             raise HTTPException(403, detail={"reason": "CURRENT_OWNER_REQUIRED"})
         if new_owner_user_id == ctx.user.id:
             return governance
+
+        target_user = db.get(AppUser, new_owner_user_id)
+        if (
+            target_user is None
+            or bool(target_user.is_guest)
+            or bool(target_user.is_deleted)
+            or target_user.deleted_at is not None
+        ):
+            raise HTTPException(409, detail={"reason": "NEW_OWNER_MUST_BE_REGISTERED_USER"})
+
         target = AuthorizationService.active_membership(db, ctx.organization.id, new_owner_user_id)
         if target is None:
             raise HTTPException(409, detail={"reason": "NEW_OWNER_MUST_BE_ACTIVE_MEMBER"})
