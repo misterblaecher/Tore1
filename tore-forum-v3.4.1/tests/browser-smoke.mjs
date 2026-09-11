@@ -21,10 +21,12 @@ function findBrowser(){
   for(const cmd of ['chrome.exe','msedge.exe','chromium.exe']){const p=commandPath(cmd);if(p)c.push(p)}
  }else if(process.platform==='darwin'){
   c.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge','/Applications/Chromium.app/Contents/MacOS/Chromium');
-  for(const cmd of ['google-chrome','chromium','chromium-browser','microsoft-edge']){const p=commandPath(cmd);if(p)c.push(p)}
+  for(const cmd of ['google-chrome','microsoft-edge','chromium','chromium-browser']){const p=commandPath(cmd);if(p)c.push(p)}
  }else{
-  c.push('/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/microsoft-edge');
-  for(const cmd of ['chromium','chromium-browser','google-chrome','google-chrome-stable','microsoft-edge']){const p=commandPath(cmd);if(p)c.push(p)}
+  // Prefer the regular Chrome binary on CI/workstations. Some /usr/bin/chromium
+  // packages are sandbox/snap wrappers that cannot run headless in containers.
+  c.push('/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/microsoft-edge','/usr/bin/chromium','/usr/bin/chromium-browser');
+  for(const cmd of ['google-chrome','google-chrome-stable','microsoft-edge','chromium','chromium-browser']){const p=commandPath(cmd);if(p)c.push(p)}
  }
  for(const candidate of c){const p=existing(candidate);if(p)return{path:p,source:'auto-detect'}}return null
 }
@@ -33,7 +35,7 @@ async function killTree(child,{force=false}={}){
  if(!child?.pid)return;
  children.delete(child);
  if(process.platform==='win32'){
-  spawnSync('taskkill',['/PID',String(child.pid),'/T',force?'/F':'/F'],{stdio:'ignore',windowsHide:true});
+  spawnSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});
   return;
  }
  const signal=force?'SIGKILL':'SIGTERM';
@@ -62,7 +64,7 @@ async function runBrowser(args,timeoutMs=15000){
  return await new Promise(resolve=>{
   const p=spawn(browser.path,[...commonArgs,...args],{stdio:['ignore','pipe','pipe'],windowsHide:true,detached:process.platform!=='win32'});children.add(p);let stderr='',stdout='',settled=false;
   p.stderr.on('data',d=>stderr+=d.toString());p.stdout.on('data',d=>stdout+=d.toString());
-  const finish=async result=>{if(settled)return;settled=true;clearTimeout(timer);children.delete(p);resolve({...result,stderr,stdout})};
+  const finish=result=>{if(settled)return;settled=true;clearTimeout(timer);children.delete(p);resolve({...result,stderr,stdout})};
   const timer=setTimeout(async()=>{await killTree(p);finish({ok:false,timeout:true})},timeoutMs);
   p.on('error',err=>finish({ok:false,error:err}));
   p.on('exit',code=>finish({ok:code===0,code}));
