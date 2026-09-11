@@ -51,6 +51,24 @@ export function createServices(repo, blobRepo, audit, permissionsOrAuth){
     catch { return false; }
   };
 
+  const inheritedDocumentReplace=services.documents.replace.bind(services.documents);
+  services.documents.replace=async(id,file)=>{
+    const before=services.documents.get(id);
+    const previousVersion=before.version;
+    const previousBlobKey=before.blobKey;
+    const previousBlob=previousBlobKey?await blobRepo.get(previousBlobKey):null;
+    const next=await inheritedDocumentReplace(id,file);
+    if(previousBlob){
+      const historicalKey=`doc:${id}:v${previousVersion}`;
+      const versions=[...(next.versions||[])];
+      const index=versions.findIndex(v=>Number(v.version)===Number(previousVersion));
+      if(index>=0)versions[index]={...versions[index],blobKey:historicalKey};
+      repo.updateForStructure('documents',sid(),id,{versions});
+      next.versions=versions;
+    }
+    return next;
+  };
+
   const baseDocumentRemove = services.documents.remove.bind(services.documents);
   services.documents.remove = async id => {
     const doc = services.documents.get(id);
