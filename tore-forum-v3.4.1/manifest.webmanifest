@@ -1,0 +1,10 @@
+{
+  "name":"TORÈ Forum — Portail Structures",
+  "short_name":"TORÈ Forum",
+  "start_url":"/structures/lembuscade/admin/dashboard",
+  "scope":"/",
+  "display":"standalone",
+  "background_color":"#080a0b",
+  "theme_color":"#080a0b",
+  "icons":[{"src":"/assets/app_icon.png","sizes":"512x512","type":"image/png"}]
+}

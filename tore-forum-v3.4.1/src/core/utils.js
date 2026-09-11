@@ -1,0 +1,15 @@
+export const h = (v='') => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+export const uid = (prefix='id') => `${prefix}_${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
+export const clone = v => structuredClone ? structuredClone(v) : JSON.parse(JSON.stringify(v));
+export const fmtDate = (iso, opts={dateStyle:'medium'}) => new Intl.DateTimeFormat('fr-BE', opts).format(new Date(iso));
+export const fmtDateTime = iso => new Intl.DateTimeFormat('fr-BE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(iso));
+export const fmtTime = iso => new Intl.DateTimeFormat('fr-BE',{hour:'2-digit',minute:'2-digit'}).format(new Date(iso));
+export const money = n => new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(Number(n||0));
+export const slugify = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+export const byId = (list,id) => list.find(x=>x.id===id);
+export const groupBy = (list,keyFn) => list.reduce((a,x)=>{const k=keyFn(x);(a[k]??=[]).push(x);return a},{});
+export const isFuture = iso => new Date(iso) > new Date();
+export const sum = (list,fn=x=>x) => list.reduce((a,x)=>a+Number(fn(x)||0),0);
+export const downloadText = (name,text,type='text/plain') => {const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+export const csv = (rows) => rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');
+export const debounce = (fn,ms=180) => {let t; return (...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}};

@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+global.localStorage={m:new Map(),getItem(k){return this.m.get(k)||null},setItem(k,v){this.m.set(k,String(v))},removeItem(k){this.m.delete(k)}};
+global.sessionStorage={m:new Map(),getItem(k){return this.m.get(k)||null},setItem(k,v){this.m.set(k,String(v))},removeItem(k){this.m.delete(k)}};
+global.document={createElement(){return {click(){},set href(v){},set download(v){}}}};
+global.URL.createObjectURL=()=> 'blob:test';global.URL.revokeObjectURL=()=>{};
+const {LocalRepository}=await import('../src/core/storage.js');
+const {AuthorizationService}=await import('../src/core/authorization.js');
+const {auditService}=await import('../src/services/audit.js');
+const {createServices}=await import('../src/services/services.js');
+const repo=new LocalRepository(),auth=new AuthorizationService(repo),audit=auditService(repo);
+const blobs={m:new Map(),async put(k,v){this.m.set(k,v)},async get(k){return this.m.get(k)},async remove(k){this.m.delete(k)}};
+const s=createServices(repo,blobs,audit,auth);
+const use=u=>{repo.state.currentUserId=u;repo.state.activeStructureId='s_lembuscade';repo.save()};
+const personas=[['public',null],['member','u_emma'],['bureau','u_jules'],['treasury','u_marie'],['owner','u_owner']];
+const expected={public:{bureau:false,treasury:false,memberOnly:false},member:{bureau:false,treasury:false,memberOnly:true},bureau:{bureau:true,treasury:false,memberOnly:true},treasury:{bureau:true,treasury:true,memberOnly:true},owner:{bureau:true,treasury:true,memberOnly:true}};
+for(const [name,user] of personas){use(user);assert.equal(auth.canViewLevel('Membres',user,'s_lembuscade'),expected[name].memberOnly,`${name}: member`);assert.equal(auth.canViewLevel('Bureau',user,'s_lembuscade'),expected[name].bureau,`${name}: bureau`);assert.equal(auth.canViewLevel('Trésorerie',user,'s_lembuscade'),expected[name].treasury,`${name}: treasury`)}
+use('u_emma');assert.equal(auth.canReadEvent('u_emma',repo.getForStructure('events','s_lembuscade','e1')),true);assert.equal(auth.canReadDocument('u_emma',repo.getForStructure('documents','s_lembuscade','doc2')),false);
+use('u_marie');assert.equal(auth.canReadDocument('u_marie',repo.getForStructure('documents','s_lembuscade','doc2')),true);assert.equal(auth.canReadAccounting('u_marie','s_lembuscade'),true);
+use('u_owner');s.onboarding.createDraft('create');s.onboarding.saveDraft({name:'QA Structure',slug:'qa-structure',type:'Comité',description:'QA',inviteEmails:['bureau1@example.be','bureau2@example.be']});const created=s.onboarding.complete();assert.equal(repo.listForStructure('invitations',created.id).length,2);
+repo.state.activeStructureId='s_lembuscade';const targetStatus=repo.getGlobal('structures','s_autre').status;s.onboarding.createDraft('claim');s.onboarding.saveDraft({mode:'claim',claimTargetId:'s_autre',claimReason:'QA ownership'});const claimed=s.onboarding.complete();assert.equal(claimed.structureId,'s_autre');assert.equal(claimed.status,'PENDING');assert.equal(repo.getGlobal('structures','s_autre').status,targetStatus);
+console.log('TORÈ Forum v3.4 role/visibility QA matrix: PASS');

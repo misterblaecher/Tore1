@@ -1,0 +1,22 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
+const css=read('../styles.css'),sw=read('../sw.js'),app=read('../src/app.js'),views=read('../src/views/views.js'),auth=read('../src/core/authorization.js'),services=read('../src/services/services.js'),storage=read('../src/core/storage.js'),integrity=read('../src/core/integrity.js');
+assert.match(css,/\.ico\{width:18px;height:18px/);
+assert.match(css,/@media\(max-width:900px\)/);
+assert.match(css,/\.channel-pane\.open/);
+assert.match(css,/\.field-error/);
+assert.match(sw,/tore-forum-v3\.4-shell/);
+assert.match(sw,/req\.mode==='navigate'/);
+assert.match(sw,/cache:'no-store'/);
+assert.ok(!sw.includes('localStorage'));
+assert.match(app,/AuthorizationService/);
+assert.match(app,/adminGuard/);
+assert.match(app,/history|Router/);
+assert.match(auth,/canReadDocument/);assert.match(auth,/canDownloadDocument/);assert.match(auth,/canPostChannel/);assert.match(auth,/canPreviewVisibility/);assert.match(auth,/canReadAccounting/);
+assert.match(storage,/getForStructure/);assert.match(storage,/listForStructure/);assert.match(storage,/insertForStructure/);assert.match(storage,/updateForStructure/);assert.match(integrity,/IMMUTABLE_FIELDS/);assert.match(integrity,/pickAllowed/);
+assert.match(services,/services\.roles=/);assert.match(services,/services\.structure=/);assert.match(services,/services\.publicPages=/);assert.match(services,/services\.claims=/);assert.match(services,/getAllowedTransitions/);assert.match(services,/STATS_PUBLIC_SUMMARY_PUBLISHED/);assert.match(services,/ACCOUNTING_LOCKED/);
+assert.match(views,/public-site/);assert.match(views,/App TORÈ/);assert.match(views,/visibility-select/);assert.match(views,/blob-image/);
+// UI must not mutate roles/settings directly.
+assert.ok(!/repo\.insert\(['"]roles['"]/.test(app),'UI must not create roles directly');
+assert.ok(!/repo\.update\(['"]structures['"]/.test(app),'UI must not update settings directly');
+console.log('TORÈ Forum v3.4 static tests: PASS');
