@@ -38,6 +38,12 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Test Player'), findsOneWidget);
+    expect(find.text('Règles du classement'), findsOneWidget);
+
+    await tester.tap(find.text('Règles du classement'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Test rules'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
