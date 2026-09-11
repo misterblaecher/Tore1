@@ -5,7 +5,7 @@ import 'package:tore/rebuild/models/snapshot.dart';
 import 'package:tore/rebuild/routing/app_routes.dart';
 import 'package:tore/rebuild/routing/qr_router.dart';
 import 'package:tore/rebuild/routing/route_guards.dart';
-import 'package:tore/rebuild/ui/theme/tore_theme.dart';
+import 'package:tore/theme/tokens.dart';
 
 void main() {
   test('route guard decisions by mode and route prefix', () {
@@ -35,9 +35,9 @@ void main() {
         AppRoutes.eventHub);
   });
 
-  test('theme tokens are night-first and CTA yellow is stable', () {
-    expect(ToreTokens.black.toARGB32(), 0xFF050506);
-    expect(ToreTokens.ruby.toARGB32(), 0xFFBA1733);
-    expect(ToreTokens.yellowCta.toARGB32(), 0xFFF4C430);
+  test('active theme tokens are night-first and authority gold is stable', () {
+    expect(ToreSemantic.bg.toARGB32(), 0xFF070607);
+    expect(ToreSemantic.accentPrimary.toARGB32(), 0xFFFF2A4D);
+    expect(ToreSemantic.accentAuthority.toARGB32(), 0xFFF5C400);
   });
 }
