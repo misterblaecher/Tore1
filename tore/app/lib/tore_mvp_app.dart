@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_context/app_context.dart';
 import 'core/auth/providers.dart';
+import 'core/config/remote_config.dart';
 import 'core/network/network_state_provider.dart';
 import 'core/routing/app_deep_link_router.dart';
 import 'features/auth/presentation/welcome_screen.dart';
@@ -22,6 +23,7 @@ import 'features/operations/presentation/operational_providers.dart';
 import 'features/operations/presentation/operational_route_gate.dart';
 import 'features/qr/presentation/qr_scanner_gate_screen.dart';
 import 'features/qr/qr_router.dart';
+import 'features/system/presentation/update_required_screen.dart';
 import 'theme/tore_theme.dart';
 import 'shared/widgets/network_banner.dart';
 
@@ -30,11 +32,22 @@ class ToreMvpApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final remoteConfig = ref.watch(remoteConfigProvider).asData?.value;
+    final buildInfo = BuildInfo.fromEnvironment();
+    final updateRequired = remoteConfig != null &&
+        requiresRemoteUpdate(remoteConfig, buildInfo);
+
     return MaterialApp(
       title: 'TORÈ',
       debugShowCheckedModeBanner: false,
       theme: ToreTheme.dark(),
-      home: const _SessionGate(),
+      home: updateRequired
+          ? UpdateRequiredScreen(
+              message: _updateRequiredMessage(remoteConfig),
+              currentVersion: buildInfo.semver,
+              currentBuild: buildInfo.buildNumber,
+            )
+          : const _SessionGate(),
       onGenerateRoute: (settings) {
         final rawRoute = settings.name ?? '';
         final uri = Uri.tryParse(rawRoute);
@@ -89,9 +102,6 @@ class ToreMvpApp extends ConsumerWidget {
               builder: (_) => MenuScreen(eventId: deepLink.id!),
             );
           case AppDeepLinkKind.barMenu:
-            // The active mobile app has no standalone public bar-menu screen.
-            // Keep the link useful and safe by landing on the canonical bar
-            // detail instead of resurrecting the rebuild BAR shell.
             return MaterialPageRoute(
               settings: settings,
               builder: (_) => BarDetailScreen(barId: deepLink.id!),
@@ -104,6 +114,19 @@ class ToreMvpApp extends ConsumerWidget {
         }
       },
     );
+  }
+
+  String _updateRequiredMessage(RemoteConfigPayload config) {
+    final parts = <String>[];
+    if (config.minSupportedVersion != null) {
+      parts.add('Version minimale : ${config.minSupportedVersion}.');
+    }
+    if (config.minSupportedBuild != null) {
+      parts.add('Build minimum : ${config.minSupportedBuild}.');
+    }
+    return parts.isEmpty
+        ? 'Une version plus récente de TORÈ est requise.'
+        : parts.join(' ');
   }
 }
 
@@ -163,6 +186,7 @@ class _ToreMvpShellState extends ConsumerState<ToreMvpShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(operationalCapabilitiesProvider);
+      ref.invalidate(remoteConfigProvider);
     }
   }
 
@@ -173,6 +197,7 @@ class _ToreMvpShellState extends ConsumerState<ToreMvpShell>
       if (next.state == NetworkState.online &&
           previous?.state != NetworkState.online) {
         ref.invalidate(operationalCapabilitiesProvider);
+        ref.invalidate(remoteConfigProvider);
       }
     });
     ref.listen<AsyncValue<OperationalCapabilities>>(
