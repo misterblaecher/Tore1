@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import os
 
+from fastapi import Depends
+
 from app.core.startup import run_startup
 from app.legacy import monolith
 from app.routers.forum_backend import router as forum_backend_router
 from app.routers.forum_backend_overrides import router as forum_backend_override_router
+from app.services.forum_identity import get_registered_forum_user
 
 
-_REPLACED_FORUM_ENDPOINTS = {"patch_public_page", "post_message"}
+_REPLACED_FORUM_ENDPOINTS = {
+    "patch_public_page",
+    "post_message",
+    "folklore_versions",
+    "list_posts",
+}
 
 
 def _server_forum_authority_enabled() -> bool:
@@ -32,9 +40,8 @@ def _install_forum_backend(app) -> None:
             )
         ]
 
-    # Two initially prepared compatibility handlers used an untyped body and an
-    # incomplete SETUP -> ACTIVE public-page transition.  Remove those route
-    # objects before composition and register their typed hardened definitions.
+    # Compatibility handlers replaced here keep the broader router stable while
+    # letting final review hardening stay isolated and typed.
     forum_backend_router.routes[:] = [
         route
         for route in forum_backend_router.routes
@@ -43,8 +50,9 @@ def _install_forum_backend(app) -> None:
     ]
 
     if not any(str(getattr(route, "path", "")).startswith("/forum/v2/") for route in app.router.routes):
-        app.include_router(forum_backend_override_router)
-        app.include_router(forum_backend_router)
+        forum_guard = [Depends(get_registered_forum_user)]
+        app.include_router(forum_backend_override_router, dependencies=forum_guard)
+        app.include_router(forum_backend_router, dependencies=forum_guard)
     app.openapi_schema = None
 
 
