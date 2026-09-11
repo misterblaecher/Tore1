@@ -11,8 +11,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import AppUser, StructureDiscussionPost
-from app.forum_models import StructureDocumentVersion, StructureGovernance, StructurePublicPage
+from models import AppUser, OrgaPost, StructureDiscussionPost
+from app.forum_models import (
+    OrgaPostPublication,
+    StructureDocumentVersion,
+    StructureGovernance,
+    StructurePageVersion,
+    StructurePublicPage,
+)
 from app.legacy.monolith import get_current_user, get_db
 from app.schemas.forum_backend import DocumentOut, DocumentPatchIn, MessageCreateIn, PublicPagePatchIn
 from app.routers.forum_backend import (
@@ -22,6 +28,7 @@ from app.routers.forum_backend import (
     _event_scoped,
     _limit,
     _organization,
+    _page_scoped,
 )
 from app.services.forum_authorization import AuthorizationService, normalize_visibility
 from app.services.forum_audit import write_structure_audit
@@ -55,6 +62,21 @@ def _document_out(db: Session, organization_id: int, doc) -> dict:
             }
             for version in versions
         ],
+    }
+
+
+def _post_out(post: OrgaPost, publication: OrgaPostPublication) -> dict:
+    return {
+        "id": post.id,
+        "title": publication.title,
+        "body": post.text,
+        "eventId": publication.event_id,
+        "mediaId": publication.media_id,
+        "status": publication.status,
+        "visibility": publication.visibility,
+        "publishAt": publication.publish_at.isoformat() if publication.publish_at else None,
+        "publishedAt": publication.published_at.isoformat() if publication.published_at else None,
+        "createdAt": post.created_at.isoformat() if post.created_at else None,
     }
 
 
@@ -229,3 +251,69 @@ def patch_document_metadata(
     )
     db.commit()
     return after
+
+
+@router.get("/structures/{slug}/folklore/{page_id}/versions")
+def folklore_versions(
+    slug: str,
+    page_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Full folklore history is an editor/admin surface, never a read bypass."""
+    org = _organization(db, slug)
+    _ctx(db, org, user, "folklore.manage")
+    _page_scoped(db, org.id, page_id)
+    rows = db.query(StructurePageVersion).filter_by(
+        organization_id=org.id,
+        page_id=page_id,
+    ).order_by(StructurePageVersion.version_number.desc()).all()
+    return {
+        "items": [
+            {
+                "version": row.version_number,
+                "title": row.title,
+                "content": row.content,
+                "category": row.category,
+                "visibility": normalize_visibility(row.visibility),
+                "createdAt": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.get("/structures/{slug}/posts")
+def list_posts(
+    slug: str,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Managers see editorial state; members see only already-public content."""
+    org = _organization(db, slug)
+    ctx = _ctx(db, org, user, "structure.read")
+    rows = db.query(OrgaPost, OrgaPostPublication).join(
+        OrgaPostPublication,
+        OrgaPostPublication.post_id == OrgaPost.id,
+    ).filter(
+        OrgaPost.organization_id == org.id,
+        OrgaPost.deleted_at.is_(None),
+    ).order_by(OrgaPost.created_at.desc()).all()
+
+    can_manage_publications = "publications.manage" in ctx.permissions
+    stamp = now_utc()
+    items = []
+    for post, publication in rows:
+        if not AuthorizationService.can_view_level(publication.visibility, user, ctx):
+            continue
+        if not can_manage_publications:
+            status = (publication.status or "DRAFT").upper()
+            visible_now = status == "PUBLISHED" or (
+                status == "SCHEDULED"
+                and publication.publish_at is not None
+                and publication.publish_at <= stamp
+            )
+            if not visible_now:
+                continue
+        items.append(_post_out(post, publication))
+    return {"items": items}
