@@ -219,17 +219,25 @@ final remoteConfigServiceProvider = Provider<RemoteConfigService>((ref) {
   );
 });
 
+/// Last resolved config consumed synchronously by write guards.
+///
+/// Keeping this snapshot separate prevents isolated widgets/tests that only
+/// read write-gate state from accidentally starting a network request.
+final remoteConfigSnapshotProvider =
+    StateProvider<RemoteConfigPayload?>((ref) => null);
+
 final remoteConfigProvider = FutureProvider<RemoteConfigPayload>((ref) async {
-  return ref.watch(remoteConfigServiceProvider).load();
+  final payload = await ref.watch(remoteConfigServiceProvider).load();
+  ref.read(remoteConfigSnapshotProvider.notifier).state = payload;
+  return payload;
 });
 
 final remoteWritesDisabledProvider = Provider<bool>((ref) {
-  return ref.watch(remoteConfigProvider).asData?.value.disableWritesGlobal ??
-      false;
+  return ref.watch(remoteConfigSnapshotProvider)?.disableWritesGlobal ?? false;
 });
 
 final remoteWriteMessageProvider = Provider<String?>((ref) {
-  final config = ref.watch(remoteConfigProvider).asData?.value;
+  final config = ref.watch(remoteConfigSnapshotProvider);
   if (config == null || !config.disableWritesGlobal) return null;
   return config.disableWritesMessage;
 });
