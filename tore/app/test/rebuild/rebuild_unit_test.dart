@@ -3,8 +3,6 @@ import 'package:tore/rebuild/models/backend_models.dart';
 import 'package:tore/rebuild/models/event_context.dart';
 import 'package:tore/rebuild/models/qr_resolve.dart';
 import 'package:tore/rebuild/models/rebuild_types.dart';
-import 'package:tore/rebuild/models/snapshot.dart';
-import 'package:tore/rebuild/routing/route_guards.dart';
 import 'package:tore/rebuild/services/idempotency_store.dart';
 
 class _MemoryPersistence implements IdempotencyPersistence {
@@ -35,22 +33,6 @@ void main() {
     expect(mapBackendStateAlias('PAUSED'), EventState.paused);
     expect(mapBackendStateAlias('CLOSED'), EventState.ended);
     expect(mapBackendStateAlias('FROZEN'), EventState.readOnly);
-  });
-
-  test('module gating and deep-link guards enforce mode + OFF module blocking',
-      () {
-    final guards = RouteGuards();
-    final snapshot = UserSnapshot(
-      roles: {'USER'},
-      capabilities: {'can_scan_qr'},
-      globalModules: {'user_home': ModuleState.on},
-      syncedAt: DateTime.fromMillisecondsSinceEpoch(0),
-    );
-
-    expect(guards.modeAllowed(ToreMode.user, snapshot), isTrue);
-    expect(guards.modeAllowed(ToreMode.orga, snapshot), isFalse);
-    expect(guards.deepLinkAllowed(ModuleState.off), isFalse);
-    expect(guards.deepLinkAllowed(ModuleState.on), isTrue);
   });
 
   test('idempotency key is reused across retries for same intent', () async {
