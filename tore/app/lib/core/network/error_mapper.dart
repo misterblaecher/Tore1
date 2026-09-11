@@ -131,15 +131,19 @@ class ErrorMapper {
   }
 
   static String _mapReason(String? reason) {
-    final copy = toreUiErrorCopy[normalizeToreErrorCode(reason)];
-    if (copy != null && reason != null && reason.isNotEmpty) {
-      return copy.message;
-    }
+    // Keep the active runtime semantics stable. Historical rebuild aliases are
+    // exposed separately through normalizeToreErrorCode/resolveToreUiError.
     switch (reason) {
+      case 'event_paused':
+        return 'Event en pause. Réessaie dans un instant.';
+      case 'module_off':
+        return 'Fonction désactivée pour cet event.';
       case 'revoked':
         return 'Accès révoqué. Contacte un manager.';
       case 'rate_limited':
         return 'Trop de requêtes, réessaie.';
+      case 'forbidden':
+        return 'Action non autorisée.';
       case 'read_only':
         return 'Event en lecture seule pour le moment.';
       case 'frozen':
@@ -149,7 +153,9 @@ class ErrorMapper {
         return 'Solde tickets insuffisant.';
       case 'already_resolved':
         return 'Marché déjà résolu.';
+      case 'expired':
       case 'invalid':
+      case 'invalid_qr':
         return 'QR expiré.';
       default:
         return '';
