@@ -196,20 +196,21 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                         .toString()
                         .trim();
                     final uri = Uri.tryParse(raw);
-                    final valid = uri != null &&
-                        {'http', 'https'}.contains(uri.scheme) &&
-                        uri.host.isNotEmpty;
-                    if (!valid ||
-                        !await launchUrl(uri!,
-                            mode: LaunchMode.externalApplication)) {
+                    if (uri == null ||
+                        !{'http', 'https'}.contains(uri.scheme) ||
+                        uri.host.isEmpty) {
+                      throw StateError('forum link unavailable');
+                    }
+                    final launched = await launchUrl(uri,
+                        mode: LaunchMode.externalApplication);
+                    if (!launched) {
                       throw StateError('forum link unavailable');
                     }
                   } catch (_) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text(
-                              'Page Forum indisponible hors connexion.')));
-                    }
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content:
+                            Text('Page Forum indisponible hors connexion.')));
                   }
                 },
                 icon: const Icon(Icons.open_in_new),
