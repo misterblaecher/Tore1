@@ -24,5 +24,14 @@ export function createServices(repo, blobRepo, audit, permissionsOrAuth){
     }
   };
 
+  const baseDocumentRemove = services.documents.remove.bind(services.documents);
+  services.documents.remove = async id => {
+    const doc = services.documents.get(id);
+    const historicalKeys = (doc.versions || []).map(v=>v.blobKey).filter(Boolean);
+    const result = await baseDocumentRemove(id);
+    for(const key of historicalKeys){try{await blobRepo.remove(key)}catch{}}
+    return result;
+  };
+
   return services;
 }
