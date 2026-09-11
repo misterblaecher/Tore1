@@ -1,0 +1,58 @@
+name: Forum v3.4.2 QA
+
+on:
+  push:
+    branches: [feature/forum-v3.4.2]
+    paths:
+      - 'tore-forum-v3.4.1/**'
+      - '.github/workflows/forum-v3.4.2.yml'
+  pull_request:
+    paths:
+      - 'tore-forum-v3.4.1/**'
+      - '.github/workflows/forum-v3.4.2.yml'
+
+jobs:
+  tests:
+    name: Unit + security + regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tore-forum-v3.4.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run all frontend suites
+        run: npm test
+      - name: Syntax checks
+        run: |
+          node --check src/services/services-v3.4.2.js
+          node --check src/services/services-v3.4.2-final.js
+          node --check src/views/views-v3.4.2.js
+          node --check src/v3.4.2/runtime.js
+          node --check tests/browser-smoke.mjs
+
+  browser-qa:
+    name: Browser QA
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tore-forum-v3.4.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Detect Chrome
+        run: |
+          which google-chrome || which chromium || which chromium-browser
+      - name: Run browser QA
+        run: npm run test:browser
+      - name: Upload browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forum-v3.4.2-browser-screenshots
+          path: tore-forum-v3.4.1/tests/artifacts/browser
+          if-no-files-found: ignore
