@@ -39,20 +39,34 @@ jobs:
         run: pytest -q
 
   migration-check:
-    name: Alembic sanity check
+    name: Alembic sanity check (Postgres)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tore_ci
+          POSTGRES_USER: tore
+          POSTGRES_PASSWORD: tore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U tore -d tore_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     defaults:
       run:
         working-directory: tore-backend
     env:
-      DATABASE_URL: sqlite:///./alembic_ci.db
+      DATABASE_URL: postgresql://tore:tore@127.0.0.1:5432/tore_ci
       TORE_JWT_SECRET: ci-jwt-secret
       TORE_SECRET: ci-app-secret
       ORDER_QR_SECRET: ci-qr-secret
       TORE_CORS_ORIGINS: http://localhost:5173
       TORE_RATE_LIMIT_MAX: "120"
       TORE_RATE_LIMIT_WINDOW_S: "60"
-      TORE_AUTO_DB_BOOTSTRAP: "1"
+      TORE_AUTO_DB_BOOTSTRAP: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,8 +84,11 @@ jobs:
       - name: Alembic import sanity
         run: python -c "from alembic.config import Config"
 
-      - name: Alembic upgrade head
+      - name: Alembic upgrade head on fresh Postgres
         run: python -m alembic upgrade head
+
+      - name: Verify Alembic head
+        run: python -m alembic current
 
   flutter-quality:
     name: Flutter analyze and tests
