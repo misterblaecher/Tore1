@@ -87,11 +87,11 @@ class AppDeepLinkRouter {
   }
 
   AppDeepLink? _parseLegacyOpen(Uri uri) {
-    final isLegacyHost = uri.scheme == 'https' &&
-        uri.host.toLowerCase() == 'app.tore.be' &&
+    final isCompatibleHttpsOpen = uri.scheme == 'https' &&
+        _httpsHosts.contains(uri.host.toLowerCase()) &&
         uri.path == '/open';
     final isLegacyScheme = uri.scheme == 'tore' && uri.host == 'open';
-    if (!isLegacyHost && !isLegacyScheme) return null;
+    if (!isCompatibleHttpsOpen && !isLegacyScheme) return null;
 
     final type = uri.queryParameters['type']?.trim().toLowerCase();
     final id = _positiveInt(
