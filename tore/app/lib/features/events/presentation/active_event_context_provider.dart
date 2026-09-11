@@ -164,9 +164,9 @@ class ActiveEventContextController
 
   Duration _nextInterval() {
     final network = ref.read(networkStatusProvider);
-    if (network == NetworkState.offline) return const Duration(seconds: 5);
-    if (network == NetworkState.degraded) return const Duration(seconds: 2);
-    return const Duration(seconds: 1);
+    if (network == NetworkState.offline) return const Duration(seconds: 15);
+    if (network == NetworkState.degraded) return const Duration(seconds: 10);
+    return const Duration(seconds: 5);
   }
 
   void _scheduleNextPoll() {
