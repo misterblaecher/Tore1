@@ -87,8 +87,14 @@ jobs:
       - name: Alembic upgrade head on fresh Postgres
         run: python -m alembic upgrade head
 
-      - name: Verify Alembic head
+      - name: Verify Alembic current revision
         run: python -m alembic current
+
+      - name: Verify single Alembic head
+        run: |
+          python -m alembic heads | tee /tmp/alembic-heads.txt
+          test "$(grep -c '(head)' /tmp/alembic-heads.txt)" -eq 1
+          grep -q '0013_forum_backend_foundation' /tmp/alembic-heads.txt
 
   flutter-quality:
     name: Flutter analyze and tests
