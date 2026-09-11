@@ -82,8 +82,8 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     }
     if (!mounted) return;
     setState(() {
-      if (total != null) _total = total!;
-      if (delta10 != null) _delta10 = delta10!;
+      if (total != null) _total = total;
+      if (delta10 != null) _delta10 = delta10;
       _statsError = failure == null
           ? null
           : 'Compteurs temporairement indisponibles — dernière valeur conservée';
