@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../config/app_config.dart';
 import '../../shared/cache/cache_providers.dart';
 import '../../shared/cache/cache_store.dart';
 import '../network/providers.dart';
