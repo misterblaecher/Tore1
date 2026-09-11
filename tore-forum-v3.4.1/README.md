@@ -1,8 +1,8 @@
-# TORÈ Forum v3.4 — Tenant Integrity & Governance
+# TORÈ Forum v3.4.2 — Final Frontend Hardening
 
-v3.4 est une passe de hardening de la v3.3. Elle ne refond pas le Forum : elle consolide
-les invariants multi-tenant, la gouvernance Owner, la confidentialité financière,
-le workflow de revendication et le lifecycle de la page publique.
+v3.4.2 ferme la phase principale de hardening du prototype frontend avant le chantier backend.
+Elle conserve l’architecture v3.4.1 et corrige les derniers écarts de permissions, visibilité,
+branding, versioning local et QA navigateur.
 
 > L’app TORÈ sert à vivre la soirée. Le Forum TORÈ sert à faire vivre la structure.
 
@@ -12,20 +12,33 @@ le workflow de revendication et le lifecycle de la page publique.
 npm run dev
 ```
 
-Puis ouvrir :
-
 - Public : `http://localhost:8080/structures/lembuscade`
 - Admin : `http://localhost:8080/structures/lembuscade/admin/dashboard`
 - Onboarding : `http://localhost:8080/onboarding`
 
-Le serveur local fournit le fallback SPA pour les deep-links History API.
+## Garanties du prototype v3.4.2
+
+- isolation locale `structureId` et champs tenant immuables ;
+- RBAC central + Permission Grant Ceiling ;
+- `structure.admin`, `ownership.transfer` et `accounting.unlock` non délégables aux rôles personnalisés ;
+- transfert de propriété réservé au véritable Owner principal ;
+- permissions secondaires optionnelles : une fiche Event reste lisible sans `stats.view` ;
+- Stats Summary soumis au Visibility Center ;
+- Contact et Publications soumis au Visibility Center ;
+- publications multi-audience : Public / TORÈ / Membres / Staff / Bureau / Trésorerie / Privé ;
+- finance filtrée indépendamment de `stats.view` ;
+- logo et bannière modifiables après onboarding ;
+- `bannerBlobKey` rendu dans le hero public ;
+- onboarding avec visibilité Presentation, Events, Membres, Albums, Folklore, Sponsors, Contact, Publications et Stats ;
+- document versioning local avec blob distinct pour chaque ancienne version créée après v3.4.2 ;
+- Browser QA avec cleanup d’arbre de processus et statuts PASS / FAIL / INCONCLUSIVE / SKIPPED.
 
 ## Architecture
 
 ```text
 UI / Views
     ↓
-AuthorizationService
+AuthorizationService + v3.4.2 hardening layer
     ↓
 Domain / Services
     ↓
@@ -34,20 +47,14 @@ Scoped repositories
 localStorage metadata + IndexedDB blobs
 ```
 
-### Invariants v3.4
+La v3.4.2 ajoute des couches de hardening ciblées sans réécrire la v3.4.1 :
 
-- `id`, `structureId` et `createdAt` ne sont pas mutables via les updates.
-- Les services utilisent des whitelists de champs.
-- Le tenant des créations provient du contexte actif, jamais d’un payload normal.
-- Les accès cross-tenant par ID connu échouent.
-- `stats.view` n’accorde aucune donnée financière.
-- Le rôle Owner est un rôle système.
-- Une structure possède exactement un owner principal actif.
-- Le changement d’owner passe uniquement par `transferOwnership()`.
-- L’onboarding et les claims exigent un utilisateur authentifié.
-- Une revendication est une `StructureClaim` séparée.
-- Une `PublicPage` possède son propre lifecycle.
-- Le centre Archives est une vue agrégée, pas une duplication de ressources.
+- `src/services/services-v3.4.2.js`
+- `src/services/services-v3.4.2-final.js`
+- `src/views/views-v3.4.2.js`
+- `src/v3.4.2/runtime.js`
+
+L’application les charge via l’import map de `index.html`. Les modules v3.4.1 restent disponibles comme base stable.
 
 ## Tests
 
@@ -55,64 +62,63 @@ localStorage metadata + IndexedDB blobs
 npm test
 npm run test:security
 npm run test:integrity
+npm run test:hardening
 npm run test:e2e
 npm run test:qa
 npm run test:browser
 ```
 
-La suite principale contient 10 fichiers de tests et 201 appels d’assertion statiques,
-auxquels s’ajoutent des scénarios générés dans des boucles d’attaque multi-tenant.
+La suite v3.4.2 ajoute `tests/final-hardening-v3.4.2.test.mjs` aux 10 suites existantes.
+Une GitHub Action dédiée (`Forum v3.4.2 QA`) exécute la suite complète, les syntax checks et le Browser QA.
 
+### Browser QA
 
-### Browser QA sous Windows
-
-`test:browser` détecte maintenant automatiquement Google Chrome, Microsoft Edge ou Chromium.
+Le runner détecte Chrome, Edge ou Chromium sous Windows/macOS/Linux.
 
 ```powershell
 npm run test:browser
 ```
 
-Si l’auto-détection échoue, indique explicitement l’exécutable :
+Forçage Windows si nécessaire :
 
 ```powershell
 $env:CHROMIUM="C:\Program Files\Google\Chrome\Application\chrome.exe"
 npm run test:browser
 ```
 
-Pour Edge, selon l’installation :
+Statuts :
 
-```powershell
-$env:CHROMIUM="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-npm run test:browser
-```
+- `PASS` : navigateur lancé et toutes les captures réussissent ;
+- `FAIL` : navigateur fonctionnel mais scénario/application en échec ;
+- `INCONCLUSIVE` : navigateur trouvé mais environnement incompatible (sandbox, D-Bus, permissions OS, crash infra) ;
+- `SKIPPED` : aucun navigateur compatible trouvé.
 
 Les captures sont écrites dans `tests/artifacts/browser/`.
 
-## Documents
+## Documentation
 
-- `CHANGELOG_v3.4.md`
+- `CHANGELOG_v3.4.2.md`
 - `SECURITY.md`
 - `PERMISSIONS.md`
 - `OWNERSHIP.md`
 - `CLAIM_LIFECYCLE.md`
 - `PUBLIC_PAGE_LIFECYCLE.md`
 - `MIGRATIONS_v3.4.md`
-- `VISIBILITY_MATRIX.md`
-- `TEST_RESULTS_v3.4.md`
+- `VISIBILITY_MATRIX_v3.4.2.md`
+- `TEST_RESULTS_v3.4.2.md`
 - `LIMITATIONS.md`
 
 ## Important : sécurité production
 
-Cette version impose les invariants métier dans le prototype frontend mais
-**IndexedDB/localStorage ne sont pas une frontière de sécurité de production**.
+Cette version impose les invariants métier dans le prototype frontend mais **IndexedDB/localStorage ne sont pas une frontière de sécurité de production**.
 
-Le backend futur devra notamment :
+Le backend TORÈ devra obligatoirement :
 - authentifier les sessions côté serveur ;
-- dériver/imposer le tenant depuis une session/autorisation serveur ;
-- revérifier toutes les permissions ;
-- ne jamais faire confiance à un `structureId` reçu dans un body client ;
-- ne jamais envoyer la finance aux utilisateurs non autorisés ;
-- fournir des URLs signées pour les fichiers privés ;
-- filtrer la recherche côté serveur ;
-- autoriser les exports côté serveur ;
-- stocker les audit logs sensibles côté serveur, idéalement append-only.
+- dériver/imposer `structureId` depuis un contexte serveur autorisé ;
+- réappliquer le Permission Grant Ceiling côté serveur ;
+- revérifier RBAC + Visibility sur chaque lecture/écriture ;
+- ne jamais sérialiser les données financières vers un utilisateur non autorisé ;
+- protéger les fichiers privés par URLs signées ;
+- filtrer recherche et exports côté serveur ;
+- stocker les AuditLogs sensibles côté serveur, idéalement append-only ;
+- ajouter monitoring, rate limiting et mécanismes RGPD.
