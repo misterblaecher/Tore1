@@ -30,7 +30,7 @@ void main() {
     expect(find.textContaining('Build minimum : 999'), findsOneWidget);
   });
 
-  test('remote freeze provider exposes write lock and operator message', () async {
+  test('remote freeze snapshot exposes write lock and operator message', () {
     final config = RemoteConfigPayload.fromJson(
       {
         'disable_writes_global': true,
@@ -41,12 +41,11 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        remoteConfigProvider.overrideWith((ref) async => config),
+        remoteConfigSnapshotProvider.overrideWith((ref) => config),
       ],
     );
     addTearDown(container.dispose);
 
-    await container.read(remoteConfigProvider.future);
     expect(container.read(remoteWritesDisabledProvider), isTrue);
     expect(container.read(remoteWriteMessageProvider), 'Maintenance TORÈ');
   });
