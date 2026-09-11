@@ -17,6 +17,10 @@ void main() {
     expect(router.parse(builder.event(42))?.kind, AppDeepLinkKind.event);
     expect(router.parse(builder.event(42))?.id, 42);
 
+    final join = router.parse(builder.join(43));
+    expect(join?.kind, AppDeepLinkKind.join);
+    expect(join?.id, 43);
+
     expect(builder.appBar(7), 'tore://bar/7');
     expect(router.parse(builder.appBar(7))?.kind, AppDeepLinkKind.bar);
     expect(router.parse(builder.appBar(7))?.id, 7);
