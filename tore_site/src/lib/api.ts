@@ -3,7 +3,7 @@ import { clearToken, getToken } from './auth';
 export const API_BASE = (
   import.meta.env.VITE_API_BASE_URL ??
   import.meta.env.VITE_API_URL ??
-  'http://127.0.0.1:8001'
+  (import.meta.env.DEV ? 'http://127.0.0.1:8001' : '')
 )
   .toString()
   .replace(/\/+$/, '');
@@ -31,7 +31,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && token && getToken() === token) {
     clearToken();
   }
 
@@ -50,5 +50,6 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(message, res.status);
   }
 
+  if (res.status === 204 || res.status === 205) return undefined as T;
   return (await res.json()) as T;
 }

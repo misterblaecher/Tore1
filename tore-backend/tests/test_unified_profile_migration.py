@@ -2,6 +2,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -27,7 +28,7 @@ def test_unified_profile_migration_fresh_database(tmp_path: Path, monkeypatch):
         column["name"] for column in inspect(engine).get_columns("organization_memberships")
     }
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_scoped_operational_access"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == ScriptDirectory.from_config(config).get_current_head()
 
 
 def test_upgrade_from_0007_keeps_legacy_private_and_unknown_visibility_private(tmp_path: Path, monkeypatch):
@@ -49,8 +50,10 @@ def test_upgrade_from_0007_keeps_legacy_private_and_unknown_visibility_private(t
             "'PRIVATE', 'PRIVATE', 'PRIVATE', 0, 0, 0)"
         ))
         connection.execute(text(
-            "INSERT INTO organizations (name, slug, visibility, join_mode, created_by_user_id, created_at) "
-            "VALUES ('Legacy Org', 'legacy-org', 'PUBLIC', 'OPEN_MEMBERSHIP', 'legacy-user', CURRENT_TIMESTAMP)"
+            # Baseline 0001 uses current metadata, so supply the non-null JSON fields.
+            "INSERT INTO organizations (name, slug, visibility, join_mode, created_by_user_id, created_at, "
+            "social_links_json, public_content_json, visibility_settings_json) "
+            "VALUES ('Legacy Org', 'legacy-org', 'PUBLIC', 'OPEN_MEMBERSHIP', 'legacy-user', CURRENT_TIMESTAMP, '{}', '{}', '{}')"
         ))
         org_id = connection.execute(text("SELECT id FROM organizations WHERE slug='legacy-org'")).scalar_one()
         connection.execute(text(

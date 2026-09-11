@@ -61,7 +61,8 @@ export default function ForumLayout() {
     const refresh = () => setRevision((value) => value + 1);
     window.addEventListener("focus", refresh);
     window.addEventListener("storage", refresh);
-    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
+    window.addEventListener("tore:structure-updated", refresh);
+    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); window.removeEventListener("tore:structure-updated", refresh); };
   }, []);
 
   const currentSession = session?.token === token ? session : null;

@@ -21,7 +21,8 @@ def _seed_admin_global() -> tuple[str, int]:
         admin = PartnerUser(display_name="Global Admin", pin_hash="hash")
         s.add(admin)
         s.flush()
-        s.add(PartnerMembership(user_id=admin.id, bar_id=bar.id, role="manager", display_name="Global Admin"))
+        # Authority lives in the database; a JWT claim cannot promote a manager.
+        s.add(PartnerMembership(user_id=admin.id, bar_id=bar.id, role="ADMIN_GLOBAL", display_name="Global Admin"))
         event = Event(bar_id=bar.id, name="Capstone Event", starts_at=now_utc(), ends_at=now_utc() + timedelta(hours=5))
         s.add(event)
         s.commit()
@@ -36,6 +37,25 @@ def _guest(client: TestClient, name: str) -> tuple[str, str]:
     assert res.status_code == 200
     payload = res.json()
     return payload["user"]["id"], payload["token"]
+
+
+def test_admin_token_loses_authority_immediately_after_demotion():
+    client = TestClient(app)
+    token, _ = _seed_admin_global()
+    headers = {"Authorization": f"Bearer {token}"}
+    identity = client.get("/partner/auth/me", headers=headers)
+    assert identity.status_code == 200
+    s = get_session()
+    try:
+        membership = s.query(PartnerMembership).filter_by(
+            user_id=identity.json()["user_id"], bar_id=identity.json()["bar_id"]
+        ).one()
+        membership.role = "manager"
+        s.commit()
+    finally:
+        s.close()
+    assert client.get("/admin/flags", headers=headers).status_code == 403
+    assert client.get("/partner/auth/me", headers=headers).json()["role"] == "manager"
 
 
 def test_export_endpoints_return_json_and_csv():

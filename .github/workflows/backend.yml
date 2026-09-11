@@ -73,12 +73,19 @@ jobs:
       - name: Alembic upgrade head
         run: python -m alembic upgrade head
 
-  flutter-skip:
-    name: Flutter quality gate (local reminder)
+  flutter-quality:
+    name: Flutter analyze and tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tore/app
     steps:
-      - name: Reminder
-        run: |
-          echo "Flutter CI is intentionally light in GitHub Actions."
-          echo "Run locally when mobile files change:"
-          echo "cd tore/app && flutter analyze"
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test

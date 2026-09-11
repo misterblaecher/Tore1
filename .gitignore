@@ -3,6 +3,9 @@ tore-portal/dist/
 *.pyc
 __pycache__/
 .env
+.venv-release/
+.npm-cache/
+*.tsbuildinfo
 .seed.env
 *.apk
 *.aab

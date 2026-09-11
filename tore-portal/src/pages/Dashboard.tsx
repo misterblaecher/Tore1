@@ -53,32 +53,7 @@ export default function Dashboard() {
       try {
         setError(null)
         const b = await api<BarOut>('/partner/portal/bar')
-        let ev = await api<EventOut[]>('/partner/portal/events')
-        if (ev.length === 0) {
-          const res = await fetch(`${API_BASE}/events`)
-          if (res.ok) {
-            ev = (await res.json()) as EventOut[]
-          }
-        }
-        if (ev.length === 0) {
-          const fallbackStart = new Date()
-          const fallbackEnd = new Date(fallbackStart.getTime() + 4 * 3600 * 1000)
-          ev = [
-            {
-              id: 1,
-              bar_id: b.id,
-              name: 'Event démo',
-              starts_at: fallbackStart.toISOString(),
-              ends_at: fallbackEnd.toISOString(),
-              entry_price_cents: 0,
-              ticket_mode: false,
-              ticket_value_cents: 0,
-              tickets_enabled: false,
-              entry_enabled: false,
-            },
-          ]
-          setError('Mode démo activé : événement local utilisé.')
-        }
+        const ev = await api<EventOut[]>('/partner/portal/events')
         setBar(b)
         setEvents(ev)
         setSelectedEventId((prev) => prev ?? ev[0]?.id ?? null)

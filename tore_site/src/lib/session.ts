@@ -1,5 +1,5 @@
 import { apiFetch } from './api';
-import { clearToken, getCachedMe, MeResponse, setCachedMe } from './auth';
+import { getToken, getCachedMe, MeResponse, setCachedMe } from './auth';
 
 export async function getMe(force = false): Promise<MeResponse> {
   if (!force) {
@@ -7,12 +7,10 @@ export async function getMe(force = false): Promise<MeResponse> {
     if (cached) return cached;
   }
 
-  try {
-    const me = await apiFetch<MeResponse>('/auth/me');
-    setCachedMe(me);
-    return me;
-  } catch (error) {
-    clearToken();
-    throw error;
-  }
+  const token = getToken();
+  const me = await apiFetch<MeResponse>('/auth/me');
+  // An old request must never populate the next account's profile cache.
+  if (getToken() !== token) throw new Error('La session a changé.');
+  setCachedMe(me);
+  return me;
 }

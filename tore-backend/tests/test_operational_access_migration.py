@@ -2,6 +2,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -24,7 +25,7 @@ def test_operational_access_migration_fresh_database(tmp_path: Path, monkeypatch
     assert {"token_hash", "target_user_id", "actions_json", "max_uses", "used_count", "accepted_at"} <= invite_columns
     assert {"status", "actions_json", "starts_at", "expires_at", "source", "revoked_at"} <= access_columns
     with db_engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0011_shared_profile_oripeaux"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == ScriptDirectory.from_config(config).get_current_head()
 
 
 def test_upgrade_from_0008_preserves_legacy_rows(tmp_path: Path, monkeypatch):

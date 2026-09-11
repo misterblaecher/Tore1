@@ -14,7 +14,7 @@ class AppConfig {
   static const String _apiBaseUrlCompatDefine = 'API_BASE_URL';
   static const String _flutterFlavorDefine = 'FLUTTER_APP_FLAVOR';
   static const String _environmentDefine = 'TORE_ENV';
-  static const String _defaultEnvironment = 'dev';
+  static const String _defaultEnvironment = kReleaseMode ? 'prod' : 'dev';
 
   static String get apiBaseUrlResolved =>
       AppConfig.fromDartDefines().apiBaseUrl;
@@ -27,19 +27,46 @@ class AppConfig {
     const definedFlavor = String.fromEnvironment(_flutterFlavorDefine,
         defaultValue: _defaultEnvironment);
     const definedEnv = String.fromEnvironment(_environmentDefine,
-        defaultValue: _defaultEnvironment);
-    final normalizedFlavor =
-        (definedFlavor.isEmpty ? _defaultEnvironment : definedFlavor)
-            .toLowerCase();
-    final normalizedEnv =
-        (definedEnv.isEmpty ? normalizedFlavor : definedEnv).toLowerCase();
+        defaultValue: '');
+    return AppConfig.resolve(
+      primaryBaseUrl: definedApiBaseUrl,
+      compatBaseUrl: definedApiBaseUrlCompat,
+      flavor: definedFlavor,
+      environment: definedEnv,
+    );
+  }
 
+  factory AppConfig.resolve({
+    String primaryBaseUrl = '',
+    String compatBaseUrl = '',
+    String flavor = _defaultEnvironment,
+    String environment = '',
+  }) {
+    final normalizedFlavor =
+        (flavor.trim().isEmpty ? _defaultEnvironment : flavor.trim()).toLowerCase();
+    final normalizedEnv =
+        (environment.trim().isEmpty ? normalizedFlavor : environment.trim()).toLowerCase();
+
+    final production = normalizedEnv == 'prod' || normalizedEnv == 'production';
+    if (production && primaryBaseUrl.trim().isEmpty && compatBaseUrl.trim().isEmpty) {
+      throw const FormatException('TORE_API_BASE_URL est requis en production.');
+    }
     final fallbackBaseUrl = _defaultBaseUrlForFlavor(normalizedFlavor);
     final apiBaseUrl = _resolveApiBaseUrl(
-      primary: definedApiBaseUrl,
-      compat: definedApiBaseUrlCompat,
+      primary: primaryBaseUrl,
+      compat: compatBaseUrl,
       fallback: fallbackBaseUrl,
     );
+    final uri = Uri.tryParse(apiBaseUrl);
+    if (uri == null || !uri.hasAuthority || uri.host.isEmpty ||
+        !['http', 'https'].contains(uri.scheme) ||
+        uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
+      throw const FormatException('TORE_API_BASE_URL doit être une URL HTTP(S) sans identifiants, paramètres ou fragment.');
+    }
+    if (production && (uri.scheme != 'https' ||
+        ['localhost', '127.0.0.1', '::1', '10.0.2.2'].contains(uri.host))) {
+      throw const FormatException('La production nécessite une API HTTPS publique.');
+    }
 
     return AppConfig(
       apiBaseUrl: apiBaseUrl,
@@ -66,18 +93,10 @@ class AppConfig {
   }
 
   static String _defaultBaseUrlForFlavor(String flavor) {
-    switch (flavor) {
-      case 'dev':
-        return 'https://tore-backend.onrender.com';
-      case 'prod':
-        // TODO: replace with dedicated production API base URL when available.
-        return 'https://tore-backend.onrender.com';
-      default:
-        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-          return 'http://10.0.2.2:8000';
-        }
-        return 'http://localhost:8000';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8000';
     }
+    return 'http://localhost:8000';
   }
 
   static String _normalizeBaseUrl(String url) {

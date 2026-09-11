@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -165,19 +165,16 @@ def current_identity(
     token = authorization.split(" ", 1)[1].strip()
     ensure_partner_token_not_revoked(db, token=token)
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-    except jwt.PyJWTError:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG], options={"require": ["exp", "sub", "bar_id"]})
+        user_id = int(payload["sub"])
+        bar_id = int(payload["bar_id"])
+    except (jwt.PyJWTError, ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    user_id = int(payload.get("sub"))
-    bar_id = int(payload.get("bar_id"))
-    role = payload.get("role")
-    name = payload.get("name")
-
     # Vérifie que membership existe encore
-    ensure_partner_membership_active(db, user_id=user_id, bar_id=bar_id)
+    membership = ensure_partner_membership_active(db, user_id=user_id, bar_id=bar_id)
 
-    return {"user_id": user_id, "bar_id": bar_id, "role": role, "display_name": name, "token": token}
+    return {"user_id": user_id, "bar_id": bar_id, "role": membership.role, "display_name": membership.display_name, "token": token}
 
 
 def require_role(required: str):
@@ -259,7 +256,10 @@ def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthOut)
-def login(data: LoginIn, db: Session = Depends(get_db)):
+def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
+    from app.services.rate_limit_service import enforce_rate_limit
+    enforce_rate_limit("partner_pin_login", f"{data.bar_id}:{data.display_name.strip().casefold()}")
+    enforce_rate_limit("partner_pin_login_ip", request.client.host if request.client else "unknown")
     m = (
         db.query(PartnerMembership)
         .filter(

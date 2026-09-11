@@ -4,7 +4,6 @@ const SESSION_KEY = 'tore_partner_session'
 export type PartnerSession = {
   bar_id: number
   display_name: string
-  pin: string
   role?: string
 }
 

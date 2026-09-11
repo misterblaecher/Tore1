@@ -33,7 +33,7 @@ class ErrorMapper {
       case 'read_only':
         return 'Event en lecture seule pour le moment.';
       case 'frozen':
-        return 'Trading temporairement gelé.';
+        return 'Les participations sont temporairement suspendues.';
       case 'insufficient_balance':
       case 'insuff_toggle':
         return 'Solde tickets insuffisant.';
@@ -61,11 +61,6 @@ class ErrorMapper {
     }
 
     if (e is DioException) {
-      final wrapped = e.error;
-      if (wrapped is ApiException) {
-        return wrapped.message;
-      }
-
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.receiveTimeout:

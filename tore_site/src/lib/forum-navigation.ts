@@ -8,7 +8,7 @@ export const forumNavGroups = [
 ] as const;
 type ForumNavItem = (typeof forumNavGroups)[number]["items"][number];
 export const forumNavItems = forumNavGroups.flatMap<ForumNavItem>((group) => group.items);
-export const structureTypeLabels: Record<string, string> = { COMMITTEE: "Comité", CIRCLE: "Cercle", ORDER: "Ordre", BAR: "Bar partenaire", OTHER: "Structure" };
+export const structureTypeLabels: Record<string, string> = { COMMITTEE: "Comité", CIRCLE: "Cercle", ORDER: "Ordre", BAR: "Bar partenaire", ASSOCIATION: "Association", PARTNER: "Structure partenaire", OTHER: "Structure" };
 export const forumRoleLabels: Record<string, string> = { OWNER: "Propriétaire", PRESIDENT: "Président", VICE_PRESIDENT: "Vice-président", ADMIN: "Administrateur", MANAGER: "Gestionnaire", TREASURER: "Trésorier", SECRETARY: "Secrétaire", MEMBER: "Membre", STAFF: "Équipe", COMMUNICATION: "Communication", ARCHIVIST: "Archiviste", BUREAU: "Bureau" };
 export function structurePath(slug: string, section = "dashboard") {
   return `/forum/structures/${encodeURIComponent(slug)}${section === "public" ? "" : `/${section}`}`;

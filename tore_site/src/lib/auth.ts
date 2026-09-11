@@ -24,12 +24,14 @@ export type MeResponse = {
 };
 
 let meCache: MeResponse | null = null;
+let meCacheToken: string | null = null;
 
 export function getToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
+  if (getToken() !== token) { meCache = null; meCacheToken = null; }
   localStorage.setItem(ACCESS_TOKEN_KEY, token);
 }
 
@@ -45,12 +47,14 @@ export function clearToken(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   meCache = null;
+  meCacheToken = null;
 }
 
 export function getCachedMe(): MeResponse | null {
-  return meCache;
+  return meCacheToken === getToken() ? meCache : null;
 }
 
 export function setCachedMe(me: MeResponse | null): void {
   meCache = me;
+  meCacheToken = getToken();
 }

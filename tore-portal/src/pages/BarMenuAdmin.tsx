@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Layout, { cardStyle, inputStyle } from '../ui/Layout'
-import { ApiError, api } from '../lib/api'
+import { ApiError, api, apiText } from '../lib/api'
 import { Badge, Button, InlineAlert } from '../lib/ui'
 
 type EventState = 'LIVE' | 'PAUSE' | 'MENU_ONLY' | 'DEGRADED' | 'FROZEN' | 'CLOSED' | string
@@ -77,6 +77,14 @@ export default function BarMenuAdmin() {
   }, [])
 
   useEffect(() => {
+    setItems([])
+    setSelected({})
+    setEventState('LIVE')
+    setError('')
+    setFlash('')
+  }, [eventId])
+
+  useEffect(() => {
     void load()
   }, [eventId, networkMode])
 
@@ -138,9 +146,19 @@ export default function BarMenuAdmin() {
     }
   }
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     if (!eventId) return
-    window.open(`${import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'}/partner/portal/bar/events/${eventId}/menu/export.csv`, '_blank')
+    try {
+      const csv = await apiText(`/partner/portal/bar/events/${eventId}/menu/export.csv`)
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `menu-${eventId}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export indisponible')
+    }
   }
 
   return (

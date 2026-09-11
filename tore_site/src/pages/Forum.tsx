@@ -24,6 +24,8 @@ const typeLabels: Record<string, string> = {
   CIRCLE: "Cercle",
   ORDER: "Ordre",
   BAR: "Bar partenaire",
+  ASSOCIATION: "Association",
+  PARTNER: "Structure partenaire",
   OTHER: "Autre structure",
 };
 

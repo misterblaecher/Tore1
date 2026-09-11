@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class CartLine {
@@ -54,6 +57,29 @@ class CartState {
 
 class CartController extends StateNotifier<CartState> {
   CartController() : super(const CartState());
+
+  String? _orderIntent;
+  String? _orderFingerprint;
+
+  /// Survives closing/reopening the cart and a network retry. A changed order
+  /// receives a new key, so an old server response cannot confirm new items.
+  String orderIdempotencyKey({required int eventId, required String userId}) {
+    final items = [...state.lines]..sort((a, b) => a.itemId.compareTo(b.itemId));
+    final fingerprint = jsonEncode([
+      eventId,
+      userId,
+      for (final line in items) [line.barId, line.itemId, line.qty],
+    ]);
+    if (_orderFingerprint != fingerprint || _orderIntent == null) {
+      _orderFingerprint = fingerprint;
+      final random = Random.secure();
+      final nonce = List.generate(16, (_) => random.nextInt(256))
+          .map((value) => value.toRadixString(16).padLeft(2, '0'))
+          .join();
+      _orderIntent = 'cart-$eventId-$nonce';
+    }
+    return _orderIntent!;
+  }
 
   void addOrIncrement({
     required int itemId,
@@ -130,7 +156,11 @@ class CartController extends StateNotifier<CartState> {
     );
   }
 
-  void clear() => state = const CartState();
+  void clear() {
+    _orderIntent = null;
+    _orderFingerprint = null;
+    state = const CartState();
+  }
 }
 
 final cartProvider =

@@ -1,14 +1,15 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api } from '../utils/api'
-import { setToken } from '../utils/auth'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { api } from '../lib/api'
+import { setToken, setSession } from '../lib/auth'
 import { btn, cardStyle, inputStyle } from './Layout'
 
 type AuthOut = { token: string; bar_id: number; role: string; display_name: string }
 
 export default function LoginPage() {
   const nav = useNavigate()
-  const [barId, setBarId] = useState('1')
+  const location = useLocation()
+  const [barId, setBarId] = useState('')
   const [name, setName] = useState('')
   const [pin, setPin] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -16,6 +17,7 @@ export default function LoginPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (loading) return
     setError(null)
     setLoading(true)
     try {
@@ -23,8 +25,11 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ bar_id: Number(barId), display_name: name, pin }),
       })
+      if (!out.token || !out.role || !out.bar_id) throw new Error('Réponse de connexion invalide')
       setToken(out.token)
-      nav('/')
+      setSession({ bar_id: out.bar_id, display_name: out.display_name, role: out.role })
+      const from = (location.state as { from?: string } | null)?.from
+      nav(from?.startsWith('/') && !from.startsWith('//') ? from : '/', { replace: true })
     } catch (err: any) {
       setError(err?.message ?? 'Erreur')
     } finally {
@@ -41,23 +46,20 @@ export default function LoginPage() {
           <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
             <label>
               <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>Bar ID</div>
-              <input value={barId} onChange={(e) => setBarId(e.target.value)} style={inputStyle()} />
+              <input required type="number" min="1" value={barId} onChange={(e) => setBarId(e.target.value)} style={inputStyle()} />
             </label>
             <label>
               <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>Nom</div>
-              <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle()} />
+              <input required minLength={2} autoComplete="username" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle()} />
             </label>
             <label>
               <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>PIN (4 chiffres)</div>
-              <input value={pin} onChange={(e) => setPin(e.target.value)} style={inputStyle()} inputMode="numeric" maxLength={4} />
+              <input required type="password" pattern="[0-9]{4}" autoComplete="current-password" value={pin} onChange={(e) => setPin(e.target.value)} style={inputStyle()} inputMode="numeric" maxLength={4} />
             </label>
             {error && <div style={{ color: '#ffb4b4' }}>{error}</div>}
             <button type="submit" disabled={loading} style={btn('primary')}>
               {loading ? 'Connexion…' : 'Se connecter'}
             </button>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Astuce dev : pour créer un bar + manager, POST sur <code>/partner/auth/manager/signup</code>.
-            </div>
           </form>
         </div>
       </div>

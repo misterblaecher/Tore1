@@ -113,6 +113,8 @@ class ApiClient {
             DioException(
               requestOptions: e.requestOptions,
               response: e.response,
+              type: e.type,
+              message: e.message,
               error: ApiException(
                 e.message ?? 'Erreur API',
                 statusCode: e.response?.statusCode,
@@ -136,7 +138,12 @@ class ApiClient {
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
-      final refreshClient = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
+      final refreshClient = Dio(BaseOptions(
+        baseUrl: dio.options.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+        sendTimeout: const Duration(seconds: 20),
+      ));
       final res = await refreshClient.post(
         ApiEndpoints.authRefresh,
         data: {'refreshToken': refreshToken},

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../shared/cache/cache_store.dart';
+import '../../../shared/cache/cache_fallback.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/models/bar.dart';
 import '../../../shared/models/event_summary.dart';
@@ -44,7 +45,8 @@ class BarsRepository {
         fromCache: false,
         lastSyncAt: syncedAt,
       );
-    } catch (_) {
+    } catch (error) {
+      await _checkCacheFallback(error, cacheKey);
       final cached = await _cache.getJson(cacheKey);
       final items = cached?['items'];
       if (items is List<dynamic>) {
@@ -69,7 +71,8 @@ class BarsRepository {
       final payload = Map<String, dynamic>.from(res.data as Map);
       await _cache.setJson(cacheKey, payload, ttl: const Duration(hours: 24));
       return Bar.fromJson(payload);
-    } catch (_) {
+    } catch (error) {
+      await _checkCacheFallback(error, cacheKey);
       final cached = await _cache.getJson(cacheKey);
       if (cached != null) return Bar.fromJson(cached);
       throw const OfflineNoCacheException('bar_detail');
@@ -97,7 +100,8 @@ class BarsRepository {
         fromCache: false,
         lastSyncAt: syncedAt,
       );
-    } catch (_) {
+    } catch (error) {
+      await _checkCacheFallback(error, cacheKey);
       final cached = await _cache.getJson(cacheKey);
       final items = cached?['items'];
       if (items is List<dynamic>) {
@@ -114,5 +118,14 @@ class BarsRepository {
       }
       throw const OfflineNoCacheException('bar_events');
     }
+  }
+
+  Future<void> _checkCacheFallback(Object error, String cacheKey) async {
+    if (canUseCacheAfter(error)) return;
+    if (error is DioException &&
+        [401, 403, 404, 410].contains(error.response?.statusCode)) {
+      await _cache.clearKey(cacheKey);
+    }
+    Error.throwWithStackTrace(error, StackTrace.current);
   }
 }

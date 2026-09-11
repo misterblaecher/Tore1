@@ -142,6 +142,9 @@ def create_position(
     idempotency_key: str,
 ) -> Dict[str, Any]:
     from app.legacy.monolith import _apply_wallet_tx, get_or_create_wallet
+    from app.services.feature_policy_service import require_value_predictions_enabled
+
+    require_value_predictions_enabled()
 
     try:
         bet = db.execute(select(Bet).where(Bet.id == bet_id).with_for_update()).scalar_one_or_none()

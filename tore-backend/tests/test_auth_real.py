@@ -110,7 +110,8 @@ def test_refresh_rotates_and_old_refresh_is_revoked(monkeypatch):
 def test_magic_link_request_never_exposes_token_outside_dev(monkeypatch):
     monkeypatch.setenv("ENV", "PROD")
     monkeypatch.setenv("TORE_EMAIL_OTP_DEV_MODE", "0")
-    monkeypatch.setenv("EMAIL_PROVIDER_API_KEY", "provider-key")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr("main._send_email", lambda *args, **kwargs: None)
     client = TestClient(app)
 
     res = client.post("/auth/email/request_link", json={"email": "safe@example.com"})
