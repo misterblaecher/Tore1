@@ -1,13 +1,13 @@
 const DEFAULT_BASE_URL = '/forum/v2';
 
 export function forumBackendEnabled(){
-  if(typeof document !== 'undefined'){
-    const meta = document.querySelector('meta[name="tore-forum-backend"]')?.content;
-    if(meta != null) return ['1','true','yes','on'].includes(String(meta).toLowerCase());
-  }
+  const meta = typeof document !== 'undefined' && typeof document.querySelector === 'function'
+    ? document.querySelector('meta[name="tore-forum-backend"]')?.content
+    : null;
+  if(meta != null) return ['1','true','yes','on'].includes(String(meta).toLowerCase());
   if(typeof window === 'undefined') return false;
   if(window.TORE_FORUM_BACKEND_ENABLED === true || window.FORUM_BACKEND_ENABLED === true) return true;
-  try{return localStorage.getItem('tore-forum-backend-enabled') === '1'}catch{return false}
+  try{return typeof localStorage !== 'undefined' && localStorage.getItem('tore-forum-backend-enabled') === '1'}catch{return false}
 }
 
 function defaultTokenProvider(){
@@ -37,10 +37,11 @@ export class ForumApiRepository{
     const token=await this.tokenProvider?.();
     const requestHeaders={Accept:'application/json',...headers};
     if(token) requestHeaders.Authorization=`Bearer ${token}`;
-    if(body !== undefined && !(body instanceof FormData)) requestHeaders['Content-Type']='application/json';
+    const hasFormData=typeof FormData !== 'undefined' && body instanceof FormData;
+    if(body !== undefined && !hasFormData) requestHeaders['Content-Type']='application/json';
     const response=await fetch(`${this.baseUrl}${path}`,{
       method,headers:requestHeaders,signal,
-      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+      body: body === undefined ? undefined : hasFormData ? body : JSON.stringify(body),
       credentials:'same-origin',
     });
     if(response.status===204)return null;
