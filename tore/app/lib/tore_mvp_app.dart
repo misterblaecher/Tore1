@@ -6,9 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/app_context/app_context.dart';
 import 'core/auth/providers.dart';
 import 'core/network/network_state_provider.dart';
+import 'core/routing/app_deep_link_router.dart';
 import 'features/auth/presentation/welcome_screen.dart';
+import 'features/bars/presentation/bar_detail_screen.dart';
 import 'features/bars/presentation/bars_screen.dart';
 import 'features/discovery/presentation/discovery_screen.dart';
+import 'features/events/presentation/event_public_screen.dart';
+import 'features/menu_market/presentation/menu_screen.dart';
 import 'features/navigation/presentation/profile_screen.dart';
 import 'features/operations/domain/operational_models.dart';
 import 'features/operations/presentation/bar_operational_hub_screen.dart';
@@ -17,6 +21,7 @@ import 'features/operations/presentation/operational_mode_switcher.dart';
 import 'features/operations/presentation/operational_providers.dart';
 import 'features/operations/presentation/operational_route_gate.dart';
 import 'features/qr/presentation/qr_scanner_gate_screen.dart';
+import 'features/qr/qr_router.dart';
 import 'theme/tore_theme.dart';
 import 'shared/widgets/network_banner.dart';
 
@@ -31,7 +36,8 @@ class ToreMvpApp extends ConsumerWidget {
       theme: ToreTheme.dark(),
       home: const _SessionGate(),
       onGenerateRoute: (settings) {
-        final uri = Uri.tryParse(settings.name ?? '');
+        final rawRoute = settings.name ?? '';
+        final uri = Uri.tryParse(rawRoute);
         if (uri == null) return null;
         if (uri.path == '/event-staff-invite' ||
             uri.host == 'event-staff-invite') {
@@ -57,7 +63,45 @@ class ToreMvpApp extends ConsumerWidget {
                     ScopedOperationalRouteGate(mode: mode, scopeId: scopeId));
           }
         }
-        return null;
+
+        final deepLink = const AppDeepLinkRouter().parse(rawRoute);
+        if (deepLink == null) return null;
+        switch (deepLink.kind) {
+          case AppDeepLinkKind.event:
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => EventPublicScreen(eventId: deepLink.id!),
+            );
+          case AppDeepLinkKind.join:
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) =>
+                  EventPublicScreen(eventId: deepLink.id!, autoJoin: true),
+            );
+          case AppDeepLinkKind.bar:
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => BarDetailScreen(barId: deepLink.id!),
+            );
+          case AppDeepLinkKind.eventMenu:
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => MenuScreen(eventId: deepLink.id!),
+            );
+          case AppDeepLinkKind.barMenu:
+            // The active mobile app has no standalone public bar-menu screen.
+            // Keep the link useful and safe by landing on the canonical bar
+            // detail instead of resurrecting the rebuild BAR shell.
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => BarDetailScreen(barId: deepLink.id!),
+            );
+          case AppDeepLinkKind.qr:
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => _QrDeepLinkGate(payload: deepLink.payload!),
+            );
+        }
       },
     );
   }
@@ -219,6 +263,71 @@ class _ToreMvpShellState extends ConsumerState<ToreMvpShell>
   void _openScanner() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const QrScannerGateScreen()),
+    );
+  }
+}
+
+class _QrDeepLinkGate extends ConsumerStatefulWidget {
+  const _QrDeepLinkGate({required this.payload});
+
+  final String payload;
+
+  @override
+  ConsumerState<_QrDeepLinkGate> createState() => _QrDeepLinkGateState();
+}
+
+class _QrDeepLinkGateState extends ConsumerState<_QrDeepLinkGate> {
+  bool _started = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _route());
+  }
+
+  Future<void> _route() async {
+    if (_started) return;
+    _started = true;
+    try {
+      await ref.read(qrRouterServiceProvider).route(
+            context: context,
+            raw: widget.payload,
+          );
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Ce lien QR TORÈ ne peut pas être ouvert.');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = _error;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ouvrir TORÈ')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: error == null
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(error, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Retour'),
+                    ),
+                  ],
+                ),
+        ),
+      ),
     );
   }
 }
