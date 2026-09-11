@@ -1,14 +1,19 @@
 const DEFAULT_BASE_URL = '/forum/v2';
 
 export function forumBackendEnabled(){
-  const meta = document.querySelector('meta[name="tore-forum-backend"]')?.content;
-  if(meta != null) return ['1','true','yes','on'].includes(String(meta).toLowerCase());
-  return window.TORE_FORUM_BACKEND_ENABLED === true;
+  if(typeof document !== 'undefined'){
+    const meta = document.querySelector('meta[name="tore-forum-backend"]')?.content;
+    if(meta != null) return ['1','true','yes','on'].includes(String(meta).toLowerCase());
+  }
+  if(typeof window === 'undefined') return false;
+  if(window.TORE_FORUM_BACKEND_ENABLED === true || window.FORUM_BACKEND_ENABLED === true) return true;
+  try{return localStorage.getItem('tore-forum-backend-enabled') === '1'}catch{return false}
 }
 
 function defaultTokenProvider(){
-  // The host application should inject the existing TORÈ bearer token.  The
-  // adapter deliberately does not invent a second Forum identity/session.
+  // The host application injects the existing TORÈ bearer token.  The adapter
+  // deliberately does not invent a second Forum identity/session.
+  if(typeof window === 'undefined') return null;
   if(typeof window.TORE_AUTH_TOKEN_PROVIDER === 'function') return window.TORE_AUTH_TOKEN_PROVIDER();
   return window.TORE_AUTH_TOKEN || null;
 }
@@ -59,6 +64,7 @@ export class ForumApiRepository{
   setVisibility(slug,policy){return this.request(`/structures/${encodeURIComponent(slug)}/visibility`,{method:'PUT',body:policy})}
   events(slug){return this.request(`/structures/${encodeURIComponent(slug)}/events`)}
   createEvent(slug,data){return this.request(`/structures/${encodeURIComponent(slug)}/events`,{method:'POST',body:data})}
+  updateEvent(slug,id,patch){return this.request(`/structures/${encodeURIComponent(slug)}/events/${id}`,{method:'PATCH',body:patch})}
   transitionEvent(slug,id,target,idempotencyKey=crypto.randomUUID()){
     return this.request(`/structures/${encodeURIComponent(slug)}/events/${id}/transition`,{method:'POST',body:{target},headers:{'Idempotency-Key':idempotencyKey}})
   }
