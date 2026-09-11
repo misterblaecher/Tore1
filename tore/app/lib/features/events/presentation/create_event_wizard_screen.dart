@@ -139,7 +139,7 @@ class _CreateEventWizardScreenState
     if (_publishNow) {
       try {
         await api.publishEventV1(
-            eventId: id!, idempotencyKey: _idem('event-publish'));
+            eventId: id, idempotencyKey: _idem('event-publish'));
       } catch (_) {
         notice = 'Event créé, publication à réessayer.';
       }
@@ -147,7 +147,7 @@ class _CreateEventWizardScreenState
 
     Map<String, dynamic>? share;
     try {
-      share = await api.getEventShareV1(id!);
+      share = await api.getEventShareV1(id);
     } catch (_) {
       notice = [
         if (notice != null) notice,
@@ -167,7 +167,7 @@ class _CreateEventWizardScreenState
     }
     ref
         .read(appContextProvider.notifier)
-        .enterEvent(eventId: id!, eventName: _name.text.trim());
+        .enterEvent(eventId: id, eventName: _name.text.trim());
     if (mounted) setState(() => _loading = false);
   }
 
