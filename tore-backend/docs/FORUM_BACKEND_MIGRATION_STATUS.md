@@ -1,8 +1,13 @@
 # TORÈ Forum — Backend / IndexedDB migration status
 
-This file records what is authoritative on the server and what the v3.4.2 browser UI still keeps locally. "Backend" means a persisted `/forum/v2` contract exists. "Frontend connected" means the current UI actually uses that contract; the existence of an adapter alone is not counted as migrated.
+This file separates two facts that must not be conflated:
 
-| Feature | Local / IndexedDB today | Backend | Frontend connected |
+- **Backend model/API available** means a persisted, server-authoritative `/forum/v2` contract exists.
+- **Frontend consuming backend** means the current Forum browser UI actually hydrates and/or writes that feature through the backend bridge.
+
+The existence of an endpoint or of a `ForumApiRepository` method alone does **not** make a feature frontend-migrated.
+
+| Feature | Local / IndexedDB today | Backend model/API available | Frontend consuming backend |
 |---|---:|---:|---:|
 | Structure identity/settings | yes | yes | partial |
 | Members / mandates | yes | yes | partial |
@@ -25,18 +30,44 @@ This file records what is authoritative on the server and what the v3.4.2 browse
 | Public page lifecycle | local | yes | partial |
 | Public stats summary | no/derived demo | yes | no |
 | Invitations | local/demo | yes | no |
-| Claims | no full server flow | yes | no |
+| Claims | no full browser flow | yes | no |
 | Ownership transfer | no local authority | yes | no |
 
-## Current frontend adapter
+## Current frontend bridge
 
-`tore-forum-v3.4.1/src/services/forum_api_repository.js` is the migration boundary. It uses the existing TORÈ bearer token and exposes Forum v2 calls for structure/context, members, roles, visibility, events, stats, accounting, channels/messages and search.
+`tore-forum-v3.4.1/src/services/forum_api_repository.js` is the HTTP boundary and `src/services/forum_backend_bridge.js` is the current incremental migration bridge. Both reuse the existing TORÈ bearer token; no second Forum identity/session exists.
 
-The adapter is gated by `FORUM_BACKEND_ENABLED`-equivalent browser configuration (`window.__TORE_FORUM_BACKEND_ENABLED__` or the documented local flag). This allows incremental screen migration without creating a second identity/session system.
+When enabled, the bridge currently hydrates server state for:
 
-## What is not yet considered migrated
+- structure context;
+- roles;
+- members;
+- visibility policies;
+- events.
 
-The following remain local until their views are explicitly switched to `ForumApiRepository` and persistence is verified after reload against PostgreSQL:
+It currently mirrors mutations for:
+
+- Structure settings;
+- Members;
+- Roles;
+- Visibility;
+- Events and event lifecycle transitions;
+- Public Page publish/hide.
+
+Those surfaces are therefore marked **partial**, not fully migrated: the v3.4.2 UI still keeps local/IndexedDB state and the bridge performs incremental synchronization rather than making every view server-only.
+
+The bridge can be enabled with one of the supported browser controls:
+
+- `<meta name="tore-forum-backend" content="true">`;
+- `window.TORE_FORUM_BACKEND_ENABLED = true`;
+- `window.FORUM_BACKEND_ENABLED = true`;
+- local development flag `localStorage['tore-forum-backend-enabled'] = '1'`.
+
+Feature detection is DOM-safe: importing/calling it in Node or SSR-like environments without `document.querySelector` falls back to disabled instead of throwing.
+
+## What is not yet considered frontend-migrated
+
+The following remain local until their views are explicitly switched to the server contract and persistence is verified after reload against PostgreSQL:
 
 - discussions/messages UI state;
 - documents UI, uploads, downloads and versions;
@@ -47,9 +78,11 @@ The following remain local until their views are explicitly switched to `ForumAp
 - audit UI;
 - search UI;
 - onboarding/local workflow state;
+- invitations/claims browser workflows;
+- ownership-transfer browser workflow;
 - remaining prototype fixtures and IndexedDB-only presentation state.
 
-A feature must not be changed to "yes" in the `Frontend connected` column solely because a backend endpoint or adapter method exists.
+The backend already exposes contracts for these features, including authorization-safe document metadata/version delivery, but they remain **Frontend consuming backend = no** until the UI actually uses them.
 
 ## Production dependencies still external
 
