@@ -201,6 +201,36 @@ class DocumentCreateIn(BaseModel):
     event_id: Optional[int] = None
 
 
+class DocumentPatchIn(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=2, max_length=180)
+    description: Optional[str] = Field(default=None, max_length=5000)
+    folder: Optional[str] = Field(default=None, max_length=120)
+    tags: Optional[list[str]] = Field(default=None, max_length=20)
+    visibility: Optional[VisibilityLevel] = None
+    event_id: Optional[int] = None
+
+
+class DocumentVersionOut(BaseModel):
+    version: int
+    name: str
+    mimeType: str
+    size: int
+    checksum: str
+    createdAt: str
+
+
+class DocumentOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    folder: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+    visibility: str
+    eventId: Optional[int] = None
+    currentVersion: int
+    versions: list[DocumentVersionOut] = Field(default_factory=list)
+
+
 class AlbumCreateIn(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     description: Optional[str] = Field(default=None, max_length=5000)
