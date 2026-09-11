@@ -66,3 +66,26 @@ def test_event_context_and_state_reflect_runtime_state_updates():
     after_payload = after.json()
     assert after_payload['eventState'] == 'PAUSE'
     assert after_payload['lastUpdatedAt'] == fast_payload['lastUpdatedAt']
+
+
+def test_event_context_accepts_app_bearer_token():
+    event_id = _seed_event()
+    client = TestClient(app)
+    guest = client.post('/auth/guest', json={'display_name': 'Context Guest'})
+    assert guest.status_code == 200
+    token = guest.json()['token']
+
+    response = client.get(
+        f'/events/{event_id}/context',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['event']['id'] == event_id
+    assert payload['permissions'] == {
+        'canCreateBets': False,
+        'canResolveBets': False,
+        'canAdminMusic': False,
+        'canDjMusic': False,
+    }
