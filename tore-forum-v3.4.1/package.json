@@ -4,12 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",
-    "test": "node tests/product.test.mjs && node tests/static.test.mjs && node tests/security.test.mjs && node tests/tenant-integrity.test.mjs && node tests/governance-v3.4.test.mjs && node tests/privacy-lifecycle-v3.4.test.mjs && node tests/migration-v3.4.test.mjs && node tests/validation-v3.4.test.mjs && node tests/e2e.service.test.mjs && node tests/qa-matrix.test.mjs && node tests/final-hardening-v3.4.2.test.mjs",
+    "test": "node tests/product.test.mjs && node tests/static.test.mjs && node tests/security.test.mjs && node tests/tenant-integrity.test.mjs && node tests/governance-v3.4.test.mjs && node tests/privacy-lifecycle-v3.4.test.mjs && node tests/migration-v3.4.test.mjs && node tests/validation-v3.4.test.mjs && node tests/e2e.service.test.mjs && node tests/qa-matrix.test.mjs && node tests/final-hardening-v3.4.2.test.mjs && node tests/backend-bridge-regressions.test.mjs",
     "test:security": "node tests/security.test.mjs && node tests/final-hardening-v3.4.2.test.mjs",
     "test:e2e": "node tests/e2e.service.test.mjs",
     "test:browser": "node tests/browser-smoke.mjs",
-    "test:qa": "node tests/qa-matrix.test.mjs",
+    "test:qa": "node tests/qa-matrix.test.mjs && node tests/backend-bridge-regressions.test.mjs",
     "test:integrity": "node tests/tenant-integrity.test.mjs && node tests/governance-v3.4.test.mjs && node tests/privacy-lifecycle-v3.4.test.mjs && node tests/final-hardening-v3.4.2.test.mjs",
-    "test:hardening": "node tests/final-hardening-v3.4.2.test.mjs"
+    "test:hardening": "node tests/final-hardening-v3.4.2.test.mjs && node tests/backend-bridge-regressions.test.mjs"
   }
 }

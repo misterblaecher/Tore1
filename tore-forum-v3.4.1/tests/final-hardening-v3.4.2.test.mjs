@@ -6,6 +6,13 @@ global.document={createElement(){return {click(){},set href(v){},set download(v)
 global.location={search:'',href:'http://localhost/structures/lembuscade'};
 global.URL={createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{}};
 
+const {forumBackendEnabled}=await import('../src/services/forum_api_repository.js');
+const minimalDocument=global.document;
+assert.equal(forumBackendEnabled(),false,'backend bridge is disabled when document lacks querySelector');
+delete global.document;
+assert.equal(forumBackendEnabled(),false,'backend bridge is disabled when document is absent');
+global.document=minimalDocument;
+
 const {LocalRepository}=await import('../src/core/storage.js');
 const {AuthorizationService,AuthorizedRepository}=await import('../src/core/authorization.js');
 const {auditService}=await import('../src/services/audit.js');

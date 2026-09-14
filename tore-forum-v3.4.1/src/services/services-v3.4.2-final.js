@@ -1,5 +1,6 @@
 import { createServices as createHardenedServices } from './services-v3.4.2.js?v=1';
 import { AuthorizationError } from '../core/authorization.js';
+import { attachForumBackendBridge } from './forum_backend_bridge.js';
 
 const STRICT_NON_DELEGABLE=new Set(['structure.admin','ownership.transfer','accounting.unlock']);
 
@@ -79,5 +80,6 @@ export function createServices(repo, blobRepo, audit, permissionsOrAuth){
   };
 
   services.roles.strictNonDelegablePermissions=[...STRICT_NON_DELEGABLE];
+  attachForumBackendBridge(repo,services);
   return services;
 }

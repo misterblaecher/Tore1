@@ -87,6 +87,7 @@ class EventRankingScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
+                      initiallyExpanded: true,
                       title: const Text('Règles du classement'),
                       children: [
                         Align(
