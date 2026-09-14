@@ -7,6 +7,7 @@ from fastapi import Depends
 from app.core.startup import run_startup
 from app.legacy import monolith
 from app.routers.forum_backend import router as forum_backend_router
+from app.routers.forum_backend_event_overrides import router as forum_backend_event_override_router
 from app.routers.forum_backend_overrides import router as forum_backend_override_router
 from app.services.forum_identity import get_registered_forum_user
 
@@ -16,6 +17,7 @@ _REPLACED_FORUM_ENDPOINTS = {
     "post_message",
     "folklore_versions",
     "list_posts",
+    "transition_event",
 }
 
 
@@ -52,6 +54,7 @@ def _install_forum_backend(app) -> None:
     if not any(str(getattr(route, "path", "")).startswith("/forum/v2/") for route in app.router.routes):
         forum_guard = [Depends(get_registered_forum_user)]
         app.include_router(forum_backend_override_router, dependencies=forum_guard)
+        app.include_router(forum_backend_event_override_router, dependencies=forum_guard)
         app.include_router(forum_backend_router, dependencies=forum_guard)
     app.openapi_schema = None
 
