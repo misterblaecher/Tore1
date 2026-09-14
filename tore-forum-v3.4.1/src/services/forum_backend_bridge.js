@@ -8,7 +8,10 @@ const visibilityToApi = value => ({
   'Public':'PUBLIC','Utilisateurs TORÈ':'TORE','Membres':'MEMBERS','Staff':'STAFF',
   'Bureau':'BUREAU','Trésorerie':'TREASURY','Privé':'PRIVATE'
 })[value] || 'PRIVATE';
-const eventVisibilityFromApi = value => String(value||'PRIVATE').toUpperCase()==='PUBLIC'?'Public':'Privé';
+// Server PRIVATE means "internal to the structure" for event list responses.
+// The local repository still applies events.view, so hydrate it as Membres
+// instead of Privé (which is reserved locally for structure.admin only).
+const eventVisibilityFromApi = value => String(value||'PRIVATE').toUpperCase()==='PUBLIC'?'Public':'Membres';
 const eventVisibilityToApi = value => value==='Public'?'PUBLIC':'PRIVATE';
 const dateOnly = value => value ? String(value).slice(0,10) : null;
 const safeSlug = value => String(value||'event').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'event';
@@ -209,4 +212,4 @@ export function attachForumBackendBridge(repo,services,{api=createForumApiReposi
   return services.backend;
 }
 
-export { visibilityFromApi, visibilityToApi };
+export { visibilityFromApi, visibilityToApi, eventVisibilityFromApi };
