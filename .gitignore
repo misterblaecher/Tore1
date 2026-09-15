@@ -10,3 +10,5 @@ __pycache__/
 *.aab
 
 tore-backend/.venv-release/
+
+tore-background-3d.zip
