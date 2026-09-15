@@ -24,6 +24,11 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function eventPath(event: EventItem) {
+  const base = event.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 180) || "event";
+  return `/forum/events/${base}-${event.id}`;
+}
+
 export default function ForumPublicPage() {
   const { slug } = useParams();
   if (!slug) return <ForumPage />;
@@ -50,7 +55,6 @@ function PublicStructure({ slug }: { slug: string }) {
   const { structure, events, members, albums, pages, stats } = data;
   return (
     <div className="min-h-screen bg-background">
-
       <main className="forum-page" style={{ "--structure-primary": structure.primaryColor ?? "#ba1733", "--structure-secondary": structure.secondaryColor ?? "#f4c430" } as CSSProperties}>
         <div className="forum-container">
         <Link className="forum-back-link" to="/forum/structures"><ArrowLeft size={15} /> Toutes les structures</Link>
@@ -65,7 +69,7 @@ function PublicStructure({ slug }: { slug: string }) {
         <div className="forum-public-stats"><div><strong>{stats?.publicEvents ?? "Privé"}</strong><span>events publics</span></div><div><strong>{stats?.members ?? "Privé"}</strong><span>membres visibles selon réglages</span></div><div><strong>{stats?.publicAlbums ?? "Privé"}</strong><span>albums publiés</span></div></div>
 
         <section className="forum-public-grid">
-          <div className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Agenda</span><h2>Prochains événements</h2></div><CalendarDays size={20} /></div><div className="forum-list">{events.length ? events.map((event) => <article className="forum-row" key={event.id}><div><strong>{event.name}</strong><p>{formatDate(event.startsAt)}{event.venue || event.city ? ` · ${event.venue || event.city}` : ""}</p>{event.description ? <small>{event.description}</small> : null}</div><ArrowRight size={16} /></article>) : <div className="forum-empty">Aucun événement public annoncé.</div>}</div></div>
+          <div className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Agenda</span><h2>Prochains événements</h2></div><CalendarDays size={20} /></div><div className="forum-list">{events.length ? events.map((event) => <Link className="forum-row" to={eventPath(event)} key={event.id}><div><strong>{event.name}</strong><p>{formatDate(event.startsAt)}{event.venue || event.city ? ` · ${event.venue || event.city}` : ""}</p>{event.description ? <small>{event.description}</small> : null}</div><ArrowRight size={16} /></Link>) : <div className="forum-empty">Aucun événement public annoncé.</div>}</div></div>
           <div className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Contact</span><h2>Liens utiles</h2></div><ExternalLink size={20} /></div><div className="forum-public-links">{structure.websiteUrl ? <a href={structure.websiteUrl} target="_blank" rel="noreferrer">Site web <ExternalLink size={14} /></a> : null}{structure.instagramHandle ? <a href={`https://instagram.com/${structure.instagramHandle.replace(/^@/, "")}`} target="_blank" rel="noreferrer">Instagram <ExternalLink size={14} /></a> : null}{structure.contactEmail ? <a href={`mailto:${structure.contactEmail}`}>Email <ExternalLink size={14} /></a> : null}{structure.contactPhone ? <a href={`tel:${structure.contactPhone}`}>Téléphone <ExternalLink size={14} /></a> : null}{!structure.websiteUrl && !structure.instagramHandle && !structure.contactEmail && !structure.contactPhone ? <span className="forum-muted">Cette structure n’a pas encore renseigné de lien public.</span> : null}</div></div>
         </section>
 
@@ -76,7 +80,6 @@ function PublicStructure({ slug }: { slug: string }) {
         {structure.sponsors?.length ? <section className="forum-card"><span className="forum-eyebrow">Partenaires</span><h2>Sponsors & partenaires</h2><div className="forum-hero-tags">{structure.sponsors.map((sponsor) => <span key={sponsor}>{sponsor}</span>)}</div></section> : null}
         </div>
       </main>
-
     </div>
   );
 }

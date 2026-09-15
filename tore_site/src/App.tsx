@@ -21,6 +21,7 @@ import ProfilePage from "./pages/Profile";
 import ForumPage from "./pages/Forum";
 import ForumHome from "./pages/ForumHome";
 import ForumPublicPage from "./pages/ForumPublic";
+import ForumEventPage from "./pages/ForumEvent";
 import ForumStructurePage from "./pages/ForumStructure";
 import CommitteeStudioPage from "./pages/CommitteeStudio";
 import LoginPage from "./pages/Login";
@@ -80,6 +81,7 @@ const App = () => (
             <Route path="/forum/public" element={<Navigate to="/forum" replace />} />
             <Route path="/forum" element={<ForumHome />} />
             <Route path="/forum/structures" element={<ForumPage />} />
+            <Route path="/forum/events/:slug" element={<ForumEventPage />} />
             <Route path="/forum/structures/:slug" element={<ForumPublicPage />} />
             <Route path="/forum/structures/:slug/:section" element={<ProtectedRoute><ForumStructurePage /></ProtectedRoute>} />
           </Route>

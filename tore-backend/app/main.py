@@ -12,6 +12,12 @@ def create_app():
         from app.routers.storage import router as storage_router
 
         app.include_router(storage_router)
+    # Public event pages and the recap workflow are kept out of the legacy
+    # monolith as a structure-scoped Forum surface.
+    if not any(getattr(route, "name", None) == "get_public_event_page" for route in app.routes):
+        from app.routers.forum_events import router as forum_events_router
+
+        app.include_router(forum_events_router)
     run_startup(app)
     return app
 
