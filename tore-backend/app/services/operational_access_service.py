@@ -13,11 +13,13 @@ from models import (
     Bar,
     Event,
     EventStaff,
+    EventStructure,
     OrganizationMembership,
     PartnerBarAccess,
     PartnerMembership,
     PartnerUser,
 )
+from app.services.event_cohosting_service import cohost_capability_actions, effective_permission
 
 
 EVENT_ROLE_ACTIONS: dict[str, set[str]] = {
@@ -36,7 +38,7 @@ BAR_ROLE_ACTIONS: dict[str, set[str]] = {
     "ENTRY": {"bar.view_ops"},
 }
 
-STRUCTURE_MANAGE_ROLES = {"OWNER", "PRESIDENT", "BUREAU", "TRESORIER", "MANAGER", "STAFF"}
+STRUCTURE_MANAGE_ROLES = {"OWNER", "PRESIDENT", "BUREAU", "TREASURER", "TRESORIER", "MANAGER", "STAFF"}
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
@@ -138,6 +140,39 @@ def event_capabilities(db: Session, user: AppUser, *, at: Optional[datetime] = N
                 "role": "MANAGER", "actions": sorted(EVENT_ROLE_ACTIONS["MANAGER"]),
                 "source": "ORGANIZATION_MEMBERSHIP", "activated_at": _iso(membership.starts_at or membership.joined_at),
                 "expires_at": _iso(expires_at), "status": "ACTIVE", "updated_at": _iso(membership.updated_at),
+                "event": {"id": event.id, "name": event.name, "state": (event.event_state or "LIVE").upper(), "starts_at": _iso(event.starts_at), "ends_at": _iso(event.ends_at)},
+            })
+
+        # Co-hosting is an explicit Event <-> Structure relation. It never grants
+        # operational rights implicitly: only the persisted COHOST permission
+        # flags are translated into event actions here.
+        cohost_rows = db.query(EventStructure, Event).join(Event, Event.id == EventStructure.event_id).filter(
+            EventStructure.organization_id == membership.organization_id,
+            EventStructure.role == "COHOST",
+        ).all()
+        for relation, event in cohost_rows:
+            if not _event_is_active(event, stamp):
+                continue
+            if not effective_permission(relation, membership, "staff"):
+                continue
+            actions = sorted(cohost_capability_actions(relation))
+            expires_at = event.ends_at
+            if membership.ends_at and (expires_at is None or membership.ends_at < expires_at):
+                expires_at = membership.ends_at
+            _merge_capability(merged, {
+                "id": f"event:{event.id}:cohost:{relation.id}:{membership.id}",
+                "type": "EVENT",
+                "scope": f"event:{event.id}",
+                "event_id": event.id,
+                "bar_id": event.bar_id,
+                "organization_id": membership.organization_id,
+                "role": "COHOST",
+                "actions": actions,
+                "source": "EVENT_COHOST",
+                "activated_at": _iso(relation.created_at),
+                "expires_at": _iso(expires_at),
+                "status": "ACTIVE",
+                "updated_at": _iso(relation.updated_at),
                 "event": {"id": event.id, "name": event.name, "state": (event.event_state or "LIVE").upper(), "starts_at": _iso(event.starts_at), "ends_at": _iso(event.ends_at)},
             })
     return sorted(merged.values(), key=lambda item: item["event_id"])

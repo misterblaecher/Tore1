@@ -8,8 +8,10 @@ the progressive split.
 
 from app.compat.reexport import reexport_public
 from app.legacy import models_monolith as _models_monolith
+from app.models.event_cohosting import EventManagerSettings, EventStructure
 from app.models.storage import StoredFile
 
 reexport_public(_models_monolith, globals())
-if "StoredFile" not in __all__:
-    __all__.append("StoredFile")
+for _name in ("StoredFile", "EventStructure", "EventManagerSettings"):
+    if _name not in __all__:
+        __all__.append(_name)
