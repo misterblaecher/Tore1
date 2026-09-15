@@ -1,10 +1,10 @@
-import { Archive, BarChart3, BookOpen, CalendarDays, Clock3, FileText, Globe2, Image, LayoutDashboard, MessageSquare, ShieldCheck, SlidersHorizontal, Users, WalletCards } from "lucide-react";
+import { Archive, BarChart3, BookOpen, CalendarDays, Clock3, FileText, Globe2, Image, KeyRound, LayoutDashboard, MessageSquare, ShieldCheck, SlidersHorizontal, Users, WalletCards } from "lucide-react";
 
 export const forumNavGroups = [
   { label: "Général", items: [["dashboard", "Dashboard", LayoutDashboard], ["public", "Page publique", Globe2]] },
   { label: "Organisation", items: [["discussions", "Discussions", MessageSquare], ["events", "Événements", CalendarDays], ["members", "Membres", Users], ["planning", "Planning", Clock3]] },
   { label: "Mémoire", items: [["documents", "Documents", FileText], ["albums", "Albums", Image], ["archives", "Archives", Archive], ["folklore", "Folklore", BookOpen]] },
-  { label: "Gestion", items: [["stats", "Stats soirées", BarChart3], ["accounting", "Comptabilité", WalletCards], ["visibility", "Visibilité", SlidersHorizontal], ["audit", "Audit logs", ShieldCheck]] },
+  { label: "Gestion", items: [["stats", "Stats soirées", BarChart3], ["accounting", "Comptabilité", WalletCards], ["visibility", "Visibilité", SlidersHorizontal], ["ownership", "Ownership", KeyRound], ["audit", "Audit logs", ShieldCheck]] },
 ] as const;
 type ForumNavItem = (typeof forumNavGroups)[number]["items"][number];
 export const forumNavItems = forumNavGroups.flatMap<ForumNavItem>((group) => group.items);
