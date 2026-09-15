@@ -21,7 +21,7 @@ type AccountingSummary = {
 
 function money(cents: number) { return `${(cents / 100).toLocaleString("fr-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`; }
 function dateLabel(value?: string | null) { return value && !Number.isNaN(Date.parse(value)) ? new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium" }).format(new Date(value)) : "Date à confirmer"; }
-function csvCell(value: string | number) { const text = String(value ?? ""); return `"${text.replaceAll('"', '""')}"`; }
+function csvCell(value: string | number) { const text = String(value ?? ""); return `"${text.replace(/"/g, '""')}"`; }
 
 export default function ForumAccountingPage() {
   const { slug = "" } = useParams();
