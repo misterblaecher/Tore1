@@ -1,6 +1,7 @@
 """Application composition entrypoint."""
 from app.core.startup import run_startup
 from app.legacy import monolith
+from app.routers.event_manager import router as event_manager
 from app.routers.forum_accounting import router as accounting
 from app.routers.forum_event_workspace import router as event_workspace
 from app.routers.forum_ownership import freeze_guard_middleware, router as ownership
@@ -12,6 +13,7 @@ from app.routers.structure_claim_review import router as claim_review
 from app.routers.structure_lifecycle import router as lifecycle
 from app.routers.structure_rbac import router as rbac
 from app.routers.structure_visibility import router as visibility
+from app.services.event_cohosting_operational import install_cohost_operational_access
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
@@ -29,9 +31,10 @@ def _replace(app):
     app.router.routes[:]=kept
 
 def create_app():
-    app=monolith.app; _replace(app); paths={getattr(r,"path","") for r in app.routes}
+    app=monolith.app; _replace(app); install_cohost_operational_access(); paths={getattr(r,"path","") for r in app.routes}
     if not any(p.endswith("/event-workspace") for p in paths): app.include_router(event_workspace)
     if not any(p.endswith("/accounting-summary") for p in paths): app.include_router(accounting)
+    if not any(p.endswith("/event-manager") for p in paths): app.include_router(event_manager)
     if not any(p.endswith("/publish") and p.startswith("/forum/structures/") for p in paths): app.include_router(lifecycle)
     if not _has(app,"GET","/forum/structures/{slug}/workspace"): app.include_router(rbac)
     if not _has(app,"PATCH","/forum/structures/{slug}/visibility"): app.include_router(visibility)
