@@ -55,6 +55,19 @@ def create_app():
         app.include_router(structure_rbac_router)
     if not _has_route(app, "PATCH", "/forum/structures/{slug}/visibility"):
         app.include_router(structure_visibility_router)
+
+    # Managed uploads and public event pages are additive Forum surfaces. Guard
+    # the singleton FastAPI app because tests and compatibility callers may call
+    # create_app more than once.
+    if not any(getattr(route, "name", None) == "upload_structure_file" for route in app.routes):
+        from app.routers.storage import router as storage_router
+
+        app.include_router(storage_router)
+    if not any(getattr(route, "name", None) == "get_public_event_page" for route in app.routes):
+        from app.routers.forum_events import router as forum_events_router
+
+        app.include_router(forum_events_router)
+
     run_startup(app)
     return app
 
