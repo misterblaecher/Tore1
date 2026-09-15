@@ -92,6 +92,17 @@ def test_rich_event_fields_persist_and_draft_is_not_live():
     assert structure_published.status_code == 200
     assert structure_published.json()["published"] is True
 
+    # The events block is independently private by default. It must also be made public
+    # explicitly before a published event can appear on the public structure page.
+    events_visible = client.patch(
+        f"/forum/structures/{slug}/visibility",
+        json={"events": "PUBLIC"},
+        headers=_headers(token, "workspace-events-visible"),
+    )
+    assert events_visible.status_code == 200
+    assert events_visible.json()["settings"]["events"] == "PUBLIC"
+    assert events_visible.json()["published"] is True
+
     published = client.patch(
         f"/forum/structures/{slug}/event-workspace/{event_id}",
         json={"visibility": "PUBLIC", "lifecycle_status": "PUBLISHED"},
