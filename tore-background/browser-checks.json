@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "localFile": true,
+  "desktop": true,
+  "mobile": true,
+  "alignedLayerDimensions": true,
+  "globalPulse": true,
+  "parallax": true,
+  "fireEmitters": true,
+  "offscreenStop": true,
+  "reducedMotion": true,
+  "lifecycle": true,
+  "maxParticleCap": 96,
+  "framesIn1100ms": 37,
+  "errors": []
+}

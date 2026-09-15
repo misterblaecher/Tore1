@@ -1,11 +1,14 @@
 tore-portal/node_modules/
 tore-portal/dist/
+tore-portal/.npm-cache/
+
 *.pyc
 __pycache__/
 .env
-.venv-release/
-.npm-cache/
-*.tsbuildinfo
 .seed.env
 *.apk
 *.aab
+
+tore-backend/.venv-release/
+
+tore-background-3d.zip
