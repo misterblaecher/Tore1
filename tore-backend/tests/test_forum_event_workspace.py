@@ -82,6 +82,16 @@ def test_rich_event_fields_persist_and_draft_is_not_live():
     assert refreshed.json()["items"][0]["recap"] == "Récap privé en préparation"
     assert refreshed.json()["items"][0]["coOrganizers"] == ["Cercle A", "Comité B"]
 
+    # Publishing an event must never publish its owning structure implicitly.
+    assert client.get(f"/forum/structures/{slug}").status_code == 404
+    structure_published = client.post(
+        f"/forum/structures/{slug}/publish",
+        json={"reason": "Publication explicite avant publication de l’event"},
+        headers=_headers(token, "workspace-structure-publish"),
+    )
+    assert structure_published.status_code == 200
+    assert structure_published.json()["published"] is True
+
     published = client.patch(
         f"/forum/structures/{slug}/event-workspace/{event_id}",
         json={"visibility": "PUBLIC", "lifecycle_status": "PUBLISHED"},
