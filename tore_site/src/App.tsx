@@ -22,6 +22,7 @@ import ForumPage from "./pages/Forum";
 import ForumHome from "./pages/ForumHome";
 import ForumPublicPage from "./pages/ForumPublic";
 import ForumStructurePage from "./pages/ForumStructure";
+import ForumAccountingPage from "./pages/ForumAccounting";
 import CommitteeStudioPage from "./pages/CommitteeStudio";
 import LoginPage from "./pages/Login";
 import AuthCallbackPage from "./pages/AuthCallback";
@@ -35,13 +36,9 @@ const queryClient = new QueryClient();
 function ScrollToHash() {
   const { hash, pathname } = useLocation();
 
-  // Scroll to top on route change (without hash)
-  // Scroll to element when hash is present
-  // This makes in-page anchors work with react-router.
   useEffect(() => {
     if (hash) {
       const id = hash.replace("#", "");
-      // small timeout to allow page render
       const timeout = window.setTimeout(() => {
         document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       }, 50);
@@ -81,6 +78,7 @@ const App = () => (
             <Route path="/forum" element={<ForumHome />} />
             <Route path="/forum/structures" element={<ForumPage />} />
             <Route path="/forum/structures/:slug" element={<ForumPublicPage />} />
+            <Route path="/forum/structures/:slug/accounting" element={<ProtectedRoute><ForumAccountingPage /></ProtectedRoute>} />
             <Route path="/forum/structures/:slug/:section" element={<ProtectedRoute><ForumStructurePage /></ProtectedRoute>} />
           </Route>
           <Route path="/studio" element={<CommitteeStudioPage />} />
