@@ -6,3 +6,4 @@ __pycache__/
 .seed.env
 *.apk
 *.aab
+tore-backend/.venv-release/
