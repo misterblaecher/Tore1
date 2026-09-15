@@ -1,5 +1,5 @@
 /* One navigation frame for the whole Forum, including public pages and account. */
-.forum-layout { --forum-rail-width: 248px; --forum-amber: #ffb347; min-height: 100vh; color: #eee8dc; background: #080808; }
+.forum-layout { --forum-rail-width: 248px; --forum-amber: #ffb347; --forum-bg: #080808; --forum-surface: #111; --forum-border: #2c2923; --forum-muted: #9a9489; --forum-text: #eee8dc; min-height: 100vh; color: var(--forum-text); background: var(--forum-bg); color-scheme: dark; }
 .forum-rail, .forum-mobile-rail { display: flex; flex-direction: column; box-sizing: border-box; color: #eee8dc; background: #0c0c0c; }
 .forum-rail { position: fixed; z-index: 40; inset: 0 auto 0 0; width: var(--forum-rail-width); height: 100dvh; padding: 16px 12px 12px; border-right: 1px solid #27251f; }
 .forum-rail__brand { display: flex; flex-shrink: 0; flex-direction: column; align-items: center; margin: 0 0 16px; color: #fff0d1; text-decoration: none; }
@@ -61,13 +61,16 @@
 .forum-topbar__account { display: inline-flex; align-items: center; gap: 7px; color: #ddd4c3; font-size: .75rem; white-space: nowrap; }
 .forum-topbar__account .forum-identity-image { width: 33px; height: 33px; }
 .forum-topbar__menu { display: none; color: #d7d0c2; }
-.forum-layout .forum-page, .forum-layout .forum-account-main, .forum-layout .forum-auth-page, .forum-layout .forum-main { width: 100%; max-width: none; min-height: 0; padding: 30px clamp(18px, 2.2vw, 34px) 42px; background: #080808; color: #eee8dc; }
+.forum-layout .forum-page, .forum-layout .forum-account-main, .forum-layout .forum-auth-page, .forum-layout .forum-main { width: 100%; max-width: none; min-height: 0; padding: 30px clamp(18px, 2.2vw, 34px) 42px; background: var(--forum-bg); color: var(--forum-text); }
 .forum-layout .forum-account-page { min-height: 0; }
 .forum-layout .forum-container, .forum-layout .forum-account-container { width: 100%; max-width: none; }
 .forum-layout .forum-home-hero { min-height: 200px; align-items: center; }
 .forum-layout .forum-home-hero h1 { max-width: 780px; font-size: clamp(1.9rem, 3.3vw, 3.1rem); }
 .forum-layout .forum-landing-head h1, .forum-layout .forum-account-identity h1, .forum-layout .forum-main__head h1 { color: #fff0d1; }
-.forum-layout .forum-panel, .forum-layout .forum-card, .forum-layout .forum-home-card, .forum-layout .forum-dashboard-card, .forum-layout .forum-account-card, .forum-layout .forum-auth-card, .forum-layout .forum-auth-aside, .forum-layout .forum-structure-card { background: #111; border-color: #2c2923; border-radius: 10px; }
+.forum-layout .forum-panel, .forum-layout .forum-card, .forum-layout .forum-home-card, .forum-layout .forum-dashboard-card, .forum-layout .forum-account-card, .forum-layout .forum-auth-card, .forum-layout .forum-auth-aside, .forum-layout .forum-structure-card { background: var(--forum-surface); border-color: var(--forum-border); border-radius: 10px; }
+/* Shared Forum theme tokens keep feature-specific screens (events, forms, tables) aligned with the dark TORÈ shell. */
+.forum-layout :is(input, textarea, select) { color-scheme: dark; }
+.forum-layout .forum-events-v341__lifecycle i { background: var(--forum-bg); }
 .forum-layout .forum-eyebrow, .forum-layout .forum-dashboard-card__title > span { color: #ffb347; }
 .forum-layout .forum-button--primary { background: linear-gradient(180deg, #ffb74d, #fa901e); color: #1d1205; border-color: #d48c26; }
 .forum-layout .forum-button--primary:hover { filter: brightness(1.08); }
