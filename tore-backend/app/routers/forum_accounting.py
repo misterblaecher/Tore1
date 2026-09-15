@@ -1,8 +1,8 @@
-"""Treasury-only accounting reads for the Structures Forum.
+"""Capability-protected accounting reads for the Structures Forum.
 
 Operational attendance statistics stay on the existing ``/stats`` surface.
-This router deliberately exposes financial values through a separate endpoint
-which requires a treasury-level server-side role.
+Financial values are exposed separately and the backend remains the security
+boundary: UI visibility never substitutes for ``finance.read``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from models import AppUser, Event, EventCost, Order
 from app.legacy.monolith import get_current_user, get_db
-from app.routers.forum import _require_role, _structure_or_404
+from app.routers.forum import _structure_or_404
+from app.services.structure_rbac import require_capability
 
 
 router = APIRouter(prefix="/forum", tags=["forum-accounting"])
@@ -47,7 +48,7 @@ def get_accounting_summary(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "TREASURER")
+    membership = require_capability(db, org.id, user, "finance.read")
     events = db.query(Event).filter(
         Event.host_type == "orga",
         Event.host_id == str(org.id),

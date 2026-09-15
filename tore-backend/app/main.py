@@ -5,6 +5,7 @@ from app.legacy import monolith
 from app.routers.forum_accounting import router as forum_accounting_router
 from app.routers.forum_event_workspace import router as forum_event_workspace_router
 from app.routers.structure_lifecycle import router as structure_lifecycle_router
+from app.routers.structure_rbac import router as structure_rbac_router
 from app.routers.structure_visibility import router as structure_visibility_router
 
 
@@ -50,6 +51,8 @@ def create_app():
         app.include_router(forum_accounting_router)
     if not any(path.endswith("/publish") and path.startswith("/forum/structures/") for path in existing_paths):
         app.include_router(structure_lifecycle_router)
+    if not _has_route(app, "GET", "/forum/structures/{slug}/workspace"):
+        app.include_router(structure_rbac_router)
     if not _has_route(app, "PATCH", "/forum/structures/{slug}/visibility"):
         app.include_router(structure_visibility_router)
     run_startup(app)

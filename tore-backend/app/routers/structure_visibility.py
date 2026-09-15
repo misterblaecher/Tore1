@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from models import AppUser, Organization, OrganizationWriteIdempotency
 from app.legacy.monolith import _orga_write_idem, get_current_user, get_db
-from app.routers.forum import _require_role, _visibility_settings
+from app.routers.forum import _visibility_settings
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
 from app.services.structure_lifecycle import lifecycle_status
+from app.services.structure_rbac import require_capability
 
 
 router = APIRouter(prefix="/forum", tags=["forum"])
@@ -62,18 +63,22 @@ def patch_visibility_private_safe(
     controlled exclusively by the explicit publish lifecycle action.
     """
     org = _org_by_slug(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "visibility.manage")
     key = ensure_idempotency_key(idempotency_key)
     action = f"forum_visibility_patch:{org.id}"
     idem = _orga_write_idem(db, actor_user_id=user.id, action=action, idempotency_key=key)
     if idem is not None:
         return idem.response_json
 
-    if payload.stats == "PUBLIC" and not payload.confirm_public_finance:
-        raise HTTPException(
-            status_code=400,
-            detail={"reason": "PUBLIC_FINANCE_CONFIRMATION_REQUIRED"},
-        )
+    if payload.stats == "PUBLIC":
+        # Publishing potentially sensitive statistics requires both visibility control
+        # and finance access. A communication-only role must never expose finance.
+        require_capability(db, org.id, user, "finance.read")
+        if not payload.confirm_public_finance:
+            raise HTTPException(
+                status_code=400,
+                detail={"reason": "PUBLIC_FINANCE_CONFIRMATION_REQUIRED"},
+            )
 
     settings = _visibility_settings(org)
     changes = payload.model_dump(exclude_none=True, exclude={"confirm_public_finance"})
