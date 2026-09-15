@@ -29,6 +29,15 @@ def _headers(token: str, key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Idempotency-Key": key}
 
 
+def _publish(token: str, slug: str, key: str) -> None:
+    response = client.post(
+        f"/forum/structures/{slug}/publish",
+        json={"reason": "Publication explicite du test"},
+        headers=_headers(token, key),
+    )
+    assert response.status_code == 200
+
+
 def test_forum_public_structure_and_private_scope_persist():
     owner_token, owner_id = _guest("forum-owner")
     outsider_token, _ = _guest("forum-outsider")
@@ -40,7 +49,11 @@ def test_forum_public_structure_and_private_scope_persist():
     assert created.status_code == 200
     structure = created.json()["orga"]
     slug = structure["slug"]
+    assert structure["lifecycle"] == "SETUP"
+    assert structure["visibility"] == "PRIVATE"
 
+    assert client.get(f"/forum/structures/{slug}").status_code == 404
+    _publish(owner_token, slug, "forum-orga-publish")
     public = client.get(f"/forum/structures/{slug}")
     assert public.status_code == 200
     assert public.json()["structure"]["name"] == "Cercle Forum MVP"
@@ -117,6 +130,7 @@ def test_structure_documents_and_events_are_isolated_and_persisted():
     assert created_a.status_code == 200 and created_b.status_code == 200
     slug_a = created_a.json()["orga"]["slug"]
     slug_b = created_b.json()["orga"]["slug"]
+    _publish(owner_a, slug_a, "isolation-publish-a")
 
     document_b = client.post(
         f"/forum/structures/{slug_b}/documents",
@@ -224,10 +238,11 @@ def test_portal_settings_roundtrip_permissions_and_public_visibility():
     assert saved.status_code == 200
     assert saved.json()["portal"]["services"] == ["Concerts"]
     assert client.get(path, headers={"Authorization": f"Bearer {token}"}).json()["portal"]["hidden_blocks"] == ["gallery"]
+    _publish(token, slug, "portal-publish")
     # Current team must exclude ended mandates, even if their status still says ACTIVE.
     with Session(engine) as db:
         org = db.query(Organization).filter(Organization.slug == slug).one()
-        org.visibility_settings_json = {"description": "PRIVATE", "contact": "PRIVATE", "folklore": "PRIVATE", "members": "PUBLIC"}
+        org.visibility_settings_json = {"page": "PUBLIC", "description": "PRIVATE", "contact": "PRIVATE", "folklore": "PRIVATE", "members": "PUBLIC"}
         membership = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org.id, OrganizationMembership.user_id == owner_id).one()
         membership.visibility = "PUBLIC"
         membership.ends_at = now_utc() - timedelta(days=1)
