@@ -9,6 +9,8 @@ from app.legacy import monolith
 from app.routers.forum_backend import router as forum_backend_router
 from app.routers.forum_backend_event_overrides import router as forum_backend_event_override_router
 from app.routers.forum_backend_overrides import router as forum_backend_override_router
+from app.routers.forum_channel_acl import router as forum_channel_acl_router
+from app.routers.forum_channel_acl_admin import router as forum_channel_acl_admin_router
 from app.services.forum_identity import get_registered_forum_user
 
 
@@ -18,6 +20,19 @@ _REPLACED_FORUM_ENDPOINTS = {
     "folklore_versions",
     "list_posts",
     "transition_event",
+    # ACL-aware replacements. These must be the only registered implementations
+    # so OpenAPI and runtime routing describe the same security boundary.
+    "list_channels",
+    "list_messages",
+    "list_documents",
+    "get_document_metadata",
+    "download_document",
+    "search_structure",
+}
+
+_ACL_REPLACED_OVERRIDE_ENDPOINTS = {
+    "post_message",
+    "get_document_metadata",
 }
 
 
@@ -50,9 +65,21 @@ def _install_forum_backend(app) -> None:
         if getattr(getattr(route, "endpoint", None), "__name__", "")
         not in _REPLACED_FORUM_ENDPOINTS
     ]
+    forum_backend_override_router.routes[:] = [
+        route
+        for route in forum_backend_override_router.routes
+        if getattr(getattr(route, "endpoint", None), "__name__", "")
+        not in _ACL_REPLACED_OVERRIDE_ENDPOINTS
+    ]
 
     if not any(str(getattr(route, "path", "")).startswith("/forum/v2/") for route in app.router.routes):
         forum_guard = [Depends(get_registered_forum_user)]
+        # Management metadata is deliberately separate from content access:
+        # channels.manage may edit an ACL without becoming a channel reader.
+        app.include_router(forum_channel_acl_admin_router, dependencies=forum_guard)
+        # Register ACL-aware routes first; descendants (message/thread/reaction/
+        # attachment) all inherit the parent channel decision.
+        app.include_router(forum_channel_acl_router, dependencies=forum_guard)
         app.include_router(forum_backend_override_router, dependencies=forum_guard)
         app.include_router(forum_backend_event_override_router, dependencies=forum_guard)
         app.include_router(forum_backend_router, dependencies=forum_guard)
