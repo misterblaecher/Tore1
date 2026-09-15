@@ -4,7 +4,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, inspect, pool, text
 
 from db import Base, DATABASE_URL
 import models  # noqa: F401
@@ -17,6 +17,42 @@ if config.config_file_name is not None:
 config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL))
 
 target_metadata = Base.metadata
+
+
+def _ensure_alembic_version_capacity(connection) -> None:
+    """Keep Alembic revision ids from overflowing its default VARCHAR(32).
+
+    TORÈ has descriptive revision ids such as
+    ``0008_unified_profile_affiliations`` (33 chars). Alembic's default
+    ``alembic_version.version_num`` column is VARCHAR(32), so a fresh Postgres
+    database would fail while recording that migration even though the schema
+    migration itself succeeded.
+
+    Bootstrap the version table with enough room on fresh databases and widen
+    existing Postgres tables before Alembic updates the revision marker.
+    """
+    if connection.dialect.name != "postgresql":
+        return
+
+    inspector = inspect(connection)
+    if "alembic_version" not in inspector.get_table_names():
+        connection.execute(
+            text(
+                """
+                CREATE TABLE alembic_version (
+                    version_num VARCHAR(64) NOT NULL,
+                    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+                )
+                """
+            )
+        )
+        return
+
+    columns = {column["name"]: column for column in inspector.get_columns("alembic_version")}
+    version_column = columns.get("version_num")
+    current_length = getattr(version_column.get("type"), "length", None) if version_column else None
+    if current_length is None or current_length < 64:
+        connection.execute(text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64)"))
 
 
 def run_migrations_offline() -> None:
@@ -41,6 +77,9 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        with connection.begin():
+            _ensure_alembic_version_capacity(connection)
+
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 
         with context.begin_transaction():
