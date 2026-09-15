@@ -4,7 +4,9 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CalendarDays, ExternalLink, Images, MapPin, Users } from "lucide-react";
 import ForumPage from "./Forum";
 import { apiFetch, ApiError } from "@/lib/api";
+import { resolveStructureBranding } from "@/lib/structure-branding";
 import "@/styles/forum.css";
+import "@/styles/structure-branding.css";
 
 type EventItem = { id: number; name: string; startsAt?: string | null; endsAt?: string | null; venue?: string | null; city?: string | null; description?: string | null };
 type PublicPage = { id: number; title: string; slug: string; category: string; content?: string; publishedAt?: string | null };
@@ -48,10 +50,18 @@ function PublicStructure({ slug }: { slug: string }) {
   if (!data) return <div className="min-h-screen bg-background"><main className="forum-page"><div className="forum-container"><div className="forum-empty">Chargement de la page officielle…</div></div></main></div>;
 
   const { structure, events, members, albums, pages, stats } = data;
+  const branding = resolveStructureBranding(structure.primaryColor, structure.secondaryColor);
+  const brandStyle = {
+    "--structure-primary": branding.primary,
+    "--structure-primary-text": branding.primaryText,
+    "--structure-secondary": branding.secondary,
+    "--structure-secondary-text": branding.secondaryText,
+    "--structure-accent": branding.accent,
+  } as CSSProperties;
+
   return (
     <div className="min-h-screen bg-background">
-
-      <main className="forum-page" style={{ "--structure-primary": structure.primaryColor ?? "#ba1733", "--structure-secondary": structure.secondaryColor ?? "#f4c430" } as CSSProperties}>
+      <main className="forum-page forum-public-branded" style={brandStyle}>
         <div className="forum-container">
         <Link className="forum-back-link" to="/forum/structures"><ArrowLeft size={15} /> Toutes les structures</Link>
         <section className="forum-public-hero" style={{ backgroundImage: structure.bannerUrl ? `linear-gradient(90deg, rgba(8,8,9,.95) 0%, rgba(8,8,9,.65) 55%, rgba(8,8,9,.35) 100%), url(${structure.bannerUrl})` : undefined }}>
@@ -59,7 +69,7 @@ function PublicStructure({ slug }: { slug: string }) {
             <div className="forum-public-logo" style={{ backgroundImage: structure.logoUrl ? `url(${structure.logoUrl})` : undefined }}>{!structure.logoUrl ? structure.name.slice(0, 1).toUpperCase() : null}</div>
             <div><span className="forum-eyebrow">Page officielle TORÈ · {structure.type}</span><h1>{structure.name}</h1><p>{structure.description || "Structure officielle de la communauté TORÈ."}</p>{structure.city ? <span className="forum-location"><MapPin size={14} /> {structure.city}{structure.address ? ` · ${structure.address}` : ""}</span> : null}</div>
           </div>
-          <div className="forum-public-hero__actions"><Link className="forum-button forum-button--primary" to={`/forum/structures/${structure.slug}/dashboard`}>Espace membre <ArrowRight size={16} /></Link></div>
+          <div className="forum-public-hero__actions"><Link className="forum-button forum-button--primary" style={{ background: branding.primary, borderColor: branding.primary, color: branding.primaryText }} to={`/forum/structures/${structure.slug}/dashboard`}>Espace membre <ArrowRight size={16} /></Link></div>
         </section>
 
         <div className="forum-public-stats"><div><strong>{stats?.publicEvents ?? "Privé"}</strong><span>events publics</span></div><div><strong>{stats?.members ?? "Privé"}</strong><span>membres visibles selon réglages</span></div><div><strong>{stats?.publicAlbums ?? "Privé"}</strong><span>albums publiés</span></div></div>
@@ -76,7 +86,6 @@ function PublicStructure({ slug }: { slug: string }) {
         {structure.sponsors?.length ? <section className="forum-card"><span className="forum-eyebrow">Partenaires</span><h2>Sponsors & partenaires</h2><div className="forum-hero-tags">{structure.sponsors.map((sponsor) => <span key={sponsor}>{sponsor}</span>)}</div></section> : null}
         </div>
       </main>
-
     </div>
   );
 }
