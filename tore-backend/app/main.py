@@ -6,6 +6,7 @@ from app.routers.forum_event_workspace import router as event_workspace
 from app.routers.forum_ownership import freeze_guard_middleware, router as ownership
 from app.routers.forum_invitations import router as invitations_legacy
 from app.routers.forum_invitations_rbac import router as invitations_rbac
+from app.routers.forum_channel_acl_current import router as channel_acl
 from app.routers.structure_claims import router as claims
 from app.routers.structure_claim_review import router as claim_review
 from app.routers.structure_lifecycle import router as lifecycle
@@ -14,10 +15,18 @@ from app.routers.structure_visibility import router as visibility
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
+_FORUM_ENDPOINT_REPLACED={"list_discussions","create_discussion","update_discussion","list_documents"}
 _INVITE_REPLACED={"list_structure_invitations","create_structure_invitation","resend_structure_invitation","revoke_structure_invitation","accept_structure_invitation"}
 
 def _has(app,m,p): return any(getattr(r,"path","")==p and m in (getattr(r,"methods",set()) or set()) for r in app.router.routes)
-def _replace(app): app.router.routes[:]=[r for r in app.router.routes if not (getattr(getattr(r,"endpoint",None),"__module__","") in _MODULES and any((m,getattr(r,"path","")) in _REPLACED for m in (getattr(r,"methods",set()) or set())))]
+def _replace(app):
+    kept=[]
+    for r in app.router.routes:
+        module=getattr(getattr(r,"endpoint",None),"__module__",""); name=getattr(getattr(r,"endpoint",None),"__name__",""); path=getattr(r,"path",""); methods=getattr(r,"methods",set()) or set()
+        if module in _MODULES and any((m,path) in _REPLACED for m in methods): continue
+        if module=="app.routers.forum" and name in _FORUM_ENDPOINT_REPLACED: continue
+        kept.append(r)
+    app.router.routes[:]=kept
 
 def create_app():
     app=monolith.app; _replace(app); paths={getattr(r,"path","") for r in app.routes}
@@ -26,14 +35,14 @@ def create_app():
     if not any(p.endswith("/publish") and p.startswith("/forum/structures/") for p in paths): app.include_router(lifecycle)
     if not _has(app,"GET","/forum/structures/{slug}/workspace"): app.include_router(rbac)
     if not _has(app,"PATCH","/forum/structures/{slug}/visibility"): app.include_router(visibility)
-    if not getattr(app.state,"forum_ownership_installed",False):
-        app.include_router(ownership); app.middleware("http")(freeze_guard_middleware); app.state.forum_ownership_installed=True
+    if not getattr(app.state,"forum_ownership_installed",False): app.include_router(ownership); app.middleware("http")(freeze_guard_middleware); app.state.forum_ownership_installed=True
     if not getattr(app.state,"forum_claims_installed",False):
         claims.routes[:]=[r for r in claims.routes if getattr(getattr(r,"endpoint",None),"__name__","")!="review_structure_claim"]
         app.include_router(claim_review); app.include_router(claims); app.state.forum_claims_installed=True
     if not getattr(app.state,"forum_invitations_installed",False):
         invitations_legacy.routes[:]=[r for r in invitations_legacy.routes if getattr(getattr(r,"endpoint",None),"__name__","") not in _INVITE_REPLACED]
         app.include_router(invitations_rbac); app.include_router(invitations_legacy); app.state.forum_invitations_installed=True
+    if not getattr(app.state,"forum_channel_acl_installed",False): app.include_router(channel_acl); app.state.forum_channel_acl_installed=True
     if not any(getattr(r,"name",None)=="upload_structure_file" for r in app.routes):
         from app.routers.storage import router as storage
         app.include_router(storage)
