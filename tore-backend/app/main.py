@@ -1,75 +1,40 @@
 """Application composition entrypoint."""
-
 from app.core.startup import run_startup
 from app.legacy import monolith
-from app.routers.forum_accounting import router as forum_accounting_router
-from app.routers.forum_event_workspace import router as forum_event_workspace_router
-from app.routers.structure_lifecycle import router as structure_lifecycle_router
-from app.routers.structure_rbac import router as structure_rbac_router
-from app.routers.structure_visibility import router as structure_visibility_router
+from app.routers.forum_accounting import router as accounting
+from app.routers.forum_event_workspace import router as event_workspace
+from app.routers.forum_ownership import freeze_guard_middleware, router as ownership
+from app.routers.structure_lifecycle import router as lifecycle
+from app.routers.structure_rbac import router as rbac
+from app.routers.structure_visibility import router as visibility
 
+_REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
+_MODULES={"app.legacy.monolith","app.routers.forum"}
 
-_LEGACY_STRUCTURE_ROUTES_REPLACED = {
-    ("POST", "/orgas"),
-    ("GET", "/orgas/{org_id}"),
-    ("PUT", "/orgas/{org_id}"),
-    ("PATCH", "/forum/structures/{slug}/visibility"),
-}
-_LEGACY_STRUCTURE_MODULES = {"app.legacy.monolith", "app.routers.forum"}
+def _has(app,method,path):
+    return any(getattr(r,"path","")==path and method in (getattr(r,"methods",set()) or set()) for r in app.router.routes)
 
-
-def _replace_legacy_structure_routes(app) -> None:
-    """Keep URLs stable while replacing only handlers that violate privacy invariants."""
-
-    filtered = []
-    for route in app.router.routes:
-        path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set()) or set()
-        endpoint_module = getattr(getattr(route, "endpoint", None), "__module__", "")
-        if endpoint_module in _LEGACY_STRUCTURE_MODULES and any(
-            (method, path) in _LEGACY_STRUCTURE_ROUTES_REPLACED for method in methods
-        ):
-            continue
-        filtered.append(route)
-    app.router.routes[:] = filtered
-
-
-def _has_route(app, method: str, path: str) -> bool:
-    return any(
-        getattr(route, "path", "") == path and method in (getattr(route, "methods", set()) or set())
-        for route in app.router.routes
-    )
-
+def _replace(app):
+    app.router.routes[:]=[r for r in app.router.routes if not (getattr(getattr(r,"endpoint",None),"__module__","") in _MODULES and any((m,getattr(r,"path","")) in _REPLACED for m in (getattr(r,"methods",set()) or set())))]
 
 def create_app():
-    app = monolith.app
-    _replace_legacy_structure_routes(app)
-    existing_paths = {getattr(route, "path", "") for route in app.routes}
-    if not any(path.endswith("/event-workspace") for path in existing_paths):
-        app.include_router(forum_event_workspace_router)
-    if not any(path.endswith("/accounting-summary") for path in existing_paths):
-        app.include_router(forum_accounting_router)
-    if not any(path.endswith("/publish") and path.startswith("/forum/structures/") for path in existing_paths):
-        app.include_router(structure_lifecycle_router)
-    if not _has_route(app, "GET", "/forum/structures/{slug}/workspace"):
-        app.include_router(structure_rbac_router)
-    if not _has_route(app, "PATCH", "/forum/structures/{slug}/visibility"):
-        app.include_router(structure_visibility_router)
-
-    # Managed uploads and public event pages are additive Forum surfaces. Guard
-    # the singleton FastAPI app because tests and compatibility callers may call
-    # create_app more than once.
-    if not any(getattr(route, "name", None) == "upload_structure_file" for route in app.routes):
-        from app.routers.storage import router as storage_router
-
-        app.include_router(storage_router)
-    if not any(getattr(route, "name", None) == "get_public_event_page" for route in app.routes):
-        from app.routers.forum_events import router as forum_events_router
-
-        app.include_router(forum_events_router)
-
+    app=monolith.app
+    _replace(app)
+    paths={getattr(r,"path","") for r in app.routes}
+    if not any(p.endswith("/event-workspace") for p in paths): app.include_router(event_workspace)
+    if not any(p.endswith("/accounting-summary") for p in paths): app.include_router(accounting)
+    if not any(p.endswith("/publish") and p.startswith("/forum/structures/") for p in paths): app.include_router(lifecycle)
+    if not _has(app,"GET","/forum/structures/{slug}/workspace"): app.include_router(rbac)
+    if not _has(app,"PATCH","/forum/structures/{slug}/visibility"): app.include_router(visibility)
+    if not getattr(app.state,"forum_ownership_installed",False):
+        app.include_router(ownership); app.middleware("http")(freeze_guard_middleware); app.state.forum_ownership_installed=True
+    if not any(getattr(r,"name",None)=="upload_structure_file" for r in app.routes):
+        from app.routers.storage import router as storage
+        app.include_router(storage)
+    if not any(getattr(r,"name",None)=="get_public_event_page" for r in app.routes):
+        from app.routers.forum_events import router as events
+        app.include_router(events)
     run_startup(app)
     return app
 
-
-__all__ = ["create_app"]
+__all__=["create_app"]
