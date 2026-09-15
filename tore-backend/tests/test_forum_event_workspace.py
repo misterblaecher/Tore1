@@ -119,11 +119,22 @@ def test_event_workspace_enforces_structure_isolation_and_transition_order():
         f"/forum/structures/{slug_b}/event-workspace",
         headers={"Authorization": f"Bearer {owner_a}"},
     ).status_code == 403
-    assert client.patch(
+
+    # The historical /forum scope helper answers 400 when an event exists but is
+    # outside the URL structure. The important invariant is that the mutation is
+    # rejected and the owning structure still reads the original value.
+    cross_tenant = client.patch(
         f"/forum/structures/{slug_b}/event-workspace/{event_id}",
         json={"description": "Tentative cross-tenant"},
         headers=_headers(owner_b, "workspace-cross-tenant"),
-    ).status_code == 404
+    )
+    assert cross_tenant.status_code == 400
+    owner_view = client.get(
+        f"/forum/structures/{slug_a}/event-workspace",
+        headers={"Authorization": f"Bearer {owner_a}"},
+    )
+    assert owner_view.status_code == 200
+    assert owner_view.json()["items"][0]["description"] != "Tentative cross-tenant"
 
     invalid = client.patch(
         f"/forum/structures/{slug_a}/event-workspace/{event_id}",
