@@ -14,8 +14,9 @@ Push-Location $repo
 try {
     $branch = (git branch --show-current).Trim()
     Write-Host "Branche courante: $branch"
-    if ($branch -ne "codex/forum-integration-2026-09-15") {
-        throw "Cette prévisualisation doit être lancée depuis codex/forum-integration-2026-09-15. Aucun checkout automatique n'est effectué."
+    $allowedBranches = @("codex/forum-integration-2026-09-15", "feat/forum-integrated-event-recap")
+    if ($allowedBranches -notcontains $branch) {
+        throw "Cette prévisualisation doit être lancée depuis une branche Forum intégrée. Aucun checkout automatique n'est effectué."
     }
 
     $dirty = git status --porcelain
@@ -55,7 +56,7 @@ try {
         $env:TORE_AUTO_DB_BOOTSTRAP = "0"
         python -m alembic current
         if ($LASTEXITCODE -ne 0) {
-            throw "Alembic ne reconnaît pas l'état courant de la base. Si la base locale contient une révision 0014 absente du code, restaure/inspecte-la avant toute migration."
+            throw "Alembic ne reconnaît pas l'état courant de la base. Inspecte ou réinitialise la base locale avant toute migration."
         }
     } finally {
         Pop-Location
@@ -79,7 +80,7 @@ try {
     Start-Sleep -Seconds 1
     Start-Process powershell -ArgumentList "-NoExit", "-Command", $siteCommand
 
-    Write-Host "" 
+    Write-Host ""
     Write-Host "Preview: http://127.0.0.1:5173/forum" -ForegroundColor Green
     Write-Host "Backend: http://127.0.0.1:8001" -ForegroundColor Green
     Write-Host "Les migrations automatiques sont désactivées pour cette preview." -ForegroundColor Yellow
