@@ -22,6 +22,8 @@ import ForumPage from "./pages/Forum";
 import ForumHome from "./pages/ForumHome";
 import ForumPublicPage from "./pages/ForumPublic";
 import ForumStructurePage from "./pages/ForumStructure";
+import ForumMembersPage from "./pages/ForumMembers";
+import ForumInvitationPage from "./pages/ForumInvitation";
 import CommitteeStudioPage from "./pages/CommitteeStudio";
 import LoginPage from "./pages/Login";
 import AuthCallbackPage from "./pages/AuthCallback";
@@ -80,7 +82,9 @@ const App = () => (
             <Route path="/forum/public" element={<Navigate to="/forum" replace />} />
             <Route path="/forum" element={<ForumHome />} />
             <Route path="/forum/structures" element={<ForumPage />} />
+            <Route path="/forum/invite/:token" element={<ForumInvitationPage />} />
             <Route path="/forum/structures/:slug" element={<ForumPublicPage />} />
+            <Route path="/forum/structures/:slug/members" element={<ProtectedRoute><ForumMembersPage /></ProtectedRoute>} />
             <Route path="/forum/structures/:slug/:section" element={<ProtectedRoute><ForumStructurePage /></ProtectedRoute>} />
           </Route>
           <Route path="/studio" element={<CommitteeStudioPage />} />

@@ -52,6 +52,18 @@ _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
         int(os.getenv("TORE_AUTH_EMAIL_OTP_VERIFY_MAX", "10")),
         int(os.getenv("TORE_AUTH_EMAIL_OTP_VERIFY_WINDOW_S", "600")),
     ),
+    "forum_invitation_actor": (
+        int(os.getenv("TORE_FORUM_INVITE_ACTOR_RATE_LIMIT_MAX", "10")),
+        int(os.getenv("TORE_FORUM_INVITE_ACTOR_RATE_LIMIT_WINDOW_S", "600")),
+    ),
+    "forum_invitation_recipient": (
+        int(os.getenv("TORE_FORUM_INVITE_RECIPIENT_RATE_LIMIT_MAX", "3")),
+        int(os.getenv("TORE_FORUM_INVITE_RECIPIENT_RATE_LIMIT_WINDOW_S", "600")),
+    ),
+    "forum_invitation_consume": (
+        int(os.getenv("TORE_FORUM_INVITE_CONSUME_RATE_LIMIT_MAX", "30")),
+        int(os.getenv("TORE_FORUM_INVITE_CONSUME_RATE_LIMIT_WINDOW_S", "600")),
+    ),
 }
 _DEFAULT_SCOPE_LIMITS = dict(_SCOPE_LIMITS)
 
@@ -71,6 +83,8 @@ def _otp_scope_limit(scope: str) -> tuple[int, int] | None:
             int(os.getenv("TORE_AUTH_EMAIL_OTP_PER_IP_WINDOW_S", "600")),
         )
     return None
+
+
 _metrics = {
     "requests_total": 0,
     "rate_limited_total": 0,
