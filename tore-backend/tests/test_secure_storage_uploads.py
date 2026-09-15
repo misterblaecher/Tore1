@@ -1,0 +1,177 @@
+import io
+import zipfile
+
+from fastapi.testclient import TestClient
+
+from db import Base, engine
+from main import app
+
+
+client = TestClient(app)
+PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+    b"\x00\x00\x00\rIDAT\x08\xd7c\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\x89\x99=\x1d"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+PDF_MIN = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n"
+
+
+def setup_function():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+
+def _guest(name: str) -> tuple[str, str]:
+    response = client.post("/auth/guest", json={"display_name": name})
+    assert response.status_code == 200
+    token = response.json()["token"]
+    me = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    return token, me.json()["id"]
+
+
+def _auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _create_structure(token: str, name: str, key: str) -> str:
+    response = client.post(
+        "/orgas",
+        json={"name": name, "city": "Liège", "org_type": "CIRCLE"},
+        headers={**_auth(token), "Idempotency-Key": key},
+    )
+    assert response.status_code == 200
+    return response.json()["orga"]["slug"]
+
+
+def _upload(slug: str, token: str, filename: str, body: bytes, content_type: str, purpose: str = "DOCUMENT"):
+    return client.post(
+        f"/forum/structures/{slug}/files",
+        headers=_auth(token),
+        data={"purpose": purpose},
+        files={"file": (filename, body, content_type)},
+    )
+
+
+def test_mime_interdit():
+    token, _ = _guest("upload-owner-forbidden")
+    slug = _create_structure(token, "Upload Forbidden", "upload-forbidden")
+    response = _upload(slug, token, "payload.exe", b"MZ\x90\x00malware", "application/octet-stream")
+    assert response.status_code == 415
+    assert response.json()["detail"]["reason"] == "MIME_NOT_ALLOWED"
+
+
+def test_taille_excessive(monkeypatch):
+    monkeypatch.setenv("TORE_UPLOAD_MAX_BYTES", "8")
+    token, _ = _guest("upload-owner-large")
+    slug = _create_structure(token, "Upload Large", "upload-large")
+    response = _upload(slug, token, "photo.png", PNG_1X1, "image/png", purpose="IMAGE")
+    assert response.status_code == 413
+    assert response.json()["detail"]["reason"] == "FILE_TOO_LARGE"
+
+
+def test_extension_mensongere():
+    token, _ = _guest("upload-owner-lie")
+    slug = _create_structure(token, "Upload Lie", "upload-lie")
+    response = _upload(slug, token, "photo.jpg", PDF_MIN, "image/jpeg")
+    assert response.status_code == 415
+    assert response.json()["detail"]["reason"] == "FILE_EXTENSION_MISMATCH"
+    assert response.json()["detail"]["detectedMime"] == "application/pdf"
+
+
+def test_upload_image_valide_et_prive_par_defaut():
+    token, user_id = _guest("upload-owner-image")
+    slug = _create_structure(token, "Upload Image", "upload-image")
+    response = _upload(slug, token, "..\\photo finale.png", PNG_1X1, "image/png", purpose="IMAGE")
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["ownerId"] == user_id
+    assert payload["mime"] == "image/png"
+    assert payload["size"] == len(PNG_1X1)
+    assert payload["visibility"] == "PRIVATE"
+    assert payload["storageKey"].startswith("private/structures/")
+    assert "photo finale" not in payload["storageKey"]
+    assert len(payload["checksum"]) == 64
+    assert client.get(f"/forum/public/files/{payload['id']}").status_code == 404
+
+
+def test_pdf_valide():
+    token, _ = _guest("upload-owner-pdf")
+    slug = _create_structure(token, "Upload PDF", "upload-pdf")
+    response = _upload(slug, token, "pv.pdf", PDF_MIN, "application/pdf")
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["mime"] == "application/pdf"
+    content = client.get(f"/forum/structures/{slug}/files/{payload['id']}/content", headers=_auth(token))
+    assert content.status_code == 200
+    assert content.content == PDF_MIN
+    assert content.headers["x-content-type-options"] == "nosniff"
+
+
+def test_acces_prive_et_autre_structure_idor():
+    owner_token, _ = _guest("upload-owner-private")
+    outsider_token, _ = _guest("upload-outsider-private")
+    slug = _create_structure(owner_token, "Private Structure A", "private-a")
+    other_slug = _create_structure(outsider_token, "Private Structure B", "private-b")
+    uploaded = _upload(slug, owner_token, "secret.pdf", PDF_MIN, "application/pdf").json()
+
+    assert client.get(f"/forum/structures/{slug}/files/{uploaded['id']}/content").status_code == 401
+    denied = client.get(f"/forum/structures/{slug}/files/{uploaded['id']}/content", headers=_auth(outsider_token))
+    assert denied.status_code == 403
+    cross_tenant = client.get(f"/forum/structures/{other_slug}/files/{uploaded['id']}", headers=_auth(outsider_token))
+    assert cross_tenant.status_code == 404
+
+
+def test_suppression_non_autorisee():
+    owner_token, _ = _guest("upload-owner-delete")
+    outsider_token, _ = _guest("upload-outsider-delete")
+    slug = _create_structure(owner_token, "Delete Structure", "delete-structure")
+    uploaded = _upload(slug, owner_token, "secret.pdf", PDF_MIN, "application/pdf").json()
+
+    denied = client.delete(f"/forum/structures/{slug}/files/{uploaded['id']}", headers=_auth(outsider_token))
+    assert denied.status_code == 403
+    assert client.get(f"/forum/structures/{slug}/files/{uploaded['id']}", headers=_auth(owner_token)).status_code == 200
+
+
+def test_publication_requiert_action_et_confirmation_explicites():
+    token, _ = _guest("upload-owner-publish")
+    slug = _create_structure(token, "Publish Structure", "publish-structure")
+    uploaded = _upload(slug, token, "photo.png", PNG_1X1, "image/png", purpose="ALBUM_MEDIA").json()
+
+    missing_confirmation = client.patch(
+        f"/forum/structures/{slug}/files/{uploaded['id']}/visibility",
+        headers=_auth(token),
+        json={"visibility": "PUBLIC"},
+    )
+    assert missing_confirmation.status_code == 409
+    assert client.get(f"/forum/public/files/{uploaded['id']}").status_code == 404
+
+    published = client.patch(
+        f"/forum/structures/{slug}/files/{uploaded['id']}/visibility",
+        headers=_auth(token),
+        json={"visibility": "PUBLIC", "confirm_public": True},
+    )
+    assert published.status_code == 200
+    assert published.json()["visibility"] == "PUBLIC"
+    public_content = client.get(f"/forum/public/files/{uploaded['id']}")
+    assert public_content.status_code == 200
+    assert public_content.content == PNG_1X1
+
+
+def test_docx_valide_est_detecte_par_conteneur_reel():
+    token, _ = _guest("upload-owner-docx")
+    slug = _create_structure(token, "Upload DOCX", "upload-docx")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<document/>")
+    response = _upload(
+        slug,
+        token,
+        "passation.docx",
+        buffer.getvalue(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    assert response.status_code == 201
+    assert response.json()["mime"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
