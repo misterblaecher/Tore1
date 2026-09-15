@@ -175,7 +175,7 @@ def upgrade():
         scope = f"system:{code}"
         role_id = bind.execute(sa.select(role.c.id).where(role.c.scope_key == scope)).scalar_one_or_none()
         if role_id is None:
-            result = bind.execute(role.insert().values(
+            bind.execute(role.insert().values(
                 organization_id=None,
                 scope_key=scope,
                 code=code,
@@ -186,7 +186,7 @@ def upgrade():
                 created_at=stamp,
                 updated_at=stamp,
             ))
-            role_id = result.inserted_primary_key[0]
+            role_id = bind.execute(sa.select(role.c.id).where(role.c.scope_key == scope)).scalar_one()
         existing_links = set(bind.execute(sa.select(role_cap.c.capability_id).where(role_cap.c.role_id == role_id)).scalars().all())
         for key in cap_keys:
             cap_id = existing_caps[key]
@@ -205,7 +205,7 @@ def upgrade():
         scope = f"legacy:{organization_id}:{legacy_code}"
         role_id = bind.execute(sa.select(role.c.id).where(role.c.scope_key == scope)).scalar_one_or_none()
         if role_id is None:
-            result = bind.execute(role.insert().values(
+            bind.execute(role.insert().values(
                 organization_id=organization_id,
                 scope_key=scope,
                 code=f"LEGACY_{legacy_code}"[:64],
@@ -216,7 +216,7 @@ def upgrade():
                 created_at=stamp,
                 updated_at=stamp,
             ))
-            role_id = result.inserted_primary_key[0]
+            role_id = bind.execute(sa.select(role.c.id).where(role.c.scope_key == scope)).scalar_one()
             for key in _legacy_caps(legacy_role or "MEMBER"):
                 bind.execute(role_cap.insert().values(
                     role_id=role_id,
