@@ -1,0 +1,66 @@
+[
+  {
+    "name": "01_background_far",
+    "width": 1920,
+    "height": 1080,
+    "alpha": false,
+    "opaque": true,
+    "bytes": 75364
+  },
+  {
+    "name": "02_fire_halo",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 399140
+  },
+  {
+    "name": "03_smoke_back",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 288726
+  },
+  {
+    "name": "04_statue_tore",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 209810
+  },
+  {
+    "name": "05_ground_mid",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 108246
+  },
+  {
+    "name": "06_foreground_rocks",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 87494
+  },
+  {
+    "name": "07_smoke_front",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 234740
+  },
+  {
+    "name": "08_brand_glow",
+    "width": 1920,
+    "height": 1080,
+    "alpha": true,
+    "opaque": false,
+    "bytes": 193248
+  }
+]

@@ -1,0 +1,55 @@
+// Development-only checks. Requires playwright through NODE_PATH.
+const {chromium}=require('playwright');
+const {pathToFileURL}=require('node:url');
+const path=require('node:path');
+const fs=require('node:fs/promises');
+const assert=require('node:assert/strict');
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'});
+ const page=await browser.newPage({viewport:{width:1440,height:900}});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const url=pathToFileURL(path.join(__dirname,'index.html')).href;
+ await page.goto(url);await page.waitForFunction(()=>window.toreBackground && [...document.querySelectorAll('.tore-background__layer')].every(i=>i.complete && i.naturalWidth===1920));
+ await page.screenshot({path:path.join(__dirname,'preview-desktop.png'),fullPage:true});
+ const before=await page.evaluate(()=>({count:toreBackground.particles.length,x:toreBackground.target.x}));
+ await page.mouse.move(1300,300);await page.waitForTimeout(500);
+ const moved=await page.evaluate(()=>({x:toreBackground.current.x,target:toreBackground.target.x,count:toreBackground.particles.length}));
+ assert.notEqual(moved.x,before.x);assert(moved.count<=96);
+ assert(await page.evaluate(()=>Array.from({length:100},()=>toreBackground.spawn({})).every(p=>p.origin.source==='halo'?Math.abs(((p.x-1400)/440)**2+((p.y-540)/360)**2-1)<.001:p.x>=1040&&p.x<=1820&&p.y>=975&&p.y<=1040)));
+ await page.evaluate(()=>toreBackground.triggerPulse());
+ assert(await page.evaluate(()=>toreBackground.pulse>0));
+ await page.waitForTimeout(4000);
+ assert(await page.evaluate(()=>toreBackground.pulse<0.1));
+ const frames=await page.evaluate(async()=>{let n=toreBackground.frames;await new Promise(r=>setTimeout(r,1100));return toreBackground.frames-n;});
+ assert(frames<=50,'decorative FPS cap');
+ await page.evaluate(()=>toreBackground.stop());
+ const stopped=await page.evaluate(()=>toreBackground.frames);await page.waitForTimeout(150);
+ assert.equal(await page.evaluate(()=>toreBackground.frames),stopped);
+ await page.evaluate(()=>{toreBackground.start();toreBackground.start();toreBackground.setQuality('low');});
+ assert.equal(await page.evaluate(()=>toreBackground.quality),'low');
+ await page.evaluate(()=>{toreBackground.host.style.marginTop='200vh';});await page.waitForTimeout(250);
+ assert.equal(await page.evaluate(()=>toreBackground.raf),0,'offscreen scene stops');
+ await page.evaluate(()=>{toreBackground.host.style.marginTop='';});await page.waitForTimeout(150);
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ const aligned=await page.evaluate(()=>[...document.querySelectorAll('.tore-background__layer')].map(i=>[i.clientWidth,i.clientHeight]));
+ assert(aligned.every(a=>a[0]===aligned[0][0]&&a[1]===aligned[0][1]));
+ await page.screenshot({path:path.join(__dirname,'preview-mobile.png'),fullPage:true});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.waitForFunction(()=>toreBackground.motion.matches&&toreBackground.raf===0);
+ const reducedFrames=await page.evaluate(()=>toreBackground.frames);await page.waitForTimeout(150);
+ assert.equal(await page.evaluate(()=>toreBackground.frames),reducedFrames);
+ assert.equal(await page.evaluate(()=>toreBackground.raf),0);
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await page.evaluate(()=>{toreBackground.destroy();toreBackground.start();});
+ assert.equal(await page.locator('.tore-background__scene').count(),0);
+ for(const demo of ['hero','forum','dashboard']){
+   await page.goto(pathToFileURL(path.join(__dirname,`demo-${demo}.html`)).href);
+   await page.waitForFunction(()=>window.toreBackground);
+   assert.equal(await page.evaluate(()=>toreBackground.options.clickPulse),demo!=='dashboard');
+ }
+ assert.deepEqual(errors,[]);
+ const report={passed:true,localFile:true,desktop:true,mobile:true,alignedLayerDimensions:true,globalPulse:true,parallax:true,fireEmitters:true,offscreenStop:true,reducedMotion:true,lifecycle:true,maxParticleCap:96,framesIn1100ms:frames,errors};
+ await fs.writeFile(path.join(__dirname,'browser-checks.json'),JSON.stringify(report,null,2));
+ console.log(report);await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#100a0b">
+  <meta name="description" content="Background TORÈ en huit plans : bronze, feu et Liège nocturne.">
+  <title>TORÈ — Forum · Background interactif</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23100a0b'/%3E%3Cpath d='M8 9h16v4h-6v13h-4V13H8z' fill='%23f18a45'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="tore-background.css">
+  <link rel=stylesheet href=demo.css>
+  <script src="tore-background.js" defer></script>
+  <script src="demo.js" defer></script>
+</head>
+<body data-preset="FORUM">
+  <div id="tore-background" class="tore-background">
+    <div class="tore-background__content demo-shell">
+      <header class="demo-header">
+        <a class="wordmark" href="index.html" aria-label="TORÈ, aperçu Forum">TORÈ<small>LIÈGE, ENSEMBLE.</small></a>
+        <nav class="preset-nav" aria-label="Ambiance du background">
+          <a href="demo-hero.html" data-preset-link="HERO">Hero</a>
+          <a href="demo-forum.html" data-preset-link="FORUM">Forum</a>
+          <a href="demo-dashboard.html" data-preset-link="DASHBOARD">Dashboard</a>
+        </nav>
+      </header>
+      <main class="demo-main">
+        <p class="eyebrow">Le forum TORÈ</p>
+        <h1>Le feu<br><em>nous rassemble.</em></h1>
+        <p class="intro">Les voix, les histoires et les rendez-vous de la communauté liégeoise.</p>
+        <div class="stats" hidden>
+          <div class="stat"><strong>12</strong><span>Discussions suivies</span></div>
+          <div class="stat"><strong>04</strong><span>Événements</span></div>
+          <div class="stat"><strong>03</strong><span>Messages</span></div>
+        </div>
+        <section class="forum-panel" aria-label="Exemple de contenu du forum">
+          <div class="panel-heading">Au fil des discussions <span>Communauté</span></div>
+          <article class="topic"><span class="topic-icon" aria-hidden="true">✦</span><div><h2>La vie de la guindaille</h2><p>Rencontres, nouvelles et bons moments.</p></div><span>01</span></article>
+          <article class="topic"><span class="topic-icon" aria-hidden="true">◈</span><div><h2>Folklore & traditions</h2><p>Ce qui se raconte. Ce qui se transmet.</p></div><span>02</span></article>
+          <article class="topic"><span class="topic-icon" aria-hidden="true">◎</span><div><h2>Les prochains rendez-vous</h2><p>Retrouvons-nous dans la Cité ardente.</p></div><span>03</span></article>
+        </section>
+        <p class="sample-label">Aperçu d’intégration · contenu de démonstration</p>
+      </main>
+      <footer class="demo-footer">
+        <div class="location">L’ESPRIT DE LIÈGE<span>Bronze. Braises. Héritage.</span></div>
+        <div class="controls" aria-label="Contrôles du décor">
+          <button id="clean" type="button" aria-pressed="false">Voir le décor seul</button>
+          <button id="pulse" type="button">Raviver le feu</button>
+          <button id="motion" type="button" aria-pressed="false">Mettre en pause</button>
+          <label for="quality">Qualité</label>
+          <select id="quality"><option value="auto">Auto</option><option value="low">Éco</option><option value="medium">Équilibrée</option><option value="high">Haute</option></select>
+        </div>
+      </footer>
+    </div>
+  </div>
+  <noscript>Activez JavaScript pour afficher la scène interactive. La composition statique reste disponible dans composition-test.png.</noscript>
+</body>
+</html>
