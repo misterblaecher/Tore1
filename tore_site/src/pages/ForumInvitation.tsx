@@ -4,7 +4,6 @@ import { Link, useParams } from "react-router-dom";
 import { apiFetch, ApiError } from "@/lib/api";
 import "@/styles/forum.css";
 
-
 type InvitationPreview = {
   structure: { name: string; slug: string; logoUrl?: string | null };
   emailMasked: string;
@@ -13,7 +12,8 @@ type InvitationPreview = {
   expiresAt: string;
 };
 
-type AcceptResponse = { ok: boolean; status: "ACCEPTED"; structure: { slug: string; name: string }; role: string };
+type AcceptResponse = { ok: boolean; status: "ACCEPTED"; structure?: { slug: string; name: string }; role: string };
+type AcceptedInvitation = Omit<AcceptResponse, "structure"> & { structure: { slug: string; name: string } };
 
 const STATUS_COPY: Record<InvitationPreview["status"], string> = {
   PENDING: "Cette invitation est prête à être utilisée.",
@@ -26,7 +26,7 @@ const STATUS_COPY: Record<InvitationPreview["status"], string> = {
 export default function ForumInvitationPage() {
   const { token = "" } = useParams();
   const [preview, setPreview] = useState<InvitationPreview | null>(null);
-  const [accepted, setAccepted] = useState<AcceptResponse | null>(null);
+  const [accepted, setAccepted] = useState<AcceptedInvitation | null>(null);
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<"accept" | "decline" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -46,7 +46,9 @@ export default function ForumInvitationPage() {
     setAction("accept"); setMessage(null); setNeedsLogin(false);
     try {
       const result = await apiFetch<AcceptResponse>(`/forum/invitations/${encodeURIComponent(token)}/accept`, { method: "POST" });
-      setAccepted(result);
+      const structure = result.structure ?? preview?.structure;
+      if (!structure) throw new Error("Structure d’invitation introuvable.");
+      setAccepted({ ...result, structure: { slug: structure.slug, name: structure.name } });
       setPreview((current) => current ? { ...current, status: "ACCEPTED" } : current);
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) {
@@ -81,16 +83,12 @@ export default function ForumInvitationPage() {
         <div className="forum-inline"><span className="forum-badge">{preview.status}</span><span className="forum-muted"><Clock3 size={14} /> expire le {new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(preview.expiresAt))}</span></div>
         <p className="forum-muted" style={{ marginTop: 14 }}>{STATUS_COPY[preview.status]}</p>
       </> : null}
-
       {message ? <div className="forum-alert" style={{ marginTop: 16 }}>{message}</div> : null}
-
       {accepted ? <div style={{ marginTop: 18 }}><div className="forum-inline"><CheckCircle2 size={19} /><strong>Vous avez rejoint {accepted.structure.name}.</strong></div><Link className="forum-button forum-button--primary" style={{ marginTop: 12 }} to={`/forum/structures/${accepted.structure.slug}/dashboard`}>Ouvrir l’espace structure</Link></div> : null}
-
       {preview?.status === "PENDING" && !accepted ? <div className="forum-inline" style={{ marginTop: 18 }}>
         <button className="forum-button forum-button--primary" disabled={action !== null} onClick={() => void accept()}><CheckCircle2 size={15} /> {action === "accept" ? "Acceptation…" : "Accepter"}</button>
         <button className="forum-button forum-button--ghost forum-danger" disabled={action !== null} onClick={() => void decline()}><XCircle size={15} /> {action === "decline" ? "Refus…" : "Refuser"}</button>
       </div> : null}
-
       {needsLogin ? <Link className="forum-button forum-button--ghost" style={{ marginTop: 12 }} to="/forum/login" state={{ from: `/forum/invite/${token}` }}><LogIn size={15} /> Se connecter</Link> : null}
     </section>
   </main>;
