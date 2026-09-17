@@ -230,6 +230,10 @@ def get_managed_event(slug: str, event_id: int, user: AppUser = Depends(get_curr
 @router.patch("/structures/{slug}/event-manager/{event_id}")
 def patch_managed_event(slug: str, event_id: int, payload: EventManagerPatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug); event, link, member = require_structure_event_relation(db, organization_id=org.id, event_id=event_id, user=user, permission="read"); data = payload.model_dump(exclude_unset=True)
+    # A stale editor can still submit its initial PRIVATE value after the event
+    # was published elsewhere. Do not let an ordinary save silently unpublish it.
+    if event.visibility == "PUBLIC" and data.get("visibility") == "PRIVATE" and "publication_status" not in data:
+        data.pop("visibility", None)
     if set(data) - {"publication_status"} and not effective_permission(link, member, "edit"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "edit"})
     if "publication_status" in data and not effective_permission(link, member, "publish"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "publish"})
     mapping = {"name": "name", "description": "public_description", "venue": "venue", "city": "city", "capacity": "capacity", "entry_price_cents": "entry_price_cents", "modules_on": "modules_on", "visibility": "visibility", "publication_status": "publication_status"}
