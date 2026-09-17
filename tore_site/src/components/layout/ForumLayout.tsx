@@ -37,7 +37,7 @@ export default function ForumLayout() {
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(""); const [searchOpen, setSearchOpen] = useState(false); const [searchResults, setSearchResults] = useState<{category:string;id:number;title:string;snippet:string;target:string}[]>([]);
   const route = matchPath("/forum/structures/:slug/:section?", location.pathname);
   const routeSlug = decodeSlug(route?.params.slug);
 
@@ -77,6 +77,8 @@ export default function ForumLayout() {
     rememberStructure(me.id, workspace?.slug ?? null);
   }, [me, workspace?.slug]);
   useEffect(() => { setMobileOpen(false); setSearch(""); }, [location.pathname]);
+  useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); window.setTimeout(() => document.querySelector<HTMLInputElement>('[aria-label="Recherche globale"]')?.focus(), 0); } if (event.key === "Escape") setSearchOpen(false); }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
+  useEffect(() => { if (!searchOpen || !workspace || search.trim().length < 2) { setSearchResults([]); return; } const timer = window.setTimeout(() => { void apiFetch<{ results: typeof searchResults }>(`/forum/structures/${workspace.slug}/search?q=${encodeURIComponent(search.trim())}`).then((data) => setSearchResults(data.results)).catch(() => setSearchResults([])); }, 250); return () => window.clearTimeout(timer); }, [search, searchOpen, workspace?.slug]);
 
   function selectWorkspace(item: ForumWorkspace) {
     if (me) rememberStructure(me.id, item.slug);
@@ -135,7 +137,7 @@ export default function ForumLayout() {
       <header className="forum-topbar">
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetTrigger className="forum-topbar__menu" aria-label="Ouvrir la navigation du Forum"><Menu size={20} /></SheetTrigger><SheetContent side="left" className="forum-mobile-rail"><SheetTitle className="sr-only">Navigation du Forum</SheetTitle><SheetDescription className="sr-only">Choisissez une structure ou une rubrique du Forum.</SheetDescription>{sidebar}</SheetContent></Sheet>
         <div className="forum-topbar__breadcrumb"><Link to="/forum">{workspace && routeSlug === workspace.slug ? workspace.name : "Forum TORÈ"}</Link><span>/</span><strong>{title}</strong></div>
-        <form className="forum-topbar__search" role="search" onSubmit={submitSearch}><Search size={16} /><input aria-label="Rechercher une structure" placeholder="Rechercher une structure…" value={search} onChange={(event) => setSearch(event.target.value)} /><button type="submit" aria-label="Lancer la recherche"><ArrowUpRight size={15} /></button></form>
+        <div className="forum-global-search"><form className="forum-topbar__search" role="search" onSubmit={(event) => { event.preventDefault(); setSearchOpen(true); }}><Search size={16} /><input aria-label="Recherche globale" placeholder="Rechercher… (⌘K)" value={search} onFocus={() => setSearchOpen(true)} onChange={(event) => { setSearch(event.target.value); setSearchOpen(true); }} /><button type="submit" aria-label="Lancer la recherche"><ArrowUpRight size={15} /></button></form>{searchOpen && workspace && search.trim().length >= 2 ? <div className="forum-global-search__results">{searchResults.length ? searchResults.map((result) => <Link key={`${result.category}-${result.id}`} to={result.target} onClick={() => setSearchOpen(false)}><span className="forum-badge">{result.category}</span><span><strong>{result.title}</strong><small>{result.snippet}</small></span></Link>) : <p className="forum-empty">Aucun résultat accessible.</p>}</div> : null}</div>
 <div className="forum-topbar__actions">{workspace ? <Link className="forum-button forum-button--ghost forum-topbar__preview" to={structurePath(workspace.slug, "public")}><ExternalLink size={14} /> Aperçu public</Link> : null}<Link className="forum-topbar__account" to={accountHref} aria-label={token ? "Ouvrir mon profil" : "Se connecter"}>{token ? <ForumIdentityImage src={me?.avatar_url} name={me?.display_name ?? "TORÈ"} /> : <><CircleUserRound size={18} /><span>Se connecter</span></>}</Link>{workspace?.canManage ? <Link className="forum-button forum-button--primary" aria-label="Créer un événement" to={`${structurePath(workspace.slug, "events")}#create-event`}><Plus size={16} /><span>Créer un événement</span></Link> : null}</div>
       </header>
       <div id="forum-content" tabIndex={-1} className="forum-layout__content"><Outlet context={{ workspace, loading, error }} /></div>

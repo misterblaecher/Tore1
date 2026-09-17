@@ -14,6 +14,7 @@ from app.routers.structure_lifecycle import router as lifecycle
 from app.routers.structure_rbac import router as rbac
 from app.routers.structure_visibility import router as visibility
 from app.routers.forum_planning import router as planning
+from app.routers.forum_search import router as search
 from app.services.event_cohosting_operational import install_cohost_operational_access
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
@@ -40,6 +41,7 @@ def create_app():
     if not _has(app,"GET","/forum/structures/{slug}/workspace"): app.include_router(rbac)
     if not _has(app,"PATCH","/forum/structures/{slug}/visibility"): app.include_router(visibility)
     if not _has(app,"GET","/forum/structures/{slug}/planning"): app.include_router(planning)
+    if not _has(app,"GET","/forum/structures/{slug}/search"): app.include_router(search)
     if not getattr(app.state,"forum_ownership_installed",False): app.include_router(ownership); app.middleware("http")(freeze_guard_middleware); app.state.forum_ownership_installed=True
     if not getattr(app.state,"forum_claims_installed",False):
         claims.routes[:]=[r for r in claims.routes if getattr(getattr(r,"endpoint",None),"__name__","")!="review_structure_claim"]
