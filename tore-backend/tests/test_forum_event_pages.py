@@ -65,6 +65,12 @@ def test_public_event_page_keeps_recap_private_until_explicit_publish():
     owner_token, _ = _guest("event-page-owner")
     outsider_token, _ = _guest("event-page-outsider")
     structure = _create_structure(owner_token, "event-page-orga")
+    published_structure = client.post(
+        f"/forum/structures/{structure['slug']}/publish",
+        json={"reason": "Publication explicite avant publication de l'événement"},
+        headers=_headers(owner_token, "event-page-publish-structure"),
+    )
+    assert published_structure.status_code == 200
     event = _create_event(owner_token, structure["slug"], key="event-page-create")
     event_id = event["id"]
     public_slug = f"recap-night-{event_id}"

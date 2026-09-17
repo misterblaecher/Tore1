@@ -78,6 +78,12 @@ def test_cohost_permissions_are_explicit_and_finance_never_leaks():
     cohost_token, cohost_user_id = _guest("event-cohost")
     owner = _structure(owner_token, "Owner Structure", "owner-structure")
     cohost = _structure(cohost_token, "Cohost Structure", "cohost-structure")
+    published_owner = client.post(
+        f"/forum/structures/{owner['slug']}/publish",
+        json={"reason": "Publication explicite avant publication de l'événement"},
+        headers=_headers(owner_token, "publish-owner-structure"),
+    )
+    assert published_owner.status_code == 200
 
     created = client.post(
         f"/forum/structures/{owner['slug']}/event-manager",

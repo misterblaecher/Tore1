@@ -245,6 +245,21 @@ def _slugify(value: str) -> str:
 def _visibility_settings(org: Organization) -> dict[str, str]:
     raw = org.visibility_settings_json if isinstance(org.visibility_settings_json, dict) else {}
     settings = {**DEFAULT_VISIBILITY, **{str(k): str(v).upper() for k, v in raw.items() if str(k) in DEFAULT_VISIBILITY}}
+    # Detailed portal blocks inherit their parent visibility when older or
+    # partially populated JSON does not contain the newer per-block keys.
+    # This prevents private descriptions/member lists from becoming public by
+    # falling back to historical PUBLIC defaults.
+    inherited = {
+        "about": "description",
+        "history": "description",
+        "partners": "description",
+        "services": "description",
+        "announcement": "description",
+        "team": "members",
+    }
+    for child, parent in inherited.items():
+        if child not in raw and parent in raw:
+            settings[child] = settings[parent]
     portal = org.public_content_json.get("portal", {}) if isinstance(org.public_content_json, dict) else {}
     aliases = {"gallery": "albums", "memory": "history", "description": "about"}
     for block in portal.get("hidden_blocks", []) if isinstance(portal, dict) else []:
@@ -299,7 +314,13 @@ def _can_view(level: str, membership: Optional[OrganizationMembership], *, is_us
 
 def _structure_or_404(db: Session, slug: str, *, public: bool = False) -> Organization:
     org = db.query(Organization).filter(func.lower(Organization.slug) == slug.strip().lower()).first()
-    if org is None or (public and _visibility_settings(org)["page"] != "PUBLIC"):
+    if org is None or (
+        public
+        and (
+            (org.visibility or "PRIVATE").upper() != "PUBLIC"
+            or _visibility_settings(org)["page"] != "PUBLIC"
+        )
+    ):
         raise HTTPException(status_code=404, detail="Structure not found")
     return org
 
@@ -358,10 +379,10 @@ def _structure_payload(org: Organization, *, include_private: bool = False) -> d
         "hidden_blocks": portal.get("hidden_blocks", []),
     }
     if not include_private:
-        if settings["about"] != "PUBLIC": payload["portal"].pop("about", None)
-        if settings["services"] != "PUBLIC": payload["portal"].pop("services", None)
-        if settings["announcement"] != "PUBLIC": payload["portal"].pop("announcement", None)
-        if settings["contact"] != "PUBLIC": payload["portal"].pop("opening_hours", None)
+        if settings["about"] != "PUBLIC": payload["portal"]["about"] = ""
+        if settings["services"] != "PUBLIC": payload["portal"]["services"] = []
+        if settings["announcement"] != "PUBLIC": payload["portal"]["announcement"] = ""
+        if settings["contact"] != "PUBLIC": payload["portal"]["opening_hours"] = ""
         payload["portal"].pop("hidden_blocks", None)
     if include_private or settings["history"] == "PUBLIC":
         payload["history"] = content.get("history")
