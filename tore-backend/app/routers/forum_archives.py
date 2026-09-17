@@ -172,12 +172,27 @@ def get_structured_archives(
     membership_rows = db.query(OrganizationMembership).filter(
         OrganizationMembership.organization_id == org.id
     ).order_by(OrganizationMembership.starts_at.desc(), OrganizationMembership.joined_at.desc()).all()
-    office_history = [_mandate_payload(db, row) for row in membership_rows if (row.role or "MEMBER").upper() in OFFICE_ROLES]
+    manager_history = (membership.role or "MEMBER").upper() in OFFICE_ROLES
+    office_history = [
+        _mandate_payload(db, row)
+        for row in membership_rows
+        if (row.role or "MEMBER").upper() in OFFICE_ROLES
+        and (
+            manager_history
+            or (
+                (row.visibility or "PRIVATE").upper() == "PUBLIC"
+                and (row.status or "ACTIVE").upper() == "ACTIVE"
+                and (row.revoked_at is None)
+                and (row.starts_at is None or row.starts_at <= now_utc())
+                and (row.ends_at is None or row.ends_at > now_utc())
+            )
+        )
+    ]
 
     events = db.query(Event).filter(Event.host_type == "orga", Event.host_id == str(org.id)).all()
     event_map = {row.id: row for row in events}
     now = now_utc()
-    past_events = [row for row in events if row.starts_at and row.starts_at < now]
+    past_events = [row for row in events if row.starts_at and ((row.ends_at is not None and row.ends_at < now) or (row.ends_at is None and row.starts_at < now))]
     past_events.sort(key=lambda row: row.starts_at or datetime.min, reverse=True)
 
     entries: list[dict[str, Any]] = []
@@ -198,7 +213,7 @@ def get_structured_archives(
             archived_at=at,
             event=event,
             mandate=_mandate_for_date(office_history, at),
-            target=f"/forum/structures/{slug}/documents",
+            target=f"/forum/structures/{slug}/archives/structured?category=DOCUMENT",
             restore_path=f"/forum/structures/{slug}/archives/documents/{row.id}/restore" if "document.manage" in capabilities else None,
         ))
 
@@ -218,7 +233,7 @@ def get_structured_archives(
             archived_at=at,
             event=event,
             mandate=_mandate_for_date(office_history, at),
-            target=f"/forum/structures/{slug}/albums",
+            target=f"/forum/structures/{slug}/archives/structured?category=ALBUM",
             restore_path=f"/forum/structures/{slug}/archives/albums/{row.id}/restore" if "album.manage" in capabilities else None,
         ))
 
@@ -257,7 +272,7 @@ def get_structured_archives(
                 archived_at=at,
                 event=None,
                 mandate=_mandate_for_date(office_history, at),
-                target=f"/forum/structures/{slug}/discussions",
+                target=f"/forum/structures/{slug}/archives/structured?category=DISCUSSION",
             ))
 
     for event in past_events:
@@ -358,6 +373,8 @@ def restore_archived_album(
     row = db.get(StructureAlbum, album_id)
     if row is None or row.organization_id != org.id:
         raise HTTPException(status_code=404, detail="Album not found")
+    if row.archived_at is None and (row.status or "").upper() != "ARCHIVED":
+        raise HTTPException(status_code=409, detail="Album is not archived")
     row.archived_at = None
     row.status = "DRAFT"
     row.updated_at = now_utc()
