@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from db import Base, engine, now_utc
 from main import app
-from models import Event, Organization
+from models import AppUser, Event, Organization
 
 
 client = TestClient(app)
@@ -17,7 +17,10 @@ def setup_function():
 
 
 def _add_org(db: Session, *, name: str, slug: str, org_type: str, city: str = "Liège", visibility: str = "PUBLIC", **kwargs) -> Organization:
-    org = Organization(name=name, slug=slug, org_type=org_type, city=city, visibility=visibility, **kwargs)
+    creator = AppUser(id=f"creator-{slug}", display_name="Test creator")
+    db.add(creator)
+    db.flush()
+    org = Organization(name=name, slug=slug, org_type=org_type, city=city, visibility=visibility, created_by_user_id=creator.id, **kwargs)
     db.add(org)
     db.flush()
     return org
