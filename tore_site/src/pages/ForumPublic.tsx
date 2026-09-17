@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, CalendarDays, ExternalLink, Images, MapPin, User
 import ForumPage from "./Forum";
 import { apiFetch, ApiError } from "@/lib/api";
 import { resolveStructureBranding } from "@/lib/structure-branding";
+import { StructureClaimAction } from "@/components/forum/StructureClaimAction";
 import "@/styles/forum.css";
 import "@/styles/structure-branding.css";
 
@@ -12,7 +13,7 @@ type EventItem = { id: number; name: string; startsAt?: string | null; endsAt?: 
 type PublicPage = { id: number; title: string; slug: string; category: string; content?: string; publishedAt?: string | null };
 type Album = { id: number; title: string; description?: string | null; coverUrl?: string | null; media?: { id: number; url: string; caption?: string | null }[] };
 type PublicPayload = {
-  structure: { name: string; slug: string; type: string; description?: string | null; city?: string | null; address?: string | null; contactEmail?: string | null; contactPhone?: string | null; websiteUrl?: string | null; instagramHandle?: string | null; logoUrl?: string | null; bannerUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null; history?: string | null; sponsors?: string[] };
+  structure: { id?: number; name: string; slug: string; type: string; description?: string | null; city?: string | null; address?: string | null; contactEmail?: string | null; contactPhone?: string | null; websiteUrl?: string | null; instagramHandle?: string | null; logoUrl?: string | null; bannerUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null; history?: string | null; sponsors?: string[] };
   visibility: Record<string, string>;
   events: EventItem[];
   members: { id: number; displayName: string; avatarUrl?: string | null; role: string }[];
@@ -69,7 +70,7 @@ function PublicStructure({ slug }: { slug: string }) {
             <div className="forum-public-logo" style={{ backgroundImage: structure.logoUrl ? `url(${structure.logoUrl})` : undefined }}>{!structure.logoUrl ? structure.name.slice(0, 1).toUpperCase() : null}</div>
             <div><span className="forum-eyebrow">Page officielle TORÈ · {structure.type}</span><h1>{structure.name}</h1><p>{structure.description || "Structure officielle de la communauté TORÈ."}</p>{structure.city ? <span className="forum-location"><MapPin size={14} /> {structure.city}{structure.address ? ` · ${structure.address}` : ""}</span> : null}</div>
           </div>
-          <div className="forum-public-hero__actions"><Link className="forum-button forum-button--primary" style={{ background: branding.primary, borderColor: branding.primary, color: branding.primaryText }} to={`/forum/structures/${structure.slug}/dashboard`}>Espace membre <ArrowRight size={16} /></Link></div>
+          <div className="forum-public-hero__actions"><Link className="forum-button forum-button--primary" style={{ background: branding.primary, borderColor: branding.primary, color: branding.primaryText }} to={`/forum/structures/${structure.slug}/dashboard`}>Espace membre <ArrowRight size={16} /></Link><StructureClaimAction structureId={structure.id} structureName={structure.name} /></div>
         </section>
 
         <div className="forum-public-stats"><div><strong>{stats?.publicEvents ?? "Privé"}</strong><span>events publics</span></div><div><strong>{stats?.members ?? "Privé"}</strong><span>membres visibles selon réglages</span></div><div><strong>{stats?.publicAlbums ?? "Privé"}</strong><span>albums publiés</span></div></div>
