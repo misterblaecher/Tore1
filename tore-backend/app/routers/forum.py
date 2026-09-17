@@ -41,6 +41,8 @@ from models import (
 from app.legacy.monolith import get_current_user, get_db
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
+from app.models.wiki import StructurePageRevision
+import difflib
 
 
 router = APIRouter(prefix="/forum", tags=["forum"])
@@ -166,6 +168,7 @@ class PagePatchIn(BaseModel):
     visibility: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
     category: Optional[str] = Field(default=None, pattern="^(HISTORY|TRADITION|GLOSSARY|GUIDE|RULE|OTHER)$")
     published: Optional[bool] = None
+    message: Optional[str] = Field(default=None, max_length=500)
 
 
 class VisibilityPatchIn(BaseModel):
@@ -1082,6 +1085,9 @@ def list_pages(slug: str, user: AppUser = Depends(get_current_user), db: Session
 def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
     actor = _require_role(db, org.id, user, "MANAGER")
+    if payload.published:
+        from app.services.structure_rbac import require_capability
+        require_capability(db, org.id, user, "page.publish")
     key, previous = _write_idem(db, user, f"forum_page_create:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -1092,6 +1098,7 @@ def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_cu
     row = StructurePage(organization_id=org.id, title=payload.title.strip(), slug=slug_value, content=payload.content, visibility=payload.visibility, category=payload.category, created_by_user_id=user.id, updated_by_user_id=user.id, version=1, published_at=now if payload.published else None, created_at=now, updated_at=now)
     db.add(row)
     db.flush()
+    db.add(StructurePageRevision(page_id=row.id, version=1, content=row.content, author_user_id=user.id, message="Création de la page", created_at=now))
     response = _page_payload(row, include_content=True)
     _save_idem(db, user, f"forum_page_create:{org.id}", key, response)
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.page.create", entity_type="structure_page", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "category": row.category})
@@ -1103,6 +1110,9 @@ def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_cu
 def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
     actor = _require_role(db, org.id, user, "MANAGER")
+    if payload.published is not None:
+        from app.services.structure_rbac import require_capability
+        require_capability(db, org.id, user, "page.publish")
     key, previous = _write_idem(db, user, f"forum_page_patch:{page_id}", idempotency_key)
     if previous is not None:
         return previous
@@ -1111,6 +1121,7 @@ def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = De
         raise HTTPException(status_code=404, detail="Page not found")
     if payload.title is not None:
         row.title = payload.title.strip()
+    content_changed = payload.content is not None and payload.content != row.content
     if payload.content is not None:
         row.content = payload.content
     if payload.visibility is not None:
@@ -1122,11 +1133,44 @@ def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = De
     row.version += 1
     row.updated_by_user_id = user.id
     row.updated_at = now_utc()
+    if content_changed:
+        db.add(StructurePageRevision(page_id=row.id, version=row.version, content=row.content, author_user_id=user.id, message=payload.message, created_at=row.updated_at))
     response = _page_payload(row, include_content=True)
     _save_idem(db, user, f"forum_page_patch:{page_id}", key, response)
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.page.patch", entity_type="structure_page", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "version": row.version})
     db.commit()
     return response
+
+@router.get("/structures/{slug}/pages/{page_id}/revisions")
+def page_revisions(slug: str, page_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); membership = _require_role(db, org.id, user, "MEMBER")
+    row = db.get(StructurePage, page_id)
+    if row is None or row.organization_id != org.id or not _can_view(row.visibility, membership): raise HTTPException(404, "Page not found")
+    return {"items": [{"id": r.id, "version": r.version, "authorUserId": r.author_user_id, "message": r.message, "createdAt": r.created_at.isoformat()} for r in db.query(StructurePageRevision).filter_by(page_id=row.id).order_by(StructurePageRevision.version.desc()).all()]}
+
+@router.get("/structures/{slug}/pages/{page_id}/revisions/{version}")
+def page_revision(slug: str, page_id: int, version: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); membership = _require_role(db, org.id, user, "MEMBER")
+    row = db.get(StructurePage, page_id); revision = db.query(StructurePageRevision).filter_by(page_id=page_id, version=version).first()
+    if row is None or row.organization_id != org.id or revision is None or not _can_view(row.visibility, membership): raise HTTPException(404, "Revision not found")
+    return {"id": revision.id, "version": revision.version, "content": revision.content, "authorUserId": revision.author_user_id, "message": revision.message, "createdAt": revision.created_at.isoformat()}
+
+@router.get("/structures/{slug}/pages/{page_id}/diff")
+def page_diff(slug: str, page_id: int, from_version: int, to_version: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); _require_role(db, org.id, user, "MEMBER")
+    page = db.get(StructurePage, page_id); before = db.query(StructurePageRevision).filter_by(page_id=page_id, version=from_version).first(); after = db.query(StructurePageRevision).filter_by(page_id=page_id, version=to_version).first()
+    if page is None or page.organization_id != org.id or before is None or after is None: raise HTTPException(404, "Revision not found")
+    return {"fromVersion": from_version, "toVersion": to_version, "diff": "".join(difflib.unified_diff(before.content.splitlines(True), after.content.splitlines(True), fromfile=f"v{from_version}", tofile=f"v{to_version}"))}
+
+@router.post("/structures/{slug}/pages/{page_id}/revisions/{version}/restore")
+def restore_page(slug: str, page_id: int, version: int, message: str = "Restauration d’une version", user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); actor = _require_role(db, org.id, user, "MANAGER")
+    page = db.get(StructurePage, page_id); source = db.query(StructurePageRevision).filter_by(page_id=page_id, version=version).first()
+    if page is None or page.organization_id != org.id or source is None: raise HTTPException(404, "Revision not found")
+    page.content = source.content; page.version += 1; page.updated_by_user_id = user.id; page.updated_at = now_utc()
+    db.add(StructurePageRevision(page_id=page.id, version=page.version, content=page.content, author_user_id=user.id, message=message, created_at=page.updated_at))
+    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.page.restore", entity_type="structure_page", entity_id=str(page.id), event_id=None, committee_id=None, bar_id=None, payload={"from_version": version, "to_version": page.version, "reason": message})
+    db.commit(); return _page_payload(page, include_content=True)
 
 
 @router.get("/structures/{slug}/visibility")
