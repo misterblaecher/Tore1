@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 from models import AppUser
 from app.legacy.monolith import get_current_user, get_db
@@ -20,6 +20,12 @@ class PlanningIn(BaseModel):
     event_id: int | None = None
     notes: str | None = Field(default=None, max_length=5000)
     assignee_user_ids: list[str] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.ends_at and self.ends_at < self.starts_at:
+            raise ValueError("ends_at must be after starts_at")
+        return self
 
 def _item(db, org_id, item_id):
     row = db.get(StructurePlanningItem, item_id)
@@ -63,6 +69,8 @@ def archive_planning(slug: str, item_id: int, user: AppUser = Depends(get_curren
 def export_planning(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug); require_capability(db, org.id, user, "planning.read")
     rows = db.query(StructurePlanningItem).filter_by(organization_id=org.id, archived=False).all()
-    def stamp(value): return value.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    body = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TORE//Planning//EN\r\n" + "".join(f"BEGIN:VEVENT\r\nUID:tore-planning-{r.id}@tore\r\nDTSTART:{stamp(r.starts_at)}\r\nDTEND:{stamp(r.ends_at or r.starts_at)}\r\nSUMMARY:{r.title}\r\nEND:VEVENT\r\n" for r in rows) + "END:VCALENDAR\r\n"
+    def stamp(value): return value.replace(tzinfo=timezone.utc).astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    def escape(value): return str(value or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+    events = "".join(f"BEGIN:VEVENT\r\nUID:tore-planning-{r.id}@tore\r\nDTSTAMP:{stamp(r.created_at)}\r\nDTSTART:{stamp(r.starts_at)}\r\nDTEND:{stamp(r.ends_at or r.starts_at)}\r\nSUMMARY:{escape(r.title)}\r\nDESCRIPTION:{escape(r.notes)}\r\nEND:VEVENT\r\n" for r in rows)
+    body = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TORE//Planning//EN\r\nCALSCALE:GREGORIAN\r\n" + events + "END:VCALENDAR\r\n"
     return Response(content=body, media_type="text/calendar", headers={"Content-Disposition": "attachment; filename=planning.ics"})
