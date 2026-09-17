@@ -80,7 +80,7 @@ function dateLabel(value?: string | null) {
 }
 function money(cents: number) { return `${(cents / 100).toLocaleString("fr-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`; }
 function emptyForm(): EventForm {
-  return { name: "", startsAt: "", endsAt: "", venue: "", city: "", description: "", capacity: "", price: "0", coverUrl: "", visibility: "PRIVATE", modules: [], coOrganizers: "", recap: "" };
+  return { name: "", startsAt: "", endsAt: "", venue: "", city: "", description: "", capacity: "", price: "0", coverUrl: "", visibility: "PUBLIC", modules: [], coOrganizers: "", recap: "" };
 }
 function eventToForm(event: EventItem): EventForm {
   return {
@@ -163,7 +163,7 @@ export default function StructureEvents({ slug, canCreate, canManage }: { slug: 
   async function create(event: FormEvent) {
     event.preventDefault(); setNotice("");
     const invalid = validateForm(createForm); setValidation(invalid); if (invalid) return;
-    const result = await mutation.write<EventItem>(base, "POST", { ...payload(createForm), publication_status: "DRAFT" });
+    const result = await mutation.write<EventItem>(base, "POST", { ...payload(createForm), publication_status: createForm.visibility === "PUBLIC" ? "PUBLISHED" : "DRAFT" });
     if (!result) return;
     setCreateForm(emptyForm()); setShowCreate(false); setValidation("");
     setNotice("Brouillon enregistré sur le serveur. Les données resteront disponibles après rechargement et nouvelle session.");
