@@ -8,6 +8,7 @@ from app.models.structure_rbac import (
     StructureRole,
     StructureRoleCapability,
 )
+from app.models.notifications import StructureNotification
 
 __all__ = [
     "ForumEventPage",
@@ -16,4 +17,5 @@ __all__ = [
     "StructureRole",
     "StructureRoleCapability",
     "StructureMembershipRole",
+    "StructureNotification",
 ]
