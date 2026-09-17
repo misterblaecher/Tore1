@@ -447,7 +447,10 @@ def _base_public_page(db: Session, org: Organization) -> dict[str, Any]:
         OrganizationMembership.status == "ACTIVE",
         OrganizationMembership.revoked_at.is_(None),
     )) or 0
-    public_stats = {"members": int(member_count), "publicEvents": len(public_events), "publicAlbums": len(albums)} if settings["stats"] == "PUBLIC" else None
+    public_stats = {
+        "operational": {"members": int(member_count), "publicEvents": len(public_events), "publicAlbums": len(albums)},
+        "finance": None,
+    } if settings["stats"] == "PUBLIC" else None
     documents = []
     if settings["documents"] == "PUBLIC":
         documents = [_document_payload(row) for row in db.query(StructureDocument).filter(
@@ -500,11 +503,15 @@ def _accessible_post(db, org_id, post_id, membership):
 
 
 def _document_payload(row: StructureDocument) -> dict[str, Any]:
+    file_url = row.file_url or ""
+    suffix = file_url.split("?")[0].rsplit(".", 1)[-1].lower() if "." in file_url.split("?")[0] else None
     return {
         "id": row.id,
         "title": row.title,
         "description": row.description,
         "fileUrl": row.file_url,
+        "type": suffix or "file",
+        "previewUrl": row.file_url if suffix in {"pdf", "png", "jpg", "jpeg", "webp", "gif"} else None,
         "folder": row.folder,
         "tags": row.tags_json if isinstance(row.tags_json, list) else [],
         "visibility": (row.visibility or "STRUCTURE_MEMBERS").upper(),
