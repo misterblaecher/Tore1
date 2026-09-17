@@ -1,0 +1,13 @@
+
+> tore-portal@0.1.0 build
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 100 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.67 kB │ gzip:   0.43 kB
+dist/assets/index-DrnVtscd.css    3.26 kB │ gzip:   1.24 kB
+dist/assets/index-DQOu0taP.js   373.10 kB │ gzip: 102.88 kB
+✓ built in 1.08s

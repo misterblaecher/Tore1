@@ -1,0 +1,25 @@
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_initial_schema, Initial schema baseline for production Postgres
+INFO  [alembic.runtime.migration] Running upgrade 0001_initial_schema -> 0002_event_costs_simple, add event_costs_simple tables
+INFO  [alembic.runtime.migration] Running upgrade 0002_event_costs_simple -> 0003_account_requests, add account_requests table
+INFO  [alembic.runtime.migration] Running upgrade 0003_account_requests -> 0004_app_user_account_mode, add app_users.account_mode
+INFO  [alembic.runtime.migration] Running upgrade 0004_app_user_account_mode -> 0005_auth_otp_codes, create auth_otp_codes table
+INFO  [alembic.runtime.migration] Running upgrade 0005_auth_otp_codes -> 0006_music_committee_v1_tables, add music + committee v1 tables for prod migration
+INFO  [alembic.runtime.migration] Running upgrade 0006_music_committee_v1_tables -> 0007_public_content_branding, add public event content and bar branding
+INFO  [alembic.runtime.migration] Running upgrade 0007_public_content_branding -> 0008_unified_profile_affiliations, unify profiles, privacy, affiliations and effective roles
+INFO  [alembic.runtime.migration] Running upgrade 0008_unified_profile_affiliations -> 0009_scoped_operational_access, add secure scoped operational access metadata
+INFO  [alembic.runtime.migration] Running upgrade 0009_scoped_operational_access -> 0010_forum_structure_mvp, add the incremental Forum Structure layer
+INFO  [alembic.runtime.migration] Running upgrade 0010_forum_structure_mvp -> 0011_shared_profile_oripeaux, add shared folkloric profile data
+INFO  [alembic.runtime.migration] Running upgrade 0011_shared_profile_oripeaux -> 0012_discussion_workspace, Persistent discussion threads, document references and reactions.
+INFO  [alembic.runtime.migration] Running upgrade 0012_discussion_workspace -> 0013_structure_lifecycle_private_defaults, Add lifecycle state while preserving historical structure publication.
+INFO  [alembic.runtime.migration] Running upgrade 0013_structure_lifecycle_private_defaults -> 0014_structure_capability_rbac, Introduce capability-based Structure RBAC with a retro-compatible role backfill.
+INFO  [alembic.runtime.migration] Running upgrade 0014_structure_capability_rbac -> 0015_secure_managed_uploads, add secure managed uploads
+INFO  [alembic.runtime.migration] Running upgrade 0015_secure_managed_uploads -> 0016_public_event_recap, add public event pages and recap workflow
+INFO  [alembic.runtime.migration] Running upgrade 0016_public_event_recap -> 0017_forum_channel_acl, Persistent per-channel role/capability/member ACLs.
+INFO  [alembic.runtime.migration] Running upgrade 0017_forum_channel_acl -> 0018_structure_claim_workflow, Add reviewed ownership claims for existing structures.
+INFO  [alembic.runtime.migration] Running upgrade 0018_structure_claim_workflow -> 0019_structure_ownership_recovery, secure structure ownership, transfers, recovery and freezes
+INFO  [alembic.runtime.migration] Running upgrade 0019_structure_ownership_recovery -> 0020_structure_invitations, Add structure member invitations.
+INFO  [alembic.runtime.migration] Running upgrade 0020_structure_invitations -> 0021_event_structure_cohosting, add persistent event structure cohosting and manager settings
+INFO  [alembic.runtime.migration] Running upgrade 0021_event_structure_cohosting -> 0022_structure_mandates, Time bounded role assignments and alumni history.
+INFO  [alembic.runtime.migration] Running upgrade 0022_structure_mandates -> 0023_managed_album_media, Managed media references and withdrawal reporting.

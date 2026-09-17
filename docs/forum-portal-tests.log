@@ -1,0 +1,32 @@
+
+> tore-portal@0.1.0 test
+> node --test server/*.test.mjs && vitest run src/lib
+
+✔ missing credentials disable the proxy, including partial Basic configuration (1.6656ms)
+✔ production refuses an insecure upstream and credentials in its URL (0.2668ms)
+✔ unauthenticated and wrong-password requests never reach the backend (58.9129ms)
+✔ authenticated review forwards only server credentials and preserves query/status (14.2009ms)
+✔ arbitrary routes and methods cannot borrow the administrator key (7.3109ms)
+✔ cross-origin Basic-auth writes are rejected without forwarding (5.1712ms)
+✔ same-origin review PATCH preserves the body and upstream rejection (14.6684ms)
+✔ upstream outage returns a stable error without leaking credentials (3.9954ms)
+✔ oversized bodies are refused before forwarding (4.18ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.4069
+
+ RUN  v3.2.4 C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore-portal
+
+ ✓ src/lib/retryable-write.test.ts (2 tests) 4ms
+ ✓ src/lib/auth.test.ts (5 tests) 7ms
+
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+   Start at  19:58:53
+   Duration  593ms (transform 77ms, setup 0ms, collect 184ms, tests 10ms, environment 0ms, prepare 245ms)
+

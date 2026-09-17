@@ -1,0 +1,299 @@
+Resolving dependencies...
+Downloading packages...
+  async 2.13.0 (2.13.1 available)
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.0.0 (2.0.0 available)
+  cross_file 0.3.5+2 (0.3.5+5 available)
+  dio 5.9.1 (5.11.1 available)
+  dio_web_adapter 2.1.1 (2.2.2 available)
+  ffi 2.1.5 (2.2.0 available)
+  flutter_riverpod 2.6.1 (3.4.3 available)
+  flutter_secure_storage 9.2.4 (11.1.1 available)
+  flutter_secure_storage_linux 1.2.3 (3.0.3 available)
+  flutter_secure_storage_macos 3.1.3 (4.0.0 available)
+  flutter_secure_storage_platform_interface 1.1.2 (2.1.0 available)
+  flutter_secure_storage_web 1.2.1 (2.1.1 available)
+  flutter_secure_storage_windows 3.1.2 (4.2.2 available)
+  glob 2.1.3 (2.2.0 available)
+  google_sign_in 6.3.0 (7.2.0 available)
+  google_sign_in_android 6.2.1 (7.2.17 available)
+  google_sign_in_ios 5.9.0 (6.3.3 available)
+  google_sign_in_platform_interface 2.5.0 (3.1.0 available)
+  google_sign_in_web 0.12.4+4 (1.1.3 available)
+  hooks 1.0.0 (2.2.0 available)
+  js 0.6.7 (0.7.2 available)
+  matcher 0.12.18 (0.12.20 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.17.0 (1.19.0 available)
+  mime 2.0.0 (2.1.0 available)
+  mobile_scanner 5.2.3 (7.4.2 available)
+  native_toolchain_c 0.17.4 (0.19.4 available)
+  objective_c 9.2.5 (9.6.0 available)
+  path_provider 2.1.5 (2.1.6 available)
+  path_provider_android 2.2.22 (2.3.1 available)
+  path_provider_linux 2.2.1 (2.2.2 available)
+  path_provider_platform_interface 2.1.2 (2.1.3 available)
+  platform 3.1.6 (3.2.0 available)
+  pub_semver 2.2.0 (2.2.1 available)
+  qr 3.0.2 (4.0.0 available)
+  riverpod 2.6.1 (3.4.3 available)
+  share_plus 10.1.4 (13.3.0 available)
+  share_plus_platform_interface 5.0.2 (7.2.0 available)
+  shared_preferences 2.5.4 (2.5.5 available)
+  shared_preferences_android 2.4.20 (2.4.28 available)
+  shared_preferences_foundation 2.5.6 (2.5.7 available)
+  shared_preferences_platform_interface 2.4.1 (2.4.2 available)
+  source_span 1.10.1 (1.10.2 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  test_api 0.7.9 (0.7.14 available)
+  url_launcher_android 6.3.28 (6.3.33 available)
+  url_launcher_ios 6.4.1 (6.4.2 available)
+  url_launcher_linux 3.2.2 (3.2.3 available)
+  url_launcher_macos 3.2.5 (3.2.6 available)
+  url_launcher_web 2.4.2 (2.4.3 available)
+  url_launcher_windows 3.1.5 (3.1.6 available)
+  uuid 4.5.3 (4.6.0 available)
+  vector_math 2.2.0 (2.4.2 available)
+  vm_service 15.0.2 (15.3.0 available)
+  win32 5.15.0 (6.4.0 available)
+  yaml 3.1.3 (3.1.4 available)
+Got dependencies!
+57 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_config_test.dart
+00:00 +0: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_config_test.dart: production requires an explicit HTTPS API URL
+00:00 +1: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_config_test.dart: flavor determines environment unless explicitly overridden
+00:00 +2: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_config_test.dart: local development and API_BASE_URL compatibility remain supported
+00:00 +3: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: parses public event links
+00:00 +4: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: parses custom-scheme bar links
+00:00 +5: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: parses event and bar menu links
+00:00 +6: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: keeps legacy app.tore.be event and join compatibility
+00:00 +7: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: parses QR payload links without accepting arbitrary routes
+00:00 +8: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: keeps legacy QR payload compatibility
+00:00 +9: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/app_deep_link_router_test.dart: rejects unknown hosts, schemes and malformed ids
+00:00 +10: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_capabilities_test.dart: account_mode is not treated as an authorization capability
+00:00 +11: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_capabilities_test.dart: mode access is read from the effective capabilities endpoint
+00:01 +12: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_interceptor_test.dart: leaves 401 refresh and invalidation to ApiClient
+00:01 +13: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_interceptor_test.dart: does not clear token for skipAuth requests
+00:01 +14: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_repository_rate_limit_test.dart: requestEmailOtp maps 429 payload to EmailRateLimitException
+🔥 ApiClient CREATED (singleton)
+00:01 +15: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_repository_rate_limit_test.dart: requestEmailOtp accepts devToken from backend dry-run response
+00:02 +16: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_session_provider_test.dart: AuthSessionState transitions guest -> authenticated
+00:02 +17: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_session_provider_test.dart: Provider boots in unknown or loading state
+[auth][bootstrap] start
+[auth][bootstrap] load token
+🔥 ApiClient CREATED (singleton)
+00:02 +18: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_token_storage_test.dart: stores and reads access/refresh tokens
+00:02 +19: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_token_storage_test.dart: clearAuthToken removes access and refresh but keeps guest mode data
+00:02 +20: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_token_storage_test.dart: persists guest_device_id
+00:02 +21: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_token_storage_test.dart: tokens are never persisted in SharedPreferences
+00:02 +22: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/auth_token_storage_test.dart: legacy SharedPreferences token is migrated and removed
+00:02 +23: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/bars_repository_test.dart: bar detail falls back to the versioned cache
+00:02 +24: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/cart_idempotency_test.dart: cart retains an order intent until items, account, or event change
+00:02 +25: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/cart_idempotency_test.dart: a completed order receives a new key for identical future items
+00:03 +26: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_detector_test.dart: detects open links
+00:03 +27: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_detector_test.dart: normalizes manual codes (spaces/dashes/uppercase)
+00:03 +28: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_detector_test.dart: detects manual code formats
+00:07 +29: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_sheet_logic_test.dart: mapping preview to login action
+00:07 +30: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_sheet_logic_test.dart: mapping preview to public event navigation
+00:07 +31: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_sheet_logic_test.dart: suffix rendering helper
+00:07 +32: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/code_entry_sheet_logic_test.dart: copy value null fallback hint
+00:07 +33: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/community_explorer_cache_test.dart: cache key hash is stable regardless of param order
+00:07 +34: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/community_explorer_cache_test.dart: orga summary parses followersCount and lastActiveAt
+00:07 +35: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/community_explorer_cache_test.dart: cache read/write and debounce config
+00:07 +36: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_admin_helpers_test.dart: join_mode label mapping
+00:07 +37: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_admin_helpers_test.dart: form diff detection for settings
+00:07 +38: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_admin_helpers_test.dart: role change payload build
+00:07 +39: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_events_models_test.dart: OrgaEventSummary parsing keeps publication/runtime/date fields
+00:07 +40: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_events_models_test.dart: orga events cache ttl store/restore
+00:08 +41: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_events_models_test.dart: wizard prefill host orga selection transition
+00:08 +42: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community/orga_invite_type_test.dart: maps invite types to expected role labels
+00:08 +43: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community_join_models_test.dart: parse join mode and membership status
+00:08 +44: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community_join_models_test.dart: cta label mapping
+00:08 +45: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community_models_cache_test.dart: profile model parsing
+00:08 +46: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community_models_cache_test.dart: posts cache ttl
+00:08 +47: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/community_models_cache_test.dart: posts cache read/write payload
+00:09 +48: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/discovery_models_test.dart: discovery query maps supported filters to backend parameters
+00:09 +49: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/discovery_models_test.dart: discovery event parses real metadata without fixture fallbacks
+00:09 +50: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/discovery_navigation_test.dart: event card opens Event Detail before any join action
+00:10 +51: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/discovery_navigation_test.dart: event card opens Event Detail before any join action
+00:10 +52: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/discovery_navigation_test.dart: event card opens Event Detail before any join action
+00:10 +53: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/discovery_states_test.dart: empty API response renders no event and no fixture
+00:11 +54: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+00:11 +55: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+00:11 +56: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+00:11 +57: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+00:11 +58: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+00:11 +59: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+00:11 +60: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen shows scanner and manual mode controls
+🔥 ApiClient CREATED (singleton)
+00:12 +61: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/entry_mode_screen_test.dart: EntryModeScreen keeps the last counters and reports refresh errors
+00:12 +62: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_detail_repository_test.dart: join sends a stable idempotency key in the HTTP header
+00:12 +63: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_join_interaction_test.dart: join ignores a second tap while the real write is pending
+00:12 +64: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_join_interaction_test.dart: join ignores a second tap while the real write is pending
+00:13 +65: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_join_interaction_test.dart: join ignores a second tap while the real write is pending
+00:13 +66: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_join_interaction_test.dart: join ignores a second tap while the real write is pending
+00:13 +67: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_ranking_screen_test.dart: ranking renders top3 when list is empty without RangeError
+00:13 +68: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_ranking_screen_test.dart: ranking renders top3 when list is empty without RangeError
+00:13 +69: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_ranking_screen_test.dart: ranking renders top3 when list is empty without RangeError
+00:13 +70: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_ranking_screen_test.dart: ranking renders top3 when list is empty without RangeError
+00:13 +71: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_ranking_screen_test.dart: ranking renders top3 when list is empty without RangeError
+00:13 +72: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/event_ranking_screen_test.dart: ranking renders top3 when list is empty without RangeError
+00:13 +73: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/hunt_models_test.dart: parses active hunt payload
+00:13 +74: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/hunt_models_test.dart: parses leaderboard payload
+00:14 +75: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: maps unknown backend reason to UI unknown state
+00:14 +76: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: prefills join code from deep link routing
+00:14 +77: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: prefills join code from deep link routing
+00:14 +78: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: prefills join code from deep link routing
+00:15 +79: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: prefills join code from deep link routing
+00:15 +80: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: prefills join code from deep link routing
+00:15 +81: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: prefills join code from deep link routing
+🔥 ApiClient CREATED (singleton)
+[boot] online / app ready endpoint=/healthz status=200 latencyMs=1
+00:15 +82: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: autoJoinPublic redirects to EventPublicScreen
+00:15 +83: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: autoJoinPublic redirects to EventPublicScreen
+00:15 +84: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: autoJoinPublic redirects to EventPublicScreen
+00:15 +85: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: autoJoinPublic redirects to EventPublicScreen
+00:15 +86: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: autoJoinPublic redirects to EventPublicScreen
+00:15 +87: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/join_event_screen_test.dart: autoJoinPublic redirects to EventPublicScreen
+[boot] online / app ready endpoint=/healthz status=200 latencyMs=1
+00:15 +88: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: mode selector only renders authorized operational modes
+00:15 +89: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: mode selector only renders authorized operational modes
+00:15 +90: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: mode selector only renders authorized operational modes
+00:16 +91: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: mode selector only renders authorized operational modes
+[auth][bootstrap] start
+[auth][bootstrap] load token
+🔥 ApiClient CREATED (singleton)
+[auth][bootstrap] start
+[auth][bootstrap] load token
+00:16 +92: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: multiple events require an explicit context selection
+00:16 +93: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: multiple events require an explicit context selection
+[auth][bootstrap] start
+[auth][bootstrap] load token
+00:16 +94: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: multiple bars require an explicit context selection
+[auth][bootstrap] start
+[auth][bootstrap] load token
+00:16 +95: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: ORGA hub exposes real state and blocks Entry offline
+00:17 +96: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: BAR hub displays scoped live order and allowed transition
+00:17 +97: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: POST is not automatically replayed without idempotency
+00:17 +98: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: invitation route accepts a prefilled opaque token
+00:17 +99: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: invitation route accepts a prefilled opaque token
+00:17 +100: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: invitation route accepts a prefilled opaque token
+00:17 +101: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: invitation route accepts a prefilled opaque token
+00:17 +102: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: a retry preserves the order idempotency key
+00:17 +102: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/operational_surfaces_test.dart: revocation or expiry refresh closes the selected context
+[auth][bootstrap] start
+[auth][bootstrap] load token
+00:17 +103: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: a retry preserves the order idempotency key
+00:17 +104: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: a retry preserves the order idempotency key
+00:17 +105: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: a retry preserves the order idempotency key
+00:17 +106: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: GET remains retryable on an outage
+00:17 +107: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: GET remains retryable on an outage
+00:17 +108: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: GET remains retryable on an outage
+00:17 +109: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: event detail evicts public cache after HTTP 401
+00:17 +110: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: event detail evicts public cache after HTTP 403
+00:17 +111: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: event detail evicts public cache after HTTP 404
+00:17 +112: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: event detail evicts public cache after HTTP 410
+00:17 +113: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/production_network_safety_test.dart: discovery and bars propagate access refusals
+00:17 +114: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: owner profile is loaded from a user-scoped offline cache
+🔥 ApiClient CREATED (singleton)
+[http] GET http://profile-cache.test/me/profile
+[http] 200 http://profile-cache.test/me/profile
+[http] GET http://profile-cache.test/me/profile
+[http] GET /me/profile
+[http] error=unknown status=0 /me/profile
+[http] error=connectionError status=0 /me/profile
+00:18 +115: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: cached capabilities never reopen operational modes offline
+[http] GET http://profile-cache.test/me/capabilities
+[http] 200 http://profile-cache.test/me/capabilities
+[http] GET http://profile-cache.test/me/capabilities
+[http] GET /me/capabilities
+[http] error=unknown status=0 /me/capabilities
+[http] error=connectionError status=0 /me/capabilities
+00:18 +116: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +116: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: profile PATCH persists the real server response in the owner cache
+[http] PATCH http://profile-cache.test/me/profile
+[http] 200 http://profile-cache.test/me/profile
+00:18 +117: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +117: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: username conflict is propagated with its HTTP status
+[http] PATCH http://profile-cache.test/me/profile
+[http] error=badResponse status=409 /me/profile
+00:18 +118: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +119: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +119: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: generic profile save failure is propagated without a fake success
+[http] PATCH http://profile-cache.test/me/profile
+00:18 +120: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +120: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: generic profile save failure is propagated without a fake success
+[http] GET /me/profile
+[http] error=unknown status=0 /me/profile
+[http] error=badResponse status=500 /me/profile
+00:18 +121: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +121: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_repository_test.dart: profile preview uses the contextual response from the server
+[http] GET http://profile-cache.test/me/profile/preview?as=PUBLIC
+[http] 200 http://profile-cache.test/me/profile/preview?as=PUBLIC
+[http] GET http://profile-cache.test/me/profile/preview?as=PUBLIC
+[http] 200 http://profile-cache.test/me/profile/preview?as=PUBLIC
+00:18 +122: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +123: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +124: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +125: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +126: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +127: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +128: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: guest profile has no fictitious role or user identity
+00:18 +129: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/qr_parser_test.dart: QrParser parse battle
+00:18 +130: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +131: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +132: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +133: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +134: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +135: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +136: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +137: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +138: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +139: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +140: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +141: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +142: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +143: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:18 +144: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: connected profile shows affiliations and no gamification
+00:19 +145: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: loading state is explicit
+00:19 +146: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/qr_validator_test.dart: QrValidator expired if local expiry is passed
+00:19 +147: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: expired session exposes a reconnection state
+00:19 +148: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: expired session exposes a reconnection state
+00:19 +149: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/profile_screen_test.dart: an affiliation exposes navigation to its real structure
+00:19 +150: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/link_builder_test.dart: LinkBuilder uses env-aware https bases
+00:19 +151: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/link_builder_test.dart: LinkBuilder builds tore:// variants
+00:20 +152: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rc_hardening_test.dart: scrubber redacts auth headers, jwt, query params, and contact fields
+00:20 +153: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rc_hardening_test.dart: safe parsing utilities return defaults for missing/unexpected values
+00:20 +154: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rc_hardening_test.dart: event state helper and spacing rhythm tokens stay stable
+00:20 +155: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rebuild_unit_test.dart: state alias normalization maps backend aliases consistently
+00:20 +156: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rebuild_unit_test.dart: idempotency key is reused across retries for same intent
+00:20 +157: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rebuild_unit_test.dart: QR error code mapping provides stable code + copy prefix
+00:20 +158: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rebuild_unit_test.dart: API error code mapping distinguishes auth and missing resources
+00:20 +159: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/rebuild/rebuild_unit_test.dart: mobile bootstrap and event context parse backend aliases
+00:20 +160: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/remote_config_test.dart: parses remote safety flags and minimum version requirements
+00:20 +161: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/remote_config_test.dart: version comparison handles semver core and build minimum
+00:20 +162: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/remote_config_test.dart: falls back safely to cached config when refresh fails
+00:20 +163: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/remote_config_test.dart: defaults fail open for reads but keep diagnostics off in prod
+00:21 +164: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/safety_cache_test.dart: cache store and restore works
+00:21 +165: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/safety_cache_test.dart: expired cache returns null
+00:21 +166: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/safety_models_test.dart: parses safety state payload
+00:21 +167: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/safety_models_test.dart: parses safety history payload
+00:21 +168: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/scan_suppression_test.dart: suppresses same hash inside cooldown window using fake clock
+00:22 +169: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/scan_suppression_test.dart: does not suppress different hash during cooldown and updates baseline
+00:22 +170: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/scan_suppression_test.dart: alternating hashes are always allowed
+00:22 +171: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/scan_suppression_test.dart: shouldAllow mirrors shouldSuppress semantics
+00:22 +172: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/share_intent_test.dart: ShareIntentBuilder prefers shortUrl
+00:22 +173: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/share_intent_test.dart: ShareIntentBuilder falls back to openUrl
+00:22 +174: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/share_intent_test.dart: copyCodeOrHint returns standard hint when no code
+00:22 +175: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/share_text_test.dart: pickShareUrl prefers shortUrl
+00:22 +176: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/share_text_test.dart: shareText formats fallback code when present
+00:22 +177: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/share_text_test.dart: fallback when shortlink creation fails keeps open url
+00:23 +178: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/theme_tokens_test.dart: active theme tokens are night-first and authority gold is stable
+00:23 +179: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/tore_mvp_remote_config_gate_test.dart: mandatory minimum version blocks canonical runtime
+[auth][bootstrap] start
+[auth][bootstrap] load token
+🔥 ApiClient CREATED (singleton)
+00:24 +180: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/update_required_screen_test.dart: shows mandatory update details without rebuild dependencies
+00:24 +181: C:/Users/miste/Documents/GitHub/Tore/.forum-master-worktree/tore/app/test/update_required_screen_test.dart: shows mandatory update details without rebuild dependencies
+00:24 +182: All tests passed!
