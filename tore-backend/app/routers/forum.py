@@ -66,6 +66,12 @@ ROLE_RANK = {
 }
 DEFAULT_VISIBILITY = {
     "page": "PUBLIC",
+    "about": "PUBLIC",
+    "history": "PUBLIC",
+    "partners": "PUBLIC",
+    "services": "PUBLIC",
+    "announcement": "PUBLIC",
+    "team": "STRUCTURE_MEMBERS",
     "description": "PUBLIC",
     "contact": "PUBLIC",
     "events": "PUBLIC",
@@ -163,11 +169,17 @@ class PagePatchIn(BaseModel):
 
 
 class VisibilityPatchIn(BaseModel):
-    page: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
+    about: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    history: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    partners: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    services: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    announcement: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    team: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    page: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
     description: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    contact: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    events: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    members: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
+    contact: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    events: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    members: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
     albums: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
     documents: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
     folklore: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
@@ -229,7 +241,14 @@ def _slugify(value: str) -> str:
 
 def _visibility_settings(org: Organization) -> dict[str, str]:
     raw = org.visibility_settings_json if isinstance(org.visibility_settings_json, dict) else {}
-    return {**DEFAULT_VISIBILITY, **{str(k): str(v).upper() for k, v in raw.items() if str(k) in DEFAULT_VISIBILITY}}
+    settings = {**DEFAULT_VISIBILITY, **{str(k): str(v).upper() for k, v in raw.items() if str(k) in DEFAULT_VISIBILITY}}
+    portal = org.public_content_json.get("portal", {}) if isinstance(org.public_content_json, dict) else {}
+    aliases = {"gallery": "albums", "memory": "history", "description": "about"}
+    for block in portal.get("hidden_blocks", []) if isinstance(portal, dict) else []:
+        key = aliases.get(str(block), str(block))
+        if key in settings and key not in raw:
+            settings[key] = "HIDDEN"
+    return settings
 
 
 def _normalized_type(org: Organization) -> str:
@@ -335,9 +354,15 @@ def _structure_payload(org: Organization, *, include_private: bool = False) -> d
         "opening_hours": portal.get("opening_hours", "") if contact_visible else "",
         "hidden_blocks": portal.get("hidden_blocks", []),
     }
-    if include_private or settings["folklore"] == "PUBLIC":
+    if not include_private:
+        if settings["about"] != "PUBLIC": payload["portal"].pop("about", None)
+        if settings["services"] != "PUBLIC": payload["portal"].pop("services", None)
+        if settings["announcement"] != "PUBLIC": payload["portal"].pop("announcement", None)
+        if settings["contact"] != "PUBLIC": payload["portal"].pop("opening_hours", None)
+        payload["portal"].pop("hidden_blocks", None)
+    if include_private or settings["history"] == "PUBLIC":
         payload["history"] = content.get("history")
-    if description_visible:
+    if include_private or settings["partners"] == "PUBLIC":
         payload["sponsors"] = content.get("sponsors", [])
     if contact_visible:
         payload["contactEmail"] = org.contact_email
