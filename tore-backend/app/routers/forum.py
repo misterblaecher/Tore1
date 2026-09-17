@@ -256,7 +256,7 @@ def _visibility_settings(org: Organization) -> dict[str, str]:
 
 def _normalized_type(org: Organization) -> str:
     value = (org.org_type or "OTHER").strip().upper()
-    aliases = {"COMITE": "COMMITTEE", "COMITÉ": "COMMITTEE", "CERCLE": "CIRCLE", "ORDRE": "ORDER", "BAR": "BAR"}
+    aliases = {"COMITE": "COMMITTEE", "COMITÉ": "COMMITTEE", "CERCLE": "CIRCLE", "ORDRE": "ORDER", "PARTENAIRE": "PARTNER", "PARTNER": "PARTNER", "BAR": "BAR"}
     return aliases.get(value, value if value in STRUCTURE_TYPES else "OTHER")
 
 
