@@ -943,10 +943,14 @@ def patch_structure_event(slug: str, event_id: int, payload: EventPatchIn, user:
         event.public_description = payload.description
     if payload.venue is not None:
         event.venue = payload.venue
-    if payload.visibility is not None:
-        event.visibility = payload.visibility
     if payload.publication_status is not None:
         event.publication_status = payload.publication_status
+        event.visibility = "PUBLIC" if payload.publication_status == "PUBLISHED" else "PRIVATE"
+    elif payload.visibility is not None:
+        # A legacy editor can submit its initial PRIVATE value while editing
+        # an already-public event. Do not silently unpublish on a content save.
+        if not ((event.visibility or "PRIVATE").upper() == "PUBLIC" and payload.visibility == "PRIVATE"):
+            event.visibility = payload.visibility
     event.last_updated_at = now_utc()
     response = _event_payload(event)
     _save_idem(db, user, f"forum_event_patch:{event_id}", key, response)
