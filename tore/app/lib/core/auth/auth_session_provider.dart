@@ -86,6 +86,9 @@ class AuthSessionNotifier extends StateNotifier<AuthSessionState> {
       if (me == null) {
         debugPrint('[auth][bootstrap] /auth/me unauthenticated');
         await markUnauthenticated();
+      } else if (guestMode) {
+        debugPrint('[auth][bootstrap] /auth/me ok -> restore guest mode');
+        state = const AuthSessionState.guest();
       } else {
         debugPrint('[auth][bootstrap] /auth/me ok');
         state = AuthSessionState.authenticated(me);

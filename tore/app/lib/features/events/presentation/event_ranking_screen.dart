@@ -41,7 +41,7 @@ class EventRankingScreen extends ConsumerWidget {
             onRefresh: () => ref.refresh(eventRankingProvider(eventId).future),
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: 3 + top3.length + list.length,
+              itemCount: 3 + list.length,
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return Padding(

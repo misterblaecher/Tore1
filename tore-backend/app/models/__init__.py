@@ -1,3 +1,21 @@
-from app.models.storage import StoredFile
+"""Extracted ORM models introduced outside the legacy monolith."""
 
-__all__ = ["StoredFile"]
+from app.models.forum_events import ForumEventPage
+from app.models.storage import StoredFile
+from app.models.structure_rbac import (
+    StructureCapability,
+    StructureMembershipRole,
+    StructureRole,
+    StructureRoleCapability,
+)
+from app.models.notifications import StructureNotification
+
+__all__ = [
+    "ForumEventPage",
+    "StoredFile",
+    "StructureCapability",
+    "StructureRole",
+    "StructureRoleCapability",
+    "StructureMembershipRole",
+    "StructureNotification",
+]

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../shared/cache/cache_store.dart';
+import '../../../shared/cache/cache_fallback.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../domain/event_public_view.dart';
 
@@ -38,7 +39,14 @@ class EventDetailRepository {
         fromCache: false,
         lastSyncAt: syncedAt,
       );
-    } catch (_) {
+    } catch (error) {
+      if (!canUseCacheAfter(error)) {
+        if (error is DioException &&
+            [401, 403, 404, 410].contains(error.response?.statusCode)) {
+          await _cache.clearKey(cacheKey);
+        }
+        rethrow;
+      }
       final cached = await _cache.getJson(cacheKey);
       final payload = cached?['payload'];
       if (payload is Map) {

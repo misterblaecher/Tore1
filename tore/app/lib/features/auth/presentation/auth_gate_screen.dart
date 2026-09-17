@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/providers.dart';
 import '../../../ui/app_design_system.dart';
-import '../../../app_shell.dart';
+import '../../../tore_mvp_app.dart';
 import 'email_auth_screen.dart';
 
 class AuthGateScreen extends ConsumerStatefulWidget {
@@ -26,7 +26,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
       await ref.read(authSessionProvider.notifier).continueAsGuest();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AppShell()),
+        MaterialPageRoute(builder: (_) => const ToreMvpShell()),
       );
     } catch (_) {
       if (!mounted) return;

@@ -26,6 +26,18 @@ class FakeEntryService extends EntryService {
   Future<String> exportCsv(int eventId) async => 'ok';
 }
 
+class FailingEntryService extends FakeEntryService {
+  @override
+  Future<Map<String, dynamic>> getEntryCount(int eventId) async {
+    throw DioException(requestOptions: RequestOptions(path: '/entry/count'));
+  }
+
+  @override
+  Future<Map<String, dynamic>> getEntryStats(int eventId) async {
+    throw DioException(requestOptions: RequestOptions(path: '/entry/stats'));
+  }
+}
+
 void main() {
   testWidgets('EntryModeScreen shows scanner and manual mode controls',
       (tester) async {
@@ -55,5 +67,25 @@ void main() {
     expect(find.text('+5'), findsOneWidget);
     expect(find.text('+10'), findsOneWidget);
     expect(find.text('-1'), findsOneWidget);
+  });
+
+  testWidgets('EntryModeScreen keeps the last counters and reports refresh errors',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          entryServiceProvider.overrideWithValue(FailingEntryService()),
+          healthRepositoryProvider.overrideWithValue(FakeHealthRepository()),
+        ],
+        child: const MaterialApp(home: EntryModeScreen(eventId: 1)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Compteurs temporairement indisponibles'),
+        findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
   });
 }

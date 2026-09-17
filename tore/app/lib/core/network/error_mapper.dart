@@ -3,6 +3,118 @@ import 'package:dio/dio.dart';
 import 'api_exception.dart';
 import '../../shared/utils/runtime_write_guard.dart';
 
+class ToreUiErrorCopy {
+  const ToreUiErrorCopy({
+    required this.code,
+    required this.title,
+    required this.message,
+    required this.ctaLabel,
+  });
+
+  final String code;
+  final String title;
+  final String message;
+  final String ctaLabel;
+}
+
+const Map<String, ToreUiErrorCopy> toreUiErrorCopy = {
+  'qr_unknown': ToreUiErrorCopy(
+    code: 'qr_unknown',
+    title: 'QR inconnu',
+    message: 'Code non reconnu. Scanne un QR TORÈ valide ou utilise la saisie.',
+    ctaLabel: 'Réessayer',
+  ),
+  'qr_expired': ToreUiErrorCopy(
+    code: 'qr_expired',
+    title: 'QR expiré',
+    message: 'Ce QR a expiré. Demande un nouveau code à l’accueil.',
+    ctaLabel: 'Demander un nouveau QR',
+  ),
+  'qr_replay': ToreUiErrorCopy(
+    code: 'qr_replay',
+    title: 'QR déjà utilisé',
+    message: 'Ce QR a déjà servi. Utilise un QR non consommé.',
+    ctaLabel: 'Utiliser un autre QR',
+  ),
+  'module_off': ToreUiErrorCopy(
+    code: 'module_off',
+    title: 'Module indisponible',
+    message: 'Le module est coupé pour cet événement.',
+    ctaLabel: 'Retour au hub',
+  ),
+  'event_paused': ToreUiErrorCopy(
+    code: 'event_paused',
+    title: 'Événement en pause',
+    message: 'Actions temporairement gelées. Réessaie dans quelques minutes.',
+    ctaLabel: 'Compris',
+  ),
+  'backend_down': ToreUiErrorCopy(
+    code: 'backend_down',
+    title: 'Service indisponible',
+    message: 'Serveur occupé. Réessaie dans un instant.',
+    ctaLabel: 'Réessayer',
+  ),
+  'unauthenticated': ToreUiErrorCopy(
+    code: 'unauthenticated',
+    title: 'Connexion requise',
+    message: 'Connecte-toi pour accéder à cette section.',
+    ctaLabel: 'Se connecter',
+  ),
+  'not_found': ToreUiErrorCopy(
+    code: 'not_found',
+    title: 'Introuvable',
+    message: 'Cette ressource n’est pas disponible.',
+    ctaLabel: 'Retour',
+  ),
+  'invalid_request': ToreUiErrorCopy(
+    code: 'invalid_request',
+    title: 'Demande invalide',
+    message: 'La demande envoyée n’est pas acceptée.',
+    ctaLabel: 'OK',
+  ),
+  'offline_write_blocked': ToreUiErrorCopy(
+    code: 'offline_write_blocked',
+    title: 'Action bloquée hors ligne',
+    message: 'Repasse en ligne pour confirmer cette action.',
+    ctaLabel: 'OK',
+  ),
+};
+
+String normalizeToreErrorCode(String? rawCode) {
+  final code = (rawCode ?? '').trim().toLowerCase();
+  switch (code) {
+    case 'expired':
+    case 'expired_qr':
+      return 'qr_expired';
+    case 'replay':
+    case 'replay_qr':
+      return 'qr_replay';
+    case 'invalid_qr':
+      return 'qr_unknown';
+    case 'unauthorized':
+    case 'missing_token':
+      return 'unauthenticated';
+    case 'forbidden':
+      return 'module_off';
+    case 'event_not_found':
+    case 'not_found':
+      return 'not_found';
+    case 'validation_error':
+    case 'unprocessable_entity':
+      return 'invalid_request';
+    case 'read_only':
+    case 'offline':
+      return 'offline_write_blocked';
+    default:
+      return code.isEmpty ? 'qr_unknown' : code;
+  }
+}
+
+ToreUiErrorCopy resolveToreUiError(String? rawCode) {
+  final normalized = normalizeToreErrorCode(rawCode);
+  return toreUiErrorCopy[normalized] ?? toreUiErrorCopy['qr_unknown']!;
+}
+
 class ErrorMapper {
   static int? retryAfterSeconds(Object e) {
     if (e is! DioException) return null;
@@ -19,6 +131,8 @@ class ErrorMapper {
   }
 
   static String _mapReason(String? reason) {
+    // Keep the active runtime semantics stable. Historical rebuild aliases are
+    // exposed separately through normalizeToreErrorCode/resolveToreUiError.
     switch (reason) {
       case 'event_paused':
         return 'Event en pause. Réessaie dans un instant.';
@@ -33,7 +147,7 @@ class ErrorMapper {
       case 'read_only':
         return 'Event en lecture seule pour le moment.';
       case 'frozen':
-        return 'Trading temporairement gelé.';
+        return 'Les participations sont temporairement suspendues.';
       case 'insufficient_balance':
       case 'insuff_toggle':
         return 'Solde tickets insuffisant.';
@@ -61,11 +175,6 @@ class ErrorMapper {
     }
 
     if (e is DioException) {
-      final wrapped = e.error;
-      if (wrapped is ApiException) {
-        return wrapped.message;
-      }
-
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.receiveTimeout:

@@ -99,16 +99,18 @@ class AppContextController extends StateNotifier<AppContextState> {
     required String eventName,
     Map<String, bool>? activeEventModules,
   }) {
+    final modules = activeEventModules ??
+        (state.activeEventId == eventId
+            ? state.activeEventModules ?? const <String, bool>{}
+            : const <String, bool>{});
     state = state.copyWith(
       activeEventId: eventId,
       activeEventName: eventName,
-      activeEventModules: activeEventModules,
+      activeEventModules: modules,
     );
     _prefs?.setInt(_kLastEventId, eventId);
     _prefs?.setString(_kLastEventName, eventName);
-    if (activeEventModules != null) {
-      _prefs?.setString(_kLastEventModules, jsonEncode(activeEventModules));
-    }
+    _prefs?.setString(_kLastEventModules, jsonEncode(modules));
   }
 
   void setActiveEventModules(Map<String, bool> modules) {

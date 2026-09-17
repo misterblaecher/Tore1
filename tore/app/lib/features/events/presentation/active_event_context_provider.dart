@@ -61,6 +61,8 @@ class ActiveEventContextController
   final Ref ref;
   Timer? _pollTimer;
   int? _eventId;
+  int _requestVersion = 0;
+  int? _loadingEventId;
 
   void _handleAppContext(AppContextState ctx) {
     final nextEventId = ctx.activeEventId;
@@ -94,6 +96,8 @@ class ActiveEventContextController
       state = const AsyncData(null);
       return;
     }
+    if (_loadingEventId == eventId) return;
+    final requestVersion = ++_requestVersion;
 
     final network = ref.read(networkStatusProvider);
     if (!force && network == NetworkState.offline) {
@@ -101,8 +105,12 @@ class ActiveEventContextController
       return;
     }
 
+    _loadingEventId = eventId;
     try {
       final payload = await ref.read(apiProvider).eventContext(eventId);
+      if (!mounted || _eventId != eventId || requestVersion != _requestVersion) {
+        return;
+      }
       final event =
           Map<String, dynamic>.from((payload['event'] as Map?) ?? const {});
       final modules = Map<String, bool>.from(
@@ -139,25 +147,31 @@ class ActiveEventContextController
           eventId: eventId,
           modulesOn: modules);
     } catch (error, stackTrace) {
+      if (!mounted || _eventId != eventId || requestVersion != _requestVersion) {
+        return;
+      }
       final current = state.valueOrNull;
       if (current == null) {
         state = AsyncError(error, stackTrace);
       }
     } finally {
-      _scheduleNextPoll();
+      if (mounted && _eventId == eventId && requestVersion == _requestVersion) {
+        _loadingEventId = null;
+        _scheduleNextPoll();
+      }
     }
   }
 
   Duration _nextInterval() {
     final network = ref.read(networkStatusProvider);
-    if (network == NetworkState.offline) return const Duration(seconds: 5);
-    if (network == NetworkState.degraded) return const Duration(seconds: 2);
-    return const Duration(seconds: 1);
+    if (network == NetworkState.offline) return const Duration(seconds: 15);
+    if (network == NetworkState.degraded) return const Duration(seconds: 10);
+    return const Duration(seconds: 5);
   }
 
   void _scheduleNextPoll() {
     _pollTimer?.cancel();
-    if (_eventId == null) return;
+    if (_eventId == null || _loadingEventId == _eventId) return;
     _pollTimer = Timer(_nextInterval(), () => unawaited(refresh()));
   }
 

@@ -34,6 +34,7 @@
   background: radial-gradient(circle at 78% 8%, rgba(186, 23, 51, .18), transparent 34rem), #080809;
   color: #f2f2f2;
 }
+.forum-planning{display:grid;gap:18px}.forum-planning__views{margin:14px 0}.forum-planning__views .is-active{border-color:#b98034;color:#ffb347}.forum-planning__grid{display:grid;gap:10px}.forum-planning__grid--month,.forum-planning__grid--week{grid-template-columns:repeat(7,minmax(0,1fr))}.forum-planning__item{display:grid;gap:8px;align-content:start;padding:13px;border:1px solid var(--forum-border,#e5e7eb);border-radius:12px;background:var(--forum-bg,#fff);min-width:0}.forum-planning__item time,.forum-planning__item p,.forum-planning__item small{color:var(--forum-muted,#6b7280);font-size:.78rem}.forum-planning__item p{margin:4px 0}.forum-planning__form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.forum-planning__form button{justify-self:start}@media(max-width:760px){.forum-planning__grid--month,.forum-planning__grid--week{grid-template-columns:1fr}.forum-planning__form{grid-template-columns:1fr}.forum-planning__item .forum-inline{flex-wrap:wrap}.forum-planning .forum-section-title{align-items:flex-start;flex-direction:column}}
 
 .forum-container { width: min(1180px, 100%); margin: 0 auto; }
 .forum-landing-head, .forum-section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
@@ -122,6 +123,8 @@
 .forum-form { display: grid; gap: 10px; }
 .forum-form label { display: grid; gap: 6px; color: #aaa6a6; font-size: .75rem; font-weight: 700; }
 .forum-form input, .forum-form textarea, .forum-form select { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid #3b3337; border-radius: 6px; outline: 0; background: #09090b; color: #fff; padding: 9px 10px; }
+.forum-row select { min-width: 190px; min-height: 36px; border: 1px solid #51463c; border-radius: 6px; background: #151416; color: #f2eee7; color-scheme: dark; padding: 7px 10px; }
+.forum-row select option { background: #151416; color: #f2eee7; }
 .forum-form textarea { min-height: 100px; resize: vertical; }
 .forum-form input:focus, .forum-form textarea:focus, .forum-form select:focus { border-color: #f4c430; }
 .forum-form__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

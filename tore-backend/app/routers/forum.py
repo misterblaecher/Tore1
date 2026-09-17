@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -33,6 +33,7 @@ from models import (
     StructureDiscussionCategory,
     StructureDiscussionChannel,
     StructureDiscussionPost,
+    StructureDiscussionReaction,
     StructureDocument,
     StructureMedia,
     StructurePage,
@@ -40,11 +41,13 @@ from models import (
 from app.legacy.monolith import get_current_user, get_db
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
+from app.models.wiki import StructurePageRevision
+import difflib
 
 
 router = APIRouter(prefix="/forum", tags=["forum"])
 
-STRUCTURE_TYPES = {"COMMITTEE", "CIRCLE", "ORDER", "BAR", "OTHER"}
+STRUCTURE_TYPES = {"COMMITTEE", "CIRCLE", "ORDER", "BAR", "ASSOCIATION", "PARTNER", "OTHER"}
 VISIBILITY_LEVELS = {"PUBLIC", "TORE_USERS", "STRUCTURE_MEMBERS", "STAFF", "OFFICE", "TREASURY", "ADMINS"}
 ROLE_RANK = {
     "FOLLOWER": 0,
@@ -65,6 +68,12 @@ ROLE_RANK = {
 }
 DEFAULT_VISIBILITY = {
     "page": "PUBLIC",
+    "about": "PUBLIC",
+    "history": "PUBLIC",
+    "partners": "PUBLIC",
+    "services": "PUBLIC",
+    "announcement": "PUBLIC",
+    "team": "STRUCTURE_MEMBERS",
     "description": "PUBLIC",
     "contact": "PUBLIC",
     "events": "PUBLIC",
@@ -100,6 +109,19 @@ class DiscussionCreateIn(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     body: str = Field(min_length=1, max_length=10000)
     channel_id: Optional[int] = None
+    parent_id: Optional[int] = None
+    document_ids: list[int] = Field(default_factory=list, max_length=8)
+
+
+class ChannelCreateIn(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    visibility: Literal["STRUCTURE_MEMBERS", "OFFICE", "TREASURY"] = "STRUCTURE_MEMBERS"
+
+
+class DiscussionActionIn(BaseModel):
+    pinned: Optional[bool] = None
+    emoji: Optional[Literal["👍", "❤️", "✅"]] = None
+    active: bool = True
 
 
 class DocumentCreateIn(BaseModel):
@@ -146,14 +168,21 @@ class PagePatchIn(BaseModel):
     visibility: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
     category: Optional[str] = Field(default=None, pattern="^(HISTORY|TRADITION|GLOSSARY|GUIDE|RULE|OTHER)$")
     published: Optional[bool] = None
+    message: Optional[str] = Field(default=None, max_length=500)
 
 
 class VisibilityPatchIn(BaseModel):
-    page: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
+    about: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    history: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    partners: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    services: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    announcement: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    team: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    page: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
     description: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    contact: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    events: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    members: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
+    contact: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    events: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    members: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
     albums: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
     documents: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
     folklore: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
@@ -181,6 +210,14 @@ class EventPatchIn(BaseModel):
     publication_status: Optional[str] = Field(default=None, pattern="^(DRAFT|PUBLISHED)$")
 
 
+class PortalContentIn(BaseModel):
+    about: str = Field(default="", max_length=10000)
+    opening_hours: str = Field(default="", max_length=2000)
+    services: list[str] = Field(default_factory=list, max_length=24)
+    announcement: str = Field(default="", max_length=2000)
+    hidden_blocks: list[Literal["about", "events", "services", "team", "gallery", "memory", "partners"]] = Field(default_factory=list, max_length=7)
+
+
 class SettingsPatchIn(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=140)
     description: Optional[str] = Field(default=None, max_length=10000)
@@ -195,6 +232,9 @@ class SettingsPatchIn(BaseModel):
     address: Optional[str] = Field(default=None, max_length=255)
     contact_email: Optional[str] = Field(default=None, max_length=255)
     contact_phone: Optional[str] = Field(default=None, max_length=64)
+    history: Optional[str] = Field(default=None, max_length=10000)
+    sponsors: Optional[list[str]] = Field(default=None, max_length=30)
+    portal: Optional[PortalContentIn] = None
 
 
 def _slugify(value: str) -> str:
@@ -204,7 +244,14 @@ def _slugify(value: str) -> str:
 
 def _visibility_settings(org: Organization) -> dict[str, str]:
     raw = org.visibility_settings_json if isinstance(org.visibility_settings_json, dict) else {}
-    return {**DEFAULT_VISIBILITY, **{str(k): str(v).upper() for k, v in raw.items() if str(k) in DEFAULT_VISIBILITY}}
+    settings = {**DEFAULT_VISIBILITY, **{str(k): str(v).upper() for k, v in raw.items() if str(k) in DEFAULT_VISIBILITY}}
+    portal = org.public_content_json.get("portal", {}) if isinstance(org.public_content_json, dict) else {}
+    aliases = {"gallery": "albums", "memory": "history", "description": "about"}
+    for block in portal.get("hidden_blocks", []) if isinstance(portal, dict) else []:
+        key = aliases.get(str(block), str(block))
+        if key in settings and key not in raw:
+            settings[key] = "HIDDEN"
+    return settings
 
 
 def _normalized_type(org: Organization) -> str:
@@ -252,7 +299,7 @@ def _can_view(level: str, membership: Optional[OrganizationMembership], *, is_us
 
 def _structure_or_404(db: Session, slug: str, *, public: bool = False) -> Organization:
     org = db.query(Organization).filter(func.lower(Organization.slug) == slug.strip().lower()).first()
-    if org is None or (public and ((org.visibility or "PRIVATE").upper() != "PUBLIC" or _visibility_settings(org)["page"] != "PUBLIC")):
+    if org is None or (public and _visibility_settings(org)["page"] != "PUBLIC"):
         raise HTTPException(status_code=404, detail="Structure not found")
     return org
 
@@ -302,8 +349,23 @@ def _structure_payload(org: Organization, *, include_private: bool = False) -> d
         "socialLinks": org.social_links_json if contact_visible and isinstance(org.social_links_json, dict) else {},
         "visibility": (org.visibility or "PRIVATE").upper(),
     }
-    if description_visible:
+    portal = content.get("portal") if isinstance(content.get("portal"), dict) else {}
+    payload["portal"] = {
+        "about": portal.get("about", "") if description_visible else "",
+        "services": portal.get("services", []) if description_visible else [],
+        "announcement": portal.get("announcement", "") if description_visible else "",
+        "opening_hours": portal.get("opening_hours", "") if contact_visible else "",
+        "hidden_blocks": portal.get("hidden_blocks", []),
+    }
+    if not include_private:
+        if settings["about"] != "PUBLIC": payload["portal"].pop("about", None)
+        if settings["services"] != "PUBLIC": payload["portal"].pop("services", None)
+        if settings["announcement"] != "PUBLIC": payload["portal"].pop("announcement", None)
+        if settings["contact"] != "PUBLIC": payload["portal"].pop("opening_hours", None)
+        payload["portal"].pop("hidden_blocks", None)
+    if include_private or settings["history"] == "PUBLIC":
         payload["history"] = content.get("history")
+    if include_private or settings["partners"] == "PUBLIC":
         payload["sponsors"] = content.get("sponsors", [])
     if contact_visible:
         payload["contactEmail"] = org.contact_email
@@ -362,6 +424,8 @@ def _base_public_page(db: Session, org: Organization) -> dict[str, Any]:
             OrganizationMembership.status == "ACTIVE",
             OrganizationMembership.revoked_at.is_(None),
             func.upper(OrganizationMembership.visibility) == "PUBLIC",
+            or_(OrganizationMembership.starts_at.is_(None), OrganizationMembership.starts_at <= now_utc()),
+            or_(OrganizationMembership.ends_at.is_(None), OrganizationMembership.ends_at > now_utc()),
         ).order_by(OrganizationMembership.joined_at.asc()).all()
         members = [_member_payload(db, item) for item in memberships]
     albums: list[dict[str, Any]] = []
@@ -386,7 +450,17 @@ def _base_public_page(db: Session, org: Organization) -> dict[str, Any]:
         OrganizationMembership.status == "ACTIVE",
         OrganizationMembership.revoked_at.is_(None),
     )) or 0
-    public_stats = {"members": int(member_count), "publicEvents": len(public_events), "publicAlbums": len(albums)} if settings["stats"] == "PUBLIC" else None
+    public_stats = {
+        "operational": {"members": int(member_count), "publicEvents": len(public_events), "publicAlbums": len(albums)},
+        "finance": None,
+    } if settings["stats"] == "PUBLIC" else None
+    documents = []
+    if settings["documents"] == "PUBLIC":
+        documents = [_document_payload(row) for row in db.query(StructureDocument).filter(
+            StructureDocument.organization_id == org.id,
+            StructureDocument.archived_at.is_(None),
+            func.upper(StructureDocument.visibility) == "PUBLIC",
+        ).order_by(StructureDocument.created_at.desc()).limit(100).all()]
     return {
         "structure": _structure_payload(org),
         "visibility": settings,
@@ -394,11 +468,12 @@ def _base_public_page(db: Session, org: Organization) -> dict[str, Any]:
         "members": members,
         "albums": albums,
         "pages": pages,
+        "documents": documents,
         "stats": public_stats,
     }
 
 
-def _discussion_payload(db: Session, post: StructureDiscussionPost) -> dict[str, Any]:
+def _discussion_payload(db: Session, post: StructureDiscussionPost, membership=None) -> dict[str, Any]:
     author = db.get(AppUser, post.created_by_user_id)
     channel = db.get(StructureDiscussionChannel, post.channel_id)
     return {
@@ -407,6 +482,10 @@ def _discussion_payload(db: Session, post: StructureDiscussionPost) -> dict[str,
         "channelName": channel.name if channel else "Discussion",
         "title": post.title,
         "body": post.body,
+        "parentId": post.parent_id,
+        "authorAvatar": getattr(author, "avatar_url", None),
+        "documents": [_document_payload(doc) for doc in db.query(StructureDocument).filter(StructureDocument.id.in_(post.document_ids or []), StructureDocument.organization_id == post.organization_id, StructureDocument.archived_at.is_(None)).all() if membership and _can_view(doc.visibility, membership)],
+        "reactions": [{"emoji": emoji, "count": len(rows), "mine": bool(membership and any(r.user_id == membership.user_id for r in rows))} for emoji in ["👍", "❤️", "✅"] if (rows := db.query(StructureDiscussionReaction).filter_by(post_id=post.id, emoji=emoji).all())],
         "authorId": post.created_by_user_id,
         "authorName": author.display_name if author else "Membre TORÈ",
         "pinned": bool(post.is_pinned),
@@ -415,12 +494,27 @@ def _discussion_payload(db: Session, post: StructureDiscussionPost) -> dict[str,
     }
 
 
+def _visible_channel_ids(db, org_id, membership):
+    return [c.id for c in db.query(StructureDiscussionChannel).filter_by(organization_id=org_id, is_archived=False).all() if _can_view(c.visibility, membership)]
+
+
+def _accessible_post(db, org_id, post_id, membership):
+    post = db.get(StructureDiscussionPost, post_id)
+    if not post or post.organization_id != org_id or post.is_archived or post.channel_id not in _visible_channel_ids(db, org_id, membership):
+        raise HTTPException(404, detail="Discussion inaccessible")
+    return post
+
+
 def _document_payload(row: StructureDocument) -> dict[str, Any]:
+    file_url = row.file_url or ""
+    suffix = file_url.split("?")[0].rsplit(".", 1)[-1].lower() if "." in file_url.split("?")[0] else None
     return {
         "id": row.id,
         "title": row.title,
         "description": row.description,
         "fileUrl": row.file_url,
+        "type": suffix or "file",
+        "previewUrl": row.file_url if suffix in {"pdf", "png", "jpg", "jpeg", "webp", "gif"} else None,
         "folder": row.folder,
         "tags": row.tags_json if isinstance(row.tags_json, list) else [],
         "visibility": (row.visibility or "STRUCTURE_MEMBERS").upper(),
@@ -540,18 +634,18 @@ def get_structure_dashboard(slug: str, user: AppUser = Depends(get_current_user)
     org = _structure_or_404(db, slug)
     membership = _require_role(db, org.id, user, "MEMBER")
     settings = _visibility_settings(org)
-    recent_posts = db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.is_archived.is_(False)).order_by(StructureDiscussionPost.created_at.desc()).limit(5).all()
+    recent_posts = db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.channel_id.in_(_visible_channel_ids(db, org.id, membership)), StructureDiscussionPost.parent_id.is_(None), StructureDiscussionPost.is_archived.is_(False)).order_by(StructureDiscussionPost.created_at.desc()).limit(5).all()
     recent_documents = db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None)).order_by(StructureDocument.created_at.desc()).limit(5).all()
     active_members = int(db.scalar(select(func.count()).select_from(OrganizationMembership).where(OrganizationMembership.organization_id == org.id, OrganizationMembership.status == "ACTIVE", OrganizationMembership.revoked_at.is_(None))) or 0)
     allow_finance = ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["TREASURER"]
     return {
         "structure": _structure_payload(org, include_private=True),
         "membership": _member_payload(db, membership, include_private=True),
-        "permissions": ["structure.read", "member.read", "discussion.read", "discussion.write", "event.read", "document.read", "album.read", "stats.read"] + (["structure.edit", "member.manage", "event.create", "event.manage", "document.manage", "album.manage", "visibility.manage", "audit.read", "accounting.read"] if ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"] else []),
+        "permissions": ["structure.read", "member.read", "discussion.read", "discussion.write", "event.read", "document.read", "album.read", "stats.read"] + (["accounting.read"] if allow_finance else []) + (["structure.edit", "member.manage", "event.create", "event.manage", "document.manage", "album.manage", "discussion.manage", "page.manage", "visibility.manage", "audit.read"] if ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"] else []),
         "stats": {"memberCount": active_members, "eventCount": len(_org_events(db, org.id)), "discussionCount": int(db.scalar(select(func.count()).select_from(StructureDiscussionPost).where(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.is_archived.is_(False))) or 0), "documentCount": int(db.scalar(select(func.count()).select_from(StructureDocument).where(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None))) or 0), "albumCount": int(db.scalar(select(func.count()).select_from(StructureAlbum).where(StructureAlbum.organization_id == org.id, StructureAlbum.archived_at.is_(None))) or 0)},
         "upcomingEvents": [_event_payload(item) for item in _org_events(db, org.id) if item.starts_at and item.starts_at >= now_utc()][:5],
-        "recentPosts": [_discussion_payload(db, item) for item in recent_posts],
-        "recentDocuments": [_document_payload(item) for item in recent_documents],
+        "recentPosts": [_discussion_payload(db, item, membership) for item in recent_posts],
+        "recentDocuments": [_document_payload(item) for item in recent_documents if _can_view(item.visibility, membership)],
         "latestEventStats": _latest_stats(db, org.id, allow_finance=allow_finance),
         "visibility": settings,
     }
@@ -689,17 +783,76 @@ def revoke_structure_member(slug: str, member_user_id: str, reason: str = Query(
 
 
 @router.get("/structures/{slug}/discussions")
-def list_discussions(slug: str, search: Optional[str] = Query(default=None, max_length=120), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_discussions(slug: str, search: Optional[str] = Query(default=None, max_length=120), channel_id: Optional[int] = None, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MEMBER")
+    membership = _require_role(db, org.id, user, "MEMBER")
     categories = db.query(StructureDiscussionCategory).filter(StructureDiscussionCategory.organization_id == org.id, StructureDiscussionCategory.is_archived.is_(False)).order_by(StructureDiscussionCategory.order_index.asc()).all()
     channels = db.query(StructureDiscussionChannel).filter(StructureDiscussionChannel.organization_id == org.id, StructureDiscussionChannel.is_archived.is_(False)).order_by(StructureDiscussionChannel.name.asc()).all()
-    query = db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.is_archived.is_(False))
+    channels = [c for c in channels if _can_view(c.visibility, membership)]
+    query = db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.channel_id.in_([c.id for c in channels]), StructureDiscussionPost.is_archived.is_(False))
+    if channel_id is not None:
+        query = query.filter(StructureDiscussionPost.channel_id == channel_id)
     if search and search.strip():
         needle = f"%{search.strip().lower()}%"
         query = query.filter(or_(func.lower(StructureDiscussionPost.title).like(needle), func.lower(StructureDiscussionPost.body).like(needle)))
-    posts = query.order_by(StructureDiscussionPost.is_pinned.desc(), StructureDiscussionPost.created_at.desc()).limit(100).all()
-    return {"categories": [{"id": c.id, "name": c.name, "slug": c.slug} for c in categories], "channels": [{"id": c.id, "categoryId": c.category_id, "name": c.name, "slug": c.slug, "visibility": c.visibility} for c in channels], "posts": [_discussion_payload(db, item) for item in posts]}
+    posts = query.order_by(StructureDiscussionPost.created_at.desc(), StructureDiscussionPost.id.desc()).limit(300).all()
+    return {"categories": [{"id": c.id, "name": c.name, "slug": c.slug} for c in categories if any(ch.category_id == c.id for ch in channels)], "channels": [{"id": c.id, "categoryId": c.category_id, "name": c.name, "slug": c.slug, "visibility": c.visibility} for c in channels], "posts": [_discussion_payload(db, item, membership) for item in posts], "limited": len(posts) == 300}
+
+
+@router.post("/structures/{slug}/channels")
+def create_channel(slug: str, payload: ChannelCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    org = _structure_or_404(db, slug)
+    actor = _require_role(db, org.id, user, "MANAGER")
+    key, previous = _write_idem(db, user, f"forum_channel_create:{org.id}", idempotency_key)
+    if previous is not None:
+        return previous
+    name = payload.name.strip()
+    if len(name) < 2:
+        raise HTTPException(422, detail="Nom de salon trop court")
+    channel_slug = re.sub(r"[^\w]+", "-", name.lower()).strip("-")
+    if not channel_slug:
+        raise HTTPException(422, detail="Nom de salon invalide")
+    if db.query(StructureDiscussionChannel).filter_by(organization_id=org.id, slug=channel_slug).first():
+        raise HTTPException(409, detail="Ce salon existe déjà")
+    category = db.query(StructureDiscussionCategory).filter_by(organization_id=org.id, slug="interne").first()
+    if not category:
+        category = StructureDiscussionCategory(organization_id=org.id, name="Salons internes", slug="interne", order_index=1)
+        db.add(category)
+        db.flush()
+    row = StructureDiscussionChannel(organization_id=org.id, category_id=category.id, name=name, slug=channel_slug, visibility=payload.visibility)
+    db.add(row)
+    db.flush()
+    response = {"id": row.id, "name": row.name}
+    _save_idem(db, user, f"forum_channel_create:{org.id}", key, response)
+    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.channel.create", entity_type="structure_discussion_channel", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "visibility": row.visibility})
+    db.commit()
+    return response
+
+
+@router.patch("/structures/{slug}/discussions/{post_id}")
+def update_discussion(slug: str, post_id: int, payload: DiscussionActionIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    org = _structure_or_404(db, slug)
+    actor = _require_role(db, org.id, user, "MEMBER")
+    row = _accessible_post(db, org.id, post_id, actor)
+    key, previous = _write_idem(db, user, f"forum_discussion_action:{post_id}", idempotency_key)
+    if previous is not None:
+        return previous
+    if payload.pinned is not None:
+        _require_role(db, org.id, user, "MANAGER")
+        if row.parent_id is not None:
+            raise HTTPException(400, detail="Seules les discussions peuvent être épinglées")
+        row.is_pinned = payload.pinned
+    if payload.emoji:
+        reaction = db.query(StructureDiscussionReaction).filter_by(post_id=row.id, user_id=user.id, emoji=payload.emoji).first()
+        if payload.active and not reaction:
+            db.add(StructureDiscussionReaction(post_id=row.id, user_id=user.id, emoji=payload.emoji))
+        elif not payload.active and reaction:
+            db.delete(reaction)
+    db.flush()
+    response = _discussion_payload(db, row, actor)
+    _save_idem(db, user, f"forum_discussion_action:{post_id}", key, response)
+    db.commit()
+    return response
 
 
 @router.post("/structures/{slug}/discussions")
@@ -710,8 +863,12 @@ def create_discussion(slug: str, payload: DiscussionCreateIn, user: AppUser = De
     if previous is not None:
         return previous
     channel = db.get(StructureDiscussionChannel, payload.channel_id) if payload.channel_id else None
+    if payload.channel_id is not None and (not channel or channel.is_archived or not _can_view(channel.visibility, actor)):
+        raise HTTPException(404, detail="Salon inaccessible")
     if channel is not None and channel.organization_id != org.id:
         raise HTTPException(status_code=400, detail={"reason": "CHANNEL_OUTSIDE_STRUCTURE"})
+    if channel is None:
+        channel = db.query(StructureDiscussionChannel).filter_by(organization_id=org.id, slug="general", is_archived=False).first()
     if channel is None:
         category = db.query(StructureDiscussionCategory).filter(StructureDiscussionCategory.organization_id == org.id, StructureDiscussionCategory.slug == "general").first()
         if category is None:
@@ -721,10 +878,22 @@ def create_discussion(slug: str, payload: DiscussionCreateIn, user: AppUser = De
         channel = StructureDiscussionChannel(organization_id=org.id, category_id=category.id, name="Général", slug="general", visibility="STRUCTURE_MEMBERS", created_at=now_utc())
         db.add(channel)
         db.flush()
-    row = StructureDiscussionPost(organization_id=org.id, channel_id=channel.id, title=payload.title.strip(), body=payload.body.strip(), created_by_user_id=user.id, created_at=now_utc(), updated_at=now_utc())
+    if not _can_view(channel.visibility, actor):
+        raise HTTPException(403, detail="Salon inaccessible")
+    if not payload.body.strip() or len(payload.title.strip()) < 2:
+        raise HTTPException(422, detail="Le titre et le message sont obligatoires")
+    if payload.parent_id is not None:
+        parent = _accessible_post(db, org.id, payload.parent_id, actor)
+        if parent.channel_id != channel.id or parent.parent_id is not None:
+            raise HTTPException(400, detail="Fil de réponse invalide")
+    for doc_id in payload.document_ids:
+        doc = db.get(StructureDocument, doc_id)
+        if not doc or doc.organization_id != org.id or doc.archived_at or not _can_view(doc.visibility, actor):
+            raise HTTPException(404, detail="Document inaccessible")
+    row = StructureDiscussionPost(organization_id=org.id, channel_id=channel.id, parent_id=payload.parent_id, document_ids=list(set(payload.document_ids)), title=payload.title.strip(), body=payload.body.strip(), created_by_user_id=user.id, created_at=now_utc(), updated_at=now_utc())
     db.add(row)
     db.flush()
-    response = _discussion_payload(db, row)
+    response = _discussion_payload(db, row, actor)
     _save_idem(db, user, f"forum_discussion_create:{org.id}", key, response)
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.discussion.create", entity_type="structure_discussion_post", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "channel_id": channel.id})
     db.commit()
@@ -774,10 +943,14 @@ def patch_structure_event(slug: str, event_id: int, payload: EventPatchIn, user:
         event.public_description = payload.description
     if payload.venue is not None:
         event.venue = payload.venue
-    if payload.visibility is not None:
-        event.visibility = payload.visibility
     if payload.publication_status is not None:
         event.publication_status = payload.publication_status
+        event.visibility = "PUBLIC" if payload.publication_status == "PUBLISHED" else "PRIVATE"
+    elif payload.visibility is not None:
+        # A legacy editor can submit its initial PRIVATE value while editing
+        # an already-public event. Do not silently unpublish on a content save.
+        if not ((event.visibility or "PRIVATE").upper() == "PUBLIC" and payload.visibility == "PRIVATE"):
+            event.visibility = payload.visibility
     event.last_updated_at = now_utc()
     response = _event_payload(event)
     _save_idem(db, user, f"forum_event_patch:{event_id}", key, response)
@@ -916,6 +1089,9 @@ def list_pages(slug: str, user: AppUser = Depends(get_current_user), db: Session
 def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
     actor = _require_role(db, org.id, user, "MANAGER")
+    if payload.published:
+        from app.services.structure_rbac import require_capability
+        require_capability(db, org.id, user, "page.publish")
     key, previous = _write_idem(db, user, f"forum_page_create:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -926,6 +1102,7 @@ def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_cu
     row = StructurePage(organization_id=org.id, title=payload.title.strip(), slug=slug_value, content=payload.content, visibility=payload.visibility, category=payload.category, created_by_user_id=user.id, updated_by_user_id=user.id, version=1, published_at=now if payload.published else None, created_at=now, updated_at=now)
     db.add(row)
     db.flush()
+    db.add(StructurePageRevision(page_id=row.id, version=1, content=row.content, author_user_id=user.id, message="Création de la page", created_at=now))
     response = _page_payload(row, include_content=True)
     _save_idem(db, user, f"forum_page_create:{org.id}", key, response)
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.page.create", entity_type="structure_page", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "category": row.category})
@@ -937,6 +1114,9 @@ def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_cu
 def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
     actor = _require_role(db, org.id, user, "MANAGER")
+    if payload.published is not None:
+        from app.services.structure_rbac import require_capability
+        require_capability(db, org.id, user, "page.publish")
     key, previous = _write_idem(db, user, f"forum_page_patch:{page_id}", idempotency_key)
     if previous is not None:
         return previous
@@ -945,6 +1125,7 @@ def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = De
         raise HTTPException(status_code=404, detail="Page not found")
     if payload.title is not None:
         row.title = payload.title.strip()
+    content_changed = payload.content is not None and payload.content != row.content
     if payload.content is not None:
         row.content = payload.content
     if payload.visibility is not None:
@@ -956,11 +1137,44 @@ def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = De
     row.version += 1
     row.updated_by_user_id = user.id
     row.updated_at = now_utc()
+    if content_changed:
+        db.add(StructurePageRevision(page_id=row.id, version=row.version, content=row.content, author_user_id=user.id, message=payload.message, created_at=row.updated_at))
     response = _page_payload(row, include_content=True)
     _save_idem(db, user, f"forum_page_patch:{page_id}", key, response)
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.page.patch", entity_type="structure_page", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "version": row.version})
     db.commit()
     return response
+
+@router.get("/structures/{slug}/pages/{page_id}/revisions")
+def page_revisions(slug: str, page_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); membership = _require_role(db, org.id, user, "MEMBER")
+    row = db.get(StructurePage, page_id)
+    if row is None or row.organization_id != org.id or not _can_view(row.visibility, membership): raise HTTPException(404, "Page not found")
+    return {"items": [{"id": r.id, "version": r.version, "authorUserId": r.author_user_id, "message": r.message, "createdAt": r.created_at.isoformat()} for r in db.query(StructurePageRevision).filter_by(page_id=row.id).order_by(StructurePageRevision.version.desc()).all()]}
+
+@router.get("/structures/{slug}/pages/{page_id}/revisions/{version}")
+def page_revision(slug: str, page_id: int, version: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); membership = _require_role(db, org.id, user, "MEMBER")
+    row = db.get(StructurePage, page_id); revision = db.query(StructurePageRevision).filter_by(page_id=page_id, version=version).first()
+    if row is None or row.organization_id != org.id or revision is None or not _can_view(row.visibility, membership): raise HTTPException(404, "Revision not found")
+    return {"id": revision.id, "version": revision.version, "content": revision.content, "authorUserId": revision.author_user_id, "message": revision.message, "createdAt": revision.created_at.isoformat()}
+
+@router.get("/structures/{slug}/pages/{page_id}/diff")
+def page_diff(slug: str, page_id: int, from_version: int, to_version: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); _require_role(db, org.id, user, "MEMBER")
+    page = db.get(StructurePage, page_id); before = db.query(StructurePageRevision).filter_by(page_id=page_id, version=from_version).first(); after = db.query(StructurePageRevision).filter_by(page_id=page_id, version=to_version).first()
+    if page is None or page.organization_id != org.id or before is None or after is None: raise HTTPException(404, "Revision not found")
+    return {"fromVersion": from_version, "toVersion": to_version, "diff": "".join(difflib.unified_diff(before.content.splitlines(True), after.content.splitlines(True), fromfile=f"v{from_version}", tofile=f"v{to_version}"))}
+
+@router.post("/structures/{slug}/pages/{page_id}/revisions/{version}/restore")
+def restore_page(slug: str, page_id: int, version: int, message: str = "Restauration d’une version", user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    org = _structure_or_404(db, slug); actor = _require_role(db, org.id, user, "MANAGER")
+    page = db.get(StructurePage, page_id); source = db.query(StructurePageRevision).filter_by(page_id=page_id, version=version).first()
+    if page is None or page.organization_id != org.id or source is None: raise HTTPException(404, "Revision not found")
+    page.content = source.content; page.version += 1; page.updated_by_user_id = user.id; page.updated_at = now_utc()
+    db.add(StructurePageRevision(page_id=page.id, version=page.version, content=page.content, author_user_id=user.id, message=message, created_at=page.updated_at))
+    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.page.restore", entity_type="structure_page", entity_id=str(page.id), event_id=None, committee_id=None, bar_id=None, payload={"from_version": version, "to_version": page.version, "reason": message})
+    db.commit(); return _page_payload(page, include_content=True)
 
 
 @router.get("/structures/{slug}/visibility")
@@ -1001,11 +1215,11 @@ def get_stats(slug: str, user: AppUser = Depends(get_current_user), db: Session 
 @router.get("/structures/{slug}/archives")
 def get_archives(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MEMBER")
+    membership = _require_role(db, org.id, user, "MEMBER")
     return {
         "documents": [_document_payload(row) for row in db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_not(None)).order_by(StructureDocument.archived_at.desc()).all()],
         "albums": [_album_payload(db, row, include_media=False) for row in db.query(StructureAlbum).filter(StructureAlbum.organization_id == org.id, StructureAlbum.status == "ARCHIVED").order_by(StructureAlbum.archived_at.desc()).all()],
-        "discussions": [_discussion_payload(db, row) for row in db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.is_archived.is_(True)).order_by(StructureDiscussionPost.created_at.desc()).limit(100).all()],
+        "discussions": [_discussion_payload(db, row, membership) for row in db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.channel_id.in_(_visible_channel_ids(db, org.id, membership)), StructureDiscussionPost.is_archived.is_(True)).order_by(StructureDiscussionPost.created_at.desc()).limit(100).all()],
         "pages": [_page_payload(row, include_content=True) for row in db.query(StructurePage).filter(StructurePage.organization_id == org.id, StructurePage.published_at.is_(None)).order_by(StructurePage.updated_at.desc()).all()],
     }
 
@@ -1026,7 +1240,10 @@ def patch_settings(slug: str, payload: SettingsPatchIn, user: AppUser = Depends(
         return previous
     mapping = {"org_type": "org_type", "logo_url": "logo_url", "banner_url": "banner_url", "primary_color": "primary_color", "secondary_color": "secondary_color", "contact_email": "contact_email", "contact_phone": "contact_phone", "website_url": "website_url", "instagram_handle": "instagram_handle", "name": "name", "description": "description", "city": "city", "address": "address"}
     for key_name, value in payload.model_dump(exclude_none=True).items():
-        setattr(org, mapping[key_name], value.strip() if isinstance(value, str) else value)
+        if key_name in {"portal", "history", "sponsors"}:
+            org.public_content_json = {**(org.public_content_json or {}), key_name: value}
+        else:
+            setattr(org, mapping[key_name], value.strip() if isinstance(value, str) else value)
     response = _structure_payload(org, include_private=True)
     _save_idem(db, user, f"forum_settings_patch:{org.id}", key, response)
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.settings.patch", entity_type="organization", entity_id=str(org.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "fields": list(payload.model_dump(exclude_none=True).keys())})

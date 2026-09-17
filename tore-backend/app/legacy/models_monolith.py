@@ -2084,11 +2084,22 @@ class StructureDiscussionPost(Base):
     channel_id: Mapped[int] = mapped_column(ForeignKey("structure_discussion_channels.id"), index=True)
     title: Mapped[str] = mapped_column(String(180))
     body: Mapped[str] = mapped_column(Text)
+    parent_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    document_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"), index=True)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: now_utc(), index=True)
+
+
+class StructureDiscussionReaction(Base):
+    __tablename__ = "structure_discussion_reactions"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", "emoji", name="uq_discussion_reaction"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("structure_discussion_posts.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("app_users.id"))
+    emoji: Mapped[str] = mapped_column(String(16))
 
 
 class StructureDocument(Base):

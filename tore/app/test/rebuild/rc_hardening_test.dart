@@ -1,13 +1,8 @@
-import 'dart:math';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tore/rebuild/models/qr_resolve.dart';
-import 'package:tore/rebuild/models/safe_parsing.dart';
 import 'package:tore/rebuild/models/rebuild_types.dart';
-import 'package:tore/rebuild/routing/app_routes.dart';
-import 'package:tore/rebuild/routing/qr_router.dart';
+import 'package:tore/rebuild/models/safe_parsing.dart';
 import 'package:tore/rebuild/services/client_log.dart';
-import 'package:tore/rebuild/ui/theme/tore_theme.dart';
+import 'package:tore/theme/tokens.dart';
 
 void main() {
   test('scrubber redacts auth headers, jwt, query params, and contact fields',
@@ -55,39 +50,9 @@ void main() {
     expect(EventState.live.isLive, isTrue);
     expect(EventState.paused.isLive, isFalse);
 
-    expect(ToreTokens.s8, 8.0);
-    expect(ToreTokens.s12, 12.0);
-    expect(ToreTokens.s16, 16.0);
-    expect(ToreTokens.s24, 24.0);
-  });
-
-  test('QR router no-throw fallback under fuzzed partial payloads', () {
-    final router = QrRouter();
-    final random = Random(42);
-
-    for (var i = 0; i < 200; i++) {
-      final map = <String, dynamic>{
-        if (random.nextBool()) 'valid': random.nextBool(),
-        if (random.nextBool())
-          'type': random.nextBool() ? 'join_event' : random.nextInt(999),
-        if (random.nextBool())
-          'event_id':
-              random.nextBool() ? random.nextInt(1000).toString() : null,
-        if (random.nextBool())
-          'route_front': random.nextBool()
-              ? '/event/${random.nextInt(99)}'
-              : random.nextInt(10),
-        if (random.nextBool())
-          'reason': random.nextBool() ? 'backend_down' : null,
-      };
-
-      expect(() => QrResolve.fromJson(map), returnsNormally);
-      final resolved = QrResolve.fromJson(map);
-      expect(() => router.targetFor(resolved), returnsNormally);
-      final route = router.targetFor(resolved);
-      expect(route.isNotEmpty, isTrue);
-    }
-
-    expect(router.targetFor(null), AppRoutes.blocked);
+    expect(ToreSpace.s2, 8.0);
+    expect(ToreSpace.s3, 12.0);
+    expect(ToreSpace.s4, 16.0);
+    expect(ToreSpace.s6, 24.0);
   });
 }

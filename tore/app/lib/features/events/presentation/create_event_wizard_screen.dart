@@ -62,6 +62,8 @@ class _CreateEventWizardScreenState
   };
   Map<String, dynamic>? _share;
   int? _eventId;
+  String? _postCreateNotice;
+  bool _shareLoading = false;
 
   String _idem(String prefix) =>
       '$prefix-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(10000)}';
@@ -103,8 +105,9 @@ class _CreateEventWizardScreenState
       return;
     }
     setState(() => _loading = true);
+    final api = ref.read(apiProvider);
+    int? id;
     try {
-      final api = ref.read(apiProvider);
       final created = await api.createEventV1(
         idempotencyKey: _idem('event-create'),
         payload: {
@@ -122,29 +125,50 @@ class _CreateEventWizardScreenState
           'rulesFlags': {},
         },
       );
-      final id = (created['event_id'] as num?)?.toInt();
+      id = (created['event_id'] as num?)?.toInt();
       if (id == null) throw Exception('missing event id');
-      if (_publishNow) {
-        await api.publishEventV1(
-            eventId: id, idempotencyKey: _idem('event-publish'));
-      }
-      final share = await api.getEventShareV1(id);
-      if (!mounted) return;
-      setState(() {
-        _eventId = id;
-        _share = share;
-        _step = 5;
-      });
-      ref
-          .read(appContextProvider.notifier)
-          .enterEvent(eventId: id, eventName: _name.text.trim());
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Création impossible: $e')));
-    } finally {
       if (mounted) setState(() => _loading = false);
+      return;
     }
+
+    String? notice;
+    if (_publishNow) {
+      try {
+        await api.publishEventV1(
+            eventId: id, idempotencyKey: _idem('event-publish'));
+      } catch (_) {
+        notice = 'Event créé, publication à réessayer.';
+      }
+    }
+
+    Map<String, dynamic>? share;
+    try {
+      share = await api.getEventShareV1(id);
+    } catch (_) {
+      notice = [
+        if (notice != null) notice,
+        'QR pack indisponible : vous pourrez le réessayer depuis cet écran.'
+      ].join(' ');
+    }
+    if (!mounted) return;
+    setState(() {
+      _eventId = id;
+      _share = share;
+      _postCreateNotice = notice;
+      _step = 5;
+    });
+    if (notice != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(notice)));
+    }
+    ref
+        .read(appContextProvider.notifier)
+        .enterEvent(eventId: id, eventName: _name.text.trim());
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -281,6 +305,8 @@ class _CreateEventWizardScreenState
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Share pack', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
+        if (_postCreateNotice != null)
+          Text(_postCreateNotice!, style: const TextStyle(color: Colors.orange)),
         SelectableText('Lien: ${share['https_link'] ?? ''}'),
         const SizedBox(height: 6),
         SelectableText('QR join payload: ${share['qr_payload_join'] ?? ''}'),
@@ -289,14 +315,44 @@ class _CreateEventWizardScreenState
         const SizedBox(height: 10),
         ToreCTA(
           label: 'Copier lien',
-          onPressed: () async {
-            final link = (share['https_link'] ?? '').toString();
-            await Clipboard.setData(ClipboardData(text: link));
-            if (!mounted) return;
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Lien copié')));
-          },
+          onPressed: share['https_link'] == null || _shareLoading
+              ? null
+              : () async {
+                  final link = (share['https_link'] ?? '').toString();
+                  await Clipboard.setData(ClipboardData(text: link));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Lien copié')));
+                },
         ),
+        if (_share == null) ...[
+          const SizedBox(height: 8),
+          ToreCTA(
+            label: _shareLoading ? 'QR pack en cours…' : 'Réessayer le QR pack',
+            style: ToreCTAStyle.secondary,
+            onPressed: _shareLoading || _eventId == null
+                ? null
+                : () async {
+                    setState(() => _shareLoading = true);
+                    try {
+                      final result = await ref
+                          .read(apiProvider)
+                          .getEventShareV1(_eventId!);
+                      if (!mounted) return;
+                      setState(() {
+                        _share = result;
+                        _postCreateNotice = null;
+                      });
+                    } catch (error) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('QR pack indisponible : $error')));
+                    } finally {
+                      if (mounted) setState(() => _shareLoading = false);
+                    }
+                  },
+          ),
+        ],
         const SizedBox(height: 8),
         ToreCTA(
           label: 'Inviter staff',

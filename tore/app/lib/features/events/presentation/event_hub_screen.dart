@@ -29,7 +29,8 @@ class EventHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contextAsync = ref.watch(activeEventContextProvider);
-    final eventCtx = contextAsync.valueOrNull;
+    final candidate = contextAsync.valueOrNull;
+    final eventCtx = candidate?.eventId == eventId ? candidate : null;
     final rawState = (eventCtx?.eventState ?? 'RUNNING').toUpperCase();
     final state = rawState == 'LIVE'
         ? 'RUNNING'
@@ -111,24 +112,24 @@ class EventHubScreen extends ConsumerWidget {
       ),
       _module(
         key: 'wallet',
-        title: 'Wallet',
-        subtitle: 'Tickets & solde',
+        title: 'Credits',
+        subtitle: 'Solde et historique',
         icon: Icons.account_balance_wallet_outlined,
         builder: (_) => WalletScreen(eventId: eventId),
       ),
       _module(
         key: 'ticker',
-        title: 'Ticker',
-        subtitle: 'Flux live de l’event',
+        title: 'Live',
+        subtitle: 'La soirée en direct',
         icon: Icons.toll_outlined,
         builder: (_) => const TickerScreen(),
       ),
       _module(
         key: 'polymarket_event',
         aliases: const ['polymarket'],
-        title: 'Polymarket EVENT',
-        subtitle: 'Polymarkets de cet event',
-        icon: Icons.casino_outlined,
+        title: 'Rooms',
+        subtitle: 'Pronostics de la soirée',
+        icon: Icons.groups_outlined,
         builder: (_) => const EventPolymarketScreen(),
       ),
       _module(
@@ -171,8 +172,8 @@ class EventHubScreen extends ConsumerWidget {
           builder: (_) => EventMapScreen(eventId: eventId)),
       _module(
         key: 'broadcast',
-        title: 'Broadcast',
-        subtitle: 'Annonces de l’event',
+        title: 'Annonces',
+        subtitle: 'Les nouvelles de l’organisateur',
         icon: Icons.campaign_outlined,
         builder: (_) => BroadcastScreen(eventId: eventId),
       ),

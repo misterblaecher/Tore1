@@ -149,12 +149,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                  onPressed: () =>
+                                  onPressed: _submitting ? null : () =>
                                       controller.decrement(line.itemId),
                                   icon:
                                       const Icon(Icons.remove_circle_outline)),
                               IconButton(
-                                  onPressed: () =>
+                                  onPressed: _submitting || unavailable ? null : () =>
                                       controller.increment(line.itemId),
                                   icon: const Icon(Icons.add_circle_outline)),
                             ],
@@ -169,7 +169,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 child: ToreCTA(
                   label: 'Retirer indisponibles',
                   style: ToreCTAStyle.secondary,
-                  onPressed: controller.removeUnavailable,
+                  onPressed: _submitting ? null : () {
+                    for (final line in outLines) {
+                      controller.remove(line.itemId);
+                    }
+                  },
                 ),
               ),
             const SizedBox(height: 8),
@@ -185,7 +189,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               label: 'Vider',
               style: ToreCTAStyle.secondary,
               onPressed:
-                  (cart.isEmpty || writeBlocked) ? null : controller.clear,
+                  (cart.isEmpty || writeBlocked || _submitting) ? null : controller.clear,
             ),
           ],
         ),
@@ -195,12 +199,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   Future<void> _confirmOrder(BuildContext context,
       {required String userId, required CartState cart}) async {
+    if (_submitting || cart.isEmpty) return;
     setState(() => _submitting = true);
     try {
       final api = ref.read(apiProvider);
       final barId = cart.lines.first.barId;
-      final key =
-          'cart-${widget.eventId}-$userId-${DateTime.now().millisecondsSinceEpoch}';
+      final key = ref.read(cartProvider(widget.eventId).notifier)
+          .orderIdempotencyKey(eventId: widget.eventId, userId: userId);
       final order = await api.createOrder(
         barId: barId,
         eventId: widget.eventId,
@@ -218,7 +223,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       );
       final orderId = (order['id'] as num?)?.toInt() ??
           int.tryParse(order['id']?.toString() ?? '');
-      if (orderId == null || !context.mounted) return;
+      if (orderId == null || orderId <= 0) {
+        throw const FormatException('La commande n’a pas pu être confirmée. Réessaie avec le même panier.');
+      }
+      if (!context.mounted) return;
 
       ref.read(cartProvider(widget.eventId).notifier).clear();
       await Navigator.of(context).pushReplacement(

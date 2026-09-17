@@ -21,6 +21,18 @@ class RetryInterceptor extends Interceptor {
       return handler.next(err);
     }
 
+    // A timeout can happen after the server committed a write. Only replay a
+    // mutation when the caller supplied the server's idempotency contract.
+    final method = req.method.toUpperCase();
+    final safeRead = method == 'GET' || method == 'HEAD' || method == 'OPTIONS';
+    final idempotencyKey = req.headers.entries
+        .where((entry) => entry.key.toLowerCase() == 'idempotency-key')
+        .map((entry) => entry.value?.toString().trim() ?? '')
+        .any((value) => value.isNotEmpty);
+    if (!safeRead && !idempotencyKey) {
+      return handler.next(err);
+    }
+
     final current = (req.extra['retry_count'] as int?) ?? 0;
     if (current >= maxRetries) {
       return handler.next(err);

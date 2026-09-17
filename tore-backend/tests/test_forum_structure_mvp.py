@@ -29,6 +29,15 @@ def _headers(token: str, key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Idempotency-Key": key}
 
 
+def _publish(token: str, slug: str, key: str) -> None:
+    response = client.post(
+        f"/forum/structures/{slug}/publish",
+        json={"reason": "Publication explicite du test"},
+        headers=_headers(token, key),
+    )
+    assert response.status_code == 200
+
+
 def test_forum_public_structure_and_private_scope_persist():
     owner_token, owner_id = _guest("forum-owner")
     outsider_token, _ = _guest("forum-outsider")
@@ -40,7 +49,11 @@ def test_forum_public_structure_and_private_scope_persist():
     assert created.status_code == 200
     structure = created.json()["orga"]
     slug = structure["slug"]
+    assert structure["lifecycle"] == "SETUP"
+    assert structure["visibility"] == "PRIVATE"
 
+    assert client.get(f"/forum/structures/{slug}").status_code == 404
+    _publish(owner_token, slug, "forum-orga-publish")
     public = client.get(f"/forum/structures/{slug}")
     assert public.status_code == 200
     assert public.json()["structure"]["name"] == "Cercle Forum MVP"
@@ -109,6 +122,67 @@ def test_revoked_member_loses_forum_access():
     assert client.get(f"/forum/structures/{slug}/dashboard", headers={"Authorization": f"Bearer {member_token}"}).status_code == 403
 
 
+def test_structure_documents_and_events_are_isolated_and_persisted():
+    owner_a, _ = _guest("forum-isolation-a")
+    owner_b, _ = _guest("forum-isolation-b")
+    created_a = client.post("/orgas", json={"name": "Structure A documents", "org_type": "COMMITTEE"}, headers=_headers(owner_a, "isolation-orga-a"))
+    created_b = client.post("/orgas", json={"name": "Structure B documents", "org_type": "COMMITTEE"}, headers=_headers(owner_b, "isolation-orga-b"))
+    assert created_a.status_code == 200 and created_b.status_code == 200
+    slug_a = created_a.json()["orga"]["slug"]
+    slug_b = created_b.json()["orga"]["slug"]
+    _publish(owner_a, slug_a, "isolation-publish-a")
+
+    document_b = client.post(
+        f"/forum/structures/{slug_b}/documents",
+        json={"title": "B privé", "file_url": "https://files.example/b.pdf", "visibility": "STRUCTURE_MEMBERS"},
+        headers=_headers(owner_b, "isolation-doc-b"),
+    )
+    assert document_b.status_code == 200
+    assert client.get(f"/forum/structures/{slug_b}/documents", headers={"Authorization": f"Bearer {owner_a}"}).status_code == 403
+    assert client.post(
+        f"/forum/structures/{slug_b}/documents",
+        json={"title": "Écriture étrangère", "file_url": "https://files.example/a.pdf"},
+        headers=_headers(owner_a, "isolation-doc-write"),
+    ).status_code == 403
+    assert client.get(
+        f"/forum/structures/{slug_b}/stats",
+        headers={"Authorization": f"Bearer {owner_a}"},
+    ).status_code == 403
+
+    event = client.post(
+        f"/forum/structures/{slug_a}/events",
+        json={"name": "Événement A", "starts_at": "2030-01-01T18:00:00Z", "ends_at": "2030-01-01T22:00:00Z", "description": "Publication de test"},
+        headers=_headers(owner_a, "isolation-event-create"),
+    )
+    assert event.status_code == 200
+    event_id = event.json()["id"]
+    published = client.patch(
+        f"/forum/structures/{slug_a}/events/{event_id}",
+        json={"publication_status": "PUBLISHED", "visibility": "PUBLIC"},
+        headers=_headers(owner_a, "isolation-event-publish"),
+    )
+    assert published.status_code == 200
+    assert client.get(f"/forum/structures/{slug_a}/events", headers={"Authorization": f"Bearer {owner_a}"}).json()["items"][0]["publicationStatus"] == "PUBLISHED"
+    assert client.get(f"/forum/structures/{slug_b}/events", headers={"Authorization": f"Bearer {owner_a}"}).status_code == 403
+
+    page = client.post(
+        f"/forum/structures/{slug_a}/pages",
+        json={"title": "Histoire A", "content": "Mémoire privée", "category": "HISTORY", "visibility": "STRUCTURE_MEMBERS"},
+        headers=_headers(owner_a, "isolation-page-create"),
+    )
+    assert page.status_code == 200
+    page_id = page.json()["id"]
+    assert client.get(f"/forum/structures/{slug_a}/pages", headers={"Authorization": f"Bearer {owner_a}"}).json()["items"][0]["title"] == "Histoire A"
+    assert client.get(f"/forum/structures/{slug_a}/pages", headers={"Authorization": f"Bearer {owner_b}"}).status_code == 403
+    published_page = client.patch(
+        f"/forum/structures/{slug_a}/pages/{page_id}",
+        json={"content": "Mémoire publiée", "published": True},
+        headers=_headers(owner_a, "isolation-page-publish"),
+    )
+    assert published_page.status_code == 200
+    assert published_page.json()["publishedAt"] is not None
+
+
 def test_navigation_returns_only_current_authorized_structures_and_their_logos():
     token, user_id = _guest("sidebar-member")
     other_token, other_id = _guest("sidebar-outsider")
@@ -146,3 +220,39 @@ def test_navigation_returns_only_current_authorized_structures_and_their_logos()
     assert items["treasury"]["canManage"] is False
     other_response = client.get("/forum/me/structures", headers={"Authorization": f"Bearer {other_token}"})
     assert [item["slug"] for item in other_response.json()["items"]] == ["other-account"]
+
+
+def test_portal_settings_roundtrip_permissions_and_public_visibility():
+    token, owner_id = _guest("portal-owner")
+    outsider_token, _ = _guest("portal-outsider")
+    created = client.post("/orgas", json={"name": "Portail de test", "org_type": "COMMITTEE"}, headers=_headers(token, "portal-create"))
+    slug = created.json()["orga"]["slug"]
+    path = f"/forum/structures/{slug}/settings"
+    payload = {
+        "org_type": "BAR", "logo_url": "https://example.test/logo.png",
+        "history": "Histoire publiée", "sponsors": ["Partenaire déclaré"],
+        "portal": {"about": "Présentation détaillée", "opening_hours": "Lundi : 16h–01h", "services": ["Concerts"], "announcement": "Nouvelle saison", "hidden_blocks": ["gallery"]},
+    }
+    assert client.patch(path, json=payload, headers=_headers(outsider_token, "portal-denied")).status_code == 403
+    saved = client.patch(path, json=payload, headers=_headers(token, "portal-save"))
+    assert saved.status_code == 200
+    assert saved.json()["portal"]["services"] == ["Concerts"]
+    assert client.get(path, headers={"Authorization": f"Bearer {token}"}).json()["portal"]["hidden_blocks"] == ["gallery"]
+    _publish(token, slug, "portal-publish")
+    # Current team must exclude ended mandates, even if their status still says ACTIVE.
+    with Session(engine) as db:
+        org = db.query(Organization).filter(Organization.slug == slug).one()
+        org.visibility_settings_json = {"page": "PUBLIC", "description": "PRIVATE", "contact": "PRIVATE", "folklore": "PRIVATE", "members": "PUBLIC"}
+        membership = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org.id, OrganizationMembership.user_id == owner_id).one()
+        membership.visibility = "PUBLIC"
+        membership.ends_at = now_utc() - timedelta(days=1)
+        db.commit()
+    public = client.get(f"/forum/structures/{slug}").json()
+    assert public["members"] == []
+    assert not public["structure"].get("history")
+    assert not public["structure"].get("sponsors")
+    assert public["structure"]["portal"]["about"] == ""
+    assert public["structure"]["portal"]["opening_hours"] == ""
+    assert public["structure"]["portal"]["services"] == []
+    assert public["structure"]["portal"]["announcement"] == ""
+    assert public["structure"]["logoUrl"] == "https://example.test/logo.png"

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tore/core/qr/qr_parser.dart';
 
@@ -51,6 +54,13 @@ void main() {
       expect(payload.orderId, 17);
     });
 
+    test('keeps legacy order_client alias', () {
+      final payload =
+          parser.parse('{"type":"order_client","order_id":17}');
+      expect(payload.type, QrType.order);
+      expect(payload.orderId, 17);
+    });
+
     test('parse polymarket', () {
       final payload = parser.parse('tore://polymarket?bet_id=44');
       expect(payload.type, QrType.polymarket);
@@ -68,6 +78,7 @@ void main() {
       expect(payload.type, QrType.joinEvent);
       expect(payload.eventId, 21);
     });
+
     test('parse open orga deeplink', () {
       final payload = parser.parse('tore://open?type=orga&id=7');
       expect(payload.type, QrType.orga);
@@ -100,12 +111,46 @@ void main() {
       expect(payload.type, QrType.orgaInvite);
       expect(payload.tokenId, 'ABC123ZZ');
     });
+
     test('parse json payload', () {
-      final payload =
-          parser.parse('{"type":"join_event","event_id":88,"exp":9999999999}');
+      final payload = parser
+          .parse('{"type":"join_event","event_id":88,"exp":9999999999}');
       expect(payload.type, QrType.joinEvent);
       expect(payload.eventId, 88);
       expect(payload.expiresAt, isNotNull);
+    });
+
+    test('route_front cannot turn an unknown payload into a navigation target',
+        () {
+      final payload = parser.parse(
+          '{"type":"unknown_legacy","route_front":"/app_shell"}');
+      expect(payload.type, QrType.unknown);
+      expect(payload.fields['route_front'], '/app_shell');
+    });
+
+    test('no-throw fallback under fuzzed partial payloads', () {
+      final random = Random(42);
+
+      for (var i = 0; i < 200; i++) {
+        final map = <String, dynamic>{
+          if (random.nextBool()) 'valid': random.nextBool(),
+          if (random.nextBool())
+            'type': random.nextBool() ? 'join_event' : random.nextInt(999),
+          if (random.nextBool())
+            'event_id':
+                random.nextBool() ? random.nextInt(1000).toString() : null,
+          if (random.nextBool())
+            'route_front': random.nextBool()
+                ? '/event/${random.nextInt(99)}'
+                : random.nextInt(10),
+          if (random.nextBool())
+            'reason': random.nextBool() ? 'backend_down' : null,
+        };
+        final raw = jsonEncode(map);
+
+        expect(() => parser.parse(raw), returnsNormally);
+        expect(parser.parse(raw).raw, raw);
+      }
     });
 
     test('unknown on invalid format', () {

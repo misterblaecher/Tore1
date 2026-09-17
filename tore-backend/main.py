@@ -7,6 +7,7 @@ from app.core.settings import EnvReport, _cors_origins, _env_bool, _resolved_env
 from app.core.errors import _http_exception_handler, _unhandled_exception_handler
 from app.core.logging import _request_id_from_request
 from app.core.startup import _startup, _startup_sanity_checks, ensure_seed, run_migrations_on_startup
+from app.core.security.app_tokens import decode_user_token
 from app.legacy import monolith as _monolith
 
 _monolith.create_app = create_app
@@ -26,5 +27,6 @@ _monolith._startup = _startup
 _monolith._startup_sanity_checks = _startup_sanity_checks
 _monolith.run_migrations_on_startup = run_migrations_on_startup
 _monolith.ensure_seed = ensure_seed
+_monolith.decode_user_token = decode_user_token
 
 sys.modules[__name__] = _monolith

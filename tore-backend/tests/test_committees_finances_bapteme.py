@@ -155,3 +155,35 @@ def test_bapteme_campaign_invite_accept_assign_incident_and_exports():
         assert audit is not None
     finally:
         s.close()
+
+
+def test_finance_reads_and_writes_are_scoped_to_the_committee():
+    client = TestClient(app)
+    owner_a_token, owner_a_id = _auth_guest(client, 'finance-scope-a')
+    owner_b_token, owner_b_id = _auth_guest(client, 'finance-scope-b')
+    committee_a, year_a, _ = _seed_committee(owner_a_id)
+    committee_b, year_b, _ = _seed_committee(owner_b_id)
+
+    foreign_summary = client.get(
+        f'/committees/{committee_b}/finances/summary?year_id={year_b}',
+        headers={'Authorization': f'Bearer {owner_a_token}'},
+    )
+    foreign_write = client.post(
+        f'/committees/{committee_b}/finances/ledger',
+        json={'yearId': year_b, 'type': 'EXPENSE', 'amountCents': 900, 'currency': 'EUR', 'category': 'Interdit', 'occurredAt': '2026-02-01'},
+        headers={'Authorization': f'Bearer {owner_a_token}', 'Idempotency-Key': 'finance-cross-committee'},
+    )
+    own_write = client.post(
+        f'/committees/{committee_a}/finances/ledger',
+        json={'yearId': year_a, 'type': 'EXPENSE', 'amountCents': 900, 'currency': 'EUR', 'category': 'Local', 'occurredAt': '2026-02-01'},
+        headers={'Authorization': f'Bearer {owner_a_token}', 'Idempotency-Key': 'finance-own-committee'},
+    )
+    own_b_summary = client.get(
+        f'/committees/{committee_b}/finances/summary?year_id={year_b}',
+        headers={'Authorization': f'Bearer {owner_b_token}'},
+    )
+    assert foreign_summary.status_code == 403
+    assert foreign_write.status_code == 403
+    assert own_write.status_code == 200
+    assert own_b_summary.status_code == 200
+    assert own_b_summary.json()['expenseCents'] == 0

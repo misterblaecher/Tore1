@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Layout, { inputStyle } from '../ui/Layout'
-import { api } from '../lib/api'
+import { api, apiText } from '../lib/api'
+import { createRetryableWrite } from '../lib/retryable-write'
 import { CursorPager, EmptyState, InlineAlert } from '../lib/ui'
 
 type WalletPage = { items: any[]; next_cursor: string | null }
@@ -60,6 +61,13 @@ export default function WalletAdmin() {
   const [scanInput, setScanInput] = useState('')
   const [scanAmount, setScanAmount] = useState('10')
   const [scanResult, setScanResult] = useState<TopupResult | null>(null)
+  const busy = useRef(false)
+  const [submitting, setSubmitting] = useState(false)
+  const topupWrite = useRef(createRetryableWrite((body, key) =>
+    api<{ idempotent?: boolean }>('/partner/portal/wallet/topup', {
+      method: 'POST', headers: { 'Idempotency-Key': key }, body,
+    })))
+  const submitTopup = topupWrite.current
 
   const eventId = params.get('event_id') || ''
   const filterUserId = params.get('user_id') || ''
@@ -68,14 +76,25 @@ export default function WalletAdmin() {
   const moduleState = snapshot?.modules?.wallet_enabled?.effective_state || 'ON'
   const eventState = (snapshot?.event_state || 'LIVE').toUpperCase()
   const writesDisabledReason = useMemo(() => {
+    if (!Number.isSafeInteger(Number(eventId)) || Number(eventId) <= 0) return 'Sélectionner un événement'
+    if (!snapshot) return 'État de l’événement indisponible : recharge suspendue'
     if (moduleState === 'OFF') return 'Module désactivé'
     if (moduleState === 'READ_ONLY') return `Événement ${eventState}: write désactivé (read-only)`
     return null
-  }, [eventState, moduleState])
+  }, [eventState, moduleState, eventId, snapshot])
 
   useEffect(() => {
+    setSnapshot(null)
+    setLogs([])
+    setCursor(null)
+    setError(null)
+    setScanResult(null)
     if (!eventId) return
-    api<Snapshot>(`/partner/portal/event/${Number(eventId)}/state-snapshot`).then(setSnapshot).catch(() => setSnapshot(null))
+    let active = true
+    api<Snapshot>(`/partner/portal/event/${Number(eventId)}/state-snapshot`)
+      .then((value) => { if (active) setSnapshot(value) })
+      .catch(() => { if (active) setSnapshot(null) })
+    return () => { active = false }
   }, [eventId])
 
   const loadLogs = async (next?: string | null) => {
@@ -98,25 +117,32 @@ export default function WalletAdmin() {
   }
 
   const topup = async () => {
+    if (busy.current) return
     if (writesDisabledReason) {
       setError(writesDisabledReason)
       return
     }
+    if (!userId.trim() || !Number.isSafeInteger(Number(amount)) || Number(amount) <= 0) {
+      setError('Utilisateur et montant entier positif requis')
+      return
+    }
+    busy.current = true
+    setSubmitting(true)
     setError(null)
     try {
-      await api('/partner/portal/wallet/topup', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': `portal-${Date.now()}` },
-        body: JSON.stringify({ event_id: Number(eventId), target_user_id: userId, amount_cents: Number(amount), reason_code: 'manual_topup', reason_text: reason }),
-      })
+      await submitTopup({ event_id: Number(eventId), target_user_id: userId.trim(), amount_cents: Number(amount), reason_code: 'manual_topup', reason_text: reason })
       await loadLogs()
     } catch (e: any) {
       const reason = e?.reason
       setError(reasonToLabel[reason] || e?.message || 'Topup refusé')
+    } finally {
+      busy.current = false
+      setSubmitting(false)
     }
   }
 
   const topupByScan = async () => {
+    if (busy.current) return
     if (writesDisabledReason) {
       setScanResult({ kind: 'denied', message: writesDisabledReason })
       return
@@ -127,18 +153,19 @@ export default function WalletAdmin() {
       setScanResult({ kind: 'denied', message: `denied: ${parsed.reason || 'invalid_target'}` })
       return
     }
-    const key = `scan-${parsed.userId}-${Number(scanAmount)}-${Date.now()}`
+    if (!Number.isSafeInteger(Number(scanAmount)) || Number(scanAmount) <= 0) {
+      setScanResult({ kind: 'denied', message: 'Montant entier positif requis' })
+      return
+    }
+    busy.current = true
+    setSubmitting(true)
     try {
-      const payload = await api<any>('/partner/portal/wallet/topup', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': key },
-        body: JSON.stringify({
+      const payload = await submitTopup({
           event_id: Number(eventId),
           target_user_id: parsed.userId,
           amount_cents: Number(scanAmount),
           reason_code: 'scan_topup',
           reason_text: `scan:${parsed.raw}`,
-        }),
       })
       setScanResult({ kind: payload?.idempotent ? 'duplicate' : 'success', message: payload?.idempotent ? 'duplicate' : 'success' })
       await loadLogs()
@@ -150,11 +177,24 @@ export default function WalletAdmin() {
       } else {
         setScanResult({ kind: 'denied', message: `denied: ${reason}` })
       }
+    } finally {
+      busy.current = false
+      setSubmitting(false)
     }
   }
 
   const exportCsv = async () => {
-    window.open(`/partner/portal/wallet/logs/export.csv?event_id=${Number(eventId)}`, '_blank', 'noopener,noreferrer')
+    try {
+      const csv = await apiText(`/partner/portal/wallet/logs/export.csv?event_id=${Number(eventId)}`)
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `wallet-${eventId}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export indisponible')
+    }
   }
 
   return (
@@ -165,7 +205,7 @@ export default function WalletAdmin() {
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="User ID" value={userId} onChange={(e) => setUserId(e.target.value)} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
       <input style={{ ...inputStyle(), marginTop: 8 }} placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-      <button onClick={topup} style={{ marginTop: 8 }} disabled={!!writesDisabledReason}>Topup</button>
+      <button onClick={topup} style={{ marginTop: 8 }} disabled={submitting || !!writesDisabledReason}>Ajouter des Credits</button>
       <hr />
       <h3>Topup by scan</h3>
       <input
@@ -180,7 +220,7 @@ export default function WalletAdmin() {
         value={scanAmount}
         onChange={(e) => setScanAmount(e.target.value)}
       />
-      <button onClick={topupByScan} style={{ marginTop: 8 }} disabled={!!writesDisabledReason}>Run scan topup</button>
+      <button onClick={topupByScan} style={{ marginTop: 8 }} disabled={submitting || !!writesDisabledReason}>Recharger après scan</button>
       {scanResult ? <InlineAlert tone={scanResult.kind === 'denied' ? 'error' : 'success'}>{scanResult.message}</InlineAlert> : null}
       <hr />
       <input style={inputStyle()} placeholder="Filter user_id" value={filterUserId} onChange={(e) => setParams({ event_id: eventId, user_id: e.target.value })} />

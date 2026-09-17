@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +31,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   final TextEditingController _noteCtrl = TextEditingController();
   String _banner = 'Prêt à scanner';
   Color _bannerColor = const Color(0xFF1F2937);
+  String? _statsError;
   final ScanSuppression _suppression =
       ScanSuppression(cooldown: const Duration(milliseconds: 800));
   final List<String> _reasonChips = const [
@@ -60,19 +62,32 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
   Future<void> _refreshStats() async {
     if (widget.eventId == null) return;
+    int? total;
+    int? delta10;
+    Object? failure;
     try {
-      final count =
-          await ref.read(entryServiceProvider).getEntryCount(widget.eventId!);
-      if (!mounted) return;
-      setState(() => _total = (count['entryCount'] ?? 0) as int);
-    } catch (_) {}
+      final count = await ref
+          .read(entryServiceProvider)
+          .getEntryCount(widget.eventId!);
+      total = (count['entryCount'] ?? 0) as int;
+    } catch (error) {
+      failure = error;
+    }
     try {
       final stats =
           await ref.read(entryServiceProvider).getEntryStats(widget.eventId!);
-      if (!mounted) return;
-      setState(
-          () => _delta10 = (stats['accepted_last_10_min'] ?? _delta10) as int);
-    } catch (_) {}
+      delta10 = (stats['accepted_last_10_min'] ?? _delta10) as int;
+    } catch (error) {
+      failure ??= error;
+    }
+    if (!mounted) return;
+    setState(() {
+      if (total != null) _total = total;
+      if (delta10 != null) _delta10 = delta10;
+      _statsError = failure == null
+          ? null
+          : 'Compteurs temporairement indisponibles — dernière valeur conservée';
+    });
   }
 
   Future<void> _openScanner() async {
@@ -84,12 +99,18 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     if (raw == null || raw.trim().isEmpty || widget.eventId == null) return;
     if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now()))
       return;
-    final payload = ref.read(qrParserProvider).parse(raw);
-    final validation = await ref.read(qrValidatorProvider).validate(payload);
-    if (!validation.isOk)
-      return _feedback('invalid', validation.reason ?? 'QR non reconnu',
+    try {
+      final payload = ref.read(qrParserProvider).parse(raw);
+      final validation = await ref.read(qrValidatorProvider).validate(payload);
+      if (!validation.isOk) {
+        return _feedback('invalid', validation.reason ?? 'QR non reconnu',
+            type: 'QR');
+      }
+      await _performCheckin(raw);
+    } catch (error) {
+      _feedback('invalid', _operatorError(error, fallback: 'QR refusé'),
           type: 'QR');
-    await _performCheckin(raw);
+    }
   }
 
   Future<void> _performCheckin(String raw) async {
@@ -113,8 +134,9 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           'QR ${(res['status'] ?? 'accepted').toString()}',
           type: 'QR');
       unawaited(_refreshStats());
-    } catch (_) {
-      _feedback('invalid', 'Serveur indisponible — entrée non validée',
+    } catch (error) {
+      _feedback('invalid',
+          _operatorError(error, fallback: 'Entrée non validée'),
           type: 'QR');
     }
   }
@@ -163,8 +185,9 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       _feedback('accepted', '${delta > 0 ? '+' : ''}$delta ajouté',
           type: 'MANUAL');
       unawaited(_refreshStats());
-    } catch (_) {
-      _feedback('invalid', 'Serveur indisponible — correction non enregistrée',
+    } catch (error) {
+      _feedback('invalid',
+          _operatorError(error, fallback: 'Correction non enregistrée'),
           type: 'MANUAL');
     }
   }
@@ -189,11 +212,36 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
   Future<void> _exportCsv() async {
     if (widget.eventId == null) return;
-    final csv = await ref.read(entryServiceProvider).exportCsv(widget.eventId!);
-    await Clipboard.setData(ClipboardData(text: csv));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CSV copié (inclut MANUAL)')));
+    try {
+      final csv =
+          await ref.read(entryServiceProvider).exportCsv(widget.eventId!);
+      await Clipboard.setData(ClipboardData(text: csv));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('CSV copié (inclut MANUAL)')));
+    } catch (error) {
+      _feedback('invalid', _operatorError(error, fallback: 'Export indisponible'),
+          type: 'EXPORT');
+    }
+  }
+
+  String _operatorError(Object error, {required String fallback}) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      final body = error.response?.data;
+      if (body is Map) {
+        final detail = body['detail'];
+        final reason = detail is Map
+            ? (detail['message'] ?? detail['reason'])
+            : detail;
+        if (reason != null && reason.toString().trim().isNotEmpty) {
+          return '$fallback — ${reason.toString()}';
+        }
+      }
+      if (status != null) return '$fallback — HTTP $status';
+      return '$fallback — réseau indisponible';
+    }
+    return '$fallback — opération non confirmée';
   }
 
   @override
@@ -260,6 +308,12 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                       borderRadius: BorderRadius.circular(8)),
                   width: double.infinity,
                   child: Text(_banner)),
+              if (_statsError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(_statsError!,
+                      style: const TextStyle(color: Colors.orange)),
+                ),
               Expanded(
                 child: SingleChildScrollView(
                   child: ConstrainedBox(

@@ -6,6 +6,7 @@ import 'api.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_models.dart';
 import 'core/auth/auth_session_provider.dart';
+import 'core/config/remote_config.dart';
 import 'core/network/api_exception.dart';
 import 'core/network/providers.dart';
 import 'features/health/presentation/health_providers.dart';
@@ -158,7 +159,8 @@ final appBootProvider =
 });
 
 final isReadOnlyProvider = Provider<bool>((ref) {
-  return ref.watch(appBootProvider).isReadOnly;
+  return ref.watch(appBootProvider).isReadOnly ||
+      ref.watch(remoteWritesDisabledProvider);
 });
 
 final meProvider = FutureProvider<AppUser>((ref) async {

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/utils/write_gate.dart';
 import '../../../shared/utils/share_text.dart';
@@ -185,6 +186,35 @@ class _OrgaDetailScreenState extends ConsumerState<OrgaDetailScreen> {
                 },
                 icon: const Icon(Icons.ios_share_outlined),
                 label: const Text('Partager le lien'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  try {
+                    final share = await api.getOrgaShare(widget.orgId);
+                    final raw = (share['webUrl'] ?? share['https_link'] ?? '')
+                        .toString()
+                        .trim();
+                    final uri = Uri.tryParse(raw);
+                    if (uri == null ||
+                        !{'http', 'https'}.contains(uri.scheme) ||
+                        uri.host.isEmpty) {
+                      throw StateError('forum link unavailable');
+                    }
+                    final launched = await launchUrl(uri,
+                        mode: LaunchMode.externalApplication);
+                    if (!launched) {
+                      throw StateError('forum link unavailable');
+                    }
+                  } catch (_) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content:
+                            Text('Page Forum indisponible hors connexion.')));
+                  }
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Voir la page Forum'),
               ),
               const SizedBox(height: 12),
               if (_isAdmin)

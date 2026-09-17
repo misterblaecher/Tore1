@@ -1,13 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../config/app_config.dart';
+import '../../shared/cache/cache_store.dart';
 import '../auth/auth_state_signal.dart';
+import '../logging/pii_redactor.dart';
 import 'api_endpoints.dart';
 import 'api_exception.dart';
 import 'auth_interceptor.dart';
 import 'retry_interceptor.dart';
 import 'token_storage.dart';
-import '../../shared/cache/cache_store.dart';
 
 class ApiClient {
   static ApiClient? _instance;
@@ -95,13 +96,26 @@ class ApiClient {
       ),
     );
 
-    // Logs only in debug (and can be disabled with --dart-define=HTTP_LOGS=false)
+    // Debug logs stay useful without ever printing auth headers, request bodies,
+    // emails, phone numbers or sensitive URL query parameters.
     if (AppConfig.enableHttpLogs) {
       dio.interceptors.add(
-        LogInterceptor(
-          requestHeader: false,
-          requestBody: false,
-          responseBody: false,
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            debugPrint(
+                '[http] ${options.method} ${scrubUrlQueryParams(options.uri.toString())}');
+            handler.next(options);
+          },
+          onResponse: (response, handler) {
+            debugPrint(
+                '[http] ${response.statusCode ?? 0} ${scrubUrlQueryParams(response.requestOptions.uri.toString())}');
+            handler.next(response);
+          },
+          onError: (error, handler) {
+            debugPrint(
+                '[http] error=${error.type.name} status=${error.response?.statusCode ?? 0} ${scrubUrlQueryParams(error.requestOptions.uri.toString())}');
+            handler.next(error);
+          },
         ),
       );
     }
@@ -113,6 +127,8 @@ class ApiClient {
             DioException(
               requestOptions: e.requestOptions,
               response: e.response,
+              type: e.type,
+              message: e.message,
               error: ApiException(
                 e.message ?? 'Erreur API',
                 statusCode: e.response?.statusCode,
@@ -136,7 +152,12 @@ class ApiClient {
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
-      final refreshClient = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
+      final refreshClient = Dio(BaseOptions(
+        baseUrl: dio.options.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+        sendTimeout: const Duration(seconds: 20),
+      ));
       final res = await refreshClient.post(
         ApiEndpoints.authRefresh,
         data: {'refreshToken': refreshToken},

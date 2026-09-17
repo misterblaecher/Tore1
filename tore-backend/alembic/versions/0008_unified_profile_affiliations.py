@@ -36,7 +36,28 @@ def _add_index(table_name: str, name: str, columns: list[str], *, unique: bool =
         op.create_index(name, table_name, columns, unique=unique)
 
 
+def _ensure_alembic_version_capacity() -> None:
+    """Allow descriptive revision IDs on PostgreSQL.
+
+    Alembic creates ``alembic_version.version_num`` as VARCHAR(32) by default.
+    This revision ID is longer than 32 chars, so PostgreSQL rejects Alembic's
+    bookkeeping UPDATE after the migration body completes. SQLite does not
+    enforce that length, which is why the issue can be invisible in SQLite CI.
+    """
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    op.execute(
+        "ALTER TABLE alembic_version "
+        "ALTER COLUMN version_num TYPE VARCHAR(128)"
+    )
+
+
 def upgrade() -> None:
+    # Must happen before Alembic records this revision name at the end of the
+    # migration transaction.
+    _ensure_alembic_version_capacity()
+
     _add_missing("app_users", [
         sa.Column("username", sa.String(length=40), nullable=True),
         sa.Column("city", sa.String(length=120), nullable=True),

@@ -53,20 +53,23 @@ class TickerController extends StateNotifier<TickerState> {
   final Ref ref;
   final int eventId;
   Timer? _pollTimer;
+  bool _disposed = false;
   static const int _maxItems = 100;
 
   String get _cacheKey => 'ticker_$eventId';
 
   Future<void> _bootstrap() async {
     await _loadCache();
+    if (_disposed) return;
     await refresh();
+    if (_disposed) return;
     _startPolling();
   }
 
   Future<void> _loadCache() async {
     final cache = ref.read(cacheStoreProvider);
     final cached = await cache.getJson(_cacheKey);
-    if (cached == null) return;
+    if (_disposed || cached == null) return;
     final raw = (cached['items'] as List<dynamic>? ?? const []);
     final parsed = raw
         .whereType<Map>()
@@ -76,11 +79,13 @@ class TickerController extends StateNotifier<TickerState> {
   }
 
   Future<void> _saveCache() async {
+    if (_disposed) return;
     final cache = ref.read(cacheStoreProvider);
+    final snapshot = state;
     await cache.setJson(
         _cacheKey,
         {
-          'items': state.items
+          'items': snapshot.items
               .take(_maxItems)
               .map((e) => {
                     'id': e.id,
@@ -114,24 +119,28 @@ class TickerController extends StateNotifier<TickerState> {
                     }
                   })
               .toList(),
-          'lastSyncAt': state.lastSyncAt?.toIso8601String(),
+          'lastSyncAt': snapshot.lastSyncAt?.toIso8601String(),
         },
         ttl: const Duration(days: 1));
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = state.copyWith(loading: true, error: null);
     final network = ref.read(networkStatusProvider);
     if (network == NetworkState.offline) {
+      if (_disposed) return;
       state = state.copyWith(loading: false, unstableConnection: true);
       return;
     }
     try {
       final api = ref.read(apiProvider);
-      final since = state.items.isNotEmpty
-          ? state.items.first.ts.toIso8601String()
+      final currentItems = state.items;
+      final since = currentItems.isNotEmpty
+          ? currentItems.first.ts.toIso8601String()
           : null;
       final page = await api.tickerFeed(eventId, since: since, limit: 50);
+      if (_disposed) return;
       final raw =
           (page['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
       final parsed = raw.map(TickerItem.fromJson).toList();
@@ -148,6 +157,7 @@ class TickerController extends StateNotifier<TickerState> {
       );
       await _saveCache();
     } on DioException catch (e) {
+      if (_disposed) return;
       if (e.response?.statusCode == 429) {
         state = state.copyWith(
             loading: false, error: 'rate limited', unstableConnection: true);
@@ -158,6 +168,7 @@ class TickerController extends StateNotifier<TickerState> {
             unstableConnection: true);
       }
     } catch (_) {
+      if (_disposed) return;
       state = state.copyWith(
           loading: false,
           error: 'connexion instable',
@@ -166,11 +177,16 @@ class TickerController extends StateNotifier<TickerState> {
   }
 
   void _startPolling() {
+    if (_disposed) return;
     _pollTimer?.cancel();
     final network = ref.read(networkStatusProvider);
     if (network == NetworkState.offline) return;
     final seconds = network == NetworkState.degraded ? 5 : 2;
-    _pollTimer = Timer.periodic(Duration(seconds: seconds), (_) => refresh());
+    _pollTimer = Timer.periodic(Duration(seconds: seconds), (_) {
+      if (!_disposed) {
+        refresh();
+      }
+    });
   }
 
   List<TickerItem> _dedup(List<TickerItem> values) {
@@ -180,6 +196,7 @@ class TickerController extends StateNotifier<TickerState> {
 
   @override
   void dispose() {
+    _disposed = true;
     _pollTimer?.cancel();
     super.dispose();
   }

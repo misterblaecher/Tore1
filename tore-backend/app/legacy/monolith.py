@@ -228,15 +228,15 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 
 def _strict_dev_env_enabled() -> bool:
-    return (os.getenv("ENV") or "").strip().upper() == "DEV"
+    return (os.getenv("TORE_ENV") or os.getenv("ENV") or "").strip().upper() in {"DEV", "DEVELOPMENT", "TEST"}
 
 
 def _otp_dev_mode_enabled() -> bool:
-    return _env_bool("TORE_EMAIL_OTP_DEV_MODE", default=_strict_dev_env_enabled())
+    return _resolved_env_name() != "PROD" and _env_bool("TORE_EMAIL_OTP_DEV_MODE", default=_strict_dev_env_enabled())
 
 
 def _otp_dry_run_enabled() -> bool:
-    return _env_bool("TORE_EMAIL_OTP_DRY_RUN", default=False)
+    return _resolved_env_name() != "PROD" and _env_bool("TORE_EMAIL_OTP_DRY_RUN", default=False)
 
 
 def _otp_exp_minutes() -> int:
@@ -285,6 +285,20 @@ def validate_env_or_warn() -> EnvReport:
     if env_name not in {"DEV", "PROD", "TEST"}:
         warnings.append(f"ENV has unexpected value '{env_name}'")
 
+    if is_prod:
+        for key in ("TORE_JWT_SECRET", "ADMIN_API_KEY"):
+            value = (os.getenv(key) or "").strip()
+            if len(value) < 32 or value.lower().startswith(("dev-", "change-me", "replace-")):
+                missing.append(f"{key} must be a unique secret of at least 32 characters")
+        for key in ("TORE_EMAIL_OTP_DEV_MODE", "TORE_EMAIL_OTP_DRY_RUN", "ALLOW_DEV_OTP"):
+            if _env_bool(key, False):
+                missing.append(f"{key} must be disabled in PROD")
+        if (os.getenv("MAIL_OVERRIDE_TO") or "").strip():
+            missing.append("MAIL_OVERRIDE_TO must be unset in PROD")
+        for key in ("SMTP_HOST", "SMTP_FROM"):
+            if not (os.getenv(key) or "").strip():
+                missing.append(key)
+
     db_url = (os.getenv("DATABASE_URL") or "").strip()
     if not db_url:
         if is_prod:
@@ -321,7 +335,7 @@ def validate_env_or_warn() -> EnvReport:
     if is_prod:
         if not cors_raw:
             missing.append("TORE_CORS_ORIGINS")
-        elif cors_raw == "*":
+        elif "*" in [origin.strip() for origin in cors_raw.split(",")]:
             missing.append("TORE_CORS_ORIGINS cannot be '*' in PROD")
     elif not cors_raw:
         warnings.append("TORE_CORS_ORIGINS missing: localhost defaults are enabled")
@@ -814,6 +828,8 @@ def _build_magic_redirect_url(redirect_url: Optional[str], email: str, code: str
 def _send_email(subject: str, body: str, to_email: str, reply_to: Optional[str] = None) -> None:
     host = (os.getenv("SMTP_HOST") or "").strip()
     if not host:
+        if _resolved_env_name() == "PROD":
+            raise HTTPException(status_code=503, detail={"code": "email_provider_missing"})
         logging.info("email.skip.no_smtp subject=%s to=%s", subject, to_email)
         return
 
@@ -1175,13 +1191,8 @@ def get_or_create_balance(s: Session, event_id: int, user_id: str) -> TicketBala
     return b
 
 def get_or_create_wallet(s: Session, user_id: str) -> Wallet:
-    wallet = s.get(Wallet, user_id)
-    if wallet:
-        return wallet
-    wallet = Wallet(user_id=user_id, balance_tickets=0, updated_at=now_utc())
-    s.add(wallet)
-    s.flush()
-    return wallet
+    from app.services.wallet_service import get_or_create_wallet as wallet_for_user
+    return wallet_for_user(s, user_id)
 
 
 def _wallet_tx_out(tx: WalletTx) -> WalletTxOut:
@@ -1220,14 +1231,9 @@ def _apply_wallet_tx(
     idempotency_key: str,
     created_by_user_id: Optional[int] = None,
 ) -> tuple[Wallet, WalletTx, bool]:
-    wallet = get_or_create_wallet(s, user_id)
-    existing = _wallet_tx_exists(s, user_id, idempotency_key)
-    if existing:
-        return wallet, existing, False
-
-    wallet.balance_tickets += amount_tickets
-    wallet.updated_at = now_utc()
-    tx = WalletTx(
+    from app.services.wallet_service import apply_wallet_tx
+    return apply_wallet_tx(
+        s,
         user_id=user_id,
         kind=kind,
         amount_tickets=amount_tickets,
@@ -1236,9 +1242,6 @@ def _apply_wallet_tx(
         created_by_user_id=created_by_user_id,
         idempotency_key=idempotency_key,
     )
-    s.add_all([wallet, tx])
-    s.flush()
-    return wallet, tx, True
 
 
 
@@ -4268,10 +4271,9 @@ def auth_email_request_otp(payload: EmailOtpRequestIn, request: Request, db: Ses
     db.add(otp_row)
     db.commit()
 
-    provider_key = (os.getenv("EMAIL_PROVIDER_API_KEY") or "").strip()
     smtp_host = (os.getenv("SMTP_HOST") or "").strip()
-    dev_mode = _otp_dev_mode_enabled() or _env_bool("ALLOW_DEV_OTP", False)
-    if not provider_key and not smtp_host:
+    dev_mode = _otp_dev_mode_enabled() or (_resolved_env_name() != "PROD" and _env_bool("ALLOW_DEV_OTP", False))
+    if not smtp_host:
         if _otp_dry_run_enabled():
             logging.info("OTP_DEBUG email=%s code=%s", email, raw_code)
             return {"ok": True, "devToken": raw_code}

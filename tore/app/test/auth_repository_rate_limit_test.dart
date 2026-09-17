@@ -40,4 +40,31 @@ void main() {
       expect(e.retryAfterSeconds, 21);
     }
   });
+
+  test('requestEmailOtp accepts devToken from backend dry-run response',
+      () async {
+    final client = ApiClient.create(baseUrl: 'https://example.test');
+    client.dio.interceptors.insert(
+      0,
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: const {
+                'ok': true,
+                'devToken': '123456',
+              },
+            ),
+          );
+        },
+      ),
+    );
+
+    final repository = AuthRepository(client);
+    final result = await repository.requestEmailOtp('user@example.com');
+
+    expect(result.devToken, '123456');
+  });
 }

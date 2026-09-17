@@ -1,6 +1,6 @@
 import { getSession } from './auth'
 
-export const ORGA_ROLES = new Set(['manager', 'bartender'])
+export const ORGA_ROLES = new Set(['manager', 'owner', 'bartender'])
 export const ORGA_MANAGER_ROLES = new Set(['manager', 'owner'])
 
 export function hasOrgaHubAccess(): boolean {

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/remote_config.dart';
 import '../../core/network/network_state_provider.dart';
 import '../../state.dart';
 import 'runtime_write_guard.dart';
@@ -34,6 +35,8 @@ String? writeDisabledReason(WidgetRef ref,
     {required WriteIntent intent,
     String? runtimeState,
     String? runtimeReason}) {
+  final remoteMessage = ref.watch(remoteWriteMessageProvider);
+  if (remoteMessage != null) return remoteMessage;
   if (isReadOnly(ref)) return readOnlyModeReasonMessage;
   if (isWriteDegradedBlocked(ref, intent)) return degradedModeReasonMessage;
   final runtimeNormalized =

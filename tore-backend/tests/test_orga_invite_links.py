@@ -24,6 +24,13 @@ def _create_orga(owner_token: str, visibility: str = 'PUBLIC') -> int:
         headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': f'create-{visibility}'},
     )
     assert res.status_code == 200
+    if visibility == 'PUBLIC':
+        published = client.post(
+            f"/forum/structures/{res.json()['orga']['slug']}/publish",
+            json={'reason': 'Publication explicite pour le test'},
+            headers={'Authorization': f'Bearer {owner_token}', 'Idempotency-Key': f'publish-{visibility}'},
+        )
+        assert published.status_code == 200
     return res.json()['orga']['id']
 
 

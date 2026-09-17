@@ -17,6 +17,9 @@ for suffix in ("", "-journal", "-wal", "-shm"):
 import os
 
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{TEST_DB_PATH.as_posix()}")
+# Existing prediction lifecycle tests exercise the explicitly enabled deployment.
+# Production defaults remain OFF and are covered by test_release_security.py.
+os.environ.setdefault("TORE_VALUE_PREDICTIONS_ENABLED", "1")
 
 from app.services import rate_limit_service
 

@@ -36,7 +36,7 @@ from app.schemas.wallet import (
 from app.services.audit_service import write_audit_log
 from app.services.p3_common import decode_cursor, encode_cursor, ensure_event_action_allowed
 from app.services.rate_limit_service import enforce_rate_limit
-from app.services.wallet_service import apply_wallet_tx, get_or_create_wallet, require_wallet_staff, wallet_tx_exists, wallet_tx_out
+from app.services.wallet_service import apply_wallet_tx, get_or_create_wallet, lock_wallets, require_wallet_staff, wallet_tx_exists, wallet_tx_out
 from app.services.gift_qr_service import decode_receive_gift_token, issue_receive_gift_token
 
 router = APIRouter()
@@ -268,35 +268,16 @@ def wallet_gift(
 
     existing = db.query(WalletGift).filter(WalletGift.from_user_id == user.id, WalletGift.idempotency_key == idem).first()
     if existing:
+        if (existing.to_user_id, existing.amount_tickets, existing.event_id) != (payload.to_user_id, payload.amount_cents, payload.event_id):
+            raise HTTPException(status_code=409, detail={"reason": "idempotency_conflict"})
         sender = get_or_create_wallet(db, user.id)
         return WalletGiftOut(gift_id=existing.id, new_balance_sender=sender.balance_tickets)
 
-    sender = get_or_create_wallet(db, user.id)
-    receiver = get_or_create_wallet(db, payload.to_user_id)
+    wallets = lock_wallets(db, user.id, payload.to_user_id)
+    sender = wallets[user.id]
     if int(sender.balance_tickets or 0) < payload.amount_cents:
         raise HTTPException(status_code=409, detail={"reason": "insufficient_balance", "message": "Insufficient balance"})
 
-    sender.balance_tickets -= payload.amount_cents
-    sender.updated_at = now_utc()
-    receiver.balance_tickets += payload.amount_cents
-    receiver.updated_at = now_utc()
-
-    out_tx = WalletTx(
-        user_id=user.id,
-        kind="DEBIT",
-        amount_tickets=-payload.amount_cents,
-        ref_type="GIFT_OUT",
-        ref_id=payload.to_user_id,
-        idempotency_key=f"gift:out:{idem}",
-    )
-    in_tx = WalletTx(
-        user_id=payload.to_user_id,
-        kind="CREDIT",
-        amount_tickets=payload.amount_cents,
-        ref_type="GIFT_IN",
-        ref_id=user.id,
-        idempotency_key=f"gift:in:{idem}",
-    )
     gift = WalletGift(
         event_id=payload.event_id,
         from_user_id=user.id,
@@ -305,11 +286,10 @@ def wallet_gift(
         message=payload.message,
         idempotency_key=idem,
     )
-    db.add_all([sender, receiver, out_tx, in_tx, gift])
+    db.add(gift)
     db.flush()
-    out_tx.ref_id = f"gift:{gift.id}"
-    in_tx.ref_id = f"gift:{gift.id}"
-    db.add_all([out_tx, in_tx])
+    apply_wallet_tx(db, user_id=user.id, kind="DEBIT", amount_tickets=-payload.amount_cents, ref_type="GIFT_OUT", ref_id=f"gift:{gift.id}", idempotency_key=f"gift:out:{gift.id}")
+    apply_wallet_tx(db, user_id=payload.to_user_id, kind="CREDIT", amount_tickets=payload.amount_cents, ref_type="GIFT_IN", ref_id=f"gift:{gift.id}", idempotency_key=f"gift:in:{gift.id}")
 
     write_audit_log(
         db,
@@ -412,15 +392,10 @@ def wallet_transfer(
     if resolved_event_id is not None:
         ensure_event_action_allowed(db, resolved_event_id, "wallet_enabled", write=True)
 
-    sender = get_or_create_wallet(db, user.id)
-    receiver = get_or_create_wallet(db, to_user_id)
+    wallets = lock_wallets(db, user.id, to_user_id)
+    sender = wallets[user.id]
     if int(sender.balance_tickets or 0) < payload.amount:
         raise HTTPException(status_code=400, detail={"reason": "insufficient_balance", "message": "Insufficient balance"})
-
-    sender.balance_tickets -= payload.amount
-    sender.updated_at = now_utc()
-    receiver.balance_tickets += payload.amount
-    receiver.updated_at = now_utc()
 
     transfer = TicketTransfer(
         from_user_id=user.id,
@@ -429,12 +404,10 @@ def wallet_transfer(
         event_id=resolved_event_id,
         reason=reason_text,
     )
-    out_tx = WalletTx(user_id=user.id, kind="DEBIT", amount_tickets=-payload.amount, ref_type="GIFT_OUT", ref_id=None, idempotency_key=f"transfer:out:{idem}")
-    in_tx = WalletTx(user_id=to_user_id, kind="CREDIT", amount_tickets=payload.amount, ref_type="GIFT_IN", ref_id=None, idempotency_key=f"transfer:in:{idem}")
-    db.add_all([sender, receiver, transfer, out_tx, in_tx])
+    db.add(transfer)
     db.flush()
-    out_tx.ref_id = f"transfer:{transfer.id}"
-    in_tx.ref_id = f"transfer:{transfer.id}"
+    apply_wallet_tx(db, user_id=user.id, kind="DEBIT", amount_tickets=-payload.amount, ref_type="GIFT_OUT", ref_id=f"transfer:{transfer.id}", idempotency_key=f"transfer:out:{transfer.id}")
+    apply_wallet_tx(db, user_id=to_user_id, kind="CREDIT", amount_tickets=payload.amount, ref_type="GIFT_IN", ref_id=f"transfer:{transfer.id}", idempotency_key=f"transfer:in:{transfer.id}")
 
     response_json = {
         "transfer_id": transfer.id,

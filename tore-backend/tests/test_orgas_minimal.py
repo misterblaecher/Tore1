@@ -21,6 +21,16 @@ def _guest(name: str) -> str:
     return res.json()['token']
 
 
+def _publish(token: str, created, key: str) -> None:
+    slug = created.json()['orga']['slug']
+    response = client.post(
+        f'/forum/structures/{slug}/publish',
+        json={'reason': 'Publication explicite du test'},
+        headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': key},
+    )
+    assert response.status_code == 200
+
+
 def test_create_orga_idempotent_and_owner_membership():
     token = _guest('orga-owner')
     headers = {'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-create-1'}
@@ -33,6 +43,8 @@ def test_create_orga_idempotent_and_owner_membership():
     assert second.status_code == 200
     assert first.json() == second.json()
     assert first.json()['role'] == 'OWNER'
+    assert first.json()['orga']['visibility'] == 'PRIVATE'
+    assert first.json()['orga']['lifecycle'] == 'SETUP'
 
     org_id = first.json()['orga']['id']
     with get_session() as s:
@@ -43,8 +55,10 @@ def test_create_orga_idempotent_and_owner_membership():
 
 def test_explorer_filtering_basic():
     token = _guest('creator')
-    client.post('/orgas', json={'name': 'Alpha Liège', 'city': 'Liège', 'org_type': 'Student'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-exp-1'})
-    client.post('/orgas', json={'name': 'Beta Namur', 'city': 'Namur', 'org_type': 'Association'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-exp-2'})
+    alpha = client.post('/orgas', json={'name': 'Alpha Liège', 'city': 'Liège', 'org_type': 'Student'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-exp-1'})
+    beta = client.post('/orgas', json={'name': 'Beta Namur', 'city': 'Namur', 'org_type': 'Association'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-exp-2'})
+    _publish(token, alpha, 'orga-exp-publish-1')
+    _publish(token, beta, 'orga-exp-publish-2')
 
     by_city = client.get('/orgas?city=liège')
     assert by_city.status_code == 200
@@ -64,6 +78,9 @@ def test_explorer_filters_private_ranking_and_sorting():
     beta = client.post('/orgas', json={'name': 'Bar Beta', 'city': 'Bruxelles', 'org_type': 'bar', 'join_mode': 'OPEN_MEMBERSHIP'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-public-b'})
     gamma = client.post('/orgas', json={'name': 'Asso Gamma', 'city': 'Liege Centre', 'org_type': 'asso', 'join_mode': 'REQUEST_TO_JOIN'}, headers={'Authorization': f'Bearer {token}', 'Idempotency-Key': 'orga-public-c'})
     assert alpha.status_code == beta.status_code == gamma.status_code == 200
+    _publish(token, alpha, 'orga-public-a-publish')
+    _publish(token, beta, 'orga-public-b-publish')
+    _publish(token, gamma, 'orga-public-c-publish')
 
     alpha_id = alpha.json()['orga']['id']
     beta_id = beta.json()['orga']['id']

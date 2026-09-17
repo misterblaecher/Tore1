@@ -65,7 +65,10 @@ class AuthRepository {
       final data = (r.data is Map)
           ? (r.data as Map).cast<String, dynamic>()
           : const <String, dynamic>{};
-      return EmailRequestResult(devToken: data['otp_debug']?.toString());
+      final devToken =
+          (data['otp_debug'] ?? data['devToken'] ?? data['code'])?.toString();
+      return EmailRequestResult(
+          devToken: devToken == null || devToken.isEmpty ? null : devToken);
     } on DioException catch (e) {
       final reason = _extractReason(e.response?.data);
       if (e.response?.statusCode == 429 || reason == 'rate_limited') {
