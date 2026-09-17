@@ -112,10 +112,30 @@ def list_structures(
             )
         }
 
+    upcoming_events: dict[int, Event] = {}
+    if rows:
+        now = now_utc()
+        candidates = (
+            db.query(Event)
+            .filter(
+                Event.host_type == "orga",
+                Event.host_id.in_([str(org.id) for org in rows]),
+                func.upper(func.coalesce(Event.visibility, "PRIVATE")) == "PUBLIC",
+                func.upper(func.coalesce(Event.publication_status, "DRAFT")) == "PUBLISHED",
+                Event.starts_at >= now,
+            )
+            .order_by(Event.starts_at.asc(), Event.id.asc())
+            .all()
+        )
+        for event in candidates:
+            org_id = int(event.host_id)
+            if org_id not in upcoming_events:
+                upcoming_events[org_id] = event
+
     items = []
     for org in rows:
         settings = _visibility_settings(org)
-        next_event = _next_public_event(db, org)
+        next_event = upcoming_events.get(org.id) if settings.get("events") == "PUBLIC" else None
         items.append(
             {
                 **_structure_payload(org),
