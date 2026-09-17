@@ -296,7 +296,7 @@ def _can_view(level: str, membership: Optional[OrganizationMembership], *, is_us
 
 def _structure_or_404(db: Session, slug: str, *, public: bool = False) -> Organization:
     org = db.query(Organization).filter(func.lower(Organization.slug) == slug.strip().lower()).first()
-    if org is None or (public and ((org.visibility or "PRIVATE").upper() != "PUBLIC" or _visibility_settings(org)["page"] != "PUBLIC")):
+    if org is None or (public and _visibility_settings(org)["page"] != "PUBLIC"):
         raise HTTPException(status_code=404, detail="Structure not found")
     return org
 

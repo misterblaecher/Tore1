@@ -122,6 +122,8 @@
 .forum-form { display: grid; gap: 10px; }
 .forum-form label { display: grid; gap: 6px; color: #aaa6a6; font-size: .75rem; font-weight: 700; }
 .forum-form input, .forum-form textarea, .forum-form select { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid #3b3337; border-radius: 6px; outline: 0; background: #09090b; color: #fff; padding: 9px 10px; }
+.forum-row select { min-width: 190px; min-height: 36px; border: 1px solid #51463c; border-radius: 6px; background: #151416; color: #f2eee7; color-scheme: dark; padding: 7px 10px; }
+.forum-row select option { background: #151416; color: #f2eee7; }
 .forum-form textarea { min-height: 100px; resize: vertical; }
 .forum-form input:focus, .forum-form textarea:focus, .forum-form select:focus { border-color: #f4c430; }
 .forum-form__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
