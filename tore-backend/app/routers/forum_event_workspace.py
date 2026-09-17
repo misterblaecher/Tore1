@@ -219,6 +219,16 @@ def _workspace_payload(db: Session, organization_id: int, event: Event) -> dict[
 
 
 def _apply_patch(event: Event, payload: EventWorkspacePatchIn) -> None:
+    # The workspace form always includes its initial visibility value. If an
+    # already-public event is edited later, that stale PRIVATE value must not
+    # silently unpublish it during an ordinary content save. Publication and
+    # lifecycle transitions below remain the explicit source of truth.
+    stale_private_visibility = (
+        (event.visibility or "PRIVATE").upper() == "PUBLIC"
+        and payload.visibility == "PRIVATE"
+        and payload.publication_status is None
+        and payload.lifecycle_status is None
+    )
     if payload.name is not None:
         event.name = payload.name.strip()
     if payload.starts_at is not None:
@@ -233,10 +243,11 @@ def _apply_patch(event: Event, payload: EventWorkspacePatchIn) -> None:
         event.city = payload.city.strip() or None
     if payload.description is not None:
         event.public_description = payload.description
-    if payload.visibility is not None:
+    if payload.visibility is not None and not stale_private_visibility:
         event.visibility = payload.visibility
     if payload.publication_status is not None:
         event.publication_status = payload.publication_status
+        event.visibility = "PUBLIC" if payload.publication_status == "PUBLISHED" else "PRIVATE"
         if payload.lifecycle_status is None:
             _set_forum_meta(event, lifecycle_status="PUBLISHED" if payload.publication_status == "PUBLISHED" else "DRAFT")
     if payload.entry_price_cents is not None:
@@ -256,6 +267,7 @@ def _apply_patch(event: Event, payload: EventWorkspacePatchIn) -> None:
         _set_forum_meta(event, **meta_changes)
     if payload.lifecycle_status is not None:
         _set_lifecycle(event, payload.lifecycle_status)
+        event.visibility = "PUBLIC" if payload.lifecycle_status != "DRAFT" else "PRIVATE"
     event.last_updated_at = now_utc()
 
 
