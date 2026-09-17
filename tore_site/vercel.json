@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/forum/structures/:slug", "destination": "/api/seo?kind=structure&slug=:slug" },
+    { "source": "/forum/events/:slug", "destination": "/api/seo?kind=event&slug=:slug" },
+    { "source": "/sitemap-structures.xml", "destination": "/api/seo?kind=sitemap-structures" },
+    { "source": "/sitemap-events.xml", "destination": "/api/seo?kind=sitemap-events" },
+    { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/index.html" }
+  ]
+}
