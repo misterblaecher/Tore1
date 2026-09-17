@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -104,7 +105,7 @@ class StaffInviteIn(BaseModel):
 
 
 def _naive(value: datetime) -> datetime:
-    return value.replace(tzinfo=None) if value.tzinfo else value
+    return value.astimezone(ZoneInfo("Europe/Brussels")).replace(tzinfo=None) if value.tzinfo else value
 
 
 def _settings(db: Session, event_id: int) -> EventManagerSettings:
