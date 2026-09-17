@@ -235,6 +235,12 @@ def patch_managed_event(slug: str, event_id: int, payload: EventManagerPatchIn, 
     mapping = {"name": "name", "description": "public_description", "venue": "venue", "city": "city", "capacity": "capacity", "entry_price_cents": "entry_price_cents", "modules_on": "modules_on", "visibility": "visibility", "publication_status": "publication_status"}
     for key, attr in mapping.items():
         if key in data: setattr(event, attr, data[key].strip() if key == "name" and data[key] else data[key])
+    # Publication is an atomic public-facing transition. This also protects older
+    # clients that only sent publication_status and accidentally kept PRIVATE.
+    if data.get("publication_status") == "PUBLISHED":
+        event.visibility = "PUBLIC"
+    elif data.get("publication_status") == "DRAFT":
+        event.visibility = "PRIVATE"
     if "starts_at" in data: event.starts_at = _naive(payload.starts_at)
     if "ends_at" in data: event.ends_at = _naive(payload.ends_at)
     if event.ends_at <= event.starts_at: raise HTTPException(400, detail={"reason": "INVALID_EVENT_DATES"})
