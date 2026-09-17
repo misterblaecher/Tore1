@@ -8,21 +8,20 @@ from app.routers.forum_ownership import freeze_guard_middleware, router as owner
 from app.routers.forum_invitations import router as invitations_legacy
 from app.routers.forum_invitations_rbac import router as invitations_rbac
 from app.routers.forum_channel_acl_current import router as channel_acl
-from app.routers.forum_directory import router as directory
 from app.routers.structure_claims import router as claims
 from app.routers.structure_claim_review import router as claim_review
 from app.routers.structure_lifecycle import router as lifecycle
 from app.routers.structure_rbac import router as rbac
 from app.routers.structure_visibility import router as visibility
+from app.routers.structure_seo import router as seo
 from app.routers.forum_planning import router as planning
 from app.routers.forum_search import router as search
 from app.routers.forum_notifications import router as notifications
-from app.routers.forum_archives import router as archives
 from app.services.event_cohosting_operational import install_cohost_operational_access
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
-_FORUM_ENDPOINT_REPLACED={"list_structures","list_discussions","create_discussion","update_discussion","list_documents"}
+_FORUM_ENDPOINT_REPLACED={"list_discussions","create_discussion","update_discussion","list_documents"}
 _INVITE_REPLACED={"list_structure_invitations","create_structure_invitation","resend_structure_invitation","revoke_structure_invitation","accept_structure_invitation"}
 
 def _has(app,m,p): return any(getattr(r,"path","")==p and m in (getattr(r,"methods",set()) or set()) for r in app.router.routes)
@@ -37,17 +36,16 @@ def _replace(app):
 
 def create_app():
     app=monolith.app; _replace(app); install_cohost_operational_access(); paths={getattr(r,"path","") for r in app.routes}
-    if not _has(app,"GET","/forum/structures"): app.include_router(directory)
     if not any(p.endswith("/event-workspace") for p in paths): app.include_router(event_workspace)
     if not any(p.endswith("/accounting-summary") for p in paths): app.include_router(accounting)
     if not any(p.endswith("/event-manager") for p in paths): app.include_router(event_manager)
     if not any(p.endswith("/publish") and p.startswith("/forum/structures/") for p in paths): app.include_router(lifecycle)
     if not _has(app,"GET","/forum/structures/{slug}/workspace"): app.include_router(rbac)
     if not _has(app,"PATCH","/forum/structures/{slug}/visibility"): app.include_router(visibility)
+    if not _has(app,"GET","/forum/seo/structures/{slug}"): app.include_router(seo)
     if not _has(app,"GET","/forum/structures/{slug}/planning"): app.include_router(planning)
     if not _has(app,"GET","/forum/structures/{slug}/search"): app.include_router(search)
     if not _has(app,"GET","/forum/structures/{slug}/notifications"): app.include_router(notifications)
-    if not _has(app,"GET","/forum/structures/{slug}/archives/structured"): app.include_router(archives)
     if not getattr(app.state,"forum_ownership_installed",False): app.include_router(ownership); app.middleware("http")(freeze_guard_middleware); app.state.forum_ownership_installed=True
     if not getattr(app.state,"forum_claims_installed",False):
         claims.routes[:]=[r for r in claims.routes if getattr(getattr(r,"endpoint",None),"__name__","")!="review_structure_claim"]
