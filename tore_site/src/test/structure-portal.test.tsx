@@ -25,22 +25,18 @@ describe("Structure public portal", () => {
     expect(screen.queryByText("Album masqué")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Comité" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Site web/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Voir les événements" })).toHaveAttribute("href", "/forum/structures/un-cercle#events");
+    expect(screen.getByRole("link", { name: /Soirée du cercle/ })).toHaveAttribute("href", "/forum/events/soiree-du-cercle-42");
   });
-  it("opens public event details and links to the supported app event route", async () => {
+  it("links public events to their canonical public page", async () => {
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /Soirée du cercle/ }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Programme public de la soirée")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ouvrir la soirée dans TORÈ" })).toHaveAttribute("href", "tore://event/42");
-    expect(screen.getByRole("link", { name: "Installer l’application" })).toHaveAttribute("href", "/rejoindre#beta");
+    expect(await screen.findByRole("link", { name: /Soirée du cercle/ })).toHaveAttribute("href", "/forum/events/soiree-du-cercle-42");
   });
   it("keeps blocks private when their visibility is omitted", async () => {
     vi.mocked(apiFetch).mockResolvedValue({ ...payload(), visibility: {} });
     mount();
     await screen.findByRole("heading", { name: "Un cercle" });
     expect(screen.queryByText("Présentation")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Soirée du cercle/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Soirée du cercle/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Informations pratiques" })).not.toBeInTheDocument();
   });
 });

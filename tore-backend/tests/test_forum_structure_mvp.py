@@ -25,8 +25,11 @@ def _guest(name: str) -> tuple[str, str]:
     return token, me.json()["id"]
 
 
-def _headers(token: str, key: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}", "Idempotency-Key": key}
+def _headers(token: str, key: str | None = None) -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {token}"}
+    if key:
+        headers["Idempotency-Key"] = key
+    return headers
 
 
 def _publish(token: str, slug: str, key: str) -> None:

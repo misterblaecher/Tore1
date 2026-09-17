@@ -54,8 +54,11 @@ describe("Forum structured archives", () => {
     fireEvent.change(screen.getByLabelText("Event"), { target: { value: "42" } });
     fireEvent.change(screen.getByLabelText("Catégorie"), { target: { value: "DOCUMENT" } });
     fireEvent.change(screen.getByLabelText("Recherche"), { target: { value: "passation" } });
-    fireEvent.click(screen.getByRole("button", { name: "Filtrer" }));
-    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([path]) => String(path).includes("year=2026") && String(path).includes("mandate=Bureau+2025-2026") && String(path).includes("event_id=42") && String(path).includes("category=DOCUMENT") && String(path).includes("search=passation"))).toBe(true));
+    fireEvent.submit(screen.getByRole("button", { name: "Filtrer" }).closest("form")!);
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([calledPath]) => String(calledPath).includes("?"))).toBe(true));
+    const path = String([...vi.mocked(apiFetch).mock.calls].reverse().find(([calledPath]) => String(calledPath).includes("?"))?.[0]);
+    const params = new URL(path, "https://tore.test").searchParams;
+    expect(Object.fromEntries(params)).toEqual({ search: "passation", year: "2026", mandate: "Bureau 2025-2026", event_id: "42", category: "DOCUMENT" });
   });
 
   it("only exposes restore when the backend supplies a capability-backed restore path", async () => {

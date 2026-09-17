@@ -43,7 +43,8 @@ export default function ForumArchivesPage() {
     if (next.mandate) params.set("mandate", next.mandate);
     if (next.eventId) params.set("event_id", next.eventId);
     if (next.category) params.set("category", next.category);
-    try { setData(await apiFetch<ArchiveData>(`/forum/structures/${encodeURIComponent(slug)}/archives/structured${params.size ? `?${params}` : ""}`)); }
+    const query = params.toString();
+    try { setData(await apiFetch<ArchiveData>(`/forum/structures/${encodeURIComponent(slug)}/archives/structured${query ? `?${query}` : ""}`)); }
     catch (reason) { setError(reason); }
     finally { setLoading(false); }
   }, [filters, slug]);
@@ -103,7 +104,7 @@ export default function ForumArchivesPage() {
       </section>
 
       <aside className="forum-archives__aside">
-        <section className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Transmission</span><h2>Historique des bureaux</h2></div><Users size={20} /></div><div className="forum-list">{data?.officeHistory.length ? data.officeHistory.slice(0, 12).map((item) => <div className="forum-archives__mandate" key={item.id}><div><strong>{item.label}</strong><p>{item.member?.displayName || "Membre TORÈ"} · {item.role.replaceAll("_", " ")}</p><small>{periodLabel(item)}</small></div>{item.isAlumni ? <span className="forum-badge">Alumni</span> : <span className="forum-badge">Bureau</span>}</div>) : <div className="forum-empty">Aucun mandat de bureau historisé.</div>}</div><div className="forum-inline forum-archives__links">{data ? <><Link className="forum-button forum-button--ghost" to={data.links.members}>Voir les mandats</Link><Link className="forum-button forum-button--ghost" to={data.links.alumni}>Voir les alumni</Link></> : null}</div></section>
+        <section className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Transmission</span><h2>Historique des bureaux</h2></div><Users size={20} /></div><div className="forum-list">{data?.officeHistory.length ? data.officeHistory.slice(0, 12).map((item) => <div className="forum-archives__mandate" key={item.id}><div><strong>{item.label}</strong><p>{item.member?.displayName || "Membre TORÈ"} · {item.role.split("_").join(" ")}</p><small>{periodLabel(item)}</small></div>{item.isAlumni ? <span className="forum-badge">Alumni</span> : <span className="forum-badge">Bureau</span>}</div>) : <div className="forum-empty">Aucun mandat de bureau historisé.</div>}</div><div className="forum-inline forum-archives__links">{data ? <><Link className="forum-button forum-button--ghost" to={data.links.members}>Voir les mandats</Link><Link className="forum-button forum-button--ghost" to={data.links.alumni}>Voir les alumni</Link></> : null}</div></section>
         <section className="forum-card"><div className="forum-section-title"><div><span className="forum-eyebrow">Événementiel</span><h2>Events passés</h2></div><CalendarDays size={20} /></div><div className="forum-list">{data?.pastEvents.length ? data.pastEvents.slice(0, 8).map((event) => <Link className="forum-archives__past-event" to={`/forum/structures/${encodeURIComponent(slug)}/events/${event.id}`} key={event.id}><strong>{event.name}</strong><span>{dateLabel(event.startsAt)}{event.venue || event.city ? ` · ${event.venue || event.city}` : ""}</span></Link>) : <div className="forum-empty">Aucun event passé.</div>}</div></section>
       </aside>
     </div>

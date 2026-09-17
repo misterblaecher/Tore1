@@ -58,7 +58,7 @@ describe("Forum public event route", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Recap Night" })).toBeInTheDocument());
-    expect(screen.getByText("Le Carré · Rue des Dominicains · Liège")).toBeInTheDocument();
+    expect(screen.getAllByText("Le Carré · Rue des Dominicains · Liège").length).toBeGreaterThan(0);
     expect(screen.getByText("Une édition mémorable.")).toBeInTheDocument();
     expect(screen.getByText("420")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Continuer dans TORÈ/i })).toHaveAttribute("href", "/rejoindre?event=42");

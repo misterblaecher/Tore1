@@ -1,5 +1,10 @@
 const SITE_NAME = 'TORÈ';
 const FALLBACK_API_BASE = 'https://tore-backend.onrender.com';
+type SeoPage = { title?: string; name?: string; description?: string; imageUrl?: string | null; coverUrl?: string | null; indexable?: boolean; slug?: string; redirectTo?: string };
+type SeoList = { items?: { slug: string }[] };
+type ApiError = Error & { status?: number };
+type RequestLike = { headers: Record<string, string | string[] | undefined>; query: Record<string, string | string[] | undefined> };
+type ResponseLike = { setHeader(name: string, value: string): void; status(code: number): { send(body: string): unknown } };
 
 function apiBase() {
   return (process.env.SEO_API_BASE_URL || process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || FALLBACK_API_BASE).replace(/\/+$/, '');
@@ -19,17 +24,17 @@ function absolute(origin: string, value?: string | null) {
   try { return new URL(value, origin).toString(); } catch { return `${origin}/logo_full.png`; }
 }
 
-async function api(path: string) {
+async function api<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBase()}${path}`, { headers: { Accept: 'application/json' } });
   if (!response.ok) {
     const error = new Error(`API ${response.status}`) as Error & { status?: number };
     error.status = response.status;
     throw error;
   }
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
-function metadata(origin: string, canonicalPath: string, item: Record<string, any>) {
+function metadata(origin: string, canonicalPath: string, item: SeoPage) {
   const title = item.title || SITE_NAME;
   const description = item.description || 'Page officielle TORÈ.';
   const canonical = `${origin}${canonicalPath}`;
@@ -65,9 +70,9 @@ function inject(shell: string, head: string, fallback: string) {
     .replace('<div id="root"></div>', `<div id="root"></div><noscript>${fallback}</noscript>`);
 }
 
-function originFor(req: any) {
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = req.headers['x-forwarded-proto'] || 'https';
+function originFor(req: RequestLike) {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost');
+  const proto = String(req.headers['x-forwarded-proto'] || 'https');
   return `${proto}://${host}`;
 }
 
@@ -81,29 +86,29 @@ function xml(items: { loc: string }[]) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${items.map((item) => `\n  <url><loc>${esc(item.loc)}</loc></url>`).join('')}\n</urlset>`;
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: RequestLike, res: ResponseLike) {
   const origin = originFor(req);
   const kind = String(req.query.kind || '');
   const slug = String(req.query.slug || '');
 
   try {
     if (kind === 'sitemap-structures') {
-      const payload = await api('/forum/seo/structures');
+      const payload = await api<SeoList>('/forum/seo/structures');
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
-      return res.status(200).send(xml((payload.items || []).map((item: any) => ({ loc: `${origin}/forum/structures/${encodeURIComponent(item.slug)}` }))));
+      return res.status(200).send(xml((payload.items || []).map((item) => ({ loc: `${origin}/forum/structures/${encodeURIComponent(item.slug)}` }))));
     }
     if (kind === 'sitemap-events') {
-      const payload = await api('/forum/seo/events');
+      const payload = await api<SeoList>('/forum/seo/events');
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
-      return res.status(200).send(xml((payload.items || []).map((item: any) => ({ loc: `${origin}/forum/events/${encodeURIComponent(item.slug)}` }))));
+      return res.status(200).send(xml((payload.items || []).map((item) => ({ loc: `${origin}/forum/events/${encodeURIComponent(item.slug)}` }))));
     }
 
     const endpoint = kind === 'event'
       ? `/forum/seo/events/${encodeURIComponent(slug)}`
       : `/forum/seo/structures/${encodeURIComponent(slug)}`;
-    const item = await api(endpoint);
+    const item = await api<SeoPage>(endpoint);
 
     if (item.redirectTo) {
       res.setHeader('Location', `${origin}/forum/structures/${encodeURIComponent(item.redirectTo)}`);
@@ -118,13 +123,13 @@ export default async function handler(req: any, res: any) {
     const html = inject(
       await shell(origin),
       metadata(origin, canonicalPath, { ...item, title, description }),
-      `<main><h1>${esc(item.title || item.name)}</h1><p>${esc(description)}</p></main>`,
+      `<main><h1>${esc(item.name || item.title)}</h1><p>${esc(description)}</p></main>`,
     );
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=600');
     return res.status(200).send(html);
-  } catch (error: any) {
-    const status = error?.status === 404 ? 404 : 502;
+  } catch (error: unknown) {
+    const status = (error as ApiError)?.status === 404 ? 404 : 502;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     return res.status(status).send('<!doctype html><html lang="fr"><head><title>TORÈ</title><meta name="robots" content="noindex,nofollow"></head><body><main><h1>Page indisponible</h1></main></body></html>');
