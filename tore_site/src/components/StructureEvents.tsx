@@ -183,7 +183,10 @@ export default function StructureEvents({ slug, canCreate, canManage }: { slug: 
   async function transition(nextStatus: Lifecycle) {
     if (!selected) return;
     setNotice(""); setValidation("");
-    const result = await mutation.write<EventItem>(`${base}/${selected.id}`, "PATCH", { lifecycle_status: nextStatus });
+    const result = await mutation.write<EventItem>(`${base}/${selected.id}`, "PATCH", {
+      lifecycle_status: nextStatus,
+      ...(nextStatus === "PUBLISHED" ? { publication_status: "PUBLISHED", visibility: "PUBLIC" } : {}),
+    });
     if (!result) return;
     setEditForm(eventToForm(result));
     setNotice(`Cycle de vie mis à jour : ${lifecycleLabels[nextStatus]}.`); reload();

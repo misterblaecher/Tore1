@@ -49,6 +49,30 @@ def _permissions(**overrides) -> dict[str, bool]:
     return base
 
 
+def test_publication_requires_active_owner_and_persists_after_activation():
+    token, _ = _guest("publication-lifecycle-owner")
+    org = _structure(token, "Publication lifecycle", "publication-lifecycle")
+    base = f"/forum/structures/{org['slug']}"
+    created = client.post(f"{base}/event-manager", json={
+        "name": "Lifecycle event",
+        "starts_at": (now_utc() + timedelta(days=2)).isoformat(),
+        "ends_at": (now_utc() + timedelta(days=2, hours=3)).isoformat(),
+    }, headers=_headers(token))
+    assert created.status_code == 201
+    path = f"{base}/event-manager/{created.json()['id']}"
+    for patch in ({"visibility": "PUBLIC"}, {"publication_status": "PUBLISHED", "visibility": "PUBLIC"}):
+        blocked = client.patch(path, json=patch, headers=_headers(token))
+        assert blocked.status_code == 409
+        assert "SETUP" in blocked.json()["detail"]
+    activated = client.post(f"{base}/publish", json={"reason": "Publication de la structure"}, headers=_headers(token, "activate-publication-lifecycle"))
+    assert activated.status_code == 200
+    published = client.patch(path, json={"publication_status": "PUBLISHED", "visibility": "PUBLIC"}, headers=_headers(token))
+    assert published.status_code == 200
+    detail = client.get(path, headers=_headers(token)).json()
+    assert detail["visibility"] == "PUBLIC"
+    assert detail["publicationStatus"] == "PUBLISHED"
+
+
 def test_cohost_permissions_are_explicit_and_finance_never_leaks():
     owner_token, owner_user_id = _guest("event-owner")
     cohost_token, cohost_user_id = _guest("event-cohost")

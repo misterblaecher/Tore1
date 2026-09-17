@@ -19,6 +19,7 @@ from app.services.event_cohosting_service import (
 )
 from app.services.event_staff_invitation_service import create_secure_event_invitation
 from app.services.idempotency_service import ensure_idempotency_key
+from app.services.structure_lifecycle import lifecycle_status
 from db import now_utc
 from models import (
     AppUser, Event, EventCost, EventManagerSettings, EventStaff, EventStaffInviteCode,
@@ -236,6 +237,15 @@ def patch_managed_event(slug: str, event_id: int, payload: EventManagerPatchIn, 
         data.pop("visibility", None)
     if set(data) - {"publication_status"} and not effective_permission(link, member, "edit"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "edit"})
     if "publication_status" in data and not effective_permission(link, member, "publish"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "publish"})
+    if data.get("publication_status") == "PUBLISHED" or data.get("visibility") == "PUBLIC":
+        if event.host_type == "orga" and str(event.host_id or "").isdigit():
+            owner_status = lifecycle_status(db, int(event.host_id))
+            if owner_status != "ACTIVE":
+                raise HTTPException(409, detail=(
+                    f"Publication impossible : la structure organisatrice est au statut {owner_status}. "
+                    "Elle doit être ACTIVE avant de rendre cet événement public. "
+                    "Si elle est en préparation (SETUP), publiez d’abord la structure."
+                ))
     mapping = {"name": "name", "description": "public_description", "venue": "venue", "city": "city", "capacity": "capacity", "entry_price_cents": "entry_price_cents", "modules_on": "modules_on", "visibility": "visibility", "publication_status": "publication_status"}
     for key, attr in mapping.items():
         if key in data: setattr(event, attr, data[key].strip() if key == "name" and data[key] else data[key])
