@@ -31,7 +31,7 @@ def current_app_user(
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> AppUser:
-    from app.legacy.monolith import _extract_bearer_token, _resolve_app_user_from_token
+    from app.core.security.user_auth import _extract_bearer_token, _resolve_app_user_from_token
 
     raw = _extract_bearer_token(authorization)
     user = _resolve_app_user_from_token(raw, db) if raw else None
