@@ -43,10 +43,7 @@ from app.services.entry_service import (
 router = APIRouter()
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _scan_status_from_log(log: EntryScanLog, *, idempotent: bool) -> str:
