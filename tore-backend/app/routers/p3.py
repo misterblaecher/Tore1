@@ -43,10 +43,7 @@ from partner_auth import current_identity, require_role
 router = APIRouter(tags=["p3"])
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 security = HTTPBearer(auto_error=False)
