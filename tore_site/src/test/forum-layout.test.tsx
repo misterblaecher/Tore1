@@ -2,12 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ForumLayout from "@/components/layout/ForumLayout";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, refreshWebSession } from "@/lib/api";
 import { ACCESS_TOKEN_KEY } from "@/lib/auth";
 import { getMe } from "@/lib/session";
 import { ForumWorkspace } from "@/lib/forum-navigation";
 
-vi.mock("@/lib/api", () => ({ apiFetch: vi.fn() }));
+vi.mock("@/lib/api", () => ({ apiFetch: vi.fn(), refreshWebSession: vi.fn(), webLogout: vi.fn() }));
 vi.mock("@/lib/session", () => ({ getMe: vi.fn() }));
 
 const committees: ForumWorkspace[] = [
@@ -31,6 +31,7 @@ describe("Forum shared navigation", () => {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, "test-session");
     vi.mocked(getMe).mockResolvedValue({ id: "user-1", display_name: "Thomas", avatar_url: "/thomas.png" });
     vi.mocked(apiFetch).mockResolvedValue({ items: committees });
+    vi.mocked(refreshWebSession).mockResolvedValue(false);
   });
   afterEach(cleanup);
 
@@ -83,9 +84,23 @@ describe("Forum shared navigation", () => {
     await waitFor(() => expect(localStorage.getItem("tore.forum.structure.user-1")).toBeNull());
   });
 
-  it("keeps the public navigation for visitors without fetching private structures", () => {
+  it("restores a cookie-backed session before treating the forum as anonymous", async () => {
     sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    vi.mocked(refreshWebSession).mockImplementation(async () => {
+      sessionStorage.setItem(ACCESS_TOKEN_KEY, "restored-session");
+      return true;
+    });
+    openPage("/forum");
+    await waitFor(() => expect(refreshWebSession).toHaveBeenCalled());
+    await waitFor(() => expect(getMe).toHaveBeenCalled());
+    expect(await screen.findByRole("button", { name: "Changer de structure" })).toHaveTextContent("L’Embuscade");
+  });
+
+  it("keeps the public navigation when no cookie-backed session exists", async () => {
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    vi.mocked(refreshWebSession).mockResolvedValue(false);
     openPage("/forum/login");
+    await waitFor(() => expect(refreshWebSession).toHaveBeenCalled());
     expect(navigation().getByRole("link", { name: "Accueil du Forum" })).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
     expect(screen.getByText(/Connectez-vous pour retrouver les rubriques/)).toBeInTheDocument();
