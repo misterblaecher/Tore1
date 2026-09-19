@@ -8,7 +8,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.models.event_cohosting import EventManagerSettings
 from app.routers.forum import _active_membership, _can_view, _structure_or_404
 from app.services.audit_service import write_audit_log

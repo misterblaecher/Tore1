@@ -24,10 +24,7 @@ from app.services.p3_common import ensure_event_action_allowed
 router = APIRouter(tags=["operational-access"])
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as legacy_get_db
-
-    yield from legacy_get_db()
+from app.deps.db import get_db
 
 
 def current_app_user(

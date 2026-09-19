@@ -138,10 +138,7 @@ def _wallet_ledger_type(tx: WalletTx) -> str:
     return mapping.get((tx.ref_type or "").upper(), "admin_adjust")
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def get_current_user(

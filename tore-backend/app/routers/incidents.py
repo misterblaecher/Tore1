@@ -32,10 +32,7 @@ STATUSES = {"open", "assigned", "resolved", "canceled"}
 ASSIGNMENT_ROLES = {"ENTRY", "BAR", "MANAGER"}
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _require_orga_identity(identity=Depends(current_identity)):

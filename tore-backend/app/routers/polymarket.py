@@ -89,10 +89,7 @@ def _rate_limit_event_create(user_id: str) -> None:
     q.append(now)
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _gate_bet_event_state(db: Session, bet_id: int, write: bool = True) -> None:

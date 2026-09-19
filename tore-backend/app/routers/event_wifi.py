@@ -26,10 +26,7 @@ from app.services.rate_limit_service import enforce_rate_limit
 router = APIRouter(tags=["event-wifi"])
 
 
-def get_db():
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _require_orga_manager_identity(identity=Depends(current_identity)):

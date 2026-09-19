@@ -32,10 +32,7 @@ security = HTTPBearer(auto_error=False)
 _ALLOWED_TYPES = {"broadcast", "order", "price", "gift", "battles", "hunt", "bets", "alerts", "crash"}
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _hash_token(raw: str) -> str:
