@@ -13,7 +13,7 @@ function webHeaders(headers?: HeadersInit): Headers {
   return out;
 }
 
-async function refreshWebSession(): Promise<boolean> {
+export async function refreshWebSession(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE}/auth/web/refresh`, {
       method: 'POST',
@@ -34,15 +34,15 @@ export async function webLogout(): Promise<void> {
   const token = getToken();
   const headers = webHeaders();
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  try {
-    await fetch(`${API_BASE}/auth/web/logout`, {
-      method: 'POST',
-      credentials: 'include',
-      headers,
-    });
-  } finally {
-    clearToken();
+  const response = await fetch(`${API_BASE}/auth/web/logout`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+  });
+  if (!response.ok) {
+    throw new ApiError(`Logout failed (HTTP ${response.status})`, response.status);
   }
+  clearToken();
 }
 
 async function request(path: string, init: RequestInit, token: string | null): Promise<Response> {
