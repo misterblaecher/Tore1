@@ -27,8 +27,8 @@ function navigation() { return within(screen.getByRole("navigation", { name: "Na
 describe("Forum shared navigation", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    localStorage.clear();
-    localStorage.setItem(ACCESS_TOKEN_KEY, "test-session");
+    localStorage.clear(); sessionStorage.clear();
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, "test-session");
     vi.mocked(getMe).mockResolvedValue({ id: "user-1", display_name: "Thomas", avatar_url: "/thomas.png" });
     vi.mocked(apiFetch).mockResolvedValue({ items: committees });
   });
@@ -84,7 +84,7 @@ describe("Forum shared navigation", () => {
   });
 
   it("keeps the public navigation for visitors without fetching private structures", () => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     openPage("/forum/login");
     expect(navigation().getByRole("link", { name: "Accueil du Forum" })).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();

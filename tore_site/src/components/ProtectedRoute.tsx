@@ -19,13 +19,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     let active = true;
     setIsChecking(true);
     setError(false);
-    const token = getToken();
-    if (!token) {
-      setIsAllowed(false);
-      setIsChecking(false);
-      return;
-    }
-
     void getMe()
       .then(() => {
         if (!active) return;
@@ -34,7 +27,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       .catch((reason: unknown) => {
         if (!active) return;
         setIsAllowed(false);
-        setError(!(reason instanceof ApiError && reason.status === 401) && Boolean(getToken()));
+        setError(!(reason instanceof ApiError && reason.status === 401));
       })
       .finally(() => {
         if (!active) return;

@@ -19,6 +19,7 @@ from app.routers.forum_search import router as search
 from app.routers.forum_notifications import router as notifications
 from app.routers.forum_directory import router as directory
 from app.services.event_cohosting_operational import install_cohost_operational_access
+from app.routers.web_auth import router as web_auth
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
@@ -62,5 +63,6 @@ def create_app():
     if not any(getattr(r,"name",None)=="get_public_event_page" for r in app.routes):
         from app.routers.forum_events import router as events
         app.include_router(events)
+    if not _has(app,"POST","/auth/web/refresh"): app.include_router(web_auth)
     run_startup(app); return app
 __all__=["create_app"]

@@ -9,8 +9,8 @@ export async function getMe(force = false): Promise<MeResponse> {
 
   const token = getToken();
   const me = await apiFetch<MeResponse>('/auth/me');
-  // An old request must never populate the next account's profile cache.
-  if (getToken() !== token) throw new Error('La session a changé.');
+  // An old authenticated request must never populate the next account's profile cache.
+  if (token && getToken() !== token) throw new Error('La session a changé.');
   setCachedMe(me);
   return me;
 }
