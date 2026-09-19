@@ -22,10 +22,7 @@ from partner_auth import current_identity
 router = APIRouter(tags=["zones"])
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 class ZoneOut(BaseModel):
