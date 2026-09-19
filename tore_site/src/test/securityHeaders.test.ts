@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 
 describe('deployment security headers', () => {
-  const config = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'))
+  const config = JSON.parse(readFileSync('vercel.json', 'utf8'))
   const values = Object.fromEntries(config.headers[0].headers.map((header: { key: string; value: string }) => [header.key, header.value]))
 
   test('defines CSP and clickjacking protections', () => {
