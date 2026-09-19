@@ -56,10 +56,7 @@ class BattleClearIn(BaseModel):
     reason: str = Field(min_length=3, max_length=240)
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _battles_guard(db: Session, event_id: int, *, write: bool) -> None:
