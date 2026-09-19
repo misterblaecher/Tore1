@@ -50,7 +50,10 @@ export function clearIncidentDraft(eventId: string | number) {
 }
 
 export function clearAllIncidentDrafts() {
-  for (const storage of [localStorage, sessionStorage]) {
+  const storages: Storage[] = []
+  if (typeof localStorage !== 'undefined') storages.push(localStorage)
+  if (typeof sessionStorage !== 'undefined') storages.push(sessionStorage)
+  for (const storage of storages) {
     const keys: string[] = []
     for (let index = 0; index < storage.length; index += 1) {
       const value = storage.key(index)
