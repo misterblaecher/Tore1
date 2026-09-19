@@ -8,6 +8,7 @@ export type PartnerSession = {
 }
 
 function clearLegacy() {
+  if (typeof localStorage === 'undefined') return
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(SESSION_KEY)
 }
@@ -15,21 +16,24 @@ function clearLegacy() {
 clearLegacy()
 
 export function getToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY)
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(TOKEN_KEY)
 }
 
 export function setToken(token: string) {
   clearLegacy()
-  sessionStorage.setItem(TOKEN_KEY, token)
+  if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TOKEN_KEY, token)
 }
 
 export function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY)
-  sessionStorage.removeItem(SESSION_KEY)
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(SESSION_KEY)
+  }
   clearLegacy()
 }
 
 export function getSession(): PartnerSession | null {
+  if (typeof sessionStorage === 'undefined') return null
   const raw = sessionStorage.getItem(SESSION_KEY)
   if (!raw) return null
   try {
@@ -42,5 +46,5 @@ export function getSession(): PartnerSession | null {
 
 export function setSession(session: PartnerSession) {
   clearLegacy()
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
 }
