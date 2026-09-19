@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from models import AppUser, Event, OrganizationMembership, StructureDocument, StructureDiscussionChannel, StructureDiscussionPost, StructurePage
-from app.legacy.monolith import get_current_user
+from app.core.security.user_auth import get_current_user
 from app.deps.db import get_db
 from app.routers.forum import _can_view, _structure_or_404
 from app.services.structure_rbac import require_capability

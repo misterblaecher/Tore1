@@ -170,6 +170,7 @@ from partner_auth import router as partner_auth_router, current_identity as curr
 from app.db.sqlite_compat import ensure_sqlite_compat
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
+from app.core.security.app_tokens import decode_user_token
 from app.utils.migrations import ensure_otp_schema, otp_schema_ready, run_migrations_on_startup
 
 

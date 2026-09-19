@@ -25,7 +25,8 @@ from models import (
     StructureAlbum,
     StructureDocument,
 )
-from app.legacy.monolith import get_current_user, get_db
+from app.core.security.user_auth import get_current_user
+from app.deps.db import get_db
 from app.routers.forum import (
     _save_idem,
     _structure_or_404,

@@ -6,8 +6,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from app.legacy import monolith
-from db import get_db, now_utc
+from app.core.environment import _resolved_env_name
+from app.core.settings import REFRESH_TOKEN_TTL_DAYS, _cors_origins
+from app.core.security.user_auth import _hash_token
+from app.deps.db import get_db
+from app.legacy import auth_compat
+from db import now_utc
 from models import AppToken, RefreshToken
 
 
@@ -21,22 +25,22 @@ def _require_web_request(request: Request) -> None:
         raise HTTPException(status_code=403, detail={"reason": "web_request_required"})
     origin = (request.headers.get("origin") or "").rstrip("/")
     if not origin:
-        if monolith._resolved_env_name() == "PROD":
+        if _resolved_env_name() == "PROD":
             raise HTTPException(status_code=403, detail={"reason": "origin_required"})
         return
-    allowed = set(monolith._cors_origins())
+    allowed = set(_cors_origins())
     if origin not in allowed:
         raise HTTPException(status_code=403, detail={"reason": "origin_forbidden"})
 
 
 def _cookie_options() -> dict[str, Any]:
-    prod = monolith._resolved_env_name() == "PROD"
+    prod = _resolved_env_name() == "PROD"
     return {
         "httponly": True,
         "secure": prod,
         "samesite": "none" if prod else "lax",
         "path": "/auth/web",
-        "max_age": int(monolith.REFRESH_TOKEN_TTL_DAYS) * 86400,
+        "max_age": int(REFRESH_TOKEN_TTL_DAYS) * 86400,
     }
 
 
@@ -66,46 +70,46 @@ def _sanitize_result(result: dict[str, Any], response: Response) -> dict[str, An
 
 @router.post("/password/register")
 def password_register(
-    payload: monolith.PasswordRegisterIn,
+    payload: auth_compat.PasswordRegisterIn,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
     _require_web_request(request)
-    return _sanitize_result(monolith.auth_password_register(payload, db), response)
+    return _sanitize_result(auth_compat.auth_password_register(payload, db), response)
 
 
 @router.post("/password/login")
 def password_login(
-    payload: monolith.PasswordLoginIn,
+    payload: auth_compat.PasswordLoginIn,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
     _require_web_request(request)
-    return _sanitize_result(monolith.auth_password_login(payload, db), response)
+    return _sanitize_result(auth_compat.auth_password_login(payload, db), response)
 
 
 @router.post("/email/verify_otp")
 def email_verify_otp(
-    payload: monolith.EmailOtpVerifyIn,
+    payload: auth_compat.EmailOtpVerifyIn,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
     _require_web_request(request)
-    return _sanitize_result(monolith.auth_email_verify_otp(payload, request, db), response)
+    return _sanitize_result(auth_compat.auth_email_verify_otp(payload, request, db), response)
 
 
 @router.post("/email/verify_link")
 def email_verify_link(
-    payload: monolith.MagicLinkVerifyIn,
+    payload: auth_compat.MagicLinkVerifyIn,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
     _require_web_request(request)
-    return _sanitize_result(monolith.auth_email_verify_link(payload, request, db), response)
+    return _sanitize_result(auth_compat.auth_email_verify_link(payload, request, db), response)
 
 
 @router.post("/refresh")
@@ -114,7 +118,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     raw_refresh = (request.cookies.get(_REFRESH_COOKIE) or "").strip()
     if not raw_refresh:
         raise HTTPException(status_code=401, detail={"reason": "refresh_cookie_missing"})
-    result = monolith.auth_refresh(monolith.RefreshIn(refreshToken=raw_refresh), db)
+    result = auth_compat.auth_refresh(auth_compat.RefreshIn(refreshToken=raw_refresh), db)
     return _sanitize_result(result, response)
 
 
@@ -130,7 +134,7 @@ def logout(
     raw_refresh = (request.cookies.get(_REFRESH_COOKIE) or "").strip()
     if raw_refresh:
         refresh_row = db.query(RefreshToken).filter(
-            RefreshToken.token_hash == monolith._hash_token(raw_refresh),
+            RefreshToken.token_hash == _hash_token(raw_refresh),
             RefreshToken.revoked_at.is_(None),
         ).first()
         if refresh_row:
@@ -140,7 +144,7 @@ def logout(
     if authorization and authorization.lower().startswith("bearer "):
         raw_access = authorization.split(" ", 1)[1].strip()
         access_row = db.query(AppToken).filter(
-            AppToken.token_hash == monolith._hash_token(raw_access),
+            AppToken.token_hash == _hash_token(raw_access),
             AppToken.revoked_at.is_(None),
         ).first()
         if access_row:

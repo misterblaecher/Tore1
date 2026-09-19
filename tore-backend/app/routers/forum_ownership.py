@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from db import SessionLocal, now_utc
 from models import AppToken, AppUser, Organization, OrganizationMembership
-from app.legacy.monolith import get_current_user
+from app.core.security.user_auth import get_current_user
 from app.deps.db import get_db
 from app.ownership_models import StructureOwnership, StructureOwnershipTransfer, StructureRecoveryRequest
 from app.services.audit_service import write_audit_log

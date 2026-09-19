@@ -23,7 +23,7 @@ def test_google_auth_creates_user_and_returns_tokens(monkeypatch):
     def fake_verify(_: str):
         return {"email": "google.user@example.com", "name": "Google User", "email_verified": True}
 
-    monkeypatch.setattr("main._verify_google_id_token", fake_verify)
+    monkeypatch.setattr("app.legacy.monolith._verify_google_id_token", fake_verify)
     res = client.post("/auth/google", json={"idToken": "fake-token"})
     assert res.status_code == 200
     data = res.json()
@@ -111,7 +111,7 @@ def test_magic_link_request_never_exposes_token_outside_dev(monkeypatch):
     monkeypatch.setenv("ENV", "PROD")
     monkeypatch.setenv("TORE_EMAIL_OTP_DEV_MODE", "0")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
-    monkeypatch.setattr("main._send_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.legacy.monolith._send_email", lambda *args, **kwargs: None)
     client = TestClient(app)
 
     res = client.post("/auth/email/request_link", json={"email": "safe@example.com"})
@@ -177,7 +177,7 @@ def test_internal_server_error_uses_json_handler(monkeypatch):
     def explode(*_args, **_kwargs):
         raise RuntimeError('boom')
 
-    monkeypatch.setattr('main._issue_auth_tokens', explode)
+    monkeypatch.setattr('app.legacy.monolith._issue_auth_tokens', explode)
 
     res = client.post('/auth/guest', json={'display_name': 'Guest Error'})
     assert res.status_code == 500
@@ -227,7 +227,7 @@ def test_email_otp_and_welcome_only_on_first_account_creation(monkeypatch):
     def fake_send_email(subject: str, body: str, to_email: str):
         sent.append({"subject": subject, "to": to_email, "body": body})
 
-    monkeypatch.setattr("main._send_email", fake_send_email)
+    monkeypatch.setattr("app.legacy.monolith._send_email", fake_send_email)
     client = TestClient(app)
 
     email = f"otp-welcome-{now_utc().timestamp()}@example.com"
@@ -275,7 +275,7 @@ def test_email_request_otp_dev_dry_run_when_smtp_fails(monkeypatch):
     def fake_smtp(*args, **kwargs):
         raise OSError("smtp down")
 
-    monkeypatch.setattr("main.smtplib.SMTP", fake_smtp)
+    monkeypatch.setattr("app.legacy.monolith.smtplib.SMTP", fake_smtp)
 
     client = TestClient(app)
     email = f"otp-dry-{now_utc().timestamp()}@example.com"

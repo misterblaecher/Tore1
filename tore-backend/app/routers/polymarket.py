@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, Bet, BetResolutionLog, EventConfig, EventRuntimeState, EventStaff, PolymarketEventIdempotency
-from app.legacy.monolith import get_current_user
+from app.core.security.user_auth import get_current_user
 from app.schemas.polymarket import (
     BetCreateIn,
     BetDetailOut,
