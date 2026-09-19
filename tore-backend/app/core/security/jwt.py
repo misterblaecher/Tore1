@@ -28,6 +28,9 @@ def _resolve_partner_identity_from_token(raw: str, db: Session) -> Optional[dict
     except (TypeError, ValueError):
         return None
 
+    role = payload.get("role")
+    name = payload.get("name")
+
     membership = (
         db.query(PartnerMembership)
         .filter(
@@ -42,8 +45,8 @@ def _resolve_partner_identity_from_token(raw: str, db: Session) -> Optional[dict
     return {
         "user_id": user_id,
         "bar_id": bar_id,
-        "role": membership.role,
-        "display_name": membership.display_name,
+        "role": role,
+        "display_name": name,
     }
 
 
