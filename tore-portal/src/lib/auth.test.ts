@@ -1,14 +1,20 @@
 import { beforeEach, expect, test, vi } from 'vitest'
 import { clearToken, getSession, getToken, setSession, setToken } from './auth'
 import { hasOrgaHubAccess, hasOrgaManagerAccess } from './authz'
-import { api } from './api'
+import { api, logoutPartnerSession } from './api'
 
 beforeEach(() => {
-  const data = new Map<string, string>()
+  const localData = new Map<string, string>()
+  const sessionData = new Map<string, string>()
   vi.stubGlobal('localStorage', {
-    getItem: (key: string) => data.get(key) ?? null,
-    setItem: (key: string, value: string) => data.set(key, value),
-    removeItem: (key: string) => data.delete(key),
+    getItem: (key: string) => localData.get(key) ?? null,
+    setItem: (key: string, value: string) => localData.set(key, value),
+    removeItem: (key: string) => localData.delete(key),
+  })
+  vi.stubGlobal('sessionStorage', {
+    getItem: (key: string) => sessionData.get(key) ?? null,
+    setItem: (key: string, value: string) => sessionData.set(key, value),
+    removeItem: (key: string) => sessionData.delete(key),
   })
 })
 
@@ -46,5 +52,32 @@ test('401 clears credentials, while 403 preserves the account session', async ()
   expect(getToken()).toBe('session-token')
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })))
   await expect(api('/private')).rejects.toMatchObject({ status: 401 })
+  expect(getToken()).toBeNull()
+})
+
+test('partner credentials are tab-scoped and old localStorage values are migrated', () => {
+  setToken('session-token')
+  setSession({ bar_id: 12, display_name: 'Staff', role: 'bartender' })
+  expect(localStorage.getItem('tore_partner_token')).toBeNull()
+  expect(localStorage.getItem('tore_partner_session')).toBeNull()
+  expect(sessionStorage.getItem('tore_partner_token')).toBe('session-token')
+
+  clearToken()
+  localStorage.setItem('tore_partner_token', 'legacy-token')
+  expect(getToken()).toBe('legacy-token')
+  expect(localStorage.getItem('tore_partner_token')).toBeNull()
+  expect(sessionStorage.getItem('tore_partner_token')).toBe('legacy-token')
+})
+
+test('partner logout revokes the bearer before clearing browser state', async () => {
+  setToken('session-token')
+  const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+  vi.stubGlobal('fetch', request)
+
+  await logoutPartnerSession()
+
+  expect(request).toHaveBeenCalledTimes(1)
+  expect(request.mock.calls[0][0]).toContain('/partner/auth/revoke-token')
+  expect(request.mock.calls[0][1].headers.Authorization).toBe('Bearer session-token')
   expect(getToken()).toBeNull()
 })
