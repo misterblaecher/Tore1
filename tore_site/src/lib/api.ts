@@ -40,7 +40,7 @@ export async function refreshWebSession(): Promise<string | null> {
       setToken(accessToken);
       return accessToken;
     } catch {
-      return null;
+      throw new ApiError('API indisponible. Vérifiez la connexion.');
     } finally {
       refreshPromise = null;
     }
