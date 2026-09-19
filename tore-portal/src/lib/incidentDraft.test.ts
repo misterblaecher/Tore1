@@ -1,12 +1,24 @@
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { clearAllIncidentDrafts, clearIncidentDraft, INCIDENT_DRAFT_TTL_MS, loadIncidentDraft, saveIncidentDraft } from './incidentDraft'
 
 const draft = { severity: 'warn', description: 'Sensitive note', location: 'Backstage', title: 'Incident' }
 
+function memoryStorage(): Storage {
+  const values = new Map<string, string>()
+  return {
+    get length() { return values.size },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => Array.from(values.keys())[index] ?? null,
+    removeItem: (key) => { values.delete(key) },
+    setItem: (key, value) => { values.set(key, value) },
+  }
+}
+
 describe('incident draft storage', () => {
   beforeEach(() => {
-    localStorage.clear()
-    sessionStorage.clear()
+    vi.stubGlobal('localStorage', memoryStorage())
+    vi.stubGlobal('sessionStorage', memoryStorage())
   })
 
   test('uses sessionStorage and clears legacy localStorage', () => {
