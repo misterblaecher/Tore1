@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Building2, CalendarClock, CircleUserRound, LogOut, ShieldCheck } from "lucide-react";
-import { apiFetch, ApiError } from "@/lib/api";
-import { MeResponse, clearToken, setCachedMe } from "@/lib/auth";
+import { apiFetch, ApiError, logoutWebSession } from "@/lib/api";
+import { MeResponse, setCachedMe } from "@/lib/auth";
 import { getMe } from "@/lib/session";
 import "@/styles/forum.css";
 
@@ -166,10 +166,13 @@ export default function ProfilePage() {
     }
   }
 
-  function logout() {
-    clearToken();
-    setCachedMe(null);
-    navigate("/forum/login");
+  async function logout() {
+    try {
+      await logoutWebSession();
+    } finally {
+      setCachedMe(null);
+      navigate("/forum/login");
+    }
   }
 
   const affiliations = profile?.affiliations ?? [];
