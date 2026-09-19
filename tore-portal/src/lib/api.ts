@@ -59,6 +59,20 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T
 }
 
+export async function logoutPartnerSession(): Promise<void> {
+  const token = getToken()
+  try {
+    if (token) {
+      await fetch(`${API_BASE}/partner/auth/revoke-token`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    }
+  } finally {
+    clearToken()
+  }
+}
+
 export async function apiText(path: string, init: RequestInit = {}): Promise<string> {
   const token = getToken()
   const headers = new Headers(init.headers)
