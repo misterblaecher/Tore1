@@ -101,3 +101,20 @@ def test_access_token_expires_server_side():
     me = client.get("/auth/me", headers={"Authorization": f"Bearer {access}"})
     assert me.status_code == 401
     assert me.json()["detail"]["reason"] == "access_token_expired"
+
+
+def test_expired_access_token_is_rejected_by_shared_resolver():
+    client = TestClient(app)
+    response = _register(client, "shared-expiry")
+    access = response.json()["access_token"]
+    digest = hashlib.sha256(access.encode("utf-8")).hexdigest()
+    with get_session() as db:
+        row = db.query(AppToken).filter(AppToken.token_hash == digest).one()
+        row.created_at = now_utc() - timedelta(minutes=ACCESS_TOKEN_TTL_MIN + 1)
+        db.commit()
+
+    from app.legacy.monolith import _resolve_app_user_from_token
+    with get_session() as db:
+        assert _resolve_app_user_from_token(access, db) is None
+        row = db.query(AppToken).filter(AppToken.token_hash == digest).one()
+        assert row.revoked_at is not None
