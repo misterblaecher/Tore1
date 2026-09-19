@@ -2,8 +2,10 @@ from datetime import timedelta
 
 from fastapi.testclient import TestClient
 
-from db import Base, engine, now_utc
+from db import Base, SessionLocal, engine, now_utc
 from main import app
+from models import Event
+from app.routers.forum_events import _event_slug, _is_public_event
 
 
 client = TestClient(app)
@@ -40,12 +42,19 @@ def _create_structure(token: str, key: str, name: str = "Structure Event Public"
     return response.json()["orga"]
 
 
-def _create_event(token: str, structure_slug: str, *, key: str, visibility: str = "PUBLIC") -> dict:
+def _create_event(
+    token: str,
+    structure_slug: str,
+    *,
+    key: str,
+    visibility: str = "PUBLIC",
+    name: str = "Recap Night",
+) -> dict:
     now = now_utc()
     response = client.post(
         f"/forum/structures/{structure_slug}/events",
         json={
-            "name": "Recap Night",
+            "name": name,
             "starts_at": (now - timedelta(hours=3)).isoformat(),
             "ends_at": (now - timedelta(hours=1)).isoformat(),
             "venue": "Le Carré",
@@ -152,3 +161,33 @@ def test_private_event_has_no_public_event_page():
 
     response = client.get(f"/forum/events/recap-night-{event['id']}")
     assert response.status_code == 404
+
+
+def test_public_event_slug_normalizes_accents():
+    owner_token, _ = _guest("accented-event-owner")
+    structure = _create_structure(owner_token, "accented-event-orga")
+    published_structure = client.post(
+        f"/forum/structures/{structure['slug']}/publish",
+        json={"reason": "Publication explicite avant le test du slug accentué"},
+        headers=_headers(owner_token, "accented-event-publish-structure"),
+    )
+    assert published_structure.status_code == 200
+    event = _create_event(
+        owner_token,
+        structure["slug"],
+        key="accented-event-create",
+        name="Réunion générale",
+    )
+
+    with SessionLocal() as db:
+        persisted = db.get(Event, event["id"])
+        assert persisted is not None
+        assert (persisted.visibility, persisted.publication_status) == ("PUBLIC", "PUBLISHED")
+        assert _is_public_event(persisted)
+        assert _event_slug(persisted) == f"reunion-generale-{event['id']}"
+
+    response = client.get(f"/forum/events/reunion-generale-{event['id']}")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["slug"] == f"reunion-generale-{event['id']}"
+    assert response.json()["canonicalPath"] == f"/forum/events/reunion-generale-{event['id']}"
