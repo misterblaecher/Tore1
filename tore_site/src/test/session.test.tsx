@@ -37,7 +37,10 @@ describe("Account session resilience", () => {
   });
   it("clears only expired credentials and accepts successful empty responses", async () => {
     setToken("session-a");
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("{}", { status: 401 })).mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
     await expect(getMe(true)).rejects.toMatchObject({ status: 401 });
     expect(getToken()).toBeNull();
     await expect(apiFetch("/resource", { method: "DELETE" })).resolves.toBeUndefined();
