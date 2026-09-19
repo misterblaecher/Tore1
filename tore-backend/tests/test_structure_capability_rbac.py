@@ -173,3 +173,60 @@ def test_cross_structure_role_assignment_is_rejected():
     workspace = client.get(f"/forum/structures/{slug_b}/workspace", headers=_headers(member_b_token))
     assert workspace.status_code == 200
     assert "finance.read" not in workspace.json()["capabilities"]
+
+
+def test_custom_document_manager_can_use_modern_document_route():
+    owner_token, _ = _guest("custom-document-owner")
+    member_token, member_id = _guest("custom-document-manager")
+    org_id, slug = _create_org(owner_token, "RBAC Document Capability", "rbac-document-org")
+    _join(org_id, member_token, "rbac-document-join")
+
+    created = client.post(
+        f"/forum/structures/{slug}/roles",
+        json={
+            "name": "Gestionnaire documentaire",
+            "code": "DOCUMENT_MANAGER_CUSTOM",
+            "capabilities": ["structure.read", "document.read", "document.manage"],
+        },
+        headers=_headers(owner_token),
+    )
+    assert created.status_code == 200
+    _assign_role(owner_token, slug, member_id, created.json()["id"])
+
+    document = client.post(
+        f"/forum/structures/{slug}/documents",
+        json={
+            "title": "Document capability",
+            "file_url": "https://files.example/capability.pdf",
+            "visibility": "STRUCTURE_MEMBERS",
+        },
+        headers=_headers(member_token, "rbac-document-create"),
+    )
+    assert document.status_code == 200
+
+
+def test_custom_role_name_does_not_grant_missing_capability():
+    owner_token, _ = _guest("custom-rank-owner")
+    member_token, member_id = _guest("custom-rank-member")
+    org_id, slug = _create_org(owner_token, "RBAC No Name Escalation", "rbac-rank-org")
+    _join(org_id, member_token, "rbac-rank-join")
+
+    created = client.post(
+        f"/forum/structures/{slug}/roles",
+        json={
+            "name": "Owner Admin Manager",
+            "code": "OWNER_ADMIN_MANAGER",
+            "capabilities": ["structure.read", "document.read"],
+        },
+        headers=_headers(owner_token),
+    )
+    assert created.status_code == 200
+    _assign_role(owner_token, slug, member_id, created.json()["id"])
+
+    denied = client.post(
+        f"/forum/structures/{slug}/documents",
+        json={"title": "Denied", "file_url": "https://files.example/denied.pdf"},
+        headers=_headers(member_token, "rbac-document-denied"),
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["capability"] == "document.manage"

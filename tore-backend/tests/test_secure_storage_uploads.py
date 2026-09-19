@@ -45,6 +45,42 @@ def _create_structure(token: str, name: str, key: str) -> str:
     return response.json()["orga"]["slug"]
 
 
+def _join_structure(slug: str, owner_token: str, member_token: str, key: str) -> tuple[int, str]:
+    lifecycle = client.get(f"/forum/structures/{slug}/lifecycle", headers=_auth(owner_token))
+    assert lifecycle.status_code == 200
+    organization_id = lifecycle.json()["organizationId"]
+    me = client.get("/auth/me", headers=_auth(member_token))
+    assert me.status_code == 200
+    joined = client.post(f"/orgas/{organization_id}/join", headers={**_auth(member_token), "Idempotency-Key": key})
+    assert joined.status_code == 200
+    return organization_id, me.json()["id"]
+
+
+def _assign_system_role(slug: str, owner_token: str, member_id: str, code: str) -> None:
+    roles = client.get(f"/forum/structures/{slug}/roles", headers=_auth(owner_token))
+    assert roles.status_code == 200
+    role_id = next(item["id"] for item in roles.json()["items"] if item["code"] == code)
+    assigned = client.put(
+        f"/forum/structures/{slug}/members/{member_id}/roles",
+        json={"role_ids": [role_id]},
+        headers=_auth(owner_token),
+    )
+    assert assigned.status_code == 200
+
+
+def _attach_document(slug: str, owner_token: str, file_id: str, visibility: str, key: str) -> None:
+    response = client.post(
+        f"/forum/structures/{slug}/documents",
+        json={
+            "title": f"Document {visibility}",
+            "file_url": f"/forum/structures/{slug}/files/{file_id}/content",
+            "visibility": visibility,
+        },
+        headers={**_auth(owner_token), "Idempotency-Key": key},
+    )
+    assert response.status_code == 200
+
+
 def _upload(slug: str, token: str, filename: str, body: bytes, content_type: str, purpose: str = "DOCUMENT"):
     return client.post(
         f"/forum/structures/{slug}/files",
@@ -123,6 +159,52 @@ def test_acces_prive_et_autre_structure_idor():
     assert cross_tenant.status_code == 404
 
 
+def test_fichier_document_respecte_audience_effective_et_uuid_direct():
+    owner_token, _ = _guest("storage-parent-owner")
+    member_token, member_id = _guest("storage-parent-member")
+    treasurer_token, treasurer_id = _guest("storage-parent-treasurer")
+    office_token, office_id = _guest("storage-parent-office")
+    slug = _create_structure(owner_token, "Storage Parent Policy", "storage-parent-create")
+    _join_structure(slug, owner_token, member_token, "storage-parent-member-join")
+    _join_structure(slug, owner_token, treasurer_token, "storage-parent-treasurer-join")
+    _join_structure(slug, owner_token, office_token, "storage-parent-office-join")
+    _assign_system_role(slug, owner_token, treasurer_id, "TREASURER")
+    _assign_system_role(slug, owner_token, office_id, "MANAGER")
+
+    treasury = _upload(slug, owner_token, "treasury.pdf", PDF_MIN, "application/pdf").json()
+    _attach_document(slug, owner_token, treasury["id"], "TREASURY", "storage-parent-treasury-doc")
+    treasury_url = f"/forum/structures/{slug}/files/{treasury['id']}/content"
+    assert client.get(treasury_url, headers=_auth(member_token)).status_code == 403
+    assert client.get(treasury_url, headers=_auth(treasurer_token)).status_code == 200
+
+    members = _upload(slug, owner_token, "members.pdf", PDF_MIN, "application/pdf").json()
+    _attach_document(slug, owner_token, members["id"], "STRUCTURE_MEMBERS", "storage-parent-members-doc")
+    assert client.get(
+        f"/forum/structures/{slug}/files/{members['id']}/content",
+        headers=_auth(member_token),
+    ).status_code == 200
+
+    office = _upload(slug, owner_token, "office.pdf", PDF_MIN, "application/pdf").json()
+    _attach_document(slug, owner_token, office["id"], "OFFICE", "storage-parent-office-doc")
+    office_url = f"/forum/structures/{slug}/files/{office['id']}/content"
+    assert client.get(office_url, headers=_auth(member_token)).status_code == 403
+    assert client.get(office_url, headers=_auth(office_token)).status_code == 200
+
+
+def test_fichier_prive_non_lie_n_est_pas_accessible_a_tout_membre():
+    owner_token, _ = _guest("storage-unbound-owner")
+    member_token, _ = _guest("storage-unbound-member")
+    slug = _create_structure(owner_token, "Storage Unbound Policy", "storage-unbound-create")
+    _join_structure(slug, owner_token, member_token, "storage-unbound-member-join")
+    uploaded = _upload(slug, owner_token, "unbound.pdf", PDF_MIN, "application/pdf").json()
+
+    direct = client.get(
+        f"/forum/structures/{slug}/files/{uploaded['id']}/content",
+        headers=_auth(member_token),
+    )
+    assert direct.status_code == 403
+
+
 def test_suppression_non_autorisee():
     owner_token, _ = _guest("upload-owner-delete")
     outsider_token, _ = _guest("upload-outsider-delete")
@@ -146,6 +228,13 @@ def test_publication_requiert_action_et_confirmation_explicites():
     )
     assert missing_confirmation.status_code == 409
     assert client.get(f"/forum/public/files/{uploaded['id']}").status_code == 404
+
+    structure_published = client.post(
+        f"/forum/structures/{slug}/publish",
+        headers={**_auth(token), "Idempotency-Key": "publish-storage-structure"},
+        json={"reason": "Publication explicite avant exposition du fichier"},
+    )
+    assert structure_published.status_code == 200
 
     published = client.patch(
         f"/forum/structures/{slug}/files/{uploaded['id']}/visibility",

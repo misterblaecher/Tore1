@@ -9,8 +9,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.legacy.monolith import get_current_user, get_db
-from app.routers.forum import ROLE_RANK, _active_membership, _require_role, _structure_or_404
+from app.models.event_cohosting import EventManagerSettings
+from app.routers.forum import _active_membership, _can_view, _structure_or_404
 from app.services.audit_service import write_audit_log
+from app.services.structure_lifecycle import structure_is_published
+from app.services.structure_rbac import capabilities_for_membership, require_capability
 from app.services.storage_service import (
     ALLOWED_PURPOSES,
     build_storage_key,
@@ -18,7 +21,7 @@ from app.services.storage_service import (
     validate_upload,
 )
 from db import now_utc
-from models import AppUser, StoredFile
+from models import AppUser, Event, Organization, StoredFile, StructureAlbum, StructureDocument, StructureMedia
 
 
 router = APIRouter(prefix="/forum", tags=["storage"])
@@ -55,11 +58,119 @@ def _file_for_structure(db: Session, *, organization_id: int, file_id: str) -> S
     return row
 
 
+def _url_references_file(value: str | None, file_id: str) -> bool:
+    path = (value or "").split("?", 1)[0].rstrip("/")
+    return path.endswith(f"/files/{file_id}/content") or path.endswith(f"/public/files/{file_id}")
+
+
+def _file_parents(db: Session, row: StoredFile) -> tuple[list[StructureDocument], list[StructureAlbum], list[StructureAlbum], list[Event]]:
+    documents = [
+        item for item in db.query(StructureDocument).filter(
+            StructureDocument.organization_id == row.organization_id,
+            StructureDocument.archived_at.is_(None),
+        ).all()
+        if _url_references_file(item.file_url, row.id)
+    ]
+    albums = db.query(StructureAlbum).filter(
+        StructureAlbum.organization_id == row.organization_id,
+        StructureAlbum.archived_at.is_(None),
+    ).all()
+    cover_albums = [item for item in albums if _url_references_file(item.cover_url, row.id)]
+    media_album_ids = {
+        item.album_id for item in db.query(StructureMedia).filter(
+            StructureMedia.album_id.in_([album.id for album in albums] or [-1])
+        ).all()
+        if _url_references_file(item.media_url, row.id)
+    }
+    media_albums = [item for item in albums if item.id in media_album_ids]
+    banner_event_ids = [item[0] for item in db.query(EventManagerSettings.event_id).filter(
+        EventManagerSettings.banner_file_id == row.id
+    ).all()]
+    events = db.query(Event).filter(
+        Event.id.in_(banner_event_ids or [-1]),
+        Event.host_type == "orga",
+        Event.host_id == str(row.organization_id),
+    ).all()
+    return documents, cover_albums, media_albums, events
+
+
+def _audience_allowed(db: Session, visibility: str, membership) -> bool:
+    level = (visibility or "STRUCTURE_MEMBERS").upper()
+    capabilities = capabilities_for_membership(db, membership)
+    if level in {"PUBLIC", "TORE_USERS"}:
+        return True
+    if level == "STRUCTURE_MEMBERS":
+        return "structure.read" in capabilities
+    if level == "TREASURY":
+        return "finance.read" in capabilities
+    if level == "OFFICE":
+        return "member.manage" in capabilities or _can_view(level, membership)
+    if level == "STAFF":
+        return bool(capabilities & {
+            "structure.edit", "member.manage", "discussion.manage", "event.manage",
+            "document.manage", "album.manage", "page.manage", "finance.read",
+        }) or _can_view(level, membership)
+    if level == "ADMINS":
+        return "member.role.manage" in capabilities and "audit.read" in capabilities
+    return False
+
+
 def _private_read_allowed(db: Session, row: StoredFile, user: AppUser) -> None:
-    if row.visibility == "PUBLIC":
-        return
-    if _active_membership(db, row.organization_id, user.id) is None:
+    membership = _active_membership(db, row.organization_id, user.id)
+    if membership is None:
         raise HTTPException(status_code=403, detail={"reason": "FILE_ACCESS_DENIED"})
+    capabilities = capabilities_for_membership(db, membership)
+    documents, cover_albums, media_albums, events = _file_parents(db, row)
+    has_parent = bool(documents or cover_albums or media_albums or events)
+    if any("document.read" in capabilities and _audience_allowed(db, item.visibility, membership) for item in documents):
+        return
+    if any(
+        "album.read" in capabilities
+        and _audience_allowed(db, item.visibility, membership)
+        and ((item.status or "DRAFT").upper() != "DRAFT" or item.created_by_user_id == user.id or "album.manage" in capabilities)
+        for item in [*cover_albums, *media_albums]
+    ):
+        return
+    if events and "event.read" in capabilities:
+        return
+    if has_parent:
+        raise HTTPException(status_code=403, detail={"reason": "FILE_PARENT_ACCESS_DENIED"})
+    if row.owner_user_id == user.id:
+        return
+    required = {
+        "DOCUMENT": "document.manage",
+        "ALBUM_MEDIA": "album.manage",
+        "BANNER": "structure.edit",
+        "LOGO": "structure.edit",
+        "IMAGE": "structure.edit",
+    }.get((row.purpose or "DOCUMENT").upper(), "structure.edit")
+    if required not in capabilities:
+        raise HTTPException(status_code=403, detail={"reason": "FILE_ACCESS_DENIED", "capability": required})
+
+
+def _public_read_allowed(db: Session, row: StoredFile) -> None:
+    documents, cover_albums, media_albums, events = _file_parents(db, row)
+    has_parent = bool(documents or cover_albums or media_albums or events)
+    # Standalone branding/assets are governed by the StoredFile publication bit.
+    # Once a file is attached to a resource, that parent's policy becomes authoritative.
+    if not has_parent:
+        return
+    org = db.get(Organization, row.organization_id)
+    if org is None or not structure_is_published(db, org):
+        raise HTTPException(status_code=404, detail="Stored file not found")
+    if any((item.visibility or "").upper() == "PUBLIC" for item in documents):
+        return
+    if any(
+        (item.visibility or "").upper() == "PUBLIC" and (item.status or "DRAFT").upper() == "PUBLISHED"
+        for item in [*cover_albums, *media_albums]
+    ):
+        return
+    if any(
+        (item.visibility or "").upper() == "PUBLIC" and (item.publication_status or "DRAFT").upper() == "PUBLISHED"
+        for item in events
+    ):
+        return
+    raise HTTPException(status_code=404, detail="Stored file not found")
 
 
 def _secure_content_response(row: StoredFile, content: bytes, *, public: bool) -> Response:
@@ -86,10 +197,17 @@ async def upload_structure_file(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "STAFF")
     normalized_purpose = purpose.strip().upper()
     if normalized_purpose not in ALLOWED_PURPOSES:
         raise HTTPException(status_code=422, detail={"reason": "INVALID_FILE_PURPOSE"})
+    manage_capability = {
+        "DOCUMENT": "document.manage",
+        "ALBUM_MEDIA": "album.manage",
+        "IMAGE": "structure.edit",
+        "LOGO": "structure.edit",
+        "BANNER": "structure.edit",
+    }[normalized_purpose]
+    actor = require_capability(db, org.id, user, manage_capability)
 
     validated = await validate_upload(file)
     file_id = str(uuid.uuid4())
@@ -184,6 +302,7 @@ def get_public_file_content(file_id: str, db: Session = Depends(get_db)):
     row = db.get(StoredFile, file_id)
     if row is None or row.deleted_at is not None or row.visibility != "PUBLIC":
         raise HTTPException(status_code=404, detail="Stored file not found")
+    _public_read_allowed(db, row)
     content = get_storage_backend(row.storage_backend).read(row.storage_key)
     return _secure_content_response(row, content, public=True)
 
@@ -197,9 +316,16 @@ def set_structure_file_visibility(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
     row = _file_for_structure(db, organization_id=org.id, file_id=file_id)
     target = payload.visibility.upper()
+    capability = {
+        "DOCUMENT": "document.publish" if target == "PUBLIC" else "document.manage",
+        "ALBUM_MEDIA": "album.publish" if target == "PUBLIC" else "album.manage",
+        "IMAGE": "structure.publish" if target == "PUBLIC" else "structure.edit",
+        "LOGO": "structure.publish" if target == "PUBLIC" else "structure.edit",
+        "BANNER": "structure.publish" if target == "PUBLIC" else "structure.edit",
+    }.get((row.purpose or "DOCUMENT").upper(), "structure.publish" if target == "PUBLIC" else "structure.edit")
+    actor = require_capability(db, org.id, user, capability)
     if target == "PUBLIC" and not payload.confirm_public:
         raise HTTPException(status_code=409, detail={"reason": "PUBLICATION_CONFIRMATION_REQUIRED"})
     if row.visibility == target:
@@ -249,12 +375,19 @@ def delete_structure_file(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    membership = _active_membership(db, org.id, user.id)
     row = _file_for_structure(db, organization_id=org.id, file_id=file_id)
+    membership = _active_membership(db, org.id, user.id)
     if membership is None:
         raise HTTPException(status_code=403, detail={"reason": "FILE_DELETE_DENIED"})
-    role_rank = ROLE_RANK.get((membership.role or "MEMBER").upper(), 0)
-    may_manage = role_rank >= ROLE_RANK["MANAGER"]
+    capabilities = capabilities_for_membership(db, membership)
+    manage_capability = {
+        "DOCUMENT": "document.manage",
+        "ALBUM_MEDIA": "album.manage",
+        "IMAGE": "structure.edit",
+        "LOGO": "structure.edit",
+        "BANNER": "structure.edit",
+    }.get((row.purpose or "DOCUMENT").upper(), "structure.edit")
+    may_manage = manage_capability in capabilities
     if row.owner_user_id != user.id and not may_manage:
         raise HTTPException(status_code=403, detail={"reason": "FILE_DELETE_DENIED"})
 

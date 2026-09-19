@@ -13,13 +13,14 @@ from app.legacy.monolith import get_current_user, get_db
 from app.routers.forum import _structure_or_404
 from app.services.audit_service import write_audit_log
 from app.services.event_cohosting_service import (
-    COHOST_PERMISSION_FIELDS, ROLE_RANK, active_structure_membership,
+    COHOST_PERMISSION_FIELDS, active_structure_membership,
     effective_permission, ensure_owner_relation, migrate_legacy_cohosts_for_event,
     relation_permissions, require_structure_event_relation,
 )
 from app.services.event_staff_invitation_service import create_secure_event_invitation
 from app.services.idempotency_service import ensure_idempotency_key
 from app.services.structure_lifecycle import lifecycle_status
+from app.services.structure_rbac import require_capability
 from db import now_utc
 from models import (
     AppUser, Event, EventCost, EventManagerSettings, EventStaff, EventStaffInviteCode,
@@ -117,15 +118,12 @@ def _settings(db: Session, event_id: int) -> EventManagerSettings:
     return row
 
 
-def _rank(membership) -> int:
-    return ROLE_RANK.get((membership.role or "MEMBER").upper(), 0)
-
-
 def _owner_guard(db: Session, org: Organization, event: Event, user: AppUser):
     relation = ensure_owner_relation(db, event, created_by_user_id=user.id)
     member = active_structure_membership(db, organization_id=org.id, user_id=user.id)
-    if relation is None or relation.organization_id != org.id or relation.role != "OWNER" or member is None or _rank(member) < ROLE_RANK["MANAGER"]:
+    if relation is None or relation.organization_id != org.id or relation.role != "OWNER" or member is None:
         raise HTTPException(403, detail={"reason": "EVENT_OWNER_REQUIRED"})
+    require_capability(db, org.id, user, "event.manage")
     return relation, member
 
 
@@ -146,7 +144,7 @@ def _finance(db: Session, event_id: int) -> dict:
 
 def _payload(db: Session, event: Event, link: EventStructure, member, resources: bool = True) -> dict:
     settings = _settings(db, event.id)
-    perms = {"read": effective_permission(link, member, "read"), **{name: effective_permission(link, member, name) for name in COHOST_PERMISSION_FIELDS}}
+    perms = {"read": effective_permission(db, link, member, "read"), **{name: effective_permission(db, link, member, name) for name in COHOST_PERMISSION_FIELDS}}
     links = db.query(EventStructure).filter(EventStructure.event_id == event.id).all()
     org_ids = [row.organization_id for row in links]
     banner = db.get(StoredFile, settings.banner_file_id) if settings.banner_file_id else None
@@ -194,15 +192,15 @@ def list_managed_events(slug: str, user: AppUser = Depends(get_current_user), db
     items = []
     for link in db.query(EventStructure).filter(EventStructure.organization_id == org.id).all():
         event = db.get(Event, link.event_id)
-        if event and effective_permission(link, member, "read"): items.append(_payload(db, event, link, member, False))
+        if event and effective_permission(db, link, member, "read"): items.append(_payload(db, event, link, member, False))
     db.commit(); items.sort(key=lambda item: (item.get("startsAt") or "", item["id"]))
     return {"items": items}
 
 
 @router.post("/structures/{slug}/event-manager", status_code=201)
 def create_managed_event(slug: str, payload: EventManagerCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug); member = active_structure_membership(db, organization_id=org.id, user_id=user.id)
-    if member is None or _rank(member) < ROLE_RANK["MANAGER"]: raise HTTPException(403, detail={"reason": "FORUM_PERMISSION_DENIED"})
+    org = _structure_or_404(db, slug); member = require_capability(db, org.id, user, "event.create")
+    if payload.publication_status == "PUBLISHED": require_capability(db, org.id, user, "event.publish")
     start, end = _naive(payload.starts_at), _naive(payload.ends_at)
     if end <= start: raise HTTPException(400, detail={"reason": "INVALID_EVENT_DATES"})
     event = Event(host_type="orga", host_id=str(org.id), host_display_name=org.name, name=payload.name.strip(), public_description=payload.description, starts_at=start, ends_at=end, venue=payload.venue, city=payload.city or org.city, capacity=payload.capacity, entry_price_cents=payload.entry_price_cents, modules_on=dict(payload.modules_on), visibility=payload.visibility, publication_status=payload.publication_status, event_state="DRAFT", created_by=f"app:{user.id}", last_state_updated_at=now_utc(), last_updated_at=now_utc())
@@ -215,8 +213,7 @@ def create_managed_event(slug: str, payload: EventManagerCreateIn, user: AppUser
 
 @router.get("/structures/{slug}/cohost-structure-search")
 def search_structures(slug: str, q: str = Query(min_length=1, max_length=120), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug); member = active_structure_membership(db, organization_id=org.id, user_id=user.id)
-    if member is None or _rank(member) < ROLE_RANK["MANAGER"]: raise HTTPException(403, detail={"reason": "FORUM_PERMISSION_DENIED"})
+    org = _structure_or_404(db, slug); require_capability(db, org.id, user, "event.manage")
     needle = f"%{q.strip().lower()}%"
     rows = db.query(Organization).filter(Organization.id != org.id, or_(func.lower(Organization.name).like(needle), func.lower(Organization.slug).like(needle), func.lower(func.coalesce(Organization.city, "")).like(needle))).order_by(Organization.name).limit(12).all()
     return {"items": [{"id": row.id, "slug": row.slug, "name": row.name, "type": (row.org_type or "OTHER").upper(), "city": row.city} for row in rows]}
@@ -235,8 +232,8 @@ def patch_managed_event(slug: str, event_id: int, payload: EventManagerPatchIn, 
     # was published elsewhere. Do not let an ordinary save silently unpublish it.
     if event.visibility == "PUBLIC" and data.get("visibility") == "PRIVATE" and "publication_status" not in data:
         data.pop("visibility", None)
-    if set(data) - {"publication_status"} and not effective_permission(link, member, "edit"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "edit"})
-    if "publication_status" in data and not effective_permission(link, member, "publish"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "publish"})
+    if set(data) - {"publication_status"} and not effective_permission(db, link, member, "edit"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "edit"})
+    if "publication_status" in data and not effective_permission(db, link, member, "publish"): raise HTTPException(403, detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": "publish"})
     if data.get("publication_status") == "PUBLISHED" or data.get("visibility") == "PUBLIC":
         if event.host_type == "orga" and str(event.host_id or "").isdigit():
             owner_status = lifecycle_status(db, int(event.host_id))

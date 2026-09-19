@@ -11,13 +11,13 @@ from app.legacy.monolith import get_current_user, get_db
 from app.models.forum_events import ForumEventPage
 from app.routers.forum import (
     _album_payload,
-    _require_role,
     _save_idem,
     _structure_or_404,
     _visibility_settings,
     _write_idem,
 )
 from app.services.audit_service import write_audit_log
+from app.services.structure_rbac import require_capability
 from app.services.p3_common import get_event_runtime_state
 from db import now_utc
 from models import AppUser, Event, Organization, StructureAlbum
@@ -307,7 +307,7 @@ def get_private_event_recap(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MANAGER")
+    require_capability(db, org.id, user, "event.recap.manage")
     event = _event_for_org(db, org.id, event_id)
     row = _page_for_event(db, event, create=True)
     assert row is not None
@@ -328,7 +328,7 @@ def replace_event_page_settings(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.manage")
     event = _event_for_org(db, org.id, event_id)
     action_key = f"forum_event_page_settings:{event.id}"
     key, previous = _write_idem(db, user, action_key, idempotency_key)
@@ -386,7 +386,7 @@ def replace_event_recap_draft(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.recap.manage")
     event = _event_for_org(db, org.id, event_id)
     if (get_event_runtime_state(db, event.id) or "").upper() not in CLOSED_STATES:
         raise HTTPException(status_code=409, detail={"reason": "EVENT_NOT_CLOSED"})
@@ -441,7 +441,8 @@ def publish_event_recap(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.recap.manage")
+    require_capability(db, org.id, user, "event.publish")
     event = _event_for_org(db, org.id, event_id)
     if (get_event_runtime_state(db, event.id) or "").upper() not in CLOSED_STATES:
         raise HTTPException(status_code=409, detail={"reason": "EVENT_NOT_CLOSED"})

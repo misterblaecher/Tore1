@@ -8,7 +8,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from models import AppUser, Event, OrganizationMembership, StructureDocument, StructureDiscussionChannel, StructureDiscussionPost, StructurePage
 from app.legacy.monolith import get_current_user, get_db
-from app.routers.forum import _can_view, _require_role, _structure_or_404
+from app.routers.forum import _can_view, _structure_or_404
+from app.services.structure_rbac import require_capability
 from app.services.forum_channel_acl_current import can_read
 
 router = APIRouter(prefix="/forum", tags=["forum-search"])
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/forum", tags=["forum-search"])
 @router.get("/structures/{slug}/search")
 def global_search(slug: str, q: str = Query(min_length=2, max_length=120), limit: int = Query(default=8, ge=1, le=20), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "structure.read")
     needle = f"%{q.strip().lower()}%"
     results: list[dict] = []
     def add(kind, title, snippet, target, row_id):

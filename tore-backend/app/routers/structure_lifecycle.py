@@ -32,6 +32,7 @@ from app.services.structure_lifecycle import (
     structure_is_published,
     transition_lifecycle,
 )
+from app.services.structure_rbac import require_capability
 
 
 router = APIRouter(tags=["structure-lifecycle"])
@@ -389,7 +390,7 @@ def get_structure_lifecycle(
     db: Session = Depends(get_db),
 ):
     org = _org_by_slug(db, slug)
-    _require_membership_role(db, org_id=org.id, user_id=user.id, min_role="MEMBER")
+    require_capability(db, org.id, user, "structure.read")
     return _lifecycle_response(db, org)
 
 
@@ -402,7 +403,7 @@ def publish_structure(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _org_by_slug(db, slug)
-    actor = _require_membership_role(db, org_id=org.id, user_id=user.id, min_role="MANAGER")
+    actor = require_capability(db, org.id, user, "structure.publish")
     return _run_lifecycle_mutation(
         db=db,
         org=org,
@@ -424,7 +425,7 @@ def unpublish_structure(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _org_by_slug(db, slug)
-    actor = _require_membership_role(db, org_id=org.id, user_id=user.id, min_role="MANAGER")
+    actor = require_capability(db, org.id, user, "structure.publish")
     return _run_lifecycle_mutation(
         db=db,
         org=org,
@@ -446,7 +447,7 @@ def suspend_structure(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _org_by_slug(db, slug)
-    actor = _require_membership_role(db, org_id=org.id, user_id=user.id, min_role="MANAGER")
+    actor = require_capability(db, org.id, user, "structure.publish")
     return _run_lifecycle_mutation(
         db=db,
         org=org,
@@ -468,7 +469,7 @@ def archive_structure(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _org_by_slug(db, slug)
-    actor = _require_membership_role(db, org_id=org.id, user_id=user.id, min_role="MANAGER")
+    actor = require_capability(db, org.id, user, "structure.publish")
     return _run_lifecycle_mutation(
         db=db,
         org=org,
@@ -490,7 +491,7 @@ def transition_structure_lifecycle(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _org_by_slug(db, slug)
-    actor = _require_membership_role(db, org_id=org.id, user_id=user.id, min_role="MANAGER")
+    actor = require_capability(db, org.id, user, "structure.publish")
     target = payload.target.upper()
     if target not in STRUCTURE_LIFECYCLE_STATES:
         raise HTTPException(status_code=422, detail={"reason": "UNKNOWN_LIFECYCLE_STATE"})
