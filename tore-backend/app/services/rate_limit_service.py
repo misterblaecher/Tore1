@@ -17,11 +17,21 @@ from sqlalchemy.exc import SQLAlchemyError
 from db import engine as _engine
 
 
-class RateLimitExceeded(Exception):
+class RateLimitExceeded(HTTPException):
     def __init__(self, scope: str, retry_after_seconds: int):
         self.scope = scope
-        self.retry_after_seconds = retry_after_seconds
-        super().__init__(f"Rate limit exceeded for scope={scope} retry_after={retry_after_seconds}s")
+        self.retry_after_seconds = int(retry_after_seconds)
+        super().__init__(
+            status_code=429,
+            detail={
+                "detail": "Too many requests",
+                "reason": "rate_limited",
+                "code": "rate_limited",
+                "retry_after_seconds": self.retry_after_seconds,
+                "scope": scope,
+            },
+            headers={"Retry-After": str(self.retry_after_seconds)},
+        )
 
 
 class RateLimitBackendUnavailable(RuntimeError):
