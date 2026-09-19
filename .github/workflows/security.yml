@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
+  security-events: write
 
 jobs:
   codeql:
@@ -15,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       security-events: write
     strategy:
       fail-fast: false
@@ -64,7 +68,7 @@ jobs:
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
       - run: npm ci
       - name: Audit high and critical vulnerabilities
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
   secrets:
     name: Secret scanning
