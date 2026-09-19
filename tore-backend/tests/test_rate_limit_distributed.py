@@ -51,11 +51,7 @@ def test_prod_auto_selects_database(monkeypatch):
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("ENV", raising=False)
     monkeypatch.delenv("TORE_RATE_LIMIT_BACKEND", raising=False)
-    if engine.dialect.name != "postgresql":
-        with pytest.raises(rate_limit_service.RateLimitBackendUnavailable):
-            rate_limit_service._backend_name()
-    else:
-        assert rate_limit_service._backend_name() == "database"
+    assert rate_limit_service._backend_name() == "database"
 
 
 def test_prod_refuses_memory_backend(monkeypatch):
