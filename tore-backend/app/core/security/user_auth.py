@@ -26,7 +26,7 @@ def _hash_token(raw: str) -> str:
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
     if not authorization:
         return None
-    raw = authorization.strip()
+    raw = authorization.strip().strip('"').strip("'").strip()
     if raw.lower().startswith("bearer "):
         raw = raw[7:].strip()
     raw = raw.strip().strip('"').strip("'").strip()
@@ -41,20 +41,14 @@ def _active_sanction_for_user(db: Session, user_id: str) -> Optional[UserSanctio
         .order_by(UserSanction.created_at.desc())
         .all()
     )
-    changed = False
     for row in rows:
         if row.starts_at and row.starts_at > now:
             continue
         if row.ends_at and row.ends_at <= now:
             row.status = "EXPIRED"
             db.add(row)
-            changed = True
             continue
-        if changed:
-            db.flush()
         return row
-    if changed:
-        db.flush()
     return None
 
 
