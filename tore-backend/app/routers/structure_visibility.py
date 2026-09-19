@@ -7,7 +7,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from models import AppUser, Organization, OrganizationWriteIdempotency
-from app.legacy.monolith import _orga_write_idem, get_current_user, get_db
+from app.legacy.monolith import _orga_write_idem
+from app.core.security.user_auth import get_current_user
+from app.deps.db import get_db
 from app.routers.forum import _visibility_settings
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
