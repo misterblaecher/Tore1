@@ -8,9 +8,12 @@ into app.legacy.monolith directly.
 from __future__ import annotations
 
 from collections import Counter
+from copy import copy
 from typing import Any, Iterator
 
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
+from starlette.routing import request_response
 
 from app.legacy import monolith as _monolith
 
@@ -30,8 +33,19 @@ def iter_legacy_routes() -> Iterator[Any]:
         yield route
 
 
+def _clone_route_for_app(route: Any, app: FastAPI):
+    """Clone a legacy route so dependency overrides belong to the new app."""
+    cloned = copy(route)
+    if isinstance(cloned, APIRoute):
+        cloned.dependency_overrides_provider = app
+        # APIRoute builds its ASGI callable during __init__. Rebuild it after
+        # changing the provider so overrides never consult the hidden legacy app.
+        cloned.app = request_response(cloned.get_route_handler())
+    return cloned
+
+
 def mount_legacy_routes(app: FastAPI) -> None:
-    """Mount historical route objects onto a fresh FastAPI application."""
+    """Mount cloned historical routes onto a fresh FastAPI application."""
     existing = {
         (
             getattr(route, "path", ""),
@@ -40,15 +54,15 @@ def mount_legacy_routes(app: FastAPI) -> None:
         )
         for route in app.router.routes
     }
-    for route in iter_legacy_routes():
+    for legacy_route in iter_legacy_routes():
         signature = (
-            getattr(route, "path", ""),
-            tuple(sorted(getattr(route, "methods", set()) or set())),
-            getattr(route, "name", None),
+            getattr(legacy_route, "path", ""),
+            tuple(sorted(getattr(legacy_route, "methods", set()) or set())),
+            getattr(legacy_route, "name", None),
         )
         if signature in existing:
             continue
-        app.router.routes.append(route)
+        app.router.routes.append(_clone_route_for_app(legacy_route, app))
         existing.add(signature)
 
 
