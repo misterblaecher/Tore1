@@ -27,7 +27,7 @@ function navigation() { return within(screen.getByRole("navigation", { name: "Na
 describe("Forum shared navigation", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    localStorage.clear();
+    localStorage.clear(); sessionStorage.clear();
     localStorage.setItem(ACCESS_TOKEN_KEY, "test-session");
     vi.mocked(getMe).mockResolvedValue({ id: "user-1", display_name: "Thomas", avatar_url: "/thomas.png" });
     vi.mocked(apiFetch).mockResolvedValue({ items: committees });
