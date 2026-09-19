@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, OrganizationMembership, StructureInvitation
-from app.legacy.monolith import get_current_user
+from app.core.security.user_auth import get_current_user
 from app.deps.db import get_db
 from app.models.structure_rbac import StructureMembershipRole, StructureRole
 from app.routers.forum import _structure_or_404
