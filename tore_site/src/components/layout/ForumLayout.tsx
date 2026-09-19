@@ -3,8 +3,8 @@ import { Link, matchPath, NavLink, Outlet, useLocation, useNavigate } from "reac
 import { ArrowUpRight, Bell, Building2, Check, ChevronDown, CircleUserRound, ExternalLink, Home, LockKeyhole, LogOut, Menu, Plus, Search, Settings } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { apiFetch } from "@/lib/api";
-import { clearToken, getToken, MeResponse } from "@/lib/auth";
+import { apiFetch, logoutWebSession } from "@/lib/api";
+import { getToken, MeResponse } from "@/lib/auth";
 import { getMe } from "@/lib/session";
 import { forumNavGroups, forumNavItems, forumRoleLabels, ForumWorkspace, structurePath, structureTypeLabels } from "@/lib/forum-navigation";
 import logo from "@/assets/logo-full.png";
@@ -86,10 +86,14 @@ export default function ForumLayout() {
     setSelectedSlug(item.slug);
     navigate(structurePath(item.slug));
   }
-  function logout() {
+  async function logout() {
     if (me) rememberStructure(me.id, null);
-    clearToken(); setSession(null); setSelectedSlug(null);
-    navigate("/forum/login");
+    try {
+      await logoutWebSession();
+    } finally {
+      setSession(null); setSelectedSlug(null);
+      navigate("/forum/login");
+    }
   }
   function submitSearch(event: FormEvent) {
     event.preventDefault();
