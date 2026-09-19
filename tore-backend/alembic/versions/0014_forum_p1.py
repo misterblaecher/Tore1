@@ -52,7 +52,7 @@ def upgrade() -> None:
             "forum_media_reports",
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("organization_id", sa.Integer(), sa.ForeignKey("organizations.id"), nullable=False, index=True),
-            sa.Column("media_id", sa.Integer(), sa.ForeignKey("structure_media_assets.id"), nullable=False, index=True),
+            sa.Column("media_id", sa.Integer(), sa.ForeignKey("structure_media.id"), nullable=False, index=True),
             sa.Column("user_id", sa.String(), sa.ForeignKey("app_users.id"), nullable=False),
             sa.Column("reason", sa.Text(), nullable=False),
             sa.Column("status", sa.String(16), nullable=False),
