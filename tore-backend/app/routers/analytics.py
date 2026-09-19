@@ -35,10 +35,7 @@ def _analytics_base_filters(
     return event_id, since
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 @router.get("/summary")
