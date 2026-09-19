@@ -1,14 +1,12 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '@/lib/api';
-import { setCachedMe, setRefreshToken, setToken } from '@/lib/auth';
+import { setCachedMe, setToken } from '@/lib/auth';
 import { getMe } from '@/lib/session';
 
 type VerifyOut = {
   access_token?: string;
   accessToken?: string;
-  refresh_token?: string;
-  refreshToken?: string;
 };
 
 export default function AuthCallbackPage() {
@@ -32,8 +30,9 @@ export default function AuthCallbackPage() {
     setLoading(true);
 
     try {
-      const data = await apiFetch<VerifyOut>('/auth/email/verify_link', {
+      const data = await apiFetch<VerifyOut>('/auth/web/email/verify_link', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, token }),
       });
@@ -44,7 +43,6 @@ export default function AuthCallbackPage() {
       }
 
       setToken(accessToken);
-      setRefreshToken(data.refresh_token ?? data.refreshToken);
 
       const me = await getMe(true);
       setCachedMe(me);
