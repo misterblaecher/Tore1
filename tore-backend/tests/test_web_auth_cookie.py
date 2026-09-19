@@ -113,7 +113,7 @@ def test_expired_access_token_is_rejected_by_shared_resolver():
         row.created_at = now_utc() - timedelta(minutes=ACCESS_TOKEN_TTL_MIN + 1)
         db.commit()
 
-    from app.legacy.monolith import _resolve_app_user_from_token
+    from app.core.security.user_auth import _resolve_app_user_from_token
     with get_session() as db:
         assert _resolve_app_user_from_token(access, db) is None
         row = db.query(AppToken).filter(AppToken.token_hash == digest).one()
