@@ -19,6 +19,7 @@ from app.routers.forum_search import router as search
 from app.routers.forum_notifications import router as notifications
 from app.routers.forum_directory import router as directory
 from app.services.event_cohosting_operational import install_cohost_operational_access
+from app.routers.web_auth import router as web_auth
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
@@ -26,6 +27,14 @@ _FORUM_ENDPOINT_REPLACED={"list_structures","list_discussions","create_discussio
 _INVITE_REPLACED={"list_structure_invitations","create_structure_invitation","resend_structure_invitation","revoke_structure_invitation","accept_structure_invitation"}
 
 def _has(app,m,p): return any(getattr(r,"path","")==p and m in (getattr(r,"methods",set()) or set()) for r in app.router.routes)
+
+def _enable_credentialed_web_cors(app):
+    """Allow explicit TORÈ origins to send the web refresh cookie; never trust wildcard preview origins."""
+    for middleware in app.user_middleware:
+        if getattr(getattr(middleware, "cls", None), "__name__", "") == "CORSMiddleware":
+            middleware.kwargs["allow_credentials"] = True
+            middleware.kwargs["allow_origin_regex"] = None
+    app.middleware_stack = None
 def _replace(app):
     kept=[]
     for r in app.router.routes:
@@ -36,7 +45,7 @@ def _replace(app):
     app.router.routes[:]=kept
 
 def create_app():
-    app=monolith.app; _replace(app); install_cohost_operational_access(); paths={getattr(r,"path","") for r in app.routes}
+    app=monolith.app; _replace(app); _enable_credentialed_web_cors(app); install_cohost_operational_access(); paths={getattr(r,"path","") for r in app.routes}
     if not any(p.endswith("/event-workspace") for p in paths): app.include_router(event_workspace)
     if not any(p.endswith("/accounting-summary") for p in paths): app.include_router(accounting)
     if not any(p.endswith("/event-manager") for p in paths): app.include_router(event_manager)
@@ -62,5 +71,6 @@ def create_app():
     if not any(getattr(r,"name",None)=="get_public_event_page" for r in app.routes):
         from app.routers.forum_events import router as events
         app.include_router(events)
+    if not _has(app,"POST","/auth/web/refresh"): app.include_router(web_auth)
     run_startup(app); return app
 __all__=["create_app"]
