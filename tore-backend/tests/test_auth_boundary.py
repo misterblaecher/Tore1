@@ -24,6 +24,7 @@ def _db_schema():
 
 def test_extract_bearer_token_preserves_legacy_normalization():
     assert _extract_bearer_token(' Bearer "abc" ') == "abc"
+    assert _extract_bearer_token('"Bearer abc"') == "abc"
     assert _extract_bearer_token("'abc'") == "abc"
     assert _extract_bearer_token(None) is None
 
