@@ -27,6 +27,17 @@ export function createAdminApp(env = process.env, upstreamFetch = fetch) {
   const allowedOrigins = new Set((env.ADMIN_ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean))
   const app = express()
   app.disable('x-powered-by')
+  app.use((_req, res, next) => {
+    res.set({
+      'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+      'X-Frame-Options': 'DENY',
+    })
+    if (production) res.set('Strict-Transport-Security', 'max-age=31536000')
+    next()
+  })
   app.use('/admin-api', (req, res, next) => {
     res.set('Cache-Control', 'no-store')
     // No permissive CORS: Basic credentials must never authorize cross-site writes.

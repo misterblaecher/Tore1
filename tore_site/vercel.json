@@ -1,9 +1,55 @@
 {
   "rewrites": [
-    { "source": "/forum/structures/:slug", "destination": "/api/seo?kind=structure&slug=:slug" },
-    { "source": "/forum/events/:slug", "destination": "/api/seo?kind=event&slug=:slug" },
-    { "source": "/sitemap-structures.xml", "destination": "/api/seo?kind=sitemap-structures" },
-    { "source": "/sitemap-events.xml", "destination": "/api/seo?kind=sitemap-events" },
-    { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/index.html" }
+    {
+      "source": "/forum/structures/:slug",
+      "destination": "/api/seo?kind=structure&slug=:slug"
+    },
+    {
+      "source": "/forum/events/:slug",
+      "destination": "/api/seo?kind=event&slug=:slug"
+    },
+    {
+      "source": "/sitemap-structures.xml",
+      "destination": "/api/seo?kind=sitemap-structures"
+    },
+    {
+      "source": "/sitemap-events.xml",
+      "destination": "/api/seo?kind=sitemap-events"
+    },
+    {
+      "source": "/((?!api/|assets/|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(self), payment=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    }
   ]
 }

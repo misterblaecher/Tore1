@@ -80,3 +80,22 @@ test('oversized bodies are refused before forwarding', async (t) => {
   const response = await fetch(`${base}/admin-api/admin/role-requests/1`, { method: 'PATCH', headers: { authorization, 'Content-Type': 'application/json' }, body: JSON.stringify({ note: 'x'.repeat(20_000) }) })
   assert.equal(response.status, 413)
 })
+
+test('admin proxy emits security headers and HSTS in production', async (t) => {
+  const productionEnv = { ...env, NODE_ENV: 'production' }
+  const server = createAdminApp(productionEnv, async () => new Response('{}', { status: 200 })).listen(0, '127.0.0.1')
+  await new Promise((resolve) => server.once('listening', resolve))
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections() }))
+  const base = `http://127.0.0.1:${server.address().port}`
+  const response = await fetch(`${base}/admin-api/admin/role-requests`, { headers: { authorization } })
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff')
+  assert.equal(response.headers.get('x-frame-options'), 'DENY')
+  assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/)
+  assert.equal(response.headers.get('strict-transport-security'), 'max-age=31536000')
+})
+
+test('admin proxy does not emit HSTS in local non-production mode', async (t) => {
+  const base = await serve(t, async () => new Response('{}', { status: 200 }))
+  const response = await fetch(`${base}/admin-api/admin/role-requests`, { headers: { authorization } })
+  assert.equal(response.headers.get('strict-transport-security'), null)
+})
