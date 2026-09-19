@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { getToken } from '@/lib/auth';
-import { ApiError } from '@/lib/api';
+import { ApiError, refreshWebSession } from '@/lib/api';
 import { getMe } from '@/lib/session';
 
 type ProtectedRouteProps = {
@@ -17,33 +17,32 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   useEffect(() => {
     let active = true;
-    setIsChecking(true);
-    setError(false);
-    const token = getToken();
-    if (!token) {
-      setIsAllowed(false);
-      setIsChecking(false);
-      return;
-    }
 
-    void getMe()
-      .then(() => {
+    async function verifySession() {
+      setIsChecking(true);
+      setError(false);
+      try {
+        let token = getToken();
+        if (!token) token = await refreshWebSession();
+        if (!active) return;
+        if (!token) {
+          setIsAllowed(false);
+          return;
+        }
+        await getMe();
         if (!active) return;
         setIsAllowed(true);
-      })
-      .catch((reason: unknown) => {
+      } catch (reason: unknown) {
         if (!active) return;
         setIsAllowed(false);
-        setError(!(reason instanceof ApiError && reason.status === 401) && Boolean(getToken()));
-      })
-      .finally(() => {
-        if (!active) return;
-        setIsChecking(false);
-      });
+        setError(!(reason instanceof ApiError && reason.status === 401));
+      } finally {
+        if (active) setIsChecking(false);
+      }
+    }
 
-    return () => {
-      active = false;
-    };
+    void verifySession();
+    return () => { active = false; };
   }, [revision]);
 
   if (isChecking) {
