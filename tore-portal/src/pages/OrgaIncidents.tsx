@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { API_BASE, api } from '../lib/api'
 import { getToken } from '../lib/auth'
+import { clearIncidentDraft, loadIncidentDraft, saveIncidentDraft } from '../lib/incidentDraft'
 import { Badge, Button, Card, EmptyState, InlineAlert } from '../lib/ui'
 
 type Incident = {
@@ -39,12 +40,14 @@ export default function OrgaIncidents() {
   const [draft, setDraft] = useState({ severity: 'warn', description: '', location: '', title: '' })
 
   useEffect(() => {
-    const raw = localStorage.getItem(`incident-draft-${eventId}`)
-    if (raw) setDraft(JSON.parse(raw))
+    if (!eventId) return
+    const restored = loadIncidentDraft(eventId)
+    if (restored) setDraft(restored)
   }, [eventId])
 
   useEffect(() => {
-    localStorage.setItem(`incident-draft-${eventId}`, JSON.stringify(draft))
+    if (!eventId) return
+    saveIncidentDraft(eventId, draft)
   }, [eventId, draft])
 
   useEffect(() => {
@@ -95,6 +98,7 @@ export default function OrgaIncidents() {
         body: JSON.stringify({ ...draft, description: draft.description.trim(), location: draft.location || undefined, title: draft.title || undefined }),
       })
       setShowNew(false)
+      clearIncidentDraft(eventId)
       setDraft({ severity: 'warn', description: '', location: '', title: '' })
       await refresh()
     } catch (e: any) {

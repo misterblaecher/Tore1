@@ -1,3 +1,4 @@
+import { clearAllIncidentDrafts } from './incidentDraft'
 const TOKEN_KEY = 'tore_partner_token'
 const SESSION_KEY = 'tore_partner_session'
 
@@ -18,6 +19,7 @@ export function setToken(token: string) {
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(SESSION_KEY)
+  clearAllIncidentDrafts()
 }
 
 export function getSession(): PartnerSession | null {
