@@ -40,7 +40,7 @@ def test_empty_database_upgrades_to_single_head(tmp_path, monkeypatch):
 
     command.upgrade(config, "head")
 
-    assert _version(database) == _head(config) == "0027_legacy_forum_schema_parity"
+    assert _version(database) == _head(config) == "0028_merge_retired_public_event_lineage"
 
 
 def test_0024_upgrades_to_head(tmp_path, monkeypatch):
@@ -55,6 +55,24 @@ def test_0024_upgrades_to_head(tmp_path, monkeypatch):
     assert {"structure_planning_items", "structure_planning_assignees"}.issubset(
         inspect(create_engine(f"sqlite:///{database.as_posix()}")).get_table_names()
     )
+
+
+def test_retired_public_event_revision_upgrades_to_head(tmp_path, monkeypatch):
+    database = tmp_path / "retired_public_event_revision.db"
+    config = _config(database, monkeypatch)
+    command.upgrade(config, "0012_discussion_workspace")
+
+    engine = create_engine(f"sqlite:///{database.as_posix()}")
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM alembic_version"))
+        connection.execute(
+            text("INSERT INTO alembic_version(version_num) VALUES ('0013_public_event_recap')")
+        )
+
+    command.upgrade(config, "head")
+
+    assert _version(database) == _head(config)
+    assert "forum_event_pages" in inspect(engine).get_table_names()
 
 
 def _replace_with_representative_legacy_schema(database: Path) -> None:
