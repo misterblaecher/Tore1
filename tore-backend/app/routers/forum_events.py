@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -54,7 +55,12 @@ class RecapPublishIn(BaseModel):
 
 
 def _event_slug(event: Event) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", (event.name or "event").lower()).strip("-")[:180] or "event"
+    normalized_name = "".join(
+        character
+        for character in unicodedata.normalize("NFD", event.name or "event")
+        if unicodedata.category(character) != "Mn"
+    )
+    base = re.sub(r"[^a-z0-9]+", "-", normalized_name.lower()).strip("-")[:180] or "event"
     return f"{base}-{event.id}"
 
 
