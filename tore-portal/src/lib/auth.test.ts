@@ -4,11 +4,17 @@ import { hasOrgaHubAccess, hasOrgaManagerAccess } from './authz'
 import { api } from './api'
 
 beforeEach(() => {
-  const data = new Map<string, string>()
+  const local = new Map<string, string>()
+  const session = new Map<string, string>()
   vi.stubGlobal('localStorage', {
-    getItem: (key: string) => data.get(key) ?? null,
-    setItem: (key: string, value: string) => data.set(key, value),
-    removeItem: (key: string) => data.delete(key),
+    getItem: (key: string) => local.get(key) ?? null,
+    setItem: (key: string, value: string) => local.set(key, value),
+    removeItem: (key: string) => local.delete(key),
+  })
+  vi.stubGlobal('sessionStorage', {
+    getItem: (key: string) => session.get(key) ?? null,
+    setItem: (key: string, value: string) => session.set(key, value),
+    removeItem: (key: string) => session.delete(key),
   })
 })
 
@@ -47,4 +53,11 @@ test('401 clears credentials, while 403 preserves the account session', async ()
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })))
   await expect(api('/private')).rejects.toMatchObject({ status: 401 })
   expect(getToken()).toBeNull()
+})
+test('partner bearer is session scoped and legacy localStorage stays empty', () => {
+  setToken('short-session-token')
+  setSession({ bar_id: 12, display_name: 'Owner', role: 'owner' })
+  expect(sessionStorage.getItem('tore_partner_token')).toBe('short-session-token')
+  expect(localStorage.getItem('tore_partner_token')).toBeNull()
+  expect(localStorage.getItem('tore_partner_session')).toBeNull()
 })

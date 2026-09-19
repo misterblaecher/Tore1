@@ -3,8 +3,8 @@ import { Link, matchPath, NavLink, Outlet, useLocation, useNavigate } from "reac
 import { ArrowUpRight, Bell, Building2, Check, ChevronDown, CircleUserRound, ExternalLink, Home, LockKeyhole, LogOut, Menu, Plus, Search, Settings } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { apiFetch } from "@/lib/api";
-import { clearToken, getToken, MeResponse } from "@/lib/auth";
+import { apiFetch, refreshWebSession, webLogout } from "@/lib/api";
+import { getToken, MeResponse } from "@/lib/auth";
 import { getMe } from "@/lib/session";
 import { forumNavGroups, forumNavItems, forumRoleLabels, ForumWorkspace, structurePath, structureTypeLabels } from "@/lib/forum-navigation";
 import logo from "@/assets/logo-full.png";
@@ -44,7 +44,19 @@ export default function ForumLayout() {
   useEffect(() => {
     let active = true;
     setError(false);
-    if (!token) { setSession(null); setSelectedSlug(null); setLoading(false); return; }
+    if (!token) {
+      setSession(null);
+      setSelectedSlug(null);
+      setLoading(true);
+      void refreshWebSession()
+        .then((restored) => {
+          if (!active) return;
+          if (restored) setRevision((value) => value + 1);
+          else setLoading(false);
+        })
+        .catch(() => { if (active) setLoading(false); });
+      return () => { active = false; };
+    }
     setLoading(true);
     void Promise.all([getMe(true), apiFetch<{ items: ForumWorkspace[] }>("/forum/me/structures")])
       .then(([me, data]) => {
@@ -86,9 +98,9 @@ export default function ForumLayout() {
     setSelectedSlug(item.slug);
     navigate(structurePath(item.slug));
   }
-  function logout() {
+  async function logout() {
     if (me) rememberStructure(me.id, null);
-    clearToken(); setSession(null); setSelectedSlug(null);
+    await webLogout(); setSession(null); setSelectedSlug(null);
     navigate("/forum/login");
   }
   function submitSearch(event: FormEvent) {

@@ -26,26 +26,35 @@ export type MeResponse = {
 let meCache: MeResponse | null = null;
 let meCacheToken: string | null = null;
 
+function clearLegacyPersistentTokens(): void {
+  try {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  } catch {
+    // Storage may be unavailable in restricted browser contexts.
+  }
+}
+
+clearLegacyPersistentTokens();
+
 export function getToken(): string | null {
-  return localStorage.getItem(ACCESS_TOKEN_KEY);
+  try { return sessionStorage.getItem(ACCESS_TOKEN_KEY); } catch { return null; }
 }
 
 export function setToken(token: string): void {
   if (getToken() !== token) { meCache = null; meCacheToken = null; }
-  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  clearLegacyPersistentTokens();
+  try { sessionStorage.setItem(ACCESS_TOKEN_KEY, token); } catch { /* keep session in memory cache only */ }
 }
 
-export function setRefreshToken(token: string | null | undefined): void {
-  if (!token) {
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    return;
-  }
-  localStorage.setItem(REFRESH_TOKEN_KEY, token);
+// Compatibility shim for old callers: refresh tokens are now HttpOnly cookies.
+export function setRefreshToken(_token: string | null | undefined): void {
+  clearLegacyPersistentTokens();
 }
 
 export function clearToken(): void {
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  try { sessionStorage.removeItem(ACCESS_TOKEN_KEY); } catch { /* ignore */ }
+  clearLegacyPersistentTokens();
   meCache = null;
   meCacheToken = null;
 }

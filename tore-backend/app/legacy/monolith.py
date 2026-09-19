@@ -1057,6 +1057,17 @@ def _resolve_app_user_from_token(raw: str, db: Session) -> Optional[AppUser]:
     user = db.get(AppUser, tok.user_id)
     if user is None:
         return None
+
+    # Registered-user bearer tokens have a finite server-side lifetime on every
+    # resolver, not only through get_current_user. Guest tokens keep their
+    # existing lifecycle semantics.
+    now = now_utc()
+    if not bool(getattr(user, "is_guest", False)) and tok.created_at and tok.created_at <= now - timedelta(minutes=ACCESS_TOKEN_TTL_MIN):
+        tok.revoked_at = now
+        db.add(tok)
+        db.commit()
+        return None
+
     try:
         _enforce_user_sanctions(db, user)
     except HTTPException:
@@ -1119,6 +1130,13 @@ def get_current_user(
     user = db.get(AppUser, tok.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+
+    now = now_utc()
+    if not bool(getattr(user, "is_guest", False)) and tok.created_at and tok.created_at <= now - timedelta(minutes=ACCESS_TOKEN_TTL_MIN):
+        tok.revoked_at = now
+        db.add(tok)
+        db.commit()
+        raise HTTPException(status_code=401, detail={"reason": "access_token_expired"})
 
     _enforce_user_sanctions(db, user)
     return user
@@ -2574,7 +2592,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_origin_regex=r"^https://.*\.onrender\.com$",
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, webLogout } from "@/lib/api";
 import { clearToken, getCachedMe, getToken, setCachedMe, setToken } from "@/lib/auth";
 import { getMe } from "@/lib/session";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -35,9 +35,26 @@ describe("Account session resilience", () => {
     await expect(request).rejects.toMatchObject({ status: 401 });
     expect(getToken()).toBe("session-b");
   });
+  it("does not clear local credentials when server logout fails", async () => {
+    setToken("session-a");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 503 }));
+    await expect(webLogout()).rejects.toMatchObject({ status: 503 });
+    expect(getToken()).toBe("session-a");
+  });
+
+  it("clears credentials only after successful server logout", async () => {
+    setToken("session-a");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    await expect(webLogout()).resolves.toBeUndefined();
+    expect(getToken()).toBeNull();
+  });
+
   it("clears only expired credentials and accepts successful empty responses", async () => {
     setToken("session-a");
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("{}", { status: 401 })).mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
     await expect(getMe(true)).rejects.toMatchObject({ status: 401 });
     expect(getToken()).toBeNull();
     await expect(apiFetch("/resource", { method: "DELETE" })).resolves.toBeUndefined();
