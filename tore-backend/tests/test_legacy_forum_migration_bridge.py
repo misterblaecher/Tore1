@@ -40,7 +40,7 @@ def test_empty_database_upgrades_to_single_head(tmp_path, monkeypatch):
 
     command.upgrade(config, "head")
 
-    assert _version(database) == _head(config) == "0029_legacy_workspace_parity"
+    assert _version(database) == _head(config) == "0030_distributed_rate_limits"
 
 
 def test_0024_upgrades_to_head(tmp_path, monkeypatch):

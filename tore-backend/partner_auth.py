@@ -257,9 +257,17 @@ def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=AuthOut)
 def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
-    from app.services.rate_limit_service import enforce_rate_limit
-    enforce_rate_limit("partner_pin_login", f"{data.bar_id}:{data.display_name.strip().casefold()}")
-    enforce_rate_limit("partner_pin_login_ip", request.client.host if request.client else "unknown")
+    from app.services.rate_limit_service import (
+        RateLimitExceeded,
+        enforce_rate_limit,
+        standard_rate_limit_http_exception,
+    )
+
+    try:
+        enforce_rate_limit("partner_pin_login", f"{data.bar_id}:{data.display_name.strip().casefold()}")
+        enforce_rate_limit("partner_pin_login_ip", request.client.host if request.client else "unknown")
+    except RateLimitExceeded as exc:
+        raise standard_rate_limit_http_exception(exc.scope, exc.retry_after_seconds) from exc
     m = (
         db.query(PartnerMembership)
         .filter(

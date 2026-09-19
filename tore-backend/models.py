@@ -8,5 +8,5 @@ from app.models_structure_claim import StructureClaim
 from app.models_structure_invitations import StructureInvitation
 
 reexport_public(_models_monolith, globals())
-for _model_name in ("StoredFile","ForumEventPage","StructureClaim","StructureInvitation","EventStructure","EventManagerSettings"):
+for _model_name in ("StoredFile","ForumEventPage","StructureClaim","StructureInvitation","EventStructure","EventManagerSettings","RateLimitBucket"):
     if _model_name not in __all__: __all__.append(_model_name)
