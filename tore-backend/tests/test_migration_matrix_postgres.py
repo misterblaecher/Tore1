@@ -44,10 +44,11 @@ def _temporary_database(label: str):
         connection.execute(text(f'CREATE DATABASE "{name}"'))
     admin.dispose()
 
+    target_url_text = target_url.render_as_string(hide_password=False)
     previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = str(target_url)
+    os.environ["DATABASE_URL"] = target_url_text
     try:
-        yield str(target_url)
+        yield target_url_text
     finally:
         if previous is None:
             os.environ.pop("DATABASE_URL", None)
