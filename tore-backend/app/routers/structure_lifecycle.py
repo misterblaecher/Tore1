@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, Organization, OrganizationMembership, OrganizationWriteIdempotency
-from app.legacy.monolith import (
+from app.services.organization_compat_service import (
     _membership_for,
     _orga_write_idem,
     _require_membership_role,

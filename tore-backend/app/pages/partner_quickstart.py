@@ -1,5 +1,5 @@
-"""Partner quickstart HTML page endpoint extracted from legacy main module."""
+"""Partner quickstart endpoint through the explicit legacy boundary."""
 
-from app.legacy.monolith import quickstart
+from app.legacy.public_exports import quickstart
 
 __all__ = ["quickstart"]

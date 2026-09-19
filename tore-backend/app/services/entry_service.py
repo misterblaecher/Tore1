@@ -8,11 +8,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from db import now_utc
-from models import EntryScanLog, EntryToken, Event
+from models import EntryLog, EntryScanLog, EntryToken, Event
 
 
 def require_partner_staff(identity: dict) -> None:
@@ -213,6 +213,18 @@ def scan_entry(
     db.add(log)
     db.flush()
     return log, False
+
+
+def entry_delta_count(db: Session, event_id: int) -> int:
+    """Historical operational counter: sum EntryLog.delta for one event."""
+    return int(
+        db.scalar(
+            select(func.coalesce(func.sum(EntryLog.delta), 0)).where(
+                EntryLog.event_id == event_id
+            )
+        )
+        or 0
+    )
 
 
 def accepted_count(db: Session, event_id: int) -> int:

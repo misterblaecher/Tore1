@@ -16,6 +16,7 @@ from app.services.event_staff_invitation_service import (
     revoke_secure_event_invitation,
 )
 from app.services.idempotency_service import ensure_idempotency_key
+from app.services.entry_service import entry_delta_count
 from app.services.operational_access_service import require_bar_action, require_event_action
 from app.services.orders_service import transition_order_status_idempotent
 from app.services.p3_common import ensure_event_action_allowed
@@ -101,8 +102,6 @@ def event_ops_hub(event_id: int, user: AppUser = Depends(current_app_user), db: 
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(404, "Event not found")
-    from app.legacy.monolith import entry_count
-
     result = {
         "event": capability["event"],
         "role": capability["role"],
@@ -112,7 +111,7 @@ def event_ops_hub(event_id: int, user: AppUser = Depends(current_app_user), db: 
         "server_time": now_utc().isoformat(),
     }
     if "event.manage_entry" in capability["actions"]:
-        result["entry_count"] = entry_count(db, event_id)
+        result["entry_count"] = entry_delta_count(db, event_id)
     return result
 
 

@@ -1,6 +1,6 @@
-"""Partner portal endpoint function exports from legacy main module."""
+"""Partner portal endpoint exports through the explicit legacy boundary."""
 
-from app.legacy.monolith import (
+from app.legacy.public_exports import (
     partner_portal_bar,
     partner_portal_events,
     partner_portal_list_battles,

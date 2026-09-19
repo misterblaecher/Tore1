@@ -64,3 +64,24 @@ def test_modern_routers_do_not_import_extracted_legacy_dependencies():
         "Modern routers must use extracted DB/auth/role boundaries. "
         f"Offenders: {offenders}"
     )
+
+
+def test_nonlegacy_business_code_has_no_direct_monolith_imports():
+    transitional = {
+        "core/errors.py",   # removed by #299
+        "core/logging.py",  # removed by #299
+        "core/startup.py",  # removed by #298
+        "main.py",          # composition boundary replaced by #299
+    }
+    offenders: dict[str, list[str]] = {}
+    for path in sorted(APP.rglob("*.py")):
+        relative = path.relative_to(APP).as_posix()
+        if relative.startswith("legacy/") or relative in transitional:
+            continue
+        imports = _legacy_imports(path)
+        if imports:
+            offenders[relative] = imports
+    assert offenders == {}, (
+        "Non-legacy business code must not import app.legacy.monolith directly; "
+        f"use an extracted service or explicit app.legacy facade. Offenders: {offenders}"
+    )

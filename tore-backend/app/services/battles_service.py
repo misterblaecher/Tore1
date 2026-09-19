@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 from db import now_utc
 from models import Battle, BattleParticipant
 from app.schemas.battles import CreateBattleIn, JoinBattleIn, WinnerIn
+from app.services.code_service import random_code
+from app.services.event_feature_service import require_feature
 
 
 def create_battle(db: Session, payload: CreateBattleIn) -> dict:
-    from app.legacy.monolith import random_code, require_feature
-
     if payload.event_id:
         require_feature(db, payload.event_id, "battles_enabled")
 
@@ -29,8 +29,6 @@ def create_battle(db: Session, payload: CreateBattleIn) -> dict:
 
 
 def join_battle(db: Session, payload: JoinBattleIn) -> dict:
-    from app.legacy.monolith import require_feature
-
     battle = db.scalar(select(Battle).where(Battle.join_code == payload.join_code))
     if not battle:
         raise HTTPException(404, "Battle not found")
