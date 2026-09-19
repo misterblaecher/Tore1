@@ -1115,17 +1115,17 @@ def get_current_user(
     if not tok:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    now = now_utc()
-    if tok.created_at and tok.created_at <= now - timedelta(minutes=ACCESS_TOKEN_TTL_MIN):
-        tok.revoked_at = now
-        db.add(tok)
-        db.commit()
-        raise HTTPException(status_code=401, detail={"reason": "access_token_expired"})
-
     # IMPORTANT: charger explicitement l'utilisateur dans CE session
     user = db.get(AppUser, tok.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+
+    now = now_utc()
+    if not bool(getattr(user, "is_guest", False)) and tok.created_at and tok.created_at <= now - timedelta(minutes=ACCESS_TOKEN_TTL_MIN):
+        tok.revoked_at = now
+        db.add(tok)
+        db.commit()
+        raise HTTPException(status_code=401, detail={"reason": "access_token_expired"})
 
     _enforce_user_sanctions(db, user)
     return user
