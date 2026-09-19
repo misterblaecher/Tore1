@@ -127,8 +127,6 @@ def _backend_name() -> str:
     backend = configured or ("database" if is_prod else "memory")
     if is_prod and backend == "memory":
         raise RateLimitBackendUnavailable("In-memory rate limiting is disabled in PROD")
-    if is_prod and backend == "database" and _database_store.engine.dialect.name != "postgresql":
-        raise RateLimitBackendUnavailable("PROD distributed rate limiting requires PostgreSQL")
     return backend
 
 
