@@ -3,12 +3,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Header, Footer } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { apiFetch, ApiError } from "@/lib/api";
-import { setCachedMe, setRefreshToken, setToken } from "@/lib/auth";
+import { setCachedMe, setToken } from "@/lib/auth";
 import { getMe } from "@/lib/session";
 
 type AuthOut = {
   access_token?: string;
-  refresh_token?: string;
 };
 
 type EmailRequestOut = {
@@ -54,7 +53,6 @@ export default function LoginPage({ context = "site" }: LoginPageProps) {
       throw new Error("missing access token");
     }
     setToken(accessToken);
-    setRefreshToken(data.refresh_token);
     const me = await getMe(true);
     setCachedMe(me);
     navigate(from, { replace: true });
@@ -67,8 +65,9 @@ export default function LoginPage({ context = "site" }: LoginPageProps) {
     setError(null);
 
     try {
-      const data = await apiFetch<AuthOut>("/auth/password/register", {
+      const data = await apiFetch<AuthOut>("/auth/web/password/register", {
         method: "POST",
+        credentials: "include",
         body: JSON.stringify({
           email: registerForm.email,
           password: registerForm.password,
@@ -96,8 +95,9 @@ export default function LoginPage({ context = "site" }: LoginPageProps) {
     setError(null);
 
     try {
-      const data = await apiFetch<AuthOut>("/auth/password/login", {
+      const data = await apiFetch<AuthOut>("/auth/web/password/login", {
         method: "POST",
+        credentials: "include",
         body: JSON.stringify(loginForm),
       });
       setMessage("Connexion reussie.");
@@ -145,8 +145,9 @@ export default function LoginPage({ context = "site" }: LoginPageProps) {
     setError(null);
 
     try {
-      const data = await apiFetch<AuthOut>("/auth/email/verify_otp", {
+      const data = await apiFetch<AuthOut>("/auth/web/email/verify_otp", {
         method: "POST",
+        credentials: "include",
         body: JSON.stringify({ email: loginForm.email, code: emailCode }),
       });
       await finishAuth(data);
