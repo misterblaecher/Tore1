@@ -26,6 +26,8 @@ def test_core_environment_settings_and_db_dependencies_do_not_import_monolith():
     for relative in (
         "core/environment.py",
         "core/settings.py",
+        "core/startup.py",
+        "core/dev_bootstrap.py",
         "deps/db.py",
     ):
         path = APP / relative
