@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, OrganizationMembership, StructureInvitation
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.models.structure_rbac import StructureMembershipRole, StructureRole
 from app.routers.forum import _structure_or_404
 from app.routers.forum_invitations import _INVITATION_STATES, _client_rate_key, _deliver, _expires_at, _lookup_token, _new_token, _not_available, _payload, _rate, _recipient_rate_key, _status
