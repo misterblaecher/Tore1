@@ -66,6 +66,14 @@ def test_prod_refuses_memory_backend(monkeypatch):
         rate_limit_service._backend_name()
 
 
+def test_rate_limit_exceeded_is_directly_safe_for_fastapi():
+    exc = rate_limit_service.RateLimitExceeded("orders_create", 12)
+    assert exc.status_code == 429
+    assert exc.detail["code"] == "rate_limited"
+    assert exc.detail["scope"] == "orders_create"
+    assert exc.headers["Retry-After"] == "12"
+
+
 def test_backend_failure_fails_closed_with_503(monkeypatch):
     monkeypatch.setenv("TORE_RATE_LIMIT_BACKEND", "database")
     monkeypatch.setenv("TORE_ENV", "DEV")
