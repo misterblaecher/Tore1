@@ -38,7 +38,8 @@ from models import (
     StructureMedia,
     StructurePage,
 )
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
 from app.models.wiki import StructurePageRevision
