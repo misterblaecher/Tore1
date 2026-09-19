@@ -27,13 +27,13 @@ from models import (
 )
 from app.legacy.monolith import get_current_user, get_db
 from app.routers.forum import (
-    _require_role,
     _save_idem,
     _structure_or_404,
     _verify_event_scope,
     _write_idem,
 )
 from app.services.audit_service import write_audit_log
+from app.services.structure_rbac import require_capability
 
 
 router = APIRouter(prefix="/forum", tags=["forum-events"])
@@ -278,7 +278,7 @@ def list_event_workspace(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MEMBER")
+    require_capability(db, org.id, user, "event.read")
     events = db.query(Event).filter(
         Event.host_type == "orga",
         Event.host_id == str(org.id),
@@ -295,7 +295,9 @@ def create_event_workspace(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.create")
+    if payload.publication_status == "PUBLISHED":
+        require_capability(db, org.id, user, "event.publish")
     action_key = f"forum_event_workspace_create:{org.id}"
     key, previous = _write_idem(db, user, action_key, idempotency_key)
     if previous is not None:
@@ -362,7 +364,9 @@ def patch_event_workspace(
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.manage")
+    if payload.publication_status is not None or payload.lifecycle_status == "PUBLISHED":
+        require_capability(db, org.id, user, "event.publish")
     event = _verify_event_scope(db, org.id, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")

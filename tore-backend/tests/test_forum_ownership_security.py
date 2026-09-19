@@ -51,6 +51,15 @@ def _join(org_id: int, token: str, suffix: str):
     assert response.status_code == 200
 
 
+def _publish(token: str, slug: str, suffix: str) -> None:
+    response = client.post(
+        f"/forum/structures/{slug}/publish",
+        json={"reason": "Publication explicite avant le test de gel"},
+        headers=_headers(token, f"publish-{suffix}"),
+    )
+    assert response.status_code == 200
+
+
 def _admin_headers() -> dict[str, str]:
     return {"X-Admin-Api-Key": "ownership-test-admin"}
 
@@ -185,6 +194,7 @@ def test_freeze_blocks_critical_admin_writes_and_admin_can_resolve_recovery_conf
     owner_token, owner_id = _guest("freeze-owner")
     recovery_token, recovery_id = _guest("freeze-recovery")
     org_id, slug = _structure(owner_token, "Freeze Secure")
+    _publish(owner_token, slug, "freeze-secure")
     _join(org_id, recovery_token, "freeze-recovery")
     assert client.get(f"/forum/structures/{slug}/ownership", headers=_headers(owner_token)).status_code == 200
     assert client.put(
@@ -254,6 +264,7 @@ def test_freeze_blocks_critical_admin_writes_and_admin_can_resolve_recovery_conf
 def test_freeze_can_hide_public_content():
     owner_token, _ = _guest("hide-owner")
     _, slug = _structure(owner_token, "Hidden Freeze")
+    _publish(owner_token, slug, "hidden-freeze")
     assert client.get(f"/forum/structures/{slug}/ownership", headers=_headers(owner_token)).status_code == 200
     assert client.post(
         f"/forum/admin/structures/{slug}/freeze",

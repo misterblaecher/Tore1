@@ -13,7 +13,7 @@ import sqlalchemy as sa
 revision = "0013_structure_lifecycle_private_defaults"
 down_revision = "0012_discussion_workspace"
 branch_labels = None
-depends_on = None
+depends_on = "0015_legacy_forum_bridge"
 
 
 def upgrade():

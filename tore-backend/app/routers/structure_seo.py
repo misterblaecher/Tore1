@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.legacy.monolith import get_current_user, get_db
-from app.routers.forum import _require_role, _structure_or_404, _visibility_settings
+from app.routers.forum import _structure_or_404, _visibility_settings
+from app.services.structure_rbac import require_capability
 from app.routers.forum_events import _event_slug, _is_public_event, _public_payload
 from app.services.audit_service import write_audit_log
 from models import AppUser, Event, Organization
@@ -62,7 +63,7 @@ def patch_structure_seo(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "structure.publish")
     public = dict(org.public_content_json or {})
     old_slug = org.slug
 
@@ -119,7 +120,7 @@ def get_structure_seo_settings(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MANAGER")
+    require_capability(db, org.id, user, "structure.publish")
     seo = _seo_config(org)
     return {
         "slug": org.slug,

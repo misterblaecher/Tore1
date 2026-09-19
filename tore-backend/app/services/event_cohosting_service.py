@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, Event, EventStructure, Organization, OrganizationMembership
+from app.services.structure_rbac import capabilities_for_membership
 
 
 COHOST_PERMISSION_FIELDS = {
@@ -18,30 +19,6 @@ COHOST_PERMISSION_FIELDS = {
     "finance": "can_finance",
     "recap": "can_recap",
 }
-
-# Keep this local to avoid importing router internals into services.
-ROLE_RANK = {
-    "FOLLOWER": 0,
-    "ANCIEN": 0,
-    "MEMBER": 1,
-    "STAFF": 2,
-    "COMMUNICATION": 2,
-    "ARCHIVIST": 2,
-    "TREASURER": 3,
-    "TRESORIER": 3,
-    "SECRETARY": 3,
-    "BUREAU": 4,
-    "VICE_PRESIDENT": 4,
-    "PRESIDENT": 4,
-    "MANAGER": 4,
-    "ADMIN": 5,
-    "OWNER": 6,
-}
-
-
-def _rank(membership: OrganizationMembership) -> int:
-    return ROLE_RANK.get((membership.role or "MEMBER").upper(), 0)
-
 
 def active_structure_membership(
     db: Session,
@@ -176,25 +153,30 @@ def relation_permissions(row: EventStructure) -> dict[str, bool]:
 
 
 def effective_permission(
+    db: Session,
     relation: EventStructure,
     membership: OrganizationMembership,
     permission: str,
 ) -> bool:
     role = (relation.role or "COHOST").upper()
-    rank = _rank(membership)
+    required = {
+        "read": "event.read",
+        "edit": "event.manage",
+        "publish": "event.publish",
+        "staff": "event.manage",
+        "documents": "document.manage",
+        "finance": "finance.read",
+        "recap": "event.recap.manage",
+    }.get(permission)
+    if required is None or required not in capabilities_for_membership(db, membership):
+        return False
     if permission == "read":
-        return rank >= ROLE_RANK["MEMBER"]
-    if permission == "finance":
-        # Finance is always explicit for a COHOST and additionally requires a
-        # treasury-capable member. No other permission implies it.
-        return rank >= ROLE_RANK["TREASURER"] and (
-            role == "OWNER" or bool(relation.can_finance)
-        )
+        return True
     if permission not in COHOST_PERMISSION_FIELDS:
         return False
-    return rank >= ROLE_RANK["MANAGER"] and (
-        role == "OWNER" or bool(getattr(relation, COHOST_PERMISSION_FIELDS[permission]))
-    )
+    # Every COHOST permission remains explicit; a local capability alone never
+    # expands the relation granted by the owning Structure.
+    return role == "OWNER" or bool(getattr(relation, COHOST_PERMISSION_FIELDS[permission]))
 
 
 def require_structure_event_relation(
@@ -216,7 +198,7 @@ def require_structure_event_relation(
     membership = active_structure_membership(
         db, organization_id=organization_id, user_id=user.id
     )
-    if relation is None or membership is None or not effective_permission(relation, membership, permission):
+    if relation is None or membership is None or not effective_permission(db, relation, membership, permission):
         raise HTTPException(
             status_code=403,
             detail={"reason": "EVENT_COHOST_PERMISSION_DENIED", "permission": permission},

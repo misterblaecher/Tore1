@@ -8,7 +8,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from models import AppUser, Event, OrganizationMembership, StructureDocument, StructureDiscussionChannel, StructureDiscussionPost, StructurePage
 from app.legacy.monolith import get_current_user, get_db
-from app.routers.forum import _can_view, _require_role, _structure_or_404
+from app.routers.forum import _can_view, _structure_or_404
+from app.services.structure_rbac import require_capability
 from app.services.forum_channel_acl_current import can_read
 
 router = APIRouter(prefix="/forum", tags=["forum-search"])
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/forum", tags=["forum-search"])
 @router.get("/structures/{slug}/search")
 def global_search(slug: str, q: str = Query(min_length=2, max_length=120), limit: int = Query(default=8, ge=1, le=20), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "structure.read")
     needle = f"%{q.strip().lower()}%"
     results: list[dict] = []
     def add(kind, title, snippet, target, row_id):
@@ -28,7 +29,7 @@ def global_search(slug: str, q: str = Query(min_length=2, max_length=120), limit
     for p in db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.channel_id.in_(channel_ids), StructureDiscussionPost.is_archived.is_(False), or_(func.lower(StructureDiscussionPost.title).like(needle), func.lower(StructureDiscussionPost.body).like(needle))).order_by(StructureDiscussionPost.created_at.desc()).limit(limit).all(): add("messages", p.title, p.body, f"/forum/structures/{slug}/discussions?post={p.id}", p.id)
     for d in db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None), or_(func.lower(StructureDocument.title).like(needle), func.lower(func.coalesce(StructureDocument.description, "")).like(needle))).limit(limit).all():
         if _can_view(d.visibility, membership): add("documents", d.title, d.description, f"/forum/structures/{slug}/documents", d.id)
-    for p in db.query(StructurePage).filter(StructurePage.organization_id == org.id, or_(func.lower(StructurePage.title).like(needle), func.lower(p.content).like(needle))).limit(limit).all():
+    for p in db.query(StructurePage).filter(StructurePage.organization_id == org.id, or_(func.lower(StructurePage.title).like(needle), func.lower(StructurePage.content).like(needle))).limit(limit).all():
         if p.published_at is not None and _can_view(p.visibility, membership): add("folklore", p.title, p.content, f"/forum/structures/{slug}/folklore#{p.slug}", p.id)
     for e in db.query(Event).filter(Event.host_type == "orga", Event.host_id == str(org.id), or_(func.lower(Event.name).like(needle), func.lower(func.coalesce(Event.public_description, "")).like(needle))).limit(limit).all():
         if (e.publication_status or "DRAFT").upper() == "PUBLISHED" and _can_view(e.visibility, membership): add("events", e.name, e.public_description, f"/forum/structures/{slug}/events/{e.id}", e.id)

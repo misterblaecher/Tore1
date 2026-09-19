@@ -31,7 +31,6 @@ from app.routers.forum import (
     _document_payload,
     _event_payload,
     _page_payload,
-    _require_role,
     _save_idem,
     _structure_or_404,
     _visible_channel_ids,
@@ -163,7 +162,7 @@ def get_structured_archives(
     db: Session = Depends(get_db),
 ):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "structure.read")
     _, capabilities = capabilities_for_user(db, org.id, user.id)
     normalized_category = category.upper() if category else None
     if normalized_category and normalized_category not in ARCHIVE_CATEGORIES:

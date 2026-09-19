@@ -184,6 +184,20 @@ def create_discussion(slug: str, payload: DiscussionCreateIn, user: AppUser = De
     db.flush()
     response = _discussion_payload(db, row, actor)
     _save_idem(db, user, f"forum_discussion_create:{org.id}", key, response)
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=actor.role,
+        action="forum.discussion.create",
+        entity_type="structure_discussion_post",
+        entity_id=str(row.id),
+        event_id=None,
+        committee_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"structure_id": org.id, "channel_id": channel.id},
+    )
     db.commit()
     return response
 

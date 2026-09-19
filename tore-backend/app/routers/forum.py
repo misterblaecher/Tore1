@@ -42,6 +42,8 @@ from app.legacy.monolith import get_current_user, get_db
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
 from app.models.wiki import StructurePageRevision
+from app.services.structure_lifecycle import structure_is_published
+from app.services.structure_rbac import capabilities_for_membership, require_capability
 import difflib
 
 
@@ -245,6 +247,21 @@ def _slugify(value: str) -> str:
 def _visibility_settings(org: Organization) -> dict[str, str]:
     raw = org.visibility_settings_json if isinstance(org.visibility_settings_json, dict) else {}
     settings = {**DEFAULT_VISIBILITY, **{str(k): str(v).upper() for k, v in raw.items() if str(k) in DEFAULT_VISIBILITY}}
+    # Detailed portal blocks inherit their parent visibility when older or
+    # partially populated JSON does not contain the newer per-block keys.
+    # This prevents private descriptions/member lists from becoming public by
+    # falling back to historical PUBLIC defaults.
+    inherited = {
+        "about": "description",
+        "history": "description",
+        "partners": "description",
+        "services": "description",
+        "announcement": "description",
+        "team": "members",
+    }
+    for child, parent in inherited.items():
+        if child not in raw and parent in raw:
+            settings[child] = settings[parent]
     portal = org.public_content_json.get("portal", {}) if isinstance(org.public_content_json, dict) else {}
     aliases = {"gallery": "albums", "memory": "history", "description": "about"}
     for block in portal.get("hidden_blocks", []) if isinstance(portal, dict) else []:
@@ -299,7 +316,14 @@ def _can_view(level: str, membership: Optional[OrganizationMembership], *, is_us
 
 def _structure_or_404(db: Session, slug: str, *, public: bool = False) -> Organization:
     org = db.query(Organization).filter(func.lower(Organization.slug) == slug.strip().lower()).first()
-    if org is None or (public and _visibility_settings(org)["page"] != "PUBLIC"):
+    if org is None or (
+        public
+        and (
+            not structure_is_published(db, org)
+            or (org.visibility or "PRIVATE").upper() != "PUBLIC"
+            or _visibility_settings(org)["page"] != "PUBLIC"
+        )
+    ):
         raise HTTPException(status_code=404, detail="Structure not found")
     return org
 
@@ -358,10 +382,10 @@ def _structure_payload(org: Organization, *, include_private: bool = False) -> d
         "hidden_blocks": portal.get("hidden_blocks", []),
     }
     if not include_private:
-        if settings["about"] != "PUBLIC": payload["portal"].pop("about", None)
-        if settings["services"] != "PUBLIC": payload["portal"].pop("services", None)
-        if settings["announcement"] != "PUBLIC": payload["portal"].pop("announcement", None)
-        if settings["contact"] != "PUBLIC": payload["portal"].pop("opening_hours", None)
+        if settings["about"] != "PUBLIC": payload["portal"]["about"] = ""
+        if settings["services"] != "PUBLIC": payload["portal"]["services"] = []
+        if settings["announcement"] != "PUBLIC": payload["portal"]["announcement"] = ""
+        if settings["contact"] != "PUBLIC": payload["portal"]["opening_hours"] = ""
         payload["portal"].pop("hidden_blocks", None)
     if include_private or settings["history"] == "PUBLIC":
         payload["history"] = content.get("history")
@@ -592,14 +616,14 @@ def list_my_forum_structures(user: AppUser = Depends(get_current_user), db: Sess
     items = []
     for org, membership in rows:
         role = (membership.role or "MEMBER").upper()
-        rank = ROLE_RANK.get(role, 0)
-        if rank < ROLE_RANK["MEMBER"]:
+        capabilities = capabilities_for_membership(db, membership)
+        if "structure.read" not in capabilities:
             continue
         items.append({
             "id": org.id, "slug": org.slug, "name": org.name,
             "type": _normalized_type(org), "city": org.city, "logoUrl": org.logo_url,
-            "role": role, "canManage": rank >= ROLE_RANK["MANAGER"],
-            "canReadFinance": rank >= ROLE_RANK["TREASURER"],
+            "role": role, "canManage": "structure.edit" in capabilities,
+            "canReadFinance": "finance.read" in capabilities,
         })
     return {"items": items}
 
@@ -632,16 +656,17 @@ def get_public_structure(slug: str, db: Session = Depends(get_db)):
 @router.get("/structures/{slug}/dashboard")
 def get_structure_dashboard(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "structure.read")
+    capabilities = capabilities_for_membership(db, membership)
     settings = _visibility_settings(org)
     recent_posts = db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.channel_id.in_(_visible_channel_ids(db, org.id, membership)), StructureDiscussionPost.parent_id.is_(None), StructureDiscussionPost.is_archived.is_(False)).order_by(StructureDiscussionPost.created_at.desc()).limit(5).all()
     recent_documents = db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None)).order_by(StructureDocument.created_at.desc()).limit(5).all()
     active_members = int(db.scalar(select(func.count()).select_from(OrganizationMembership).where(OrganizationMembership.organization_id == org.id, OrganizationMembership.status == "ACTIVE", OrganizationMembership.revoked_at.is_(None))) or 0)
-    allow_finance = ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["TREASURER"]
+    allow_finance = "finance.read" in capabilities
     return {
         "structure": _structure_payload(org, include_private=True),
         "membership": _member_payload(db, membership, include_private=True),
-        "permissions": ["structure.read", "member.read", "discussion.read", "discussion.write", "event.read", "document.read", "album.read", "stats.read"] + (["accounting.read"] if allow_finance else []) + (["structure.edit", "member.manage", "event.create", "event.manage", "document.manage", "album.manage", "discussion.manage", "page.manage", "visibility.manage", "audit.read"] if ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"] else []),
+        "permissions": sorted(capabilities),
         "stats": {"memberCount": active_members, "eventCount": len(_org_events(db, org.id)), "discussionCount": int(db.scalar(select(func.count()).select_from(StructureDiscussionPost).where(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.is_archived.is_(False))) or 0), "documentCount": int(db.scalar(select(func.count()).select_from(StructureDocument).where(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None))) or 0), "albumCount": int(db.scalar(select(func.count()).select_from(StructureAlbum).where(StructureAlbum.organization_id == org.id, StructureAlbum.archived_at.is_(None))) or 0)},
         "upcomingEvents": [_event_payload(item) for item in _org_events(db, org.id) if item.starts_at and item.starts_at >= now_utc()][:5],
         "recentPosts": [_discussion_payload(db, item, membership) for item in recent_posts],
@@ -654,8 +679,8 @@ def get_structure_dashboard(slug: str, user: AppUser = Depends(get_current_user)
 @router.get("/structures/{slug}/members")
 def list_structure_members(slug: str, include_archived: bool = False, search: Optional[str] = Query(default=None, max_length=120), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
-    include_private = ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"]
+    membership = require_capability(db, org.id, user, "member.read")
+    include_private = "member.manage" in capabilities_for_membership(db, membership)
     query = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org.id)
     if not include_archived or not include_private:
         query = query.filter(OrganizationMembership.status == "ACTIVE", OrganizationMembership.revoked_at.is_(None))
@@ -675,7 +700,7 @@ def list_structure_members(slug: str, include_archived: bool = False, search: Op
 @router.post("/structures/{slug}/members")
 def upsert_structure_member(slug: str, payload: MemberUpsertIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "member.manage")
     if payload.role.strip().upper() == "OWNER" and (actor.role or "").upper() != "OWNER":
         raise HTTPException(status_code=403, detail={"reason": "OWNER_ROLE_REQUIRES_OWNER"})
     member_action = f"forum_member_upsert:{org.id}"
@@ -713,7 +738,7 @@ def upsert_structure_member(slug: str, payload: MemberUpsertIn, user: AppUser = 
 @router.patch("/structures/{slug}/members/{member_user_id}")
 def patch_structure_member(slug: str, member_user_id: str, payload: MemberPatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "member.manage")
     member_action = f"forum_member_patch:{org.id}"
     key, previous = _write_idem(db, user, member_action, idempotency_key)
     if previous is not None:
@@ -760,7 +785,7 @@ def patch_structure_member(slug: str, member_user_id: str, payload: MemberPatchI
 @router.delete("/structures/{slug}/members/{member_user_id}")
 def revoke_structure_member(slug: str, member_user_id: str, reason: str = Query(default="Révocation depuis le Forum", min_length=2, max_length=280), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "member.manage")
     member_action = f"forum_member_revoke:{org.id}"
     key, previous = _write_idem(db, user, member_action, idempotency_key)
     if previous is not None:
@@ -785,7 +810,7 @@ def revoke_structure_member(slug: str, member_user_id: str, reason: str = Query(
 @router.get("/structures/{slug}/discussions")
 def list_discussions(slug: str, search: Optional[str] = Query(default=None, max_length=120), channel_id: Optional[int] = None, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "discussion.read")
     categories = db.query(StructureDiscussionCategory).filter(StructureDiscussionCategory.organization_id == org.id, StructureDiscussionCategory.is_archived.is_(False)).order_by(StructureDiscussionCategory.order_index.asc()).all()
     channels = db.query(StructureDiscussionChannel).filter(StructureDiscussionChannel.organization_id == org.id, StructureDiscussionChannel.is_archived.is_(False)).order_by(StructureDiscussionChannel.name.asc()).all()
     channels = [c for c in channels if _can_view(c.visibility, membership)]
@@ -802,7 +827,7 @@ def list_discussions(slug: str, search: Optional[str] = Query(default=None, max_
 @router.post("/structures/{slug}/channels")
 def create_channel(slug: str, payload: ChannelCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "channel.create")
     key, previous = _write_idem(db, user, f"forum_channel_create:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -832,13 +857,13 @@ def create_channel(slug: str, payload: ChannelCreateIn, user: AppUser = Depends(
 @router.patch("/structures/{slug}/discussions/{post_id}")
 def update_discussion(slug: str, post_id: int, payload: DiscussionActionIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MEMBER")
+    actor = require_capability(db, org.id, user, "discussion.write")
     row = _accessible_post(db, org.id, post_id, actor)
     key, previous = _write_idem(db, user, f"forum_discussion_action:{post_id}", idempotency_key)
     if previous is not None:
         return previous
     if payload.pinned is not None:
-        _require_role(db, org.id, user, "MANAGER")
+        require_capability(db, org.id, user, "discussion.manage")
         if row.parent_id is not None:
             raise HTTPException(400, detail="Seules les discussions peuvent être épinglées")
         row.is_pinned = payload.pinned
@@ -858,7 +883,7 @@ def update_discussion(slug: str, post_id: int, payload: DiscussionActionIn, user
 @router.post("/structures/{slug}/discussions")
 def create_discussion(slug: str, payload: DiscussionCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MEMBER")
+    actor = require_capability(db, org.id, user, "discussion.write")
     key, previous = _write_idem(db, user, f"forum_discussion_create:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -903,14 +928,16 @@ def create_discussion(slug: str, payload: DiscussionCreateIn, user: AppUser = De
 @router.get("/structures/{slug}/events")
 def list_structure_events(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MEMBER")
+    require_capability(db, org.id, user, "event.read")
     return {"items": [_event_payload(item) for item in _org_events(db, org.id)]}
 
 
 @router.post("/structures/{slug}/events")
 def create_structure_event(slug: str, payload: EventCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.create")
+    if payload.publication_status == "PUBLISHED":
+        require_capability(db, org.id, user, "event.publish")
     key, previous = _write_idem(db, user, f"forum_event_create:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -930,7 +957,9 @@ def create_structure_event(slug: str, payload: EventCreateIn, user: AppUser = De
 @router.patch("/structures/{slug}/events/{event_id}")
 def patch_structure_event(slug: str, event_id: int, payload: EventPatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "event.manage")
+    if payload.publication_status is not None:
+        require_capability(db, org.id, user, "event.publish")
     key, previous = _write_idem(db, user, f"forum_event_patch:{event_id}", idempotency_key)
     if previous is not None:
         return previous
@@ -963,7 +992,7 @@ def patch_structure_event(slug: str, event_id: int, payload: EventPatchIn, user:
 @router.get("/structures/{slug}/documents")
 def list_documents(slug: str, search: Optional[str] = Query(default=None, max_length=120), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "document.read")
     query = db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None))
     if search and search.strip():
         needle = f"%{search.strip().lower()}%"
@@ -975,7 +1004,7 @@ def list_documents(slug: str, search: Optional[str] = Query(default=None, max_le
 @router.post("/structures/{slug}/documents")
 def create_document(slug: str, payload: DocumentCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "document.manage")
     event = _verify_event_scope(db, org.id, payload.event_id)
     key, previous = _write_idem(db, user, f"forum_document_create:{org.id}", idempotency_key)
     if previous is not None:
@@ -993,7 +1022,7 @@ def create_document(slug: str, payload: DocumentCreateIn, user: AppUser = Depend
 @router.delete("/structures/{slug}/documents/{document_id}")
 def archive_document(slug: str, document_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "document.manage")
     key, previous = _write_idem(db, user, f"forum_document_archive:{document_id}", idempotency_key)
     if previous is not None:
         return previous
@@ -1012,15 +1041,16 @@ def archive_document(slug: str, document_id: int, user: AppUser = Depends(get_cu
 @router.get("/structures/{slug}/albums")
 def list_albums(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "album.read")
+    capabilities = capabilities_for_membership(db, membership)
     rows = db.query(StructureAlbum).filter(StructureAlbum.organization_id == org.id, StructureAlbum.archived_at.is_(None)).order_by(StructureAlbum.created_at.desc()).all()
-    return {"items": [_album_payload(db, row, include_media=True) for row in rows if _can_view(row.visibility, membership) and ((row.status or "DRAFT").upper() != "DRAFT" or row.created_by_user_id == user.id or ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"])]}
+    return {"items": [_album_payload(db, row, include_media=True) for row in rows if _can_view(row.visibility, membership) and ((row.status or "DRAFT").upper() != "DRAFT" or row.created_by_user_id == user.id or "album.manage" in capabilities)]}
 
 
 @router.post("/structures/{slug}/albums")
 def create_album(slug: str, payload: AlbumCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "album.manage")
     event = _verify_event_scope(db, org.id, payload.event_id)
     key, previous = _write_idem(db, user, f"forum_album_create:{org.id}", idempotency_key)
     if previous is not None:
@@ -1038,7 +1068,7 @@ def create_album(slug: str, payload: AlbumCreateIn, user: AppUser = Depends(get_
 @router.post("/structures/{slug}/albums/{album_id}/media")
 def add_album_media(slug: str, album_id: int, payload: MediaCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "album.manage")
     key, previous = _write_idem(db, user, f"forum_album_media_create:{album_id}", idempotency_key)
     if previous is not None:
         return previous
@@ -1060,7 +1090,9 @@ def add_album_media(slug: str, album_id: int, payload: MediaCreateIn, user: AppU
 @router.patch("/structures/{slug}/albums/{album_id}")
 def update_album_status(slug: str, album_id: int, payload: AlbumStatusIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "album.manage")
+    if payload.status == "PUBLISHED":
+        require_capability(db, org.id, user, "album.publish")
     key, previous = _write_idem(db, user, f"forum_album_status:{album_id}:{payload.status}", idempotency_key)
     if previous is not None:
         return previous
@@ -1080,17 +1112,17 @@ def update_album_status(slug: str, album_id: int, payload: AlbumStatusIn, user: 
 @router.get("/structures/{slug}/pages")
 def list_pages(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "page.read")
+    capabilities = capabilities_for_membership(db, membership)
     rows = db.query(StructurePage).filter(StructurePage.organization_id == org.id).order_by(StructurePage.updated_at.desc()).all()
-    return {"items": [_page_payload(row, include_content=True) for row in rows if _can_view(row.visibility, membership) and (row.published_at is not None or ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"])]}
+    return {"items": [_page_payload(row, include_content=True) for row in rows if _can_view(row.visibility, membership) and (row.published_at is not None or "page.manage" in capabilities)]}
 
 
 @router.post("/structures/{slug}/pages")
 def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "page.manage")
     if payload.published:
-        from app.services.structure_rbac import require_capability
         require_capability(db, org.id, user, "page.publish")
     key, previous = _write_idem(db, user, f"forum_page_create:{org.id}", idempotency_key)
     if previous is not None:
@@ -1113,9 +1145,8 @@ def create_page(slug: str, payload: PageCreateIn, user: AppUser = Depends(get_cu
 @router.patch("/structures/{slug}/pages/{page_id}")
 def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "page.manage")
     if payload.published is not None:
-        from app.services.structure_rbac import require_capability
         require_capability(db, org.id, user, "page.publish")
     key, previous = _write_idem(db, user, f"forum_page_patch:{page_id}", idempotency_key)
     if previous is not None:
@@ -1147,28 +1178,28 @@ def patch_page(slug: str, page_id: int, payload: PagePatchIn, user: AppUser = De
 
 @router.get("/structures/{slug}/pages/{page_id}/revisions")
 def page_revisions(slug: str, page_id: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug); membership = _require_role(db, org.id, user, "MEMBER")
+    org = _structure_or_404(db, slug); membership = require_capability(db, org.id, user, "page.read")
     row = db.get(StructurePage, page_id)
     if row is None or row.organization_id != org.id or not _can_view(row.visibility, membership): raise HTTPException(404, "Page not found")
     return {"items": [{"id": r.id, "version": r.version, "authorUserId": r.author_user_id, "message": r.message, "createdAt": r.created_at.isoformat()} for r in db.query(StructurePageRevision).filter_by(page_id=row.id).order_by(StructurePageRevision.version.desc()).all()]}
 
 @router.get("/structures/{slug}/pages/{page_id}/revisions/{version}")
 def page_revision(slug: str, page_id: int, version: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug); membership = _require_role(db, org.id, user, "MEMBER")
+    org = _structure_or_404(db, slug); membership = require_capability(db, org.id, user, "page.read")
     row = db.get(StructurePage, page_id); revision = db.query(StructurePageRevision).filter_by(page_id=page_id, version=version).first()
     if row is None or row.organization_id != org.id or revision is None or not _can_view(row.visibility, membership): raise HTTPException(404, "Revision not found")
     return {"id": revision.id, "version": revision.version, "content": revision.content, "authorUserId": revision.author_user_id, "message": revision.message, "createdAt": revision.created_at.isoformat()}
 
 @router.get("/structures/{slug}/pages/{page_id}/diff")
 def page_diff(slug: str, page_id: int, from_version: int, to_version: int, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug); _require_role(db, org.id, user, "MEMBER")
+    org = _structure_or_404(db, slug); require_capability(db, org.id, user, "page.read")
     page = db.get(StructurePage, page_id); before = db.query(StructurePageRevision).filter_by(page_id=page_id, version=from_version).first(); after = db.query(StructurePageRevision).filter_by(page_id=page_id, version=to_version).first()
     if page is None or page.organization_id != org.id or before is None or after is None: raise HTTPException(404, "Revision not found")
     return {"fromVersion": from_version, "toVersion": to_version, "diff": "".join(difflib.unified_diff(before.content.splitlines(True), after.content.splitlines(True), fromfile=f"v{from_version}", tofile=f"v{to_version}"))}
 
 @router.post("/structures/{slug}/pages/{page_id}/revisions/{version}/restore")
 def restore_page(slug: str, page_id: int, version: int, message: str = "Restauration d’une version", user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug); actor = _require_role(db, org.id, user, "MANAGER")
+    org = _structure_or_404(db, slug); actor = require_capability(db, org.id, user, "page.manage")
     page = db.get(StructurePage, page_id); source = db.query(StructurePageRevision).filter_by(page_id=page_id, version=version).first()
     if page is None or page.organization_id != org.id or source is None: raise HTTPException(404, "Revision not found")
     page.content = source.content; page.version += 1; page.updated_by_user_id = user.id; page.updated_at = now_utc()
@@ -1180,14 +1211,14 @@ def restore_page(slug: str, page_id: int, version: int, message: str = "Restaura
 @router.get("/structures/{slug}/visibility")
 def get_visibility(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
-    return {"settings": _visibility_settings(org), "structureVisibility": (org.visibility or "PRIVATE").upper(), "canManage": ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["MANAGER"], "preview": {"public": _base_public_page(db, org) if (org.visibility or "PRIVATE").upper() == "PUBLIC" else None, "member": {"name": org.name, "members": "visible selon rôle", "documents": "visible selon rôle", "stats": "privé"}}}
+    membership = require_capability(db, org.id, user, "structure.read")
+    return {"settings": _visibility_settings(org), "structureVisibility": (org.visibility or "PRIVATE").upper(), "canManage": "visibility.manage" in capabilities_for_membership(db, membership), "preview": {"public": _base_public_page(db, org) if structure_is_published(db, org) else None, "member": {"name": org.name, "members": "visible selon rôle", "documents": "visible selon rôle", "stats": "privé"}}}
 
 
 @router.patch("/structures/{slug}/visibility")
 def patch_visibility(slug: str, payload: VisibilityPatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "visibility.manage")
     key, previous = _write_idem(db, user, f"forum_visibility_patch:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -1208,14 +1239,14 @@ def patch_visibility(slug: str, payload: VisibilityPatchIn, user: AppUser = Depe
 @router.get("/structures/{slug}/stats")
 def get_stats(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MANAGER")
-    return _latest_stats(db, org.id, allow_finance=ROLE_RANK.get((membership.role or "MEMBER").upper(), 0) >= ROLE_RANK["TREASURER"])
+    membership = require_capability(db, org.id, user, "stats.read")
+    return _latest_stats(db, org.id, allow_finance="finance.read" in capabilities_for_membership(db, membership))
 
 
 @router.get("/structures/{slug}/archives")
 def get_archives(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    membership = _require_role(db, org.id, user, "MEMBER")
+    membership = require_capability(db, org.id, user, "structure.read")
     return {
         "documents": [_document_payload(row) for row in db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_not(None)).order_by(StructureDocument.archived_at.desc()).all()],
         "albums": [_album_payload(db, row, include_media=False) for row in db.query(StructureAlbum).filter(StructureAlbum.organization_id == org.id, StructureAlbum.status == "ARCHIVED").order_by(StructureAlbum.archived_at.desc()).all()],
@@ -1227,14 +1258,14 @@ def get_archives(slug: str, user: AppUser = Depends(get_current_user), db: Sessi
 @router.get("/structures/{slug}/settings")
 def get_settings(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MANAGER")
+    require_capability(db, org.id, user, "structure.edit")
     return _structure_payload(org, include_private=True)
 
 
 @router.patch("/structures/{slug}/settings")
 def patch_settings(slug: str, payload: SettingsPatchIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     org = _structure_or_404(db, slug)
-    actor = _require_role(db, org.id, user, "MANAGER")
+    actor = require_capability(db, org.id, user, "structure.edit")
     key, previous = _write_idem(db, user, f"forum_settings_patch:{org.id}", idempotency_key)
     if previous is not None:
         return previous
@@ -1254,7 +1285,7 @@ def patch_settings(slug: str, payload: SettingsPatchIn, user: AppUser = Depends(
 @router.get("/structures/{slug}/audit")
 def get_structure_audit(slug: str, limit: int = Query(default=100, ge=1, le=250), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug)
-    _require_role(db, org.id, user, "MANAGER")
+    require_capability(db, org.id, user, "audit.read")
     rows = db.query(AuditLog).order_by(AuditLog.ts.desc(), AuditLog.id.desc()).limit(1000).all()
     items = []
     for row in rows:

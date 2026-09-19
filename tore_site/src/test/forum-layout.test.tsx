@@ -91,10 +91,11 @@ describe("Forum shared navigation", () => {
     expect(screen.getByText(/Connectez-vous pour retrouver les rubriques/)).toBeInTheDocument();
   });
 
-  it("sends the topbar search to the public directory", async () => {
+  it("sends the topbar search to the structure-scoped global search", async () => {
     openPage();
-    fireEvent.change(screen.getByRole("textbox", { name: "Rechercher une structure" }), { target: { value: "Liège" } });
+    await screen.findByRole("button", { name: "Changer de structure" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Recherche globale" }), { target: { value: "Liège" } });
     fireEvent.click(screen.getByRole("button", { name: "Lancer la recherche" }));
-    await waitFor(() => expect(screen.getByTestId("route")).toHaveTextContent("/forum/structures?q=Li%C3%A8ge"));
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([path]) => String(path).includes("/forum/structures/embuscade/search?q=Li%C3%A8ge"))).toBe(true));
   });
 });
