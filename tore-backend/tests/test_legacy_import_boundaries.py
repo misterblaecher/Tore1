@@ -47,3 +47,15 @@ def test_modern_routers_do_not_import_legacy_get_db():
         "Modern routers must use app.deps.db.get_db; legacy auth helpers may remain "
         f"behind the compatibility boundary. Offenders: {offenders}"
     )
+
+
+def test_app_composition_does_not_import_monolith_directly():
+    for relative in ("main.py", "core/errors.py", "core/logging.py"):
+        path = APP / relative
+        assert _legacy_imports(path) == [], f"{relative} must use app.legacy.runtime only"
+
+
+def test_root_entrypoint_has_no_module_alias_or_monkey_patch():
+    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    assert "sys.modules[__name__]" not in source
+    assert "_monolith." not in source
