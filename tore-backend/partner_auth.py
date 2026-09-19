@@ -32,7 +32,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 JWT_SECRET = os.getenv("TORE_JWT_SECRET", "dev-secret-change-me")
 JWT_ALG = "HS256"
-TOKEN_MINUTES = int(os.getenv("TOKEN_MINUTES", "43200"))  # 30 jours
+TOKEN_MINUTES = int(os.getenv("TOKEN_MINUTES", "720"))  # 12h par défaut; révocable côté serveur
 
 
 # -----------------------
