@@ -7,29 +7,40 @@ export type PartnerSession = {
   role?: string
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function clearToken() {
+function clearLegacy() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(SESSION_KEY)
 }
 
+clearLegacy()
+
+export function getToken(): string | null {
+  return sessionStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string) {
+  clearLegacy()
+  sessionStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken() {
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(SESSION_KEY)
+  clearLegacy()
+}
+
 export function getSession(): PartnerSession | null {
-  const raw = localStorage.getItem(SESSION_KEY)
+  const raw = sessionStorage.getItem(SESSION_KEY)
   if (!raw) return null
   try {
     return JSON.parse(raw) as PartnerSession
   } catch {
+    sessionStorage.removeItem(SESSION_KEY)
     return null
   }
 }
 
 export function setSession(session: PartnerSession) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  clearLegacy()
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
 }
