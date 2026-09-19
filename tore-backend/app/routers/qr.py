@@ -49,10 +49,7 @@ def _resolve_runtime_gate(db: Session, qr_type: str, event_id: int | None) -> tu
     return True, None
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 @router.post("/qr/resolve", response_model=QrResolveOut)
