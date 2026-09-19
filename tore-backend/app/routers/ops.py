@@ -34,10 +34,7 @@ _MOBILE_MODULE_FIELDS = {
 }
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 def _health_payload() -> dict:
