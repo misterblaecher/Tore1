@@ -40,7 +40,7 @@ def test_empty_database_upgrades_to_single_head(tmp_path, monkeypatch):
 
     command.upgrade(config, "head")
 
-    assert _version(database) == _head(config) == "0028_merge_retired_public_event_lineage"
+    assert _version(database) == _head(config) == "0029_legacy_workspace_parity"
 
 
 def test_0024_upgrades_to_head(tmp_path, monkeypatch):
@@ -64,6 +64,10 @@ def test_retired_public_event_revision_upgrades_to_head(tmp_path, monkeypatch):
 
     engine = create_engine(f"sqlite:///{database.as_posix()}")
     with engine.begin() as connection:
+        connection.execute(text("DROP TABLE IF EXISTS structure_discussion_reactions"))
+        connection.execute(text("DROP TABLE IF EXISTS structure_notifications"))
+        connection.execute(text("ALTER TABLE structure_discussion_posts DROP COLUMN document_ids"))
+        connection.execute(text("ALTER TABLE structure_discussion_posts DROP COLUMN parent_id"))
         connection.execute(text("DELETE FROM alembic_version"))
         connection.execute(
             text("INSERT INTO alembic_version(version_num) VALUES ('0013_public_event_recap')")
@@ -73,6 +77,11 @@ def test_retired_public_event_revision_upgrades_to_head(tmp_path, monkeypatch):
 
     assert _version(database) == _head(config)
     assert "forum_event_pages" in inspect(engine).get_table_names()
+    assert "structure_discussion_reactions" in inspect(engine).get_table_names()
+    assert "structure_notifications" in inspect(engine).get_table_names()
+    assert {"parent_id", "document_ids"}.issubset(
+        {column["name"] for column in inspect(engine).get_columns("structure_discussion_posts")}
+    )
 
 
 def _replace_with_representative_legacy_schema(database: Path) -> None:
