@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import { API_BASE, api } from '../lib/api'
 import { getToken } from '../lib/auth'
 import { Badge, Button, Card, EmptyState, InlineAlert } from '../lib/ui'
+import { clearIncidentDraft, loadIncidentDraft, saveIncidentDraft, type IncidentDraft } from '../lib/incidentDraft'
 
 type Incident = {
   id: number
@@ -36,15 +37,21 @@ export default function OrgaIncidents() {
   const [error, setError] = useState<string | null>(null)
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine)
 
-  const [draft, setDraft] = useState({ severity: 'warn', description: '', location: '', title: '' })
+  const emptyDraft = (): IncidentDraft => ({ severity: 'warn', description: '', location: '', title: '' })
+  const [draft, setDraft] = useState<IncidentDraft>(() => loadIncidentDraft(eventId) ?? emptyDraft())
+  const skipNextDraftSave = useRef(false)
 
   useEffect(() => {
-    const raw = localStorage.getItem(`incident-draft-${eventId}`)
-    if (raw) setDraft(JSON.parse(raw))
+    skipNextDraftSave.current = true
+    setDraft(loadIncidentDraft(eventId) ?? emptyDraft())
   }, [eventId])
 
   useEffect(() => {
-    localStorage.setItem(`incident-draft-${eventId}`, JSON.stringify(draft))
+    if (skipNextDraftSave.current) {
+      skipNextDraftSave.current = false
+      return
+    }
+    saveIncidentDraft(eventId, draft)
   }, [eventId, draft])
 
   useEffect(() => {
@@ -95,7 +102,9 @@ export default function OrgaIncidents() {
         body: JSON.stringify({ ...draft, description: draft.description.trim(), location: draft.location || undefined, title: draft.title || undefined }),
       })
       setShowNew(false)
-      setDraft({ severity: 'warn', description: '', location: '', title: '' })
+      skipNextDraftSave.current = true
+      clearIncidentDraft(eventId)
+      setDraft(emptyDraft())
       await refresh()
     } catch (e: any) {
       setError(e?.message ?? 'Erreur création incident')
@@ -158,7 +167,7 @@ export default function OrgaIncidents() {
         <Card>
           <strong>Nouveau incident</strong>
           <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-            <select value={draft.severity} onChange={(e) => setDraft((prev) => ({ ...prev, severity: e.target.value }))}>
+            <select value={draft.severity} onChange={(e) => setDraft((prev) => ({ ...prev, severity: e.target.value as IncidentDraft['severity'] }))}>
               <option value="info">INFO</option><option value="warn">WARN</option><option value="critical">CRITICAL</option>
             </select>
             <input value={draft.title} onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))} placeholder="Titre (optionnel)" />
