@@ -15,7 +15,7 @@ SEED_SOURCE = "seed_local_discovery.py"
 
 
 def _assert_local_dev_database() -> None:
-    env_name = (os.getenv("TORE_ENV") or os.getenv("ENV") or "DEV").strip().upper()
+    env_name = (os.getenv("TORE_ENV") or os.getenv("APP_ENV") or os.getenv("ENV") or "DEV").strip().upper()
     if env_name in {"PROD", "PRODUCTION"}:
         raise RuntimeError("Refus: ce seed est réservé au développement local.")
 

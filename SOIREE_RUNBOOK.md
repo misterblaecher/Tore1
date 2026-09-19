@@ -3,7 +3,7 @@
 ## 1) Variables d'environnement obligatoires
 
 ### Backend (Render)
-- `APP_ENV=prod`
+- `TORE_ENV=prod` (`APP_ENV=prod` reste accepté comme alias de compatibilité)
 - `DATABASE_URL`
 - `TORE_CORS_ORIGINS`
 - `ORGA_CODE`

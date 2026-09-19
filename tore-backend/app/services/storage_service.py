@@ -147,7 +147,7 @@ class S3StorageBackend:
 
 
 def get_storage_backend(backend_name: str | None = None) -> StorageBackend:
-    env_name = (os.getenv("TORE_ENV") or os.getenv("ENV") or "DEV").strip().upper()
+    env_name = (os.getenv("TORE_ENV") or os.getenv("APP_ENV") or os.getenv("ENV") or "DEV").strip().upper()
     configured = backend_name or os.getenv("TORE_STORAGE_BACKEND")
     if configured:
         backend = configured.strip().lower()
