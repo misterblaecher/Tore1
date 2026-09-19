@@ -64,6 +64,12 @@ def _event_slug(event: Event) -> str:
     return f"{base}-{event.id}"
 
 
+def _legacy_event_slug(event: Event) -> str:
+    """Slug emitted before accent normalization; kept only as a read alias."""
+    base = re.sub(r"[^a-z0-9]+", "-", (event.name or "event").lower()).strip("-")[:180] or "event"
+    return f"{base}-{event.id}"
+
+
 def _event_for_org(db: Session, org_id: int, event_id: int) -> Event:
     event = db.get(Event, event_id)
     if event is None or (event.host_type or "").lower() != "orga" or str(event.host_id or "") != str(org_id):
@@ -183,7 +189,9 @@ def _resolve_public_event(db: Session, slug: str) -> tuple[Event, Optional[Forum
     if match is None:
         raise HTTPException(status_code=404, detail="Event not found")
     event = db.get(Event, int(match.group(1)))
-    if not _is_public_event(event) or _event_slug(event) != slug:
+    if not _is_public_event(event):
+        raise HTTPException(status_code=404, detail="Event not found")
+    if slug not in {_event_slug(event), _legacy_event_slug(event)}:
         raise HTTPException(status_code=404, detail="Event not found")
     return event, db.query(ForumEventPage).filter(ForumEventPage.event_id == event.id).first()
 

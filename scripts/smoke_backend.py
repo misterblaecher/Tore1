@@ -125,7 +125,7 @@ class SmokeRunner:
 
     def _check_cors(self) -> None:
         origins = (os.getenv("TORE_CORS_ORIGINS") or "").strip()
-        app_env = (os.getenv("TORE_ENV") or os.getenv("ENV") or "").strip().lower()
+        app_env = (os.getenv("TORE_ENV") or os.getenv("APP_ENV") or os.getenv("ENV") or "").strip().lower()
 
         if app_env in {"prod", "production"}:
             ok = bool(origins) and origins != "*"

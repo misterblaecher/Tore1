@@ -191,3 +191,11 @@ def test_public_event_slug_normalizes_accents():
     assert response.status_code == 200, response.text
     assert response.json()["slug"] == f"reunion-generale-{event['id']}"
     assert response.json()["canonicalPath"] == f"/forum/events/reunion-generale-{event['id']}"
+
+    # URLs emitted before accent normalization remain readable, but the payload
+    # advertises the normalized canonical URL.
+    legacy_slug = f"r-union-g-n-rale-{event['id']}"
+    legacy = client.get(f"/forum/events/{legacy_slug}")
+    assert legacy.status_code == 200, legacy.text
+    assert legacy.json()["slug"] == f"reunion-generale-{event['id']}"
+    assert legacy.json()["canonicalPath"] == f"/forum/events/reunion-generale-{event['id']}"

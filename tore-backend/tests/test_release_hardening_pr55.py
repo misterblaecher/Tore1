@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from db import Base, engine
-from main import app, validate_env_or_warn
+from main import app, _resolved_env_name, validate_env_or_warn
 
 client = TestClient(app)
 
@@ -43,5 +43,20 @@ def test_validate_env_or_warn_fails_fast_in_prod(monkeypatch):
     monkeypatch.delenv('TORE_QR_SIGNING_KEYS', raising=False)
     monkeypatch.delenv('CORS_ORIGINS', raising=False)
     monkeypatch.delenv('TORE_CORS_ORIGINS', raising=False)
+    with pytest.raises(RuntimeError):
+        validate_env_or_warn()
+
+
+def test_app_env_prod_alias_enables_prod_hardening(monkeypatch):
+    monkeypatch.delenv('TORE_ENV', raising=False)
+    monkeypatch.delenv('ENV', raising=False)
+    monkeypatch.setenv('APP_ENV', 'prod')
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.delenv('PUBLIC_URL', raising=False)
+    monkeypatch.delenv('BASE_URL', raising=False)
+    monkeypatch.delenv('TORE_QR_SIGNING_KEYS', raising=False)
+    monkeypatch.delenv('TORE_CORS_ORIGINS', raising=False)
+
+    assert _resolved_env_name() == 'PROD'
     with pytest.raises(RuntimeError):
         validate_env_or_warn()
