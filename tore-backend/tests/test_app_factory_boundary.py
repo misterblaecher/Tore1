@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 import main
 from app.legacy.runtime import legacy_app_identity
+from app.legacy import monolith as legacy_monolith
 from app.main import create_app
 
 
@@ -51,3 +52,21 @@ def test_root_legacy_attribute_fallback_is_narrow_compatibility():
     # Existing tests/integrations that still import a historical constant from
     # main keep working without replacing the main module itself.
     assert isinstance(main.JWT_ALG, str)
+
+
+def test_mounted_legacy_routes_are_cloned_for_each_app():
+    fresh = create_app()
+    fresh_route = next(
+        route for route in fresh.routes
+        if getattr(route, "path", "") == "/partner/portal/bar"
+    )
+    legacy_route = next(
+        route for route in legacy_monolith.app.routes
+        if getattr(route, "path", "") == "/partner/portal/bar"
+    )
+    assert fresh_route is not legacy_route
+    assert getattr(fresh_route, "dependency_overrides_provider", None) is fresh
+
+
+def test_legacy_context_decoder_is_an_explicit_dependency():
+    assert legacy_monolith.decode_user_token is not None
