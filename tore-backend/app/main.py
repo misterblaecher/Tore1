@@ -7,7 +7,7 @@ middleware, exception handling and startup belong to the modern app.
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.errors import install_exception_handlers
@@ -65,6 +65,23 @@ def _has(app: FastAPI, method: str, path: str) -> bool:
         and method in (getattr(route, "methods", set()) or set())
         for route in app.router.routes
     )
+
+
+def _include_filtered_router(
+    app: FastAPI,
+    source: APIRouter,
+    *,
+    excluded_endpoint_names: set[str],
+) -> None:
+    """Include selected routes while rebinding dependencies to the destination app."""
+    filtered = APIRouter()
+    filtered.routes.extend(
+        route
+        for route in source.routes
+        if getattr(getattr(route, "endpoint", None), "__name__", "")
+        not in excluded_endpoint_names
+    )
+    app.include_router(filtered)
 
 
 def _replace(app: FastAPI) -> None:
@@ -141,26 +158,21 @@ def _install_modern_overrides(app: FastAPI) -> None:
         app.state.forum_ownership_installed = True
 
     if not getattr(app.state, "forum_claims_installed", False):
-        claim_routes = [
-            route
-            for route in claims.routes
-            if getattr(getattr(route, "endpoint", None), "__name__", "")
-            != "review_structure_claim"
-        ]
-        for route in claim_routes:
-            app.router.routes.append(route)
+        _include_filtered_router(
+            app,
+            claims,
+            excluded_endpoint_names={"review_structure_claim"},
+        )
         app.include_router(claim_review)
         app.state.forum_claims_installed = True
 
     if not getattr(app.state, "forum_invitations_installed", False):
-        for route in invitations_rbac.routes:
-            app.router.routes.append(route)
-        for route in invitations_legacy.routes:
-            if (
-                getattr(getattr(route, "endpoint", None), "__name__", "")
-                not in _INVITE_REPLACED
-            ):
-                app.router.routes.append(route)
+        app.include_router(invitations_rbac)
+        _include_filtered_router(
+            app,
+            invitations_legacy,
+            excluded_endpoint_names=_INVITE_REPLACED,
+        )
         app.state.forum_invitations_installed = True
 
     if not getattr(app.state, "forum_channel_acl_installed", False):
