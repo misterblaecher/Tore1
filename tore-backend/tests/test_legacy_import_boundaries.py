@@ -15,6 +15,9 @@ def _legacy_imports(path: Path) -> list[str]:
         if isinstance(node, ast.ImportFrom) and node.module == "app.legacy.monolith":
             names = ", ".join(alias.name for alias in node.names)
             found.append(f"from app.legacy.monolith import {names}")
+        elif isinstance(node, ast.ImportFrom) and node.module == "app.legacy":
+            if any(alias.name == "monolith" for alias in node.names):
+                found.append("from app.legacy import monolith")
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "app.legacy.monolith":
