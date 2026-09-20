@@ -68,5 +68,23 @@ def test_mounted_legacy_routes_are_cloned_for_each_app():
     assert getattr(fresh_route, "dependency_overrides_provider", None) is fresh
 
 
+def test_filtered_modern_routes_bind_dependency_overrides_to_fresh_app():
+    fresh = create_app()
+    expected = {
+        ("GET", "/forum/structure-claims/mine"),
+        ("GET", "/forum/structures/{slug}/invitations"),
+        ("GET", "/forum/invitations/{token}"),
+    }
+    found = set()
+    for route in fresh.routes:
+        path = getattr(route, "path", "")
+        methods = getattr(route, "methods", set()) or set()
+        for method, expected_path in expected:
+            if path == expected_path and method in methods:
+                assert getattr(route, "dependency_overrides_provider", None) is fresh
+                found.add((method, expected_path))
+    assert found == expected
+
+
 def test_legacy_context_decoder_is_an_explicit_dependency():
     assert legacy_monolith.decode_user_token is not None
