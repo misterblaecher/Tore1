@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/network_state_provider.dart';
+import '../../broadcast/broadcast_screen.dart';
 import '../../entry/presentation/entry_mode_screen.dart';
 import '../domain/operational_models.dart';
 import 'operational_providers.dart';
@@ -87,6 +88,24 @@ class EventOperationalHubScreen extends ConsumerWidget {
                   ? 'Contrôle des entrées'
                   : 'Entrées bloquées hors ligne'),
             ),
+          if (OperationalGuard.canPerform(
+              capability: capability,
+              action: 'event.broadcast',
+              mode: OperationalMode.orga,
+              scopeId: eventId)) ...[
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              onPressed: network == NetworkState.online
+                  ? () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          BroadcastScreen(eventId: eventId, canCompose: true)))
+                  : null,
+              icon: const Icon(Icons.campaign_outlined),
+              label: Text(network == NetworkState.online
+                  ? 'Envoyer une annonce'
+                  : 'Annonces bloquées hors ligne'),
+            ),
+          ],
           if (capability.allows('event.manage_staff')) ...[
             const SizedBox(height: 24),
             _StaffSection(eventId: eventId),
