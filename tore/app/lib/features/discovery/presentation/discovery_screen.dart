@@ -9,6 +9,7 @@ import '../../../shared/widgets/public_media.dart';
 import '../../bars/presentation/bars_screen.dart';
 import '../../community/presentation/community_screen.dart';
 import '../../events/presentation/event_detail_screen.dart';
+import '../../map_calendar/presentation/calendar_screen.dart';
 import '../domain/discovery_models.dart';
 import 'discovery_providers.dart';
 
@@ -58,7 +59,19 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
     return Scaffold(
       appBar: widget.compactHome
           ? null
-          : AppBar(title: const Text('Soirées à Liège')),
+          : AppBar(
+              title: const Text('Soirées à Liège'),
+              actions: [
+                TextButton.icon(
+                  key: const ValueKey('calendar-entry'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CalendarScreen()),
+                  ),
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('Calendrier'),
+                ),
+              ],
+            ),
       body: RefreshIndicator(
         onRefresh: () async =>
             ref.refresh(discoveryEventsProvider(query).future),
