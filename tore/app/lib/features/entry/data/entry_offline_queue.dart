@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'entry_service.dart';
+
 class EntryQueueItem {
   EntryQueueItem({
     required this.id,
@@ -29,6 +31,25 @@ class EntryQueueItem {
   final String? note;
   String status;
   String? lastError;
+
+  bool get isPending => status == 'pending';
+  bool get isFailed => status == 'failed';
+
+  EntryQueueItem copyWith(
+          {String? status, String? lastError, bool clearLastError = false}) =>
+      EntryQueueItem(
+        id: id,
+        eventId: eventId,
+        type: type,
+        rawQr: rawQr,
+        scannedAt: scannedAt,
+        idempotencyKey: idempotencyKey,
+        delta: delta,
+        reason: reason,
+        note: note,
+        status: status ?? this.status,
+        lastError: clearLastError ? null : (lastError ?? this.lastError),
+      );
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -62,17 +83,25 @@ class EntryQueueItem {
 
 class EntryOfflineQueueStore {
   static const _key = 'entry_offline_queue_v1';
+  static const pendingTtl = Duration(days: 7);
+  static const failedTtl = Duration(days: 30);
 
   Future<List<EntryQueueItem>> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw == null || raw.isEmpty) return [];
     final list = (jsonDecode(raw) as List<dynamic>?) ?? const [];
-    return list
+    final items = list
         .map((row) =>
             EntryQueueItem.fromJson(Map<String, dynamic>.from(row as Map)))
         .where((item) => item.id.isNotEmpty && item.idempotencyKey.isNotEmpty)
         .toList();
+    final kept = items.where((item) {
+      final age = DateTime.now().difference(item.scannedAt);
+      return age < (item.isFailed ? failedTtl : pendingTtl);
+    }).toList();
+    if (kept.length != items.length) await save(kept);
+    return kept;
   }
 
   Future<void> save(List<EntryQueueItem> items) async {
@@ -85,3 +114,74 @@ class EntryOfflineQueueStore {
 final entryOfflineQueueStoreProvider = Provider<EntryOfflineQueueStore>((ref) {
   return EntryOfflineQueueStore();
 });
+
+final entryOfflineQueueProvider = Provider<EntryOfflineQueue>((ref) {
+  return EntryOfflineQueue(
+    store: ref.watch(entryOfflineQueueStoreProvider),
+    service: ref.watch(entryServiceProvider),
+  );
+});
+
+class EntryQueueSyncResult {
+  const EntryQueueSyncResult({required this.sent, required this.failed, required this.pending});
+  final int sent;
+  final int failed;
+  final int pending;
+}
+
+class EntryOfflineQueue {
+  EntryOfflineQueue({required this.store, required this.service});
+
+  final EntryOfflineQueueStore store;
+  final EntryService service;
+
+  Future<List<EntryQueueItem>> load() => store.load();
+
+  Future<void> enqueue(EntryQueueItem item) async {
+    final items = await store.load();
+    if (items.any((e) => e.id == item.id || e.idempotencyKey == item.idempotencyKey)) return;
+    await store.save([...items, item]);
+  }
+
+  Future<EntryQueueSyncResult> replay() async {
+    final items = await store.load();
+    var sent = 0;
+    var failed = 0;
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      if (!item.isPending) continue;
+      try {
+        if (item.type == 'MANUAL') {
+          await service.manualIncrement(eventId: item.eventId, delta: item.delta,
+              reason: item.reason ?? 'offline', note: item.note,
+              idempotencyKey: item.idempotencyKey);
+        } else {
+          await service.checkin(eventId: item.eventId, rawQr: item.rawQr ?? '',
+              deviceId: 'orga-mobile', idempotencyKey: item.idempotencyKey,
+              scannedAt: item.scannedAt);
+        }
+        items[index] = item.copyWith(status: 'sent', clearLastError: true);
+        sent++;
+        await store.save(items);
+      } catch (error) {
+        if (EntryService.isPermanentWriteFailure(error)) {
+          items[index] = item.copyWith(status: 'failed', lastError: EntryService.describeWriteFailure(error));
+          failed++;
+          await store.save(items);
+          continue;
+        }
+        break;
+      }
+    }
+    return EntryQueueSyncResult(sent: sent, failed: failed,
+        pending: items.where((item) => item.isPending).length);
+  }
+
+  Future<void> retry(String id) async {
+    final items = await store.load();
+    final index = items.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+    items[index] = items[index].copyWith(status: 'pending', clearLastError: true);
+    await store.save(items);
+  }
+}
