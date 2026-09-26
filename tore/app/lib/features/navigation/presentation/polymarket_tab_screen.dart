@@ -61,7 +61,7 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
     final session = ref.watch(authSessionProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Polymarket')),
+      appBar: AppBar(title: const Text('Rooms')),
       backgroundColor: AppColors.backgroundPrimary,
       body: SolarBackground(
         child: RefreshIndicator(
@@ -70,17 +70,17 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
             padding: const EdgeInsets.all(AppSpacing.md),
             children: [
               if (_loading) ...[
-                const ToreSectionHeader('Chargement des marchés'),
+                const ToreSectionHeader('Chargement des Rooms'),
                 const ToreLoadingSkeleton(lines: 8),
               ] else if (_hasError)
                 ToreErrorState(
-                    message: _error ?? 'Impossible de charger les marchés.',
+                    message: _error ?? 'Impossible de charger les Rooms.',
                     onRetry: _load)
               else if (_markets.isEmpty)
                 const ToreEmptyState(
-                  title: 'Aucun marché actif',
+                  title: 'Aucune Room active',
                   message:
-                      'Les marchés seront affichés ici dès leur ouverture.',
+                      'Les Rooms seront affichées ici dès leur ouverture.',
                 )
               else ...[
                 _section(
@@ -143,26 +143,26 @@ class _PolymarketTabScreenState extends ConsumerState<PolymarketTabScreen> {
                           'Oui ${(market.yesPct * 100).toStringAsFixed(0)}% • Non ${(market.noPct * 100).toStringAsFixed(0)}%'),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                          'Participants ${market.poolTickets} • Volume ${market.volume}',
+                          'Participants ${market.poolTickets} • Credits ${market.volume}',
                           style: AppTextStyles.muted),
                       const SizedBox(height: AppSpacing.sm),
                       ToreButton.primary(
                         label: isGuest
                             ? 'Connecte-toi pour continuer'
-                            : 'Voir le marché',
+                            : 'Voir la Room',
                         icon:
                             isGuest ? Icons.lock_outline : Icons.arrow_forward,
                         onPressed: () {
                           if (isGuest) {
                             RequireAuthSheet.show(context,
                                 message:
-                                    'La prise de position nécessite une connexion.');
+                                    'La sélection d’un Pick nécessite une connexion.');
                             return;
                           }
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                                 content: Text(
-                                    'Lecture ouverte: marché consultable depuis cet écran.')),
+                                    'Room ouverte : contenu consultable depuis cet écran.')),
                           );
                         },
                       ),

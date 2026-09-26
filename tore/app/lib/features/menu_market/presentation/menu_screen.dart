@@ -234,7 +234,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   ),
                 ),
                 if (tickets != null)
-                  Chip(label: Text('🎟️ $tickets'))
+                  Chip(label: Text('🎟️ $tickets Credits'))
                 else
                   const SizedBox.shrink(),
                 const SizedBox(width: 8),
@@ -424,7 +424,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                                         : (isOut
                                             ? 'RUPTURE'
                                             : (!hasEnoughTickets
-                                                ? 'Tickets ×$requiredTickets'
+                                                ? 'Credits ×$requiredTickets'
                                                 : 'Ajouter')))),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
