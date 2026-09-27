@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/providers.dart';
 import '../../../shared/cache/cache_providers.dart';
 import '../data/discovery_repository.dart';
+import '../data/nearby_location_service.dart';
 import '../domain/discovery_models.dart';
 
 final discoveryRepositoryProvider = Provider<DiscoveryRepository>((ref) {
@@ -11,6 +12,10 @@ final discoveryRepositoryProvider = Provider<DiscoveryRepository>((ref) {
     ref.watch(cacheStoreProvider),
   );
 });
+
+final nearbyLocationServiceProvider = Provider<NearbyLocationService>(
+  (ref) => NearbyLocationService(),
+);
 
 final discoveryQueryProvider = StateProvider<DiscoveryQuery>(
   (ref) => const DiscoveryQuery(),

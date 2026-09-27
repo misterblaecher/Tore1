@@ -26,6 +26,7 @@ dependencies:
   share_plus: ^10.1.2
   crypto: ^3.0.3
   google_sign_in: ^6.2.1
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
