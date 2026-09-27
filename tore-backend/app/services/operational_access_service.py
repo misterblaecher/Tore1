@@ -21,8 +21,8 @@ from models import (
 
 
 EVENT_ROLE_ACTIONS: dict[str, set[str]] = {
-    "ADMIN": {"event.view_ops", "event.manage_entry", "event.manage_staff"},
-    "MANAGER": {"event.view_ops", "event.manage_entry", "event.manage_staff"},
+    "ADMIN": {"event.view_ops", "event.manage_entry", "event.manage_staff", "event.broadcast"},
+    "MANAGER": {"event.view_ops", "event.manage_entry", "event.manage_staff", "event.broadcast"},
     "ENTRY": {"event.view_ops", "event.manage_entry"},
     "BAR": {"event.view_ops"},
     "HELPER": {"event.view_ops"},

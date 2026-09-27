@@ -113,7 +113,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       await _load();
       if (!messenger.mounted) return;
       messenger
-          .showSnackBar(const SnackBar(content: Text('Position placée ✅')));
+          .showSnackBar(const SnackBar(content: Text('Pick enregistré ✅')));
     } catch (e) {
       if (!messenger.mounted) return;
       final msg = ErrorMapper.message(e);
@@ -133,7 +133,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Résoudre ce Polymarket'),
+        title: const Text('Clôturer cette Room'),
         content: StatefulBuilder(
           builder: (context, setLocal) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -202,12 +202,12 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
     final degradedBlocked = isWriteDegradedBlocked(ref, WriteIntent.critical);
     if (_loading)
       return Scaffold(
-          appBar: AppBar(title: const Text('Polymarket')),
+          appBar: AppBar(title: const Text('Rooms')),
           body: const Center(child: CircularProgressIndicator()));
     final m = _market;
     if (m == null)
       return Scaffold(
-          appBar: AppBar(title: const Text('Polymarket')),
+          appBar: AppBar(title: const Text('Rooms')),
           body: const Center(child: Text('Introuvable')));
     final resolvedBlocked = m.status == 'resolved';
     final writeBlocked = isWriteBlocked(
@@ -226,7 +226,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
       });
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Détail Polymarket')),
+      appBar: AppBar(title: const Text('Détail de la Room')),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -241,11 +241,11 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             const SizedBox(height: 6),
             LinearProgressIndicator(value: m.yesPct, minHeight: 10),
             const SizedBox(height: 6),
-            Text('Pool: ${m.poolTickets} • Volume: ${m.volume} tickets'),
+            Text('Participants: ${m.poolTickets} • Credits: ${m.volume}'),
             if ((m.description ?? '').isNotEmpty) Text(m.description!),
             if (m.outcome != null)
               Text(
-                  'Résultat: ${m.outcome} ${m.myPositionTotal == 0 ? '' : ((m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0) ? '• WIN' : '• LOSE')}'),
+        'Résultat: ${m.outcome} ${m.myPositionTotal == 0 ? '' : ((m.outcome == 'YES' && m.myPositionYes > 0) || (m.outcome == 'NO' && m.myPositionNo > 0) ? '• GAGNÉ' : '• PERDU')}'),
             if (_resolutionFlash != null)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -261,13 +261,13 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               ),
             const SizedBox(height: 12),
             Text(
-                'My position: YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
+                'Mes Picks : YES ${m.myPositionYes} / NO ${m.myPositionNo} (Total ${m.myPositionTotal})'),
             if (writeBlocked)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: ServiceLimitedBanner(
                   message: resolvedBlocked
-                      ? 'Polymarket résolu: achats désactivés.'
+                      ? 'Room clôturée : les Picks sont désactivés.'
                       : writeBlockedMessage(
                           readOnly: readOnly,
                           degradedBlocked: degradedBlocked,
@@ -291,7 +291,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
             TextField(
               controller: _customCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Montant tickets'),
+              decoration: const InputDecoration(labelText: 'Montant en Credits'),
               onSubmitted: (v) {
                 final parsed = int.tryParse(v);
                 if (parsed == null || parsed < 1) {
@@ -312,7 +312,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                     onPressed: (_submitting || writeBlocked)
                         ? null
                         : () => _submit('yes'),
-                    child: const Text('Buy YES'),
+                    child: const Text('Pick YES'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -321,7 +321,7 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
                     onPressed: (_submitting || writeBlocked)
                         ? null
                         : () => _submit('no'),
-                    child: const Text('Buy NO'),
+                    child: const Text('Pick NO'),
                   ),
                 ),
               ],
@@ -332,10 +332,10 @@ class _MarketDetailScreenState extends ConsumerState<MarketDetailScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: FilledButton.tonal(
-                    onPressed: _resolveMarket, child: const Text('Resolve')),
+                    onPressed: _resolveMarket, child: const Text('Clôturer')),
               ),
             const SizedBox(height: 16),
-            const Text('My History',
+            const Text('Historique de mes Picks',
                 style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             ..._history.map((h) => ListTile(

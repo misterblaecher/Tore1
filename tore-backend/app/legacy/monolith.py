@@ -13,6 +13,7 @@ import string
 import hashlib
 import hmac
 import json
+import math
 import subprocess
 import threading
 import time
@@ -2052,6 +2053,7 @@ class EventSummaryOut(BaseModel):
     address: Optional[str] = None
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
     lng: Optional[float] = Field(default=None, ge=-180, le=180)
+    distanceKm: Optional[float] = None
 
 
 class JoinByCodeIn(BaseModel):
@@ -5463,8 +5465,14 @@ def list_all_events(
     city: Optional[str] = Query(default=None, max_length=120),
     bar_id: Optional[int] = Query(default=None, ge=1),
     structure_id: Optional[int] = Query(default=None, ge=1),
+    lat: Optional[float] = Query(default=None, ge=-90, le=90),
+    lng: Optional[float] = Query(default=None, ge=-180, le=180),
+    radius: Optional[float] = Query(default=None, gt=0, le=100),
     db: Session = Depends(get_db),
 ):
+    nearby = lat is not None or lng is not None or radius is not None
+    if nearby and (lat is None or lng is None or radius is None):
+        raise HTTPException(422, "lat, lng and radius are required together")
     now = now_utc()
     request = db.query(Event).filter(
         func.upper(Event.visibility) == "PUBLIC",
@@ -5534,13 +5542,39 @@ def list_all_events(
     elif status == "UPCOMING":
         request = request.filter(Event.starts_at > now)
 
-    rows = request.order_by(Event.starts_at.asc()).limit(limit).all()
+    rows = request.order_by(Event.starts_at.asc(), Event.id.asc())
+    rows = rows.all() if nearby else rows.limit(limit).all()
     bar_ids = {row.bar_id for row in rows if row.bar_id is not None}
     bars_by_id = (
         {bar.id: bar for bar in db.query(Bar).filter(Bar.id.in_(bar_ids)).all()}
         if bar_ids
         else {}
     )
+    distances: dict[int, float] = {}
+    if nearby:
+        assert lat is not None and lng is not None and radius is not None
+        for row in rows:
+            bar = bars_by_id.get(row.bar_id)
+            if row.lat is not None and row.lng is not None:
+                event_lat, event_lng = row.lat, row.lng
+            elif bar is not None and bar.lat is not None and bar.lng is not None:
+                event_lat, event_lng = bar.lat, bar.lng
+            else:
+                continue
+            phi1, phi2 = math.radians(lat), math.radians(event_lat)
+            delta_phi = math.radians(event_lat - lat)
+            delta_lambda = math.radians(event_lng - lng)
+            haversine = (
+                math.sin(delta_phi / 2) ** 2
+                + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+            )
+            distance = 6371.0 * 2 * math.asin(math.sqrt(min(1.0, haversine)))
+            if distance <= radius:
+                distances[row.id] = distance
+        rows = sorted(
+            (row for row in rows if row.id in distances),
+            key=lambda row: (distances[row.id], row.starts_at, row.id),
+        )[:limit]
     output: list[EventSummaryOut] = []
     for row in rows:
         runtime = db.query(EventRuntimeState).filter(
@@ -5551,6 +5585,12 @@ def list_all_events(
         ).upper()
         timing_status = "LIVE" if row.starts_at <= now <= row.ends_at else "UPCOMING"
         bar = bars_by_id.get(row.bar_id)
+        if row.lat is not None and row.lng is not None:
+            event_lat, event_lng = row.lat, row.lng
+        elif bar is not None and bar.lat is not None and bar.lng is not None:
+            event_lat, event_lng = bar.lat, bar.lng
+        else:
+            event_lat, event_lng = None, None
         output.append(
             EventSummaryOut(
                 id=row.id,
@@ -5578,8 +5618,9 @@ def list_all_events(
                 accessType=row.access_type,
                 currency=(row.currency or "EUR").upper(),
                 address=row.address or (bar.address if bar else None),
-                lat=row.lat if row.lat is not None else (bar.lat if bar else None),
-                lng=row.lng if row.lng is not None else (bar.lng if bar else None),
+                lat=event_lat,
+                lng=event_lng,
+                distanceKm=round(distances[row.id], 2) if nearby else None,
             )
         )
     return output

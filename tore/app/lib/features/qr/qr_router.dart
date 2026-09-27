@@ -194,7 +194,7 @@ class QrRouterService {
         );
         return;
       case QrType.polymarket:
-        onOutcome?.call(const QrRouteOutcome.success('Polymarket'));
+        onOutcome?.call(const QrRouteOutcome.success('Rooms'));
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PolymarketTabScreen()),
         );
