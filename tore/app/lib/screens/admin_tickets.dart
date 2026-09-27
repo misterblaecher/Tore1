@@ -56,7 +56,7 @@ class _AdminTicketsScreenState extends ConsumerState<AdminTicketsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Valeur d’1 ticket',
+                'Valeur d’1 Credit',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
@@ -103,7 +103,7 @@ class _AdminTicketsScreenState extends ConsumerState<AdminTicketsScreen> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    '✅ Ticket = ${(cents / 100).toStringAsFixed(2)} €',
+                                    '✅ Credit = ${(cents / 100).toStringAsFixed(2)} €',
                                   ),
                                 ),
                               );

@@ -66,7 +66,7 @@ class _HomeTerritoryFeedScreenState
                 modules: const [
                   Icons.local_bar_outlined,
                   Icons.music_note_outlined,
-                  Icons.casino_outlined
+                  Icons.meeting_room_outlined
                 ],
               ),
             );
@@ -84,7 +84,7 @@ class _HomeTerritoryFeedScreenState
                 name: 'Nocturne Liège',
                 distanceLabel: 'à proximité',
                 participants: 180,
-                modules: [Icons.local_bar_outlined, Icons.casino_outlined],
+                modules: [Icons.local_bar_outlined, Icons.meeting_room_outlined],
               ),
             ];
 
@@ -320,7 +320,7 @@ class _HomeTerritoryFeedScreenState
                     children: const [
                       SolarChip(label: 'Arène centrale'),
                       SolarChip(label: 'Territoire étudiant'),
-                      SolarChip(label: 'Polymarket chaud'),
+                      SolarChip(label: 'Room active'),
                     ],
                   ),
                 ],

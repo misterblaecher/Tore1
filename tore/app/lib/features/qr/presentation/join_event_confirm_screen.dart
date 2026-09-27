@@ -172,7 +172,7 @@ IconData _iconForModule(String module) {
     case 'wallet':
       return Icons.account_balance_wallet_outlined;
     case 'polymarket':
-      return Icons.casino_outlined;
+      return Icons.meeting_room_outlined;
     case 'ticker':
       return Icons.toll_outlined;
     default:
@@ -187,7 +187,7 @@ String _labelForModule(String module) {
     case 'wallet':
       return 'Wallet';
     case 'polymarket':
-      return 'Polymarket';
+      return 'Rooms';
     case 'ticker':
       return 'Ticker';
     default:

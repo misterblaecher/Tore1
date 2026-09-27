@@ -64,7 +64,7 @@ class _MenuItemDetailSheetState extends State<MenuItemDetailSheet> {
                       child: Text(desc),
                     ),
                   const SizedBox(height: 6),
-                  Text('Prix: 🎟️ $tickets'),
+                  Text('Prix: 🎟️ $tickets Credits'),
                   if (lastPriceChange != null)
                     Text('Dernière variation: $lastPriceChange'),
                   if (stockState == MenuItemStockState.out)

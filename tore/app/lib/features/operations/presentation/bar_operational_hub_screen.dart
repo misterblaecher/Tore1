@@ -120,7 +120,7 @@ class _BarOperationalHubScreenState
     return Card(
       child: ListTile(
         title: Text('Commande #$orderId · $status'),
-        subtitle: Text('${order['total_tickets'] ?? 0} tickets'),
+        subtitle: Text('${order['total_tickets'] ?? 0} Credits'),
         trailing: next == null
             ? const Icon(Icons.check_circle_outline)
             : Row(
