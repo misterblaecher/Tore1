@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import AppUser, Organization, OrganizationMembership, StructureInvitation
-from app.legacy.monolith import get_current_user, get_db
+from app.core.security.user_auth import get_current_user
+from app.deps.db import get_db
 from app.routers.forum import ROLE_RANK, _require_role, _structure_or_404
 from app.services.audit_service import write_audit_log
 from app.services.rate_limit_service import RateLimitExceeded, enforce_rate_limit, standard_rate_limit_http_exception

@@ -23,7 +23,8 @@ from models import (
     StructureDocument,
     StructurePage,
 )
-from app.legacy.monolith import get_current_user, get_db
+from app.core.security.user_auth import get_current_user
+from app.deps.db import get_db
 from app.routers.forum import (
     _album_payload,
     _can_view,

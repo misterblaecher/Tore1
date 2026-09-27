@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from app.services.rate_limit_service import standard_rate_limit_http_exception
 from app.services.rate_limit_service import RateLimitExceeded, enforce_rate_limit
+from app.services.email_service import send_email
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -24,10 +25,7 @@ _PHONE_CLEAN_RE = re.compile(r"[^0-9+]")
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
+from app.deps.db import get_db
 
 
 class AccountRequestIn(BaseModel):
@@ -238,9 +236,7 @@ def create_account_request(
     notify_to = (os.getenv("CONTACT_TO_EMAIL") or os.getenv("SMTP_USERNAME") or "").strip()
     if notify_to:
         try:
-            from app.legacy.monolith import _send_email
-
-            _send_email(
+            send_email(
                 subject=f"Nouvelle demande d’accès TORÈ · {payload.role}",
                 body=(
                     f"Nom : {payload.name}\nEmail : {payload.email}\nTéléphone : {payload.phone}\n"
@@ -268,9 +264,7 @@ def create_contact_message(payload: ContactIn, request: Request):
     if not notify_to:
         raise HTTPException(status_code=503, detail={"reason": "email_provider_missing"})
 
-    from app.legacy.monolith import _send_email
-
-    _send_email(
+    send_email(
         subject=f"Contact TORÈ · {payload.subject}",
         body=(
             f"Nom : {payload.first_name} {payload.last_name}\nEmail : {payload.email}\n"

@@ -11,7 +11,8 @@ from app.services.qr_service import resolve_qr_payload
 from app.services.qr_validation_service import validate_signed_qr
 from app.services.rate_limit_service import enforce_rate_limit
 from models import AppUser, Battle, Bet, Order
-from app.legacy.monolith import _role_rank, get_current_user, resolve_event_role
+from app.core.security.user_auth import get_current_user
+from app.services.event_role_service import _role_rank, resolve_event_role
 
 router = APIRouter()
 

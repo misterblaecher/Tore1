@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.legacy.monolith import get_current_user
+from app.core.security.user_auth import get_current_user
 from app.deps.db import get_db
 from app.routers.forum import _structure_or_404
 from app.services.audit_service import write_audit_log

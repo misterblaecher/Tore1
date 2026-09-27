@@ -164,7 +164,7 @@ def get_current_user(
     user = db.get(AppUser, tok.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    from app.legacy.monolith import _enforce_user_sanctions
+    from app.core.security.user_auth import _enforce_user_sanctions
 
     _enforce_user_sanctions(db, user)
     return user

@@ -6,7 +6,7 @@ import secrets
 from fastapi.testclient import TestClient
 
 from db import Base, engine, get_session
-import main
+from app.legacy import monolith as legacy_monolith
 from main import app
 from models import Event, EventRuntimeState, EventStaff, Organization, OrganizationMembership
 
@@ -89,7 +89,7 @@ def test_bucketing_today_upcoming_live_timezone_and_staff_role(monkeypatch):
     user_id, token = _seed_user(client, f'bucket-{secrets.token_hex(2)}')
 
     frozen = datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(main, 'now_utc', lambda: frozen)
+    monkeypatch.setattr(legacy_monolith, 'now_utc', lambda: frozen)
 
     s = get_session()
     try:

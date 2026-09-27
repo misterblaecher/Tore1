@@ -56,7 +56,7 @@ def _app_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ):
-    from app.legacy.monolith import get_current_user
+    from app.core.security.user_auth import get_current_user
 
     return get_current_user(credentials=credentials, db=db)
 
