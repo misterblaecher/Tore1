@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/network_state_provider.dart';
 import '../../entry/presentation/entry_mode_screen.dart';
+import '../../reports/presentation/report_providers.dart';
+import '../../reports/presentation/report_screen.dart';
 import '../domain/operational_models.dart';
 import 'operational_providers.dart';
 
@@ -24,6 +26,9 @@ class EventOperationalHubScreen extends ConsumerWidget {
             await ref.refresh(eventOperationalHubProvider(eventId).future);
         if (capability.allows('event.manage_staff')) {
           ref.invalidate(eventOperationalStaffProvider(eventId));
+        }
+        if (OperationalGuard.canViewReport(capability, eventId)) {
+          ref.invalidate(eventReportProvider(eventId));
         }
       },
       child: ListView(
@@ -87,12 +92,88 @@ class EventOperationalHubScreen extends ConsumerWidget {
                   ? 'Contrôle des entrées'
                   : 'Entrées bloquées hors ligne'),
             ),
+          if (OperationalGuard.canViewReport(capability, eventId)) ...[
+            const SizedBox(height: 24),
+            _ReportSection(capability: capability),
+          ],
           if (capability.allows('event.manage_staff')) ...[
             const SizedBox(height: 24),
             _StaffSection(eventId: eventId),
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ReportSection extends ConsumerWidget {
+  const _ReportSection({required this.capability});
+
+  final ScopedCapability capability;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventId = capability.eventId!;
+    final report = ref.watch(eventReportProvider(eventId));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Bilan soirée', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        report.when(
+          loading: () => const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+          error: (_, __) => Card(
+            child: ListTile(
+              leading: const Icon(Icons.error_outline),
+              title: const Text('Bilan indisponible'),
+              trailing: IconButton(
+                tooltip: 'Réessayer le bilan',
+                onPressed: () => ref.invalidate(eventReportProvider(eventId)),
+                icon: const Icon(Icons.refresh),
+              ),
+            ),
+          ),
+          data: (result) {
+            final report = result.report;
+            String euros(int cents) => '${(cents / 100).toStringAsFixed(2)} €';
+            return Card(
+              child: Column(
+                children: [
+                  if (result.fromCache)
+                    const ListTile(
+                      leading: Icon(Icons.cloud_off_outlined),
+                      title: Text('Bilan en cache · lecture seule'),
+                    ),
+                  ListTile(
+                    title: const Text('Recettes estimées'),
+                    trailing: Text(euros(report.sales.grossRevenueCents)),
+                  ),
+                  ListTile(
+                    title: const Text('Coûts'),
+                    trailing: Text(euros(report.costs.totalCostCents)),
+                  ),
+                  ListTile(
+                    title: const Text('Résultat estimé'),
+                    trailing: Text(euros(report.profit.grossProfitCents)),
+                  ),
+                  ListTile(
+                    title: const Text('Ouvrir le bilan soirée'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => ReportScreen(capability: capability),
+                    )),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

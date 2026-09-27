@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tore/core/auth/auth_session_provider.dart';
 import 'package:tore/core/network/network_state_provider.dart';
 import 'package:tore/features/operations/data/operational_repository.dart';
 import 'package:tore/features/operations/domain/operational_models.dart';
@@ -10,6 +11,9 @@ import 'package:tore/features/operations/presentation/event_operational_hub_scre
 import 'package:tore/features/operations/presentation/invitation_center_screen.dart';
 import 'package:tore/features/operations/presentation/operational_mode_switcher.dart';
 import 'package:tore/features/operations/presentation/operational_providers.dart';
+import 'package:tore/features/reports/data/event_report_service.dart';
+import 'package:tore/features/reports/presentation/report_providers.dart';
+import 'package:tore/shared/models/event_report.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +143,55 @@ void main() {
     expect(find.text('Entrées bloquées hors ligne'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
+    expect(find.text('Bilan soirée'), findsNothing);
+  });
+
+  testWidgets('ORGA manager sees cached bilan and opens its detail',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final cap = eventCap(10, role: 'MANAGER');
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.offline),
+        eventOperationalHubProvider
+            .overrideWith((ref, id) async => OperationalLoadResult({
+                  'event': {'state': 'LIVE'},
+                  'entry_count': 42,
+                })),
+        eventOperationalStaffProvider.overrideWith((ref, id) async =>
+            const OperationalLoadResult({'items': [], 'invitations': []})),
+        eventReportProvider
+            .overrideWith((ref, id) async => EventReportFetchResult(
+                  fromCache: true,
+                  report: EventReport.fromJson({
+                    'event_id': id,
+                    'sales': {'gross_revenue_cents': 12000},
+                    'costs': {'total_cost_cents': 3000},
+                    'profit': {'gross_profit_cents': 9000},
+                  }),
+                )),
+      ],
+      child: MaterialApp(
+          home: Scaffold(body: EventOperationalHubScreen(capability: cap))),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Entrées : 42'), findsOneWidget);
+    expect(find.text('Recettes estimées'), findsOneWidget);
+    expect(find.text('120.00 €'), findsOneWidget);
+    expect(find.text('Bilan en cache · lecture seule'), findsOneWidget);
+    await tester.ensureVisible(find.text('Ouvrir le bilan soirée'));
+    await tester.tap(find.text('Ouvrir le bilan soirée'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bilan soirée'), findsOneWidget);
+    expect(find.text('Mode hors ligne (lecture seule)'), findsOneWidget);
+    expect(find.text('Ajouter'), findsOneWidget);
+    expect(
+        tester
+            .widget<ElevatedButton>(
+                find.widgetWithText(ElevatedButton, 'Ajouter'))
+            .onPressed,
+        isNull);
   });
 
   testWidgets('BAR hub displays scoped live order and allowed transition',
@@ -183,7 +236,10 @@ void main() {
   });
 
   test('revocation or expiry refresh closes the selected context', () async {
-    final container = ProviderContainer();
+    final container = ProviderContainer(overrides: [
+      authSessionProvider.overrideWith(
+          (ref) => AuthSessionNotifier(ref, autoBootstrap: false)),
+    ]);
     addTearDown(container.dispose);
     final current = OperationalCapabilities(userId: 'u', events: [eventCap(1)]);
     final controller = container.read(operationalSelectionProvider.notifier);

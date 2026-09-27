@@ -15,13 +15,14 @@ class EventReportFetchResult {
 }
 
 class EventReportService {
-  EventReportService(this._dio, this._cache);
+  EventReportService(this._dio, this._cache, this._userId);
 
   final Dio _dio;
   final CacheStore _cache;
+  final String _userId;
 
   Future<EventReportFetchResult> fetchReport(int eventId) async {
-    final cacheKey = 'event_report_$eventId';
+    final cacheKey = _cache.operationsKey(_userId, 'event', eventId, 'report');
     try {
       final res = await _dio.get(
         '/events/$eventId/report',
@@ -37,15 +38,25 @@ class EventReportService {
         report: EventReport.fromJson(json),
         fromCache: false,
       );
-    } catch (_) {
-      final cached = await _cache.getJson(cacheKey);
-      if (cached != null) {
-        return EventReportFetchResult(
-          report: EventReport.fromJson(cached),
-          fromCache: true,
-        );
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        rethrow;
       }
-      throw const OfflineNoCacheException('event_report');
+      return _cachedReport(cacheKey);
+    } catch (_) {
+      return _cachedReport(cacheKey);
     }
+  }
+
+  Future<EventReportFetchResult> _cachedReport(String cacheKey) async {
+    final cached = await _cache.getJson(cacheKey);
+    if (cached != null) {
+      return EventReportFetchResult(
+        report: EventReport.fromJson(cached),
+        fromCache: true,
+      );
+    }
+    throw const OfflineNoCacheException('event_report');
   }
 }

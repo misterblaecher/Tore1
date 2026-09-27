@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/network_state_provider.dart';
 import '../../../shared/cache/offline_no_cache_exception.dart';
 import '../../../shared/widgets/offline_fallback_screen.dart';
+import '../../operations/domain/operational_models.dart';
 import '../data/event_cost_service.dart';
 import 'report_providers.dart';
 
 class ReportScreen extends ConsumerStatefulWidget {
-  const ReportScreen({super.key, required this.eventId});
+  const ReportScreen({super.key, required this.capability});
 
-  final int eventId;
+  final ScopedCapability capability;
+  int get eventId => capability.eventId!;
 
   @override
   ConsumerState<ReportScreen> createState() => _ReportScreenState();
@@ -31,8 +34,10 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
 
   Future<void> _addCost(EventCostService service) async {
     if (_savingCost) return;
+    if (ref.read(networkStatusProvider) != NetworkState.online) return;
     final draft = await _showCostDialog();
     if (draft == null) return;
+    if (ref.read(networkStatusProvider) != NetworkState.online) return;
 
     setState(() => _savingCost = true);
     try {
@@ -168,6 +173,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       },
     );
     if (confirmed != true) return;
+    if (ref.read(networkStatusProvider) != NetworkState.online) return;
 
     try {
       await service.deleteCost(eventId: widget.eventId, costId: costId);
@@ -197,12 +203,16 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!OperationalGuard.canViewReport(widget.capability, widget.eventId)) {
+      return const Scaffold(body: Center(child: Text('Accès refusé au bilan')));
+    }
     final reportAsync = ref.watch(eventReportProvider(widget.eventId));
     final costService = ref.watch(eventCostServiceProvider);
+    final online = ref.watch(networkStatusProvider) == NetworkState.online;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rapport event'),
+        title: const Text('Bilan soirée'),
       ),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -215,7 +225,18 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                   ref.invalidate(eventReportProvider(widget.eventId)),
             );
           }
-          return Center(child: Text('Erreur: $err'));
+          return Center(
+              child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Bilan indisponible'),
+              TextButton(
+                onPressed: () =>
+                    ref.invalidate(eventReportProvider(widget.eventId)),
+                child: const Text('Réessayer'),
+              ),
+            ],
+          ));
         },
         data: (result) {
           final report = result.report;
@@ -265,7 +286,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         ),
                         const SizedBox(height: 8),
                         _MetricRow(
-                          label: 'Recettes',
+                          label: 'Recettes estimées',
                           value: _formatCents(report.sales.grossRevenueCents),
                         ),
                         const SizedBox(height: 8),
@@ -275,7 +296,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         ),
                         const SizedBox(height: 8),
                         _MetricRow(
-                          label: 'Profit brut',
+                          label: 'Résultat estimé',
                           value: _formatCents(report.profit.grossProfitCents),
                         ),
                       ],
@@ -329,7 +350,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       ),
                     ),
                     ElevatedButton.icon(
-                      onPressed: isOffline || _savingCost
+                      onPressed: !online || isOffline || _savingCost
                           ? null
                           : () => _addCost(costService),
                       icon: _savingCost
@@ -359,7 +380,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(_formatCents(cost.amountCents)),
-                                  if (!isOffline)
+                                  if (online && !isOffline)
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline),
                                       onPressed: () => _confirmDeleteCost(
