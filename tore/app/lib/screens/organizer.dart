@@ -16,7 +16,7 @@ class OrganizerScreen extends StatelessWidget {
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Prix'),
-              Tab(text: 'Tickets'),
+              Tab(text: 'Credits'),
             ],
           ),
         ),

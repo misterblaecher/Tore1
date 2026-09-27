@@ -98,14 +98,14 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
     final session = ref.watch(authSessionProvider);
     if (session.status == AuthStatus.unauthenticated) {
       return Scaffold(
-        appBar: AppBar(title: const Text('My Positions')),
+        appBar: AppBar(title: const Text('Mes Picks')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Connecte-toi pour voir tes positions.',
+                const Text('Connecte-toi pour voir tes Picks.',
                     textAlign: TextAlign.center),
                 const SizedBox(height: 12),
                 FilledButton(
@@ -121,7 +121,7 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Positions')),
+      appBar: AppBar(title: const Text('Mes Picks')),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: _loading
@@ -143,7 +143,7 @@ class _MyPositionsScreenState extends ConsumerState<MyPositionsScreen> {
                         children: const [
                           SizedBox(height: 200),
                           Center(
-                              child: Text('Aucune position pour le moment.')),
+                              child: Text('Aucun Pick pour le moment.')),
                         ],
                       )
                     : ListView.builder(

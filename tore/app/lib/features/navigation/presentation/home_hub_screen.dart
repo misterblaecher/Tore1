@@ -260,9 +260,9 @@ class HomeHubScreen extends ConsumerWidget {
             ),
           if (hasEvent && polymarketOn)
             _ModuleCard(
-              icon: Icons.casino_outlined,
-              title: 'Polymarket',
-              subtitle: 'Polymarkets et positions',
+              icon: Icons.meeting_room_outlined,
+              title: 'Rooms',
+              subtitle: 'Rooms et Picks',
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const PolymarketTabScreen())),
             ),

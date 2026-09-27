@@ -150,9 +150,9 @@ class ErrorMapper {
         return 'Les participations sont temporairement suspendues.';
       case 'insufficient_balance':
       case 'insuff_toggle':
-        return 'Solde tickets insuffisant.';
+        return 'Solde de Credits insuffisant.';
       case 'already_resolved':
-        return 'Marché déjà résolu.';
+        return 'Room déjà clôturée.';
       case 'expired':
       case 'invalid':
       case 'invalid_qr':

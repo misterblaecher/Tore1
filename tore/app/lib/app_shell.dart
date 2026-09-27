@@ -59,7 +59,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       _ShellTab(
         key: _polymarketNavKey,
         icon: Icons.candlestick_chart_outlined,
-        label: 'Polymarket',
+        label: 'Rooms',
         root: const PolymarketTabScreen(),
       ),
       _ShellTab(
