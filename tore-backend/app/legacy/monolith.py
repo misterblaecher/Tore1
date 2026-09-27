@@ -1813,6 +1813,7 @@ class EventConfigOut(BaseModel):
     hunt_enabled: bool
     report_enabled: bool
     allow_user_bets: bool
+    ticker_enabled: bool = False
     updated_at: Optional[str] = None
     updated_by_user_id: Optional[str] = None
     role: Optional[str] = None
@@ -9856,6 +9857,11 @@ def get_event_config(
         "hunt_enabled": cfg.hunt_enabled,
         "report_enabled": cfg.report_enabled,
         "allow_user_bets": cfg.allow_user_bets,
+        "ticker_enabled": bool(
+            (db.query(EventModuleConfig)
+             .filter(EventModuleConfig.event_id == event_id)
+             .first() or EventModuleConfig()).market_enabled
+        ),
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
         "updated_by_user_id": cfg.updated_by_user_id,
         "role": role,

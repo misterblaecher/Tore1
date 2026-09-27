@@ -24,9 +24,8 @@ class TickerScreen extends ConsumerWidget {
 
     final configAsync = ref.watch(eventConfigProvider(eventId));
     final tickerEnabled = configAsync.maybeWhen(
-      data: (cfg) =>
-          cfg.menuEnabled || cfg.walletEnabled || cfg.polymarketEnabled,
-      orElse: () => true,
+      data: (cfg) => cfg.tickerEnabled,
+      orElse: () => false,
     );
     if (!tickerEnabled) {
       return const ModuleUnavailableScreen(
