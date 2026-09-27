@@ -44,4 +44,21 @@ void main() {
     expect(event.modules, contains('polymarket'));
     expect(event.isFree, isFalse);
   });
+
+  test('nearby query sends coordinates and parses API distance', () {
+    const query = DiscoveryQuery(lat: 50.64, lng: 5.57, radius: 20);
+    expect(query.toQueryParameters(), {
+      'lat': 50.64,
+      'lng': 5.57,
+      'radius': 20.0,
+      'limit': 100,
+    });
+    expect(query.copyWith(clearNearby: true).isNearby, isFalse);
+    final event = DiscoveryEvent.fromJson({
+      'id': 1,
+      'name': 'Nearby',
+      'distanceKm': 2.35,
+    });
+    expect(event.distanceKm, 2.35);
+  });
 }

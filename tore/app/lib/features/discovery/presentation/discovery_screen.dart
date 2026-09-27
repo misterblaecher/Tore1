@@ -24,6 +24,44 @@ class DiscoveryScreen extends ConsumerStatefulWidget {
 class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
   late final TextEditingController _searchController;
   Timer? _debounce;
+  bool _locating = false;
+
+  Future<void> _toggleNearby(bool selected) async {
+    if (!selected) {
+      final current = ref.read(discoveryQueryProvider);
+      ref.read(discoveryQueryProvider.notifier).state =
+          current.copyWith(clearNearby: true);
+      return;
+    }
+    setState(() => _locating = true);
+    try {
+      final coords = await ref.read(nearbyLocationServiceProvider).locate();
+      if (!mounted) return;
+      if (coords == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Localisation indisponible. Toutes les soirées restent affichées.'),
+        ));
+        return;
+      }
+      final current = ref.read(discoveryQueryProvider);
+      ref.read(discoveryQueryProvider.notifier).state = current.copyWith(
+        clearCity: true,
+        lat: coords.lat,
+        lng: coords.lng,
+        radius: 20,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Position introuvable. Toutes les soirées restent affichées.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
 
   @override
   void initState() {
@@ -58,7 +96,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
     return Scaffold(
       appBar: widget.compactHome
           ? null
-          : AppBar(title: const Text('Soirées à Liège')),
+          : AppBar(title: const Text('Soirées')),
       body: RefreshIndicator(
         onRefresh: () async =>
             ref.refresh(discoveryEventsProvider(query).future),
@@ -94,14 +132,11 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
                       avatar: const Icon(Icons.near_me_outlined, size: 18),
-                      label: const Text('Autour de moi · Liège'),
-                      selected: query.city == 'Liège',
-                      onSelected: (selected) {
-                        ref.read(discoveryQueryProvider.notifier).state =
-                            selected
-                                ? query.copyWith(city: 'Liège')
-                                : query.copyWith(clearCity: true);
-                      },
+                      label: Text(_locating
+                          ? 'Localisation…'
+                          : 'Autour de moi · 20 km'),
+                      selected: query.isNearby,
+                      onSelected: _locating ? null : _toggleNearby,
                     ),
                   ),
                   for (final status in DiscoveryStatus.values)
@@ -300,6 +335,11 @@ class DiscoveryEventCard extends StatelessWidget {
               ),
               if (location.isNotEmpty)
                 _MetadataLine(icon: Icons.place_outlined, text: location),
+              if (event.distanceKm != null)
+                _MetadataLine(
+                  icon: Icons.near_me_outlined,
+                  text: '${event.distanceKm!.toStringAsFixed(1)} km',
+                ),
               _MetadataLine(
                 icon: Icons.confirmation_number_outlined,
                 text: event.isFree

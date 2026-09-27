@@ -120,6 +120,85 @@ def test_discovery_filters_by_city():
     assert seeded["event_id"] not in [item["id"] for item in missing.json()]
 
 
+def test_discovery_nearby_filters_and_sorts_by_actual_distance_before_limit():
+    seeded = _seed_discovery_events()
+    session = get_session()
+    try:
+        near = session.get(Event, seeded["event_id"])
+        near.lat, near.lng = 50.64, 5.57
+        farther = Event(
+            bar_id=seeded["bar_id"],
+            name="Farther Discovery",
+            starts_at=now_utc() + timedelta(hours=1),
+            ends_at=now_utc() + timedelta(hours=8),
+            lat=50.70,
+            lng=5.57,
+            visibility="PUBLIC",
+            publication_status="PUBLISHED",
+        )
+        no_coordinates = Event(
+            name="Unlocated Discovery",
+            starts_at=now_utc() + timedelta(minutes=30),
+            ends_at=now_utc() + timedelta(hours=8),
+            visibility="PUBLIC",
+            publication_status="PUBLISHED",
+        )
+        session.add_all([farther, no_coordinates])
+        session.commit()
+        farther_id, no_coordinates_id = farther.id, no_coordinates.id
+    finally:
+        session.close()
+
+    client = TestClient(app)
+    params = {"lat": 50.64, "lng": 5.57, "radius": 20, "bar_id": seeded["bar_id"]}
+    response = client.get("/events", params=params)
+    limited = client.get("/events", params={**params, "limit": 1})
+
+    assert response.status_code == 200
+    ids = [item["id"] for item in response.json()]
+    assert ids == [seeded["event_id"], farther_id]
+    assert response.json()[0]["distanceKm"] == 0
+    assert response.json()[1]["distanceKm"] > 0
+    assert no_coordinates_id not in [
+        item["id"] for item in client.get("/events", params={
+            "lat": 50.64, "lng": 5.57, "radius": 20,
+        }).json()
+    ]
+    assert [item["id"] for item in limited.json()] == [seeded["event_id"]]
+    assert client.get("/events", params={**params, "radius": 1}).json()[0]["id"] == seeded["event_id"]
+    assert farther_id not in [item["id"] for item in client.get("/events", params={**params, "radius": 1}).json()]
+
+
+def test_discovery_nearby_requires_complete_valid_coordinates():
+    client = TestClient(app)
+    for params in ({"lat": 50.64}, {"lat": 50.64, "lng": 5.57},
+                   {"lat": 91, "lng": 5.57, "radius": 20},
+                   {"lat": 50.64, "lng": 5.57, "radius": 0}):
+        assert client.get("/events", params=params).status_code == 422
+
+
+def test_discovery_nearby_uses_bar_coordinates_only_as_a_complete_pair():
+    seeded = _seed_discovery_events()
+    session = get_session()
+    try:
+        bar = session.get(Bar, seeded["bar_id"])
+        bar.lat, bar.lng = 50.64, 5.57
+        event = session.get(Event, seeded["event_id"])
+        event.lat = 51.0  # Partial event coordinates must not mix with bar longitude.
+        session.commit()
+    finally:
+        session.close()
+
+    response = TestClient(app).get("/events", params={
+        "lat": 50.64, "lng": 5.57, "radius": 1, "bar_id": seeded["bar_id"],
+    })
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [seeded["event_id"]]
+    assert response.json()[0]["lat"] == 50.64
+    assert response.json()[0]["lng"] == 5.57
+    assert response.json()[0]["distanceKm"] == 0
+
+
 def test_event_detail_exposes_real_pricing_access_and_bar_metadata():
     seeded = _seed_discovery_events()
     response = TestClient(app).get(f"/events/{seeded['event_id']}/public")
