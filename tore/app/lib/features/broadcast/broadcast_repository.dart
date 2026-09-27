@@ -52,4 +52,19 @@ class BroadcastRepository {
       );
     }
   }
+
+  Future<BroadcastItem> create({
+    required int eventId,
+    required String message,
+    required String level,
+    required String idempotencyKey,
+  }) async {
+    final json = await _api.createBroadcast(
+      eventId: eventId,
+      message: message,
+      level: level,
+      idempotencyKey: idempotencyKey,
+    );
+    return BroadcastItem.fromJson(json);
+  }
 }
