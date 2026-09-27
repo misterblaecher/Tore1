@@ -275,7 +275,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         ),
                         const SizedBox(height: 8),
                         _MetricRow(
-                          label: 'Profit brut',
+                          label: 'Rewards',
                           value: _formatCents(report.profit.grossProfitCents),
                         ),
                       ],

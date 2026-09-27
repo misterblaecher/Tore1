@@ -166,7 +166,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             runtimeState: eventState)),
                   ),
                 Text(
-                  'Tickets: $balance',
+                  'Credits: $balance',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 12),
@@ -223,7 +223,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                    content: Text('✅ +10 tickets crédités')),
+                                    content: Text('✅ +10 Credits crédités')),
                               );
 
                               _refresh();
@@ -236,7 +236,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                               );
                             }
                           },
-                    label: 'Ajouter 10 tickets',
+                    label: 'Ajouter 10 Credits',
                   ),
                 const SizedBox(height: 8),
                 if (giftsEnabled)

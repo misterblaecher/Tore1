@@ -142,7 +142,7 @@ class _TickerTile extends StatelessWidget {
         ),
       GiftTickerPayload p => (
           'Gift',
-          '${p.fromLabel} sent ${p.amount} tickets to ${p.toLabel}',
+          '${p.fromLabel} sent ${p.amount} Credits to ${p.toLabel}',
           Icons.card_giftcard
         ),
       PriceTickerPayload p => (
@@ -152,7 +152,7 @@ class _TickerTile extends StatelessWidget {
         ),
       OrderTickerPayload p => (
           'Order ${p.status}',
-          '#${p.orderId} • ${p.totalTickets} tickets',
+          '#${p.orderId} • ${p.totalTickets} Credits',
           Icons.receipt_long
         ),
     };
