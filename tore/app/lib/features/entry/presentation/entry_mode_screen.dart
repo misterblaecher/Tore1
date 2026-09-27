@@ -13,6 +13,7 @@ import '../../../core/qr/qr_validator.dart';
 import '../../events/presentation/staff_backup_join_screen.dart';
 import '../../qr/presentation/qr_scanner_screen.dart';
 import '../data/entry_service.dart';
+import '../data/entry_offline_queue.dart';
 
 class EntryModeScreen extends ConsumerStatefulWidget {
   const EntryModeScreen({super.key, required this.eventId});
@@ -32,6 +33,10 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   String _banner = 'Prêt à scanner';
   Color _bannerColor = const Color(0xFF1F2937);
   String? _statsError;
+  late final EntryOfflineQueue _queue;
+  int _pendingCount = 0;
+  int _failedCount = 0;
+  bool _syncing = false;
   final ScanSuppression _suppression =
       ScanSuppression(cooldown: const Duration(milliseconds: 800));
   final List<String> _reasonChips = const [
@@ -44,6 +49,10 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   @override
   void initState() {
     super.initState();
+    _queue = ref.read(entryOfflineQueueProvider);
+    ref.listenManual<NetworkSnapshot>(networkStateProvider, (_, next) {
+      if (next.state == NetworkState.online) unawaited(_replayQueue());
+    });
     unawaited(_load());
   }
 
@@ -55,9 +64,40 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
 
   Future<void> _load() async {
     if (widget.eventId == null) return;
+    await _refreshQueueCounts();
     await _refreshStats();
+    if (ref.read(networkStatusProvider) == NetworkState.online) {
+      await _replayQueue();
+    }
     if (!mounted) return;
     setState(() => _loading = false);
+  }
+
+  Future<void> _refreshQueueCounts() async {
+    final items = await _queue.load();
+    if (!mounted) return;
+    setState(() {
+      _pendingCount = items.where((item) => item.isPending).length;
+      _failedCount = items.where((item) => item.isFailed).length;
+    });
+  }
+
+  Future<void> _replayQueue() async {
+    if (_syncing || !mounted) return;
+    _syncing = true;
+    try {
+      final result = await _queue.replay();
+      await _refreshQueueCounts();
+      if (!mounted || (result.sent == 0 && result.failed == 0)) return;
+      final message = [
+        if (result.sent > 0) '${result.sent} entrée(s) synchronisée(s)',
+        if (result.failed > 0) '${result.failed} échec(s) définitif(s)',
+      ].join(' · ');
+      _feedback(result.failed > 0 ? 'invalid' : 'accepted', message, type: 'SYNC');
+      unawaited(_refreshStats());
+    } finally {
+      _syncing = false;
+    }
   }
 
   Future<void> _refreshStats() async {
@@ -91,9 +131,6 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   }
 
   Future<void> _openScanner() async {
-    if (ref.read(networkStatusProvider) != NetworkState.online) {
-      return _feedback('invalid', 'Serveur indisponible', type: 'QR');
-    }
     final raw = await Navigator.of(context).push<String>(MaterialPageRoute(
         builder: (_) => const QrScannerScreen(mode: QrScannerMode.pickRaw)));
     if (raw == null || raw.trim().isEmpty || widget.eventId == null) return;
@@ -117,12 +154,20 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     final eventId = widget.eventId;
     if (eventId == null) return;
     final scannedAt = DateTime.now();
-    if (ref.read(networkStatusProvider) != NetworkState.online) {
-      return _feedback('invalid', 'Serveur indisponible — entrée non validée',
-          type: 'QR');
-    }
     final idempotencyKey =
         'entry-$eventId-${scannedAt.millisecondsSinceEpoch}-${raw.hashCode}';
+    final item = EntryQueueItem(
+      id: idempotencyKey,
+      eventId: eventId,
+      rawQr: raw,
+      scannedAt: scannedAt,
+      idempotencyKey: idempotencyKey,
+    );
+    if (ref.read(networkStatusProvider) != NetworkState.online) {
+      await _queue.enqueue(item);
+      await _refreshQueueCounts();
+      return _feedback('pending', 'QR accepté localement — synchronisation en attente', type: 'QR');
+    }
     try {
       final res = await ref.read(entryServiceProvider).checkin(
           eventId: eventId,
@@ -135,6 +180,11 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           type: 'QR');
       unawaited(_refreshStats());
     } catch (error) {
+      if (!EntryService.isPermanentWriteFailure(error)) {
+        await _queue.enqueue(item);
+        await _refreshQueueCounts();
+        return _feedback('pending', 'Connexion perdue — QR mis en attente', type: 'QR');
+      }
       _feedback('invalid',
           _operatorError(error, fallback: 'Entrée non validée'),
           type: 'QR');
@@ -167,14 +217,24 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     }
 
     final now = DateTime.now();
-    if (ref.read(networkStatusProvider) != NetworkState.online) {
-      return _feedback(
-          'invalid', 'Serveur indisponible — correction non enregistrée',
-          type: 'MANUAL');
-    }
     final idempotencyKey =
         'manual-$eventId-${now.millisecondsSinceEpoch}-$delta';
     final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
+    final item = EntryQueueItem(
+      id: idempotencyKey,
+      eventId: eventId,
+      type: 'MANUAL',
+      scannedAt: now,
+      idempotencyKey: idempotencyKey,
+      delta: delta.abs(),
+      reason: _manualReason,
+      note: note,
+    );
+    if (ref.read(networkStatusProvider) != NetworkState.online) {
+      await _queue.enqueue(item);
+      await _refreshQueueCounts();
+      return _feedback('pending', 'Correction acceptée localement — synchronisation en attente', type: 'MANUAL');
+    }
     try {
       await ref.read(entryServiceProvider).manualIncrement(
           eventId: eventId,
@@ -186,6 +246,11 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           type: 'MANUAL');
       unawaited(_refreshStats());
     } catch (error) {
+      if (!EntryService.isPermanentWriteFailure(error)) {
+        await _queue.enqueue(item);
+        await _refreshQueueCounts();
+        return _feedback('pending', 'Connexion perdue — correction mise en attente', type: 'MANUAL');
+      }
       _feedback('invalid',
           _operatorError(error, fallback: 'Correction non enregistrée'),
           type: 'MANUAL');
@@ -334,9 +399,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                           const SizedBox(height: 12),
                           if (!_manualMode)
                             ElevatedButton.icon(
-                                onPressed: net == NetworkState.online
-                                    ? _openScanner
-                                    : null,
+                                onPressed: _openScanner,
                                 icon: const Icon(Icons.qr_code_scanner),
                                 label: const Text('SCAN',
                                     style: TextStyle(fontSize: 24)))
@@ -357,24 +420,16 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                             const SizedBox(height: 8),
                             Wrap(spacing: 8, runSpacing: 8, children: [
                               FilledButton(
-                                  onPressed: net == NetworkState.online
-                                      ? () => _manualIncrement(1)
-                                      : null,
+                                  onPressed: () => _manualIncrement(1),
                                   child: const Text('+1')),
                               FilledButton(
-                                  onPressed: net == NetworkState.online
-                                      ? () => _manualIncrement(5)
-                                      : null,
+                                  onPressed: () => _manualIncrement(5),
                                   child: const Text('+5')),
                               FilledButton(
-                                  onPressed: net == NetworkState.online
-                                      ? () => _manualIncrement(10)
-                                      : null,
+                                  onPressed: () => _manualIncrement(10),
                                   child: const Text('+10')),
                               OutlinedButton(
-                                  onPressed: net == NetworkState.online
-                                      ? () => _manualIncrement(-1)
-                                      : null,
+                                  onPressed: () => _manualIncrement(-1),
                                   child: const Text('-1')),
                             ]),
                           ],
@@ -390,7 +445,11 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                   Text('Status: ${net.name.toUpperCase()}'),
                   Text(net == NetworkState.online
                       ? 'Validation serveur requise'
-                      : 'Entrées bloquées hors ligne'),
+                      : 'Validation locale — synchronisation automatique'),
+                  if (_pendingCount > 0) Text('$_pendingCount en attente'),
+                  if (_failedCount > 0)
+                    Text('$_failedCount échec(s) — intervention staff requise',
+                        style: const TextStyle(color: Colors.orange)),
                 ],
               ),
               Container(

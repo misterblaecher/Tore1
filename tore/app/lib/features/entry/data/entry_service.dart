@@ -9,6 +9,22 @@ class EntryService {
   final Dio _dio;
   final PerfTracer _tracer;
 
+  static bool isPermanentWriteFailure(Object error) {
+    if (error is! DioException) return false;
+    final status = error.response?.statusCode;
+    return status != null && status >= 400 && status < 500 && status != 408 && status != 429;
+  }
+
+  static String describeWriteFailure(Object error) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      final body = error.response?.data;
+      if (body is Map && body['detail'] != null) return body['detail'].toString();
+      if (status != null) return 'HTTP $status';
+    }
+    return 'Opération non confirmée';
+  }
+
   Future<Map<String, dynamic>> scanEntry({
     required int eventId,
     required String token,
