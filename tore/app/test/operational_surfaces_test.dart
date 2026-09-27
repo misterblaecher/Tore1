@@ -168,6 +168,56 @@ void main() {
     expect(find.byTooltip('Annuler'), findsOneWidget);
   });
 
+  testWidgets('BAR menu shows prices and disables stock changes from cache',
+      (tester) async {
+    final cap = ScopedCapability(
+      id: 'bar:20:manager',
+      type: 'BAR',
+      scope: 'bar:20',
+      barId: 20,
+      role: 'MANAGER',
+      actions: const {'bar.view_ops', 'bar.manage_menu'},
+      source: 'PARTNER_ACCESS',
+      bar: const {'name': 'Bar 20'},
+    );
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.offline),
+        barOperationalHubProvider
+            .overrideWith((ref, id) async => OperationalLoadResult({
+                  'bar': {'partner_status': 'ACTIVE'}
+                })),
+        barOperationalOrdersProvider.overrideWith(
+            (ref, id) async => OperationalLoadResult({'items': []})),
+        barOperationalMenuProvider
+            .overrideWith((ref, id) async => OperationalLoadResult({
+                  'items': [
+                    {
+                      'id': 4,
+                      'name': 'Cola',
+                      'category': 'Soft',
+                      'price_cents': 350,
+                      'available': false,
+                      'stock_status': 'OUT',
+                      'version': 2
+                    }
+                  ]
+                }, isFromCache: true)),
+      ],
+      child: MaterialApp(
+          home: Scaffold(body: BarOperationalHubScreen(capability: cap))),
+    ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Cola'));
+    expect(find.textContaining('3.50 €'), findsOneWidget);
+    expect(find.text('Menu local · lecture seule'), findsOneWidget);
+    expect(
+        tester
+            .widget<PopupMenuButton<String>>(find.byType(PopupMenuButton<String>))
+            .enabled,
+        isFalse);
+  });
+
   testWidgets('invitation route accepts a prefilled opaque token',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
@@ -196,5 +246,7 @@ void main() {
     await controller.revalidate(const OperationalCapabilities(userId: 'u'));
     expect(container.read(operationalSelectionProvider).mode,
         OperationalMode.user);
+    // Let the auth bootstrap started by the provider finish before teardown.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
   });
 }

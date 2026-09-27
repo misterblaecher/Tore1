@@ -15,6 +15,8 @@ from models import (
     Event,
     EventStaff,
     EventStaffInviteCode,
+    MenuCategory,
+    MenuItem,
     Order,
     PartnerBarAccess,
     PartnerUser,
@@ -276,6 +278,44 @@ def test_bar_capability_is_scoped_and_revocation_is_immediate():
         access.is_active = False
         db.commit()
     assert client.get(f"/ops/bars/{bar_a}", headers=_headers(token)).status_code == 403
+
+
+def test_bar_menu_availability_is_scoped_idempotent_and_price_is_read_only():
+    manager_token, manager_id = _user("Menu Manager")
+    staff_token, staff_id = _user("Menu Staff")
+    bar_id, _ = _bar_access(manager_id)
+    _bar_access(staff_id, role="bartender")
+    with get_session() as db:
+        category = MenuCategory(bar_id=bar_id, name="Drinks")
+        db.add(category)
+        db.flush()
+        item = MenuItem(bar_id=bar_id, category_id=category.id, name="Cola", price_cents=350)
+        db.add(item)
+        db.commit()
+        item_id = item.id
+
+    url = f"/ops/bars/{bar_id}/menu/items/{item_id}/availability"
+    listed = client.get(f"/ops/bars/{bar_id}/menu", headers=_headers(manager_token))
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["price_cents"] == 350
+    assert client.get(f"/ops/bars/{bar_id}/menu", headers=_headers(staff_token)).status_code == 403
+    assert client.put(url, headers=_headers(manager_token), json={
+        "available": False, "stock_status": "OUT", "expected_version": 1,
+    }).status_code == 400
+    payload = {"available": False, "stock_status": "OUT", "expected_version": 1}
+    first = client.put(url, headers=_headers(manager_token, "menu-out"), json=payload)
+    replay = client.put(url, headers=_headers(manager_token, "menu-out"), json=payload)
+    assert first.status_code == replay.status_code == 200
+    assert first.json() == replay.json()
+    assert first.json()["item"]["version"] == 2
+    assert client.put(url, headers=_headers(manager_token, "menu-stale"), json=payload).status_code == 409
+    assert client.put(url, headers=_headers(manager_token, "menu-price"), json={
+        **payload, "price_cents": 1,
+    }).status_code == 422
+    with get_session() as db:
+        saved = db.get(MenuItem, item_id)
+        assert saved.price_cents == 350
+        assert saved.is_available is False
 
 
 def test_bar_order_scope_valid_transitions_invalid_transition_and_idempotence():
