@@ -2,12 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tore/features/discovery/domain/discovery_models.dart';
+import 'package:tore/features/discovery/presentation/discovery_providers.dart';
 import 'package:tore/features/discovery/presentation/discovery_screen.dart';
 import 'package:tore/features/events/data/event_detail_repository.dart';
 import 'package:tore/features/events/domain/event_public_view.dart';
 import 'package:tore/features/events/presentation/event_detail_providers.dart';
 
 void main() {
+  testWidgets('Soirées opens the existing calendar screen', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          discoveryEventsProvider(const DiscoveryQuery()).overrideWith(
+            (ref) async => DiscoveryResult(
+              events: const [],
+              fromCache: false,
+              lastSyncAt: DateTime(2030, 5, 10),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: DiscoveryScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(const ValueKey('calendar-entry')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Calendrier guindaille'), findsOneWidget);
+    expect(find.text('Aujourd’hui'), findsOneWidget);
+    expect(find.text('Semaine'), findsOneWidget);
+    expect(find.text('Mois'), findsOneWidget);
+  });
+
   testWidgets('event card opens Event Detail before any join action',
       (tester) async {
     final now = DateTime(2030, 5, 10, 20);

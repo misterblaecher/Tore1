@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/network/error_mapper.dart';
 import '../../../state.dart';
 import '../../../ui/components/components.dart';
 import '../../events/presentation/event_hub_screen.dart';
@@ -69,8 +70,35 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           Expanded(
             child: asyncEvents.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Erreur calendrier: $e')),
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 40),
+                    const SizedBox(height: 12),
+                    Text(ErrorMapper.message(error)),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () =>
+                          ref.invalidate(calendarEventsProvider(_range)),
+                      child: const Text('Réessayer'),
+                    ),
+                  ],
+                ),
+              ),
               data: (result) {
+                if (result.items.isEmpty) {
+                  return const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_busy_outlined, size: 40),
+                        SizedBox(height: 12),
+                        Text('Aucune soirée dans cette période.'),
+                      ],
+                    ),
+                  );
+                }
                 return ListView.builder(
                   padding: const EdgeInsets.all(12),
                   itemCount: result.items.length,
