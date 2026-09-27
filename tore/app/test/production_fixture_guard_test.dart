@@ -19,7 +19,6 @@ void main() {
       '_applyShowcaseDefaults',
       'fetchMeSnapshot',
       'ToreRebuildApp',
-      "rebuild/ui/theme/tore_theme.dart",
     ];
 
     final files = <File>[];

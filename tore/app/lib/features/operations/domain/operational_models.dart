@@ -124,6 +124,14 @@ class OperationalSelection {
 class OperationalGuard {
   const OperationalGuard._();
 
+  // The existing report API requires the event admin role. Operational
+  // MANAGER and ADMIN are the corresponding scoped capabilities.
+  static bool canViewReport(ScopedCapability capability, int eventId) =>
+      capability.isEvent &&
+      capability.eventId == eventId &&
+      capability.allows('event.view_ops') &&
+      (capability.role == 'MANAGER' || capability.role == 'ADMIN');
+
   static bool canEnter({
     required OperationalMode mode,
     required int scopeId,

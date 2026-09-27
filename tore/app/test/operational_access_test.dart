@@ -66,6 +66,22 @@ void main() {
         isFalse);
   });
 
+  test('bilan access requires an admin-equivalent scoped capability', () {
+    final entry = eventCapability(10);
+    final manager = ScopedCapability.fromJson({
+      ...entry.toJson(),
+      'role': 'MANAGER',
+    });
+    expect(OperationalGuard.canViewReport(entry, 10), isFalse);
+    expect(OperationalGuard.canViewReport(manager, 10), isTrue);
+    expect(OperationalGuard.canViewReport(manager, 11), isFalse);
+    final noOps = ScopedCapability.fromJson({
+      ...manager.toJson(),
+      'actions': <String>[],
+    });
+    expect(OperationalGuard.canViewReport(noOps, 10), isFalse);
+  });
+
   test('bar A never opens bar B, including via direct/deep link guard', () {
     final capability = barCapability(20);
     final capabilities =

@@ -212,7 +212,7 @@ class _OrderQrScreenState extends ConsumerState<OrderQrScreen> {
             const SizedBox(height: 12),
             if (widget.estimatedTickets != null)
               Text(
-                'Total estimé: 🎟️ ${widget.estimatedTickets}',
+                'Total estimé: 🎟️ ${widget.estimatedTickets} Credits',
                 textAlign: TextAlign.center,
               ),
             const SizedBox(height: 20),

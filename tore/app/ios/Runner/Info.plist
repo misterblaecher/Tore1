@@ -39,6 +39,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>TORÈ utilise la caméra uniquement pour scanner les QR des soirées et des menus.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TORÈ utilise votre position à la demande pour afficher les soirées à proximité.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

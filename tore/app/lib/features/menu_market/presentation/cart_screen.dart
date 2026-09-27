@@ -95,7 +95,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
                 child: ServiceLimitedBanner(
-                    message: 'Tickets insuffisants pour confirmer ce panier.'),
+                    message: 'Credits insuffisants pour confirmer ce panier.'),
               ),
             if (hasUnavailable)
               const Padding(
@@ -112,18 +112,18 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       trailing: Text(cart.totalItems.toString())),
                   const ToreDivider(),
                   ToreListRow(
-                      title: 'Total tickets',
-                      trailing: Text('🎟️ ${cart.totalTickets}')),
+                      title: 'Total Credits',
+                      trailing: Text('🎟️ ${cart.totalTickets} Credits')),
                   if (cart.totalFeesTickets > 0) ...[
                     const ToreDivider(),
                     ToreListRow(
                         title: 'Frais estimés',
-                        trailing: Text('🎟️ ${cart.totalFeesTickets}')),
+                        trailing: Text('🎟️ ${cart.totalFeesTickets} Credits')),
                   ],
                   const ToreDivider(),
                   ToreListRow(
                       title: 'Total estimé',
-                      trailing: Text('🎟️ ${cart.totalEstimatedTickets}')),
+                      trailing: Text('🎟️ ${cart.totalEstimatedTickets} Credits')),
                 ],
               ),
             ),
@@ -144,7 +144,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           title: '${line.name} ×${line.qty}',
                           subtitle: unavailable
                               ? 'Indispo'
-                              : '${line.ticketCost} tickets/unité',
+                              : '${line.ticketCost} Credits/unité',
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -259,7 +259,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       if (data is Map && data['detail'] is Map) {
         final detail = Map<String, dynamic>.from(data['detail'] as Map);
         final reason = detail['reason']?.toString();
-        if (reason == 'insufficient_balance') return 'Pas assez de tickets.';
+        if (reason == 'insufficient_balance') return 'Pas assez de Credits.';
       }
     }
     final runtimeMessage = ErrorMapper.runtimeBlockedMessage(error);

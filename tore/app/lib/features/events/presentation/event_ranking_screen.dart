@@ -147,7 +147,7 @@ class EventRankingScreen extends ConsumerWidget {
     final stats = row['stats'] is Map
         ? Map<String, dynamic>.from(row['stats'] as Map)
         : const <String, dynamic>{};
-    return 'cmd ${stats['orders'] ?? 0} · dép ${stats['spentTickets'] ?? 0} · gifts ${stats['giftsSent'] ?? 0} · bets ${stats['bets'] ?? 0}';
+    return 'cmd ${stats['orders'] ?? 0} · dép ${stats['spentTickets'] ?? 0} Credits · gifts ${stats['giftsSent'] ?? 0} · Picks ${stats['bets'] ?? 0}';
   }
 }
 
@@ -186,7 +186,7 @@ class _TopCard extends StatelessWidget {
                 if ((entry['stats'] as Map?)?['spentTickets'] != null)
                   Chip(
                       label: Text(
-                          'Dép ${(entry['stats'] as Map)['spentTickets']}')),
+                          'Dép ${(entry['stats'] as Map)['spentTickets']} Credits')),
               ],
             ),
           ],

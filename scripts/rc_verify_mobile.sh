@@ -25,14 +25,24 @@ fi
 echo "[3/4] flutter test"
 flutter test
 
-echo "[4/4] route-surface guard checks"
-if rg -n "^\s*AppRoutes\.[A-Za-z0-9_]+\s*:\s*\(_\)\s*=>\s*AppShell\(" lib/rebuild/tore_rebuild_app.dart; then
-  echo "Legacy AppShell wired into rebuild routes."
+echo "[4/4] canonical runtime guard checks"
+if ! rg -n "runApp\(const ProviderScope\(child: ToreMvpApp\(\)\)\)" lib/main.dart; then
+  echo "Canonical ToreMvpApp runtime is not wired from lib/main.dart."
   exit 1
 fi
 
-if rg -n "^\s*static const .*=['\"]\/app_shell['\"]" lib/rebuild/routing/app_routes.dart; then
-  echo "Legacy /app_shell route exposed in AppRoutes."
+if test -e lib/app_shell.dart; then
+  echo "Legacy lib/app_shell.dart must remain orphaned and removed."
+  exit 1
+fi
+
+if test -d lib/rebuild; then
+  echo "Legacy lib/rebuild must remain orphaned and removed."
+  exit 1
+fi
+
+if rg -n "app_shell\.dart|package:tore/rebuild" lib test; then
+  echo "Legacy mobile runtime references found."
   exit 1
 fi
 

@@ -1265,6 +1265,20 @@ class Api {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> createBroadcast({
+    required int eventId,
+    required String message,
+    required String level,
+    required String idempotencyKey,
+  }) async {
+    final res = await _client.dio.post(
+      '/ops/events/$eventId/broadcast',
+      data: {'message': message, 'level': level},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> tickerFeed(int eventId,
       {String? cursor,
       String? since,

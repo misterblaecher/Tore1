@@ -35,6 +35,9 @@ class DiscoveryQuery {
     this.city,
     this.barId,
     this.structureId,
+    this.lat,
+    this.lng,
+    this.radius,
   });
 
   final String search;
@@ -42,6 +45,13 @@ class DiscoveryQuery {
   final String? city;
   final int? barId;
   final int? structureId;
+  final double? lat;
+  final double? lng;
+
+  /// Search radius in kilometres. Present only with both coordinates.
+  final double? radius;
+
+  bool get isNearby => lat != null && lng != null && radius != null;
 
   Map<String, dynamic> toQueryParameters() => {
         if (search.trim().isNotEmpty) 'query': search.trim(),
@@ -49,6 +59,9 @@ class DiscoveryQuery {
         if ((city ?? '').trim().isNotEmpty) 'city': city!.trim(),
         if (barId != null) 'bar_id': barId,
         if (structureId != null) 'structure_id': structureId,
+        if (isNearby) 'lat': lat,
+        if (isNearby) 'lng': lng,
+        if (isNearby) 'radius': radius,
         'limit': 100,
       };
 
@@ -58,6 +71,10 @@ class DiscoveryQuery {
     String? city,
     int? barId,
     int? structureId,
+    double? lat,
+    double? lng,
+    double? radius,
+    bool clearNearby = false,
     bool clearBar = false,
     bool clearCity = false,
     bool clearStructure = false,
@@ -68,6 +85,9 @@ class DiscoveryQuery {
       city: clearCity ? null : (city ?? this.city),
       barId: clearBar ? null : (barId ?? this.barId),
       structureId: clearStructure ? null : (structureId ?? this.structureId),
+      lat: clearNearby ? null : (lat ?? this.lat),
+      lng: clearNearby ? null : (lng ?? this.lng),
+      radius: clearNearby ? null : (radius ?? this.radius),
     );
   }
 
@@ -78,10 +98,14 @@ class DiscoveryQuery {
       other.status == status &&
       other.city == city &&
       other.barId == barId &&
-      other.structureId == structureId;
+      other.structureId == structureId &&
+      other.lat == lat &&
+      other.lng == lng &&
+      other.radius == radius;
 
   @override
-  int get hashCode => Object.hash(search, status, city, barId, structureId);
+  int get hashCode =>
+      Object.hash(search, status, city, barId, structureId, lat, lng, radius);
 }
 
 class DiscoveryEvent {
@@ -110,6 +134,7 @@ class DiscoveryEvent {
     this.address,
     this.lat,
     this.lng,
+    this.distanceKm,
   });
 
   final int id;
@@ -136,6 +161,7 @@ class DiscoveryEvent {
   final String? address;
   final double? lat;
   final double? lng;
+  final double? distanceKm;
 
   String? get imageUrl => bannerUrl ?? thumbnailUrl;
 
@@ -177,6 +203,7 @@ class DiscoveryEvent {
       address: _optionalText(json['address']),
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
+      distanceKm: (json['distanceKm'] as num?)?.toDouble(),
     );
   }
 
