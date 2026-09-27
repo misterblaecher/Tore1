@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/qr/qr_resolve_service.dart';
 import 'qr_parser.dart';
 
-enum QrValidationStatus { ok, expired, revoked, invalid, unknownType }
+enum QrValidationStatus { ok, pending, expired, revoked, invalid, unknownType }
 
 class QrValidationResult {
   const QrValidationResult({required this.status, this.reason});
@@ -12,6 +12,7 @@ class QrValidationResult {
   final String? reason;
 
   bool get isOk => status == QrValidationStatus.ok;
+  bool get isPending => status == QrValidationStatus.pending;
 }
 
 class QrValidator {
@@ -24,7 +25,8 @@ class QrValidator {
   final QrResolveService? _resolver;
   final Future<QrResolveResult> Function(String raw)? _resolveRaw;
 
-  Future<QrValidationResult> validate(QrPayload payload) async {
+  Future<QrValidationResult> validate(QrPayload payload,
+      {bool tryBackend = true}) async {
     if (payload.type == QrType.unknown) {
       return const QrValidationResult(
           status: QrValidationStatus.unknownType, reason: 'Type inconnu');
@@ -36,13 +38,11 @@ class QrValidator {
           status: QrValidationStatus.expired, reason: 'expired');
     }
 
-    if (payload.signature != null && payload.signature!.isNotEmpty) {
-      final backend = await _validateWithBackend(payload.raw);
-      if (backend != null) return backend;
-    }
-
-    final backend = await _validateWithBackend(payload.raw);
-    return backend ?? const QrValidationResult(status: QrValidationStatus.ok);
+    final backend = tryBackend ? await _validateWithBackend(payload.raw) : null;
+    return backend ??
+        const QrValidationResult(
+            status: QrValidationStatus.pending,
+            reason: 'En attente de vérification serveur');
   }
 
   Future<QrValidationResult?> _validateWithBackend(String raw) async {

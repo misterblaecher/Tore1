@@ -409,6 +409,14 @@ class QrRouterService {
         await Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => QrRevokedScreen(details: validation.reason)));
         return;
+      case QrValidationStatus.pending:
+        onOutcome?.call(
+            const QrRouteOutcome.unknown('En attente de vérification serveur'));
+        await _openUnknown(
+            context: context,
+            payload: payload,
+            reason: validation.reason ?? 'En attente de vérification serveur');
+        return;
       case QrValidationStatus.invalid:
         onOutcome?.call(const QrRouteOutcome.unknown('QR invalide'));
         await Navigator.of(context).push(MaterialPageRoute(

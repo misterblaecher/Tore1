@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tore/core/auth/auth_session_provider.dart';
 import 'package:tore/core/network/network_state_provider.dart';
+import 'package:tore/features/entry/presentation/entry_mode_screen.dart';
 import 'package:tore/features/operations/data/operational_repository.dart';
 import 'package:tore/features/operations/domain/operational_models.dart';
 import 'package:tore/features/operations/presentation/bar_operational_hub_screen.dart';
@@ -122,8 +123,7 @@ void main() {
     expect(context.read(operationalSelectionProvider).scopeId, 4);
   });
 
-  testWidgets('ORGA hub exposes real state and blocks Entry offline',
-      (tester) async {
+  testWidgets('ORGA hub opens Entry offline', (tester) async {
     final cap = eventCap(10);
     await tester.pumpWidget(ProviderScope(
       overrides: [
@@ -140,9 +140,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('État : LIVE'), findsOneWidget);
     expect(find.text('Entrées : 42'), findsOneWidget);
-    expect(find.text('Entrées bloquées hors ligne'), findsOneWidget);
+    expect(find.text('Contrôle des entrées · hors ligne'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull);
+        isNotNull);
+    await tester.ensureVisible(find.text('Contrôle des entrées · hors ligne'));
+    await tester.tap(find.text('Contrôle des entrées · hors ligne'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EntryModeScreen), findsOneWidget);
     expect(find.text('Bilan soirée'), findsNothing);
   });
 
@@ -266,7 +270,8 @@ void main() {
     expect(find.text('Menu local · lecture seule'), findsOneWidget);
     expect(
         tester
-            .widget<PopupMenuButton<String>>(find.byType(PopupMenuButton<String>))
+            .widget<PopupMenuButton<String>>(
+                find.byType(PopupMenuButton<String>))
             .enabled,
         isFalse);
   });

@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/qr/qr_parser.dart';
+import '../../../core/qr/qr_validator.dart';
 import 'entry_service.dart';
 
 class EntryQueueItem {
@@ -55,14 +59,14 @@ class EntryQueueItem {
         'id': id,
         'eventId': eventId,
         'type': type,
-        'rawQr': rawQr,
+        if (type == 'CHECKIN') 'rawQr': rawQr,
         'scannedAt': scannedAt.toIso8601String(),
         'idempotencyKey': idempotencyKey,
-        'delta': delta,
-        'reason': reason,
-        'note': note,
+        if (type == 'MANUAL') 'delta': delta,
+        if (type == 'MANUAL') 'reason': reason,
+        if (type == 'MANUAL' && note != null) 'note': note,
         'status': status,
-        'lastError': lastError,
+        if (lastError != null) 'lastError': lastError,
       };
 
   static EntryQueueItem fromJson(Map<String, dynamic> json) => EntryQueueItem(
@@ -84,7 +88,7 @@ class EntryQueueItem {
 class EntryOfflineQueueStore {
   static const _key = 'entry_offline_queue_v1';
   static const pendingTtl = Duration(days: 7);
-  static const failedTtl = Duration(days: 30);
+  static const failedTtl = Duration(days: 14);
 
   Future<List<EntryQueueItem>> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -98,7 +102,8 @@ class EntryOfflineQueueStore {
         .toList();
     final kept = items.where((item) {
       final age = DateTime.now().difference(item.scannedAt);
-      return age < (item.isFailed ? failedTtl : pendingTtl);
+      return item.status != 'sent' &&
+          age < (item.isFailed ? failedTtl : pendingTtl);
     }).toList();
     if (kept.length != items.length) await save(kept);
     return kept;
@@ -119,32 +124,102 @@ final entryOfflineQueueProvider = Provider<EntryOfflineQueue>((ref) {
   return EntryOfflineQueue(
     store: ref.watch(entryOfflineQueueStoreProvider),
     service: ref.watch(entryServiceProvider),
+    parser: ref.watch(qrParserProvider),
+    validator: ref.watch(qrValidatorProvider),
   );
 });
 
 class EntryQueueSyncResult {
-  const EntryQueueSyncResult({required this.sent, required this.failed, required this.pending});
+  const EntryQueueSyncResult(
+      {required this.sent, required this.failed, required this.pending});
   final int sent;
   final int failed;
   final int pending;
 }
 
 class EntryOfflineQueue {
-  EntryOfflineQueue({required this.store, required this.service});
+  EntryOfflineQueue(
+      {required this.store,
+      required this.service,
+      required this.parser,
+      required this.validator});
 
   final EntryOfflineQueueStore store;
   final EntryService service;
+  final QrParser parser;
+  final QrValidator validator;
+  final Set<String> _recentQrHashes = {};
+  Future<void> _writeTail = Future.value();
 
-  Future<List<EntryQueueItem>> load() => store.load();
-
-  Future<void> enqueue(EntryQueueItem item) async {
-    final items = await store.load();
-    if (items.any((e) => e.id == item.id || e.idempotencyKey == item.idempotencyKey)) return;
-    await store.save([...items, item]);
+  Future<T> _write<T>(Future<T> Function() action) async {
+    final previous = _writeTail;
+    final done = Completer<void>();
+    _writeTail = done.future;
+    await previous;
+    try {
+      return await action();
+    } finally {
+      done.complete();
+    }
   }
 
+  String _qrKey(int eventId, String rawQr) =>
+      '$eventId:${sha256.convert(utf8.encode(rawQr.trim()))}';
+
+  Future<bool> hasQr(int eventId, String rawQr) async {
+    if (_recentQrHashes.contains(_qrKey(eventId, rawQr))) return true;
+    final items = await load();
+    return items.any((item) =>
+        item.type == 'CHECKIN' &&
+        item.eventId == eventId &&
+        item.rawQr?.trim() == rawQr.trim());
+  }
+
+  void recordCheckedQr(int eventId, String rawQr) {
+    _recentQrHashes.add(_qrKey(eventId, rawQr));
+    if (_recentQrHashes.length > 1000)
+      _recentQrHashes.remove(_recentQrHashes.first);
+  }
+
+  Future<List<EntryQueueItem>> load() async {
+    await _writeTail;
+    return store.load();
+  }
+
+  Future<bool> enqueue(EntryQueueItem item) => _write(() async {
+        final items = await store.load();
+        if (items.any((e) =>
+                e.id == item.id ||
+                e.idempotencyKey == item.idempotencyKey ||
+                (item.type == 'CHECKIN' &&
+                    e.type == 'CHECKIN' &&
+                    e.eventId == item.eventId &&
+                    e.rawQr?.trim() == item.rawQr?.trim())) ||
+            (item.rawQr != null &&
+                _recentQrHashes.contains(_qrKey(item.eventId, item.rawQr!)))) {
+          return false;
+        }
+        await store.save([...items, item]);
+        return true;
+      });
+
+  Future<void> _remove(String id) => _write(() async {
+        final items = await store.load();
+        items.removeWhere((item) => item.id == id);
+        await store.save(items);
+      });
+
+  Future<void> _fail(String id, String reason) => _write(() async {
+        final items = await store.load();
+        final index = items.indexWhere((item) => item.id == id);
+        if (index < 0) return;
+        items[index] =
+            items[index].copyWith(status: 'failed', lastError: reason);
+        await store.save(items);
+      });
+
   Future<EntryQueueSyncResult> replay() async {
-    final items = await store.load();
+    final items = await load();
     var sent = 0;
     var failed = 0;
     for (var index = 0; index < items.length; index++) {
@@ -152,36 +227,53 @@ class EntryOfflineQueue {
       if (!item.isPending) continue;
       try {
         if (item.type == 'MANUAL') {
-          await service.manualIncrement(eventId: item.eventId, delta: item.delta,
-              reason: item.reason ?? 'offline', note: item.note,
+          await service.manualIncrement(
+              eventId: item.eventId,
+              delta: item.delta,
+              reason: item.reason ?? 'offline',
+              note: item.note,
               idempotencyKey: item.idempotencyKey);
         } else {
-          await service.checkin(eventId: item.eventId, rawQr: item.rawQr ?? '',
-              deviceId: 'orga-mobile', idempotencyKey: item.idempotencyKey,
+          final validation =
+              await validator.validate(parser.parse(item.rawQr ?? ''));
+          if (validation.isPending) break;
+          if (!validation.isOk) {
+            await _fail(
+                item.id, validation.reason ?? 'QR refusé par le serveur');
+            failed++;
+            continue;
+          }
+          await service.checkin(
+              eventId: item.eventId,
+              rawQr: item.rawQr ?? '',
+              deviceId: 'orga-mobile',
+              idempotencyKey: item.idempotencyKey,
               scannedAt: item.scannedAt);
+          recordCheckedQr(item.eventId, item.rawQr ?? '');
         }
-        items[index] = item.copyWith(status: 'sent', clearLastError: true);
+        await _remove(item.id);
         sent++;
-        await store.save(items);
       } catch (error) {
         if (EntryService.isPermanentWriteFailure(error)) {
-          items[index] = item.copyWith(status: 'failed', lastError: EntryService.describeWriteFailure(error));
+          await _fail(item.id, EntryService.describeWriteFailure(error));
           failed++;
-          await store.save(items);
           continue;
         }
         break;
       }
     }
-    return EntryQueueSyncResult(sent: sent, failed: failed,
-        pending: items.where((item) => item.isPending).length);
+    return EntryQueueSyncResult(
+        sent: sent,
+        failed: failed,
+        pending: (await load()).where((item) => item.isPending).length);
   }
 
-  Future<void> retry(String id) async {
-    final items = await store.load();
-    final index = items.indexWhere((item) => item.id == id);
-    if (index < 0) return;
-    items[index] = items[index].copyWith(status: 'pending', clearLastError: true);
-    await store.save(items);
-  }
+  Future<void> retry(String id) => _write(() async {
+        final items = await store.load();
+        final index = items.indexWhere((item) => item.id == id);
+        if (index < 0) return;
+        items[index] =
+            items[index].copyWith(status: 'pending', clearLastError: true);
+        await store.save(items);
+      });
 }

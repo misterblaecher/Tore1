@@ -48,5 +48,19 @@ void main() {
       final result = await validator.validate(payload);
       expect(result.status, QrValidationStatus.ok);
     });
+
+    test('recognized QR stays pending without server verification', () async {
+      final payload =
+          parser.parse('tore://join_event?event_id=1&sig=unverified');
+      final validator =
+          QrValidator(resolveRaw: (_) async => throw StateError('offline'));
+
+      final result = await validator.validate(payload);
+      expect(result.status, QrValidationStatus.pending);
+      expect(result.isOk, isFalse);
+      expect(result.isPending, isTrue);
+      expect((await validator.validate(payload, tryBackend: false)).isPending,
+          isTrue);
+    });
   });
 }
