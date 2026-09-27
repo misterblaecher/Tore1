@@ -181,6 +181,20 @@ final barOperationalOrdersProvider = FutureProvider.autoDispose
   }
 });
 
+final barOperationalMenuProvider = FutureProvider.autoDispose
+    .family<OperationalLoadResult, int>((ref, barId) async {
+  final userId = ref.watch(authSessionProvider).user?.id;
+  if (userId == null) throw StateError('registered_session_required');
+  try {
+    return await ref
+        .watch(operationalRepositoryProvider)
+        .barMenu(userId, barId);
+  } on DioException catch (error) {
+    await _resetForbidden(ref, error);
+    rethrow;
+  }
+});
+
 Future<void> _resetForbidden(Ref ref, DioException error) async {
   final status = error.response?.statusCode;
   if (status != 401 && status != 403) return;

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
 from db import now_utc
-from models import AppUser, AuditLog, Bar, Event, EventStaff, EventStaffInviteCode, Order
+from models import AppUser, AuditLog, Bar, Event, EventAppWriteIdempotency, EventStaff, EventStaffInviteCode, MenuCategory, MenuItem, Order
 from app.services.audit_service import write_audit_log
 from app.services.event_staff_invitation_service import (
     accept_secure_event_invitation,
@@ -65,6 +65,14 @@ class OrderTransitionIn(BaseModel):
 
     action: Literal["accept", "ready", "complete", "cancel"]
     reason: Optional[str] = Field(default=None, max_length=280)
+
+
+class BarMenuAvailabilityIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    available: bool
+    stock_status: Literal["IN", "LOW", "OUT"]
+    expected_version: int = Field(ge=1)
 
 
 def _invitation_status(invite: EventStaffInviteCode) -> str:
@@ -293,6 +301,78 @@ def bar_ops_hub(bar_id: int, user: AppUser = Depends(current_app_user), db: Sess
         "source": capability["source"], "expires_at": capability["expires_at"],
         "server_time": now_utc().isoformat(),
     }
+
+
+def _bar_menu_item(item: MenuItem, category: str) -> dict:
+    return {
+        "id": item.id, "name": item.name, "category": category,
+        "price_cents": int(item.price_cents or 0),
+        "available": bool(item.is_available),
+        "stock_status": (item.stock_status or "IN").upper(),
+        "version": max(1, int(item.version or 1)),
+    }
+
+
+@router.get("/ops/bars/{bar_id}/menu")
+def bar_ops_menu(bar_id: int, user: AppUser = Depends(current_app_user), db: Session = Depends(get_db)):
+    require_bar_action(db, user, bar_id, "bar.view_ops")
+    rows = (
+        db.query(MenuItem, MenuCategory.name)
+        .join(MenuCategory, MenuCategory.id == MenuItem.category_id)
+        .filter(MenuItem.bar_id == bar_id, MenuItem.is_active.is_(True), MenuCategory.is_active.is_(True))
+        .order_by(MenuCategory.sort_order, MenuItem.name, MenuItem.id)
+        .all()
+    )
+    return {"items": [_bar_menu_item(item, category) for item, category in rows], "server_time": now_utc().isoformat()}
+
+
+@router.put("/ops/bars/{bar_id}/menu/items/{item_id}/availability")
+def bar_ops_menu_availability(
+    bar_id: int, item_id: int, payload: BarMenuAvailabilityIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(current_app_user), db: Session = Depends(get_db),
+):
+    capability = require_bar_action(db, user, bar_id, "bar.manage_menu")
+    key = ensure_idempotency_key(idempotency_key)
+    if len(key) > 120:
+        raise HTTPException(422, detail={"reason": "idempotency_key_too_long"})
+    if payload.available != (payload.stock_status != "OUT"):
+        raise HTTPException(422, detail={"reason": "inconsistent_stock_status"})
+    action = f"bar_menu:{bar_id}:{item_id}"
+    replay = db.query(EventAppWriteIdempotency).filter(
+        EventAppWriteIdempotency.actor_user_id == user.id,
+        EventAppWriteIdempotency.action == action,
+        EventAppWriteIdempotency.idempotency_key == key,
+    ).first()
+    if replay:
+        return replay.response_json
+    item = db.get(MenuItem, item_id)
+    if item is None:
+        raise HTTPException(404, "Item not found")
+    if item.bar_id != bar_id:
+        raise HTTPException(403, detail={"reason": "menu_bar_scope_forbidden"})
+    if not item.is_active:
+        raise HTTPException(409, detail={"reason": "menu_item_inactive"})
+    version = max(1, int(item.version or 1))
+    if payload.expected_version != version:
+        raise HTTPException(409, detail={"reason": "version_mismatch", "current_version": version})
+    before = {"available": bool(item.is_available), "stock_status": item.stock_status or "IN"}
+    item.is_available = payload.available
+    item.stock_status = payload.stock_status
+    item.version = version + 1
+    item.updated_at = now_utc()
+    response = {"item": _bar_menu_item(item, item.category.name if item.category else "")}
+    db.add(EventAppWriteIdempotency(
+        actor_user_id=user.id, action=action, idempotency_key=key, response_json=response,
+    ))
+    write_audit_log(
+        db, actor_partner_id=None, actor_user_id=user.id, actor_role=capability["role"],
+        action="bar.menu.availability.update", entity_type="menu_item", entity_id=str(item.id),
+        event_id=None, bar_id=bar_id,
+        payload={"before": before, "after": {"available": item.is_available, "stock_status": item.stock_status}},
+    )
+    db.commit()
+    return response
 
 
 @router.get("/ops/bars/{bar_id}/orders")

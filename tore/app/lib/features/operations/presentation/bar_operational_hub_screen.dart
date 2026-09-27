@@ -18,17 +18,20 @@ class BarOperationalHubScreen extends ConsumerStatefulWidget {
 class _BarOperationalHubScreenState
     extends ConsumerState<BarOperationalHubScreen> {
   final Set<int> _busyOrders = {};
+  final Set<int> _busyItems = {};
 
   @override
   Widget build(BuildContext context) {
     final barId = widget.capability.barId!;
     final hub = ref.watch(barOperationalHubProvider(barId));
     final orders = ref.watch(barOperationalOrdersProvider(barId));
+    final menu = ref.watch(barOperationalMenuProvider(barId));
     final network = ref.watch(networkStatusProvider);
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(operationalCapabilitiesProvider);
         ref.invalidate(barOperationalHubProvider(barId));
+        ref.invalidate(barOperationalMenuProvider(barId));
         final _ = await ref.refresh(barOperationalOrdersProvider(barId).future);
       },
       child: ListView(
@@ -61,6 +64,69 @@ class _BarOperationalHubScreenState
                   ? 'Donnée locale · lecture seule'
                   : 'Synchronisé : ${result.cachedAt ?? 'maintenant'}'),
             ),
+          ),
+          const Divider(),
+          Text('Aperçu', style: Theme.of(context).textTheme.titleLarge),
+          orders.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (_, __) => const Text('Aperçu indisponible'),
+            data: (result) {
+              final items =
+                  (result.data['items'] as List? ?? const []).whereType<Map>();
+              final active = items
+                  .where((order) => const {'NEW', 'IN_PROGRESS', 'READY'}
+                      .contains(order['status']?.toString()))
+                  .length;
+              final counts = <String, int>{};
+              for (final order in items) {
+                if (order['status'] == 'CANCELLED') continue;
+                for (final item
+                    in (order['items'] as List? ?? const []).whereType<Map>()) {
+                  final name = item['name']?.toString() ?? '';
+                  if (name.isNotEmpty) {
+                    counts[name] = (counts[name] ?? 0) +
+                        ((item['qty'] as num?)?.toInt() ?? 0);
+                  }
+                }
+              }
+              final top = counts.entries.toList()
+                ..sort((a, b) => b.value.compareTo(a.value));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.receipt_long_outlined),
+                    title: Text('$active commandes actives'),
+                    subtitle: Text(result.isFromCache
+                        ? 'Données locales · lecture seule'
+                        : 'Sur les ${items.length} dernières commandes'),
+                  ),
+                  if (top.isNotEmpty)
+                    Text(
+                        'Produits principaux : ${top.take(3).map((entry) => '${entry.key} (${entry.value})').join(', ')}'),
+                ],
+              );
+            },
+          ),
+          const Divider(),
+          Text('Menu produits', style: Theme.of(context).textTheme.titleLarge),
+          menu.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (_, __) => const ListTile(title: Text('Menu indisponible')),
+            data: (result) {
+              final items = (result.data['items'] as List? ?? const [])
+                  .whereType<Map>()
+                  .map((item) => item.cast<String, dynamic>());
+              if (items.isEmpty) {
+                return const ListTile(title: Text('Aucun produit'));
+              }
+              return Column(children: [
+                if (result.isFromCache)
+                  const ListTile(title: Text('Menu local · lecture seule')),
+                for (final item in items) _menuItem(item, result.isFromCache),
+              ]);
+            },
           ),
           const Divider(),
           Text('Commandes', style: Theme.of(context).textTheme.titleLarge),
@@ -100,6 +166,80 @@ class _BarOperationalHubScreenState
         ],
       ),
     );
+  }
+
+  Widget _menuItem(Map<String, dynamic> item, bool fromCache) {
+    final id = (item['id'] as num).toInt();
+    final available = item['available'] == true;
+    final stock = item['stock_status']?.toString() ?? 'IN';
+    final stockLabel = switch (stock) {
+      'LOW' => 'Stock faible',
+      'OUT' => 'Rupture',
+      _ => 'Disponible',
+    };
+    final price = (((item['price_cents'] as num?)?.toInt() ?? 0) / 100)
+        .toStringAsFixed(2);
+    final allowed = OperationalGuard.canPerform(
+      capability: widget.capability,
+      action: 'bar.manage_menu',
+      mode: OperationalMode.bar,
+      scopeId: widget.capability.barId!,
+    );
+    final canEdit = allowed &&
+        ref.watch(networkStatusProvider) == NetworkState.online &&
+        !fromCache &&
+        !_busyItems.contains(id);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(item['name']?.toString() ?? 'Produit #$id'),
+      subtitle: Text(
+          '${item['category'] ?? ''} · $price € · ${available ? stockLabel : 'Rupture'}'),
+      trailing: PopupMenuButton<String>(
+        tooltip: 'Disponibilité',
+        enabled: canEdit,
+        onSelected: (value) => _updateItem(item, value),
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'IN', child: Text('Disponible')),
+          PopupMenuItem(value: 'LOW', child: Text('Stock faible')),
+          PopupMenuItem(value: 'OUT', child: Text('Rupture')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateItem(Map<String, dynamic> item, String stock) async {
+    final id = (item['id'] as num).toInt();
+    if (_busyItems.contains(id) ||
+        ref.read(networkStatusProvider) != NetworkState.online ||
+        !OperationalGuard.canPerform(
+          capability: widget.capability,
+          action: 'bar.manage_menu',
+          mode: OperationalMode.bar,
+          scopeId: widget.capability.barId!,
+        )) return;
+    setState(() => _busyItems.add(id));
+    try {
+      await ref.read(operationalRepositoryProvider).updateBarMenuAvailability(
+            barId: widget.capability.barId!,
+            itemId: id,
+            available: stock != 'OUT',
+            stockStatus: stock,
+            expectedVersion: (item['version'] as num).toInt(),
+            idempotencyKey:
+                'mobile-menu-$id-${DateTime.now().microsecondsSinceEpoch}',
+          );
+      ref.invalidate(barOperationalMenuProvider(widget.capability.barId!));
+    } catch (_) {
+      ref.invalidate(operationalCapabilitiesProvider);
+      ref.invalidate(barOperationalMenuProvider(widget.capability.barId!));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Mise à jour refusée ou menu modifié'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busyItems.remove(id));
+    }
   }
 
   Widget _orderCard(Map<String, dynamic> order, bool fromCache) {

@@ -38,6 +38,29 @@ class OperationalRepository {
   Future<OperationalLoadResult> barOrders(String userId, int barId) =>
       _getCached(userId, 'bar', barId, 'orders', '/ops/bars/$barId/orders');
 
+  Future<OperationalLoadResult> barMenu(String userId, int barId) =>
+      _getCached(userId, 'bar', barId, 'menu', '/ops/bars/$barId/menu');
+
+  Future<Map<String, dynamic>> updateBarMenuAvailability({
+    required int barId,
+    required int itemId,
+    required bool available,
+    required String stockStatus,
+    required int expectedVersion,
+    required String idempotencyKey,
+  }) async {
+    final response = await api.dio.put(
+      '/ops/bars/$barId/menu/items/$itemId/availability',
+      data: {
+        'available': available,
+        'stock_status': stockStatus,
+        'expected_version': expectedVersion,
+      },
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   Future<List<Map<String, dynamic>>> myInvitations() async {
     final response = await api.dio.get('/me/event-staff-invitations');
     final data = (response.data as Map).cast<String, dynamic>();
