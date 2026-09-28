@@ -156,8 +156,12 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
             type: 'QR');
       }
       final payload = ref.read(qrParserProvider).parse(raw);
-      final validation = await ref.read(qrValidatorProvider).validate(payload,
-          tryBackend: ref.read(networkStatusProvider) == NetworkState.online);
+      final validation = await ref.read(qrValidatorProvider).validate(
+            payload,
+            tryBackend:
+                ref.read(networkStatusProvider) == NetworkState.online,
+            requireServerVerification: true,
+          );
       if (!validation.isOk && !validation.isPending) {
         return _feedback('invalid', validation.reason ?? 'QR non reconnu',
             type: 'QR');
