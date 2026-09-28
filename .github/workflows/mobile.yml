@@ -1,0 +1,45 @@
+name: Mobile release gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tore/app/**'
+      - 'scripts/rc_verify_mobile.sh'
+      - 'scripts/rc_grep_pii.sh'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    paths:
+      - 'tore/app/**'
+      - 'scripts/rc_verify_mobile.sh'
+      - 'scripts/rc_grep_pii.sh'
+      - '.github/workflows/mobile.yml'
+
+jobs:
+  mobile-release-gate:
+    name: Flutter quality and Android smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tore/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+      - name: Resolve Flutter packages
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+      - name: Android debug smoke (dev)
+        run: flutter build apk --debug --flavor dev --dart-define=TORE_ENV=dev
+      - name: Android release smoke (dev)
+        run: flutter build apk --release --flavor dev --dart-define=TORE_ENV=dev
