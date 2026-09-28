@@ -216,6 +216,8 @@ def update_event_runtime_state(
     before = {
         "state": ((runtime.state or "LIVE")).upper(),
         "reason": runtime.reason,
+        "updated_at": _iso(runtime.updated_at),
+        "updated_by_partner_id": runtime.updated_by_user_id,
     }
     normalized_reason = (reason or "").strip()[:180]
     if before["state"] != normalized_state and not normalized_reason:
@@ -229,11 +231,15 @@ def update_event_runtime_state(
 
     runtime.state = normalized_state
     runtime.reason = normalized_reason or None
-    runtime.updated_by_user_id = actor_user_id
+    # EventRuntimeState.updated_by_user_id is a legacy PartnerUser FK.
+    # App-authenticated writes are attributed through AuditLog.actor_user_id.
+    runtime.updated_by_user_id = None
     runtime.updated_at = now_utc()
     after = {
         "state": runtime.state,
         "reason": runtime.reason,
+        "updated_at": _iso(runtime.updated_at),
+        "updated_by_partner_id": runtime.updated_by_user_id,
     }
     response = {
         "ok": True,
@@ -248,6 +254,7 @@ def update_event_runtime_state(
             actor_user_id=actor_user_id,
             action=action,
             idempotency_key=idempotency_key,
+            event_id=event_id,
             response_json=response,
         )
     )
