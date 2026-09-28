@@ -4,7 +4,8 @@ from typing import Literal, Optional
 from sqlalchemy.orm import Session
 from db import now_utc
 from models import AppUser, Organization, OrganizationMembership, StructureClaim
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.ownership_models import StructureOwnership
 from app.routers.forum_ownership import _complete_ownership_change
 from app.services.structure_claim_service import _audit, claim_payload

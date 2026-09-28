@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.models.forum_events import ForumEventPage
 from app.routers.forum import (
     _album_payload,

@@ -23,7 +23,16 @@ from app.routers.web_auth import router as web_auth
 
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
+_MODERN_REPLACEMENT_MODULES={"app.routers.forum_channel_acl_current","app.routers.structure_visibility","app.routers.forum_directory"}
 _FORUM_ENDPOINT_REPLACED={"list_structures","list_discussions","create_discussion","update_discussion","list_documents"}
+_MODERN_ROUTE_OWNERS={
+    ("GET","/forum/structures"): "app.routers.forum_directory",
+    ("PATCH","/forum/structures/{slug}/visibility"): "app.routers.structure_visibility",
+    ("GET","/forum/structures/{slug}/discussions"): "app.routers.forum_channel_acl_current",
+    ("POST","/forum/structures/{slug}/discussions"): "app.routers.forum_channel_acl_current",
+    ("PATCH","/forum/structures/{slug}/discussions/{post_id}"): "app.routers.forum_channel_acl_current",
+    ("GET","/forum/structures/{slug}/documents"): "app.routers.forum_channel_acl_current",
+}
 _INVITE_REPLACED={"list_structure_invitations","create_structure_invitation","resend_structure_invitation","revoke_structure_invitation","accept_structure_invitation"}
 
 def _has(app,m,p): return any(getattr(r,"path","")==p and m in (getattr(r,"methods",set()) or set()) for r in app.router.routes)
@@ -31,8 +40,10 @@ def _replace(app):
     kept=[]
     for r in app.router.routes:
         module=getattr(getattr(r,"endpoint",None),"__module__",""); name=getattr(getattr(r,"endpoint",None),"__name__",""); path=getattr(r,"path",""); methods=getattr(r,"methods",set()) or set()
+        if module in _MODERN_REPLACEMENT_MODULES: continue
         if module in _MODULES and any((m,path) in _REPLACED for m in methods): continue
         if module=="app.routers.forum" and name in _FORUM_ENDPOINT_REPLACED: continue
+        if any((m,path) in _MODERN_ROUTE_OWNERS for m in methods): continue
         kept.append(r)
     app.router.routes[:]=kept
 
@@ -43,12 +54,12 @@ def create_app():
     if not any(p.endswith("/event-manager") for p in paths): app.include_router(event_manager)
     if not any(p.endswith("/publish") and p.startswith("/forum/structures/") for p in paths): app.include_router(lifecycle)
     if not _has(app,"GET","/forum/structures/{slug}/workspace"): app.include_router(rbac)
-    if not _has(app,"PATCH","/forum/structures/{slug}/visibility"): app.include_router(visibility)
+    app.include_router(visibility)
     if not _has(app,"GET","/forum/seo/structures/{slug}"): app.include_router(seo)
     if not _has(app,"GET","/forum/structures/{slug}/planning"): app.include_router(planning)
     if not _has(app,"GET","/forum/structures/{slug}/search"): app.include_router(search)
     if not _has(app,"GET","/forum/structures/{slug}/notifications"): app.include_router(notifications)
-    if not _has(app,"GET","/forum/structures"): app.include_router(directory)
+    app.include_router(directory)
     if not getattr(app.state,"forum_ownership_installed",False): app.include_router(ownership); app.middleware("http")(freeze_guard_middleware); app.state.forum_ownership_installed=True
     if not getattr(app.state,"forum_claims_installed",False):
         claims.routes[:]=[r for r in claims.routes if getattr(getattr(r,"endpoint",None),"__name__","")!="review_structure_claim"]
@@ -56,7 +67,7 @@ def create_app():
     if not getattr(app.state,"forum_invitations_installed",False):
         invitations_legacy.routes[:]=[r for r in invitations_legacy.routes if getattr(getattr(r,"endpoint",None),"__name__","") not in _INVITE_REPLACED]
         app.include_router(invitations_rbac); app.include_router(invitations_legacy); app.state.forum_invitations_installed=True
-    if not getattr(app.state,"forum_channel_acl_installed",False): app.include_router(channel_acl); app.state.forum_channel_acl_installed=True
+    app.include_router(channel_acl); app.state.forum_channel_acl_installed=True
     if not any(getattr(r,"name",None)=="upload_structure_file" for r in app.routes):
         from app.routers.storage import router as storage
         app.include_router(storage)
