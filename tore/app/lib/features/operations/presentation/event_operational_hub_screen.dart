@@ -322,11 +322,13 @@ class _EventRuntimeStateControlState
 
     if (!mounted) return;
     setState(() => _busy = false);
-    final serverState = (response['state'] ?? request.state).toString();
+    final serverState = response['state']?.toString();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'État serveur : ${_eventRuntimeStateLabel(serverState)}',
+          serverState == null || serverState.isEmpty
+              ? 'État serveur rechargé'
+              : 'État serveur : ${_eventRuntimeStateLabel(serverState)}',
         ),
       ),
     );
