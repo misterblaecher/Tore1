@@ -48,11 +48,17 @@ class FakeEntryService extends EntryService {
 class FakeQrValidator extends QrValidator {
   QrValidationResult result =
       const QrValidationResult(status: QrValidationStatus.ok);
+  bool? lastRequireServerVerification;
 
   @override
-  Future<QrValidationResult> validate(QrPayload payload,
-          {bool tryBackend = true}) async =>
-      result;
+  Future<QrValidationResult> validate(
+    QrPayload payload, {
+    bool tryBackend = true,
+    bool requireServerVerification = false,
+  }) async {
+    lastRequireServerVerification = requireServerVerification;
+    return result;
+  }
 }
 
 EntryOfflineQueue queueFor(FakeEntryService service,
@@ -151,6 +157,7 @@ void main() {
     await queue.enqueue(item('a'));
     expect((await queue.replay()).pending, 1);
     expect(service.calls, isEmpty);
+    expect(validator.lastRequireServerVerification, isTrue);
 
     validator.result = const QrValidationResult(status: QrValidationStatus.ok);
     expect((await queue.replay()).sent, 1);
