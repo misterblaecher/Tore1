@@ -1444,7 +1444,7 @@ class PasswordRegisterIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     first_name: str = Field(min_length=1, max_length=120)
     last_name: str = Field(min_length=1, max_length=120)
-    nickname: str = Field(min_length=1, max_length=120)
+    nickname: str = Field(default="", max_length=120)
 
 
 class PasswordLoginIn(BaseModel):

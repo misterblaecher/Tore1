@@ -30,6 +30,8 @@ jobs:
         with:
           languages: ${{ matrix.language }}
       - uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
 
   python-dependencies:
     name: Python dependency audit

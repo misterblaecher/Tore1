@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 from models import AppUser
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.routers.forum import _structure_or_404
 from app.services.structure_rbac import require_capability
 from app.models.planning import StructurePlanningItem, StructurePlanningAssignee
