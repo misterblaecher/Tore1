@@ -23,18 +23,50 @@ class TickerScreen extends ConsumerWidget {
     }
 
     final configAsync = ref.watch(eventConfigProvider(eventId));
-    final tickerEnabled = configAsync.maybeWhen(
-      data: (cfg) => cfg.tickerEnabled,
-      orElse: () => false,
+    return configAsync.when(
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Ticker')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Scaffold(
+        appBar: AppBar(title: const Text('Ticker')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48),
+                const SizedBox(height: 12),
+                const Text(
+                  'Impossible de charger la configuration du ticker.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () =>
+                      ref.invalidate(eventConfigProvider(eventId)),
+                  child: const Text('Réessayer'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      data: (config) {
+        if (!config.tickerEnabled) {
+          return const ModuleUnavailableScreen(
+            title: 'Ticker indisponible',
+            message: 'Ce module est désactivé pour cet event.',
+            reasonCode: 'module_off',
+          );
+        }
+        return _buildTicker(context, ref, eventId);
+      },
     );
-    if (!tickerEnabled) {
-      return const ModuleUnavailableScreen(
-        title: 'Ticker indisponible',
-        message: 'Ce module est désactivé pour cet event.',
-        reasonCode: 'module_off',
-      );
-    }
+  }
 
+  Widget _buildTicker(BuildContext context, WidgetRef ref, int eventId) {
     final state = ref.watch(tickerControllerProvider(eventId));
     final selectedFilter = ref.watch(tickerFilterProvider(eventId));
     final network = ref.watch(networkStatusProvider);
