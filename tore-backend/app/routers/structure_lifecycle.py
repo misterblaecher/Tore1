@@ -17,8 +17,8 @@ from app.legacy.monolith import (
     _resolve_app_user_from_token,
     _slugify_orga_name,
     get_current_user,
-    get_db,
 )
+from app.deps.db import get_db
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
 from app.services.structure_lifecycle import (

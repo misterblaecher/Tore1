@@ -24,6 +24,14 @@ from app.routers.web_auth import router as web_auth
 _REPLACED={("POST","/orgas"),("GET","/orgas/{org_id}"),("PUT","/orgas/{org_id}"),("PATCH","/forum/structures/{slug}/visibility")}
 _MODULES={"app.legacy.monolith","app.routers.forum"}
 _FORUM_ENDPOINT_REPLACED={"list_structures","list_discussions","create_discussion","update_discussion","list_documents"}
+_MODERN_ROUTE_OWNERS={
+    ("GET","/forum/structures"): "app.routers.forum_directory",
+    ("PATCH","/forum/structures/{slug}/visibility"): "app.routers.structure_visibility",
+    ("GET","/forum/structures/{slug}/discussions"): "app.routers.forum_channel_acl_current",
+    ("POST","/forum/structures/{slug}/discussions"): "app.routers.forum_channel_acl_current",
+    ("PATCH","/forum/structures/{slug}/discussions/{post_id}"): "app.routers.forum_channel_acl_current",
+    ("GET","/forum/structures/{slug}/documents"): "app.routers.forum_channel_acl_current",
+}
 _INVITE_REPLACED={"list_structure_invitations","create_structure_invitation","resend_structure_invitation","revoke_structure_invitation","accept_structure_invitation"}
 
 def _has(app,m,p): return any(getattr(r,"path","")==p and m in (getattr(r,"methods",set()) or set()) for r in app.router.routes)
@@ -33,6 +41,7 @@ def _replace(app):
         module=getattr(getattr(r,"endpoint",None),"__module__",""); name=getattr(getattr(r,"endpoint",None),"__name__",""); path=getattr(r,"path",""); methods=getattr(r,"methods",set()) or set()
         if module in _MODULES and any((m,path) in _REPLACED for m in methods): continue
         if module=="app.routers.forum" and name in _FORUM_ENDPOINT_REPLACED: continue
+        if any((owner := _MODERN_ROUTE_OWNERS.get((m,path))) and module != owner for m in methods): continue
         kept.append(r)
     app.router.routes[:]=kept
 

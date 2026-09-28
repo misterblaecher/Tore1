@@ -14,6 +14,8 @@ from app.services.rate_limit_service import RateLimitExceeded, enforce_rate_limi
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
+from app.deps.db import get_db
+
 from db import now_utc
 from models import AccountRequest
 
@@ -23,11 +25,6 @@ ROLE_VALUES = {"student", "committee", "bar", "dj"}
 _PHONE_CLEAN_RE = re.compile(r"[^0-9+]")
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
-
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
 
 
 class AccountRequestIn(BaseModel):

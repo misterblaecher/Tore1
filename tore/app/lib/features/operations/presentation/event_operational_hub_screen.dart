@@ -310,12 +310,14 @@ class _EventRuntimeStateControlState
     }
 
     try {
-      await ref.refresh(eventOperationalHubProvider(widget.eventId).future);
+      ref.invalidate(eventOperationalHubProvider(widget.eventId));
+      await ref.read(eventOperationalHubProvider(widget.eventId).future);
     } catch (_) {
       // The command already succeeded; keep the visible state server-driven.
     }
     try {
-      await ref.refresh(operationalCapabilitiesProvider.future);
+      ref.invalidate(operationalCapabilitiesProvider);
+      await ref.read(operationalCapabilitiesProvider.future);
     } catch (_) {
       // Capabilities are refreshed independently from the hub.
     }
