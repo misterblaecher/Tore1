@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from db import now_utc
 from models import Event, Organization, OrganizationMembership
-from app.legacy.monolith import get_db
+from app.deps.db import get_db
 from app.routers.forum import (
     STRUCTURE_TYPES,
     _event_payload,

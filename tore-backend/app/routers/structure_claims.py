@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from models import AppUser, AuditLog, Organization, StructureClaim
-from app.legacy.monolith import get_current_user, get_db
+from app.legacy.monolith import get_current_user
+from app.deps.db import get_db
 from app.services.rate_limit_service import (
     RateLimitExceeded,
     enforce_rate_limit,
