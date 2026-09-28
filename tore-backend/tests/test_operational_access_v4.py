@@ -466,11 +466,16 @@ def test_event_runtime_state_replay_audit_and_hub_use_server_runtime_state():
             AuditLog.action == "event_state.update",
         ).all()
         assert len(audits) == 1
-        assert audits[0].payload_json["before"] == {"state": "LIVE", "reason": None}
-        assert audits[0].payload_json["after"] == {
-            "state": "PAUSE",
-            "reason": "Incident temporaire",
-        }
+        before = audits[0].payload_json["before"]
+        after = audits[0].payload_json["after"]
+        assert before["state"] == "LIVE"
+        assert before["reason"] is None
+        assert "updated_at" in before
+        assert "updated_by_partner_id" in before
+        assert after["state"] == "PAUSE"
+        assert after["reason"] == "Incident temporaire"
+        assert after["updated_at"] is not None
+        assert after["updated_by_partner_id"] is None
 
 
 def test_event_runtime_state_cross_event_scope_is_forbidden():
