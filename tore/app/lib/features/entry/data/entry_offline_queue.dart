@@ -234,8 +234,10 @@ class EntryOfflineQueue {
               note: item.note,
               idempotencyKey: item.idempotencyKey);
         } else {
-          final validation =
-              await validator.validate(parser.parse(item.rawQr ?? ''));
+          final validation = await validator.validate(
+            parser.parse(item.rawQr ?? ''),
+            requireServerVerification: true,
+          );
           if (validation.isPending) break;
           if (!validation.isOk) {
             await _fail(
