@@ -1,0 +1,25 @@
+name: PR311 Mobile Validation
+
+on:
+  push:
+    branches:
+      - fix/mobile-entry-offline-trust
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tore/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-pub
+      - run: flutter test test/qr_validator_test.dart
+      - run: flutter test test/entry_offline_queue_test.dart
+      - run: flutter test test/entry_mode_screen_test.dart
+      - run: flutter test --no-pub test/operational_surfaces_test.dart
