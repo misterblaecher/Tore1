@@ -37,7 +37,11 @@ class QrRouterService {
     void Function(QrRouteOutcome outcome)? onOutcome,
   }) async {
     final payload = _ref.read(qrParserProvider).parse(raw);
-    final validation = await _ref.read(qrValidatorProvider).validate(payload);
+    final validation = await _ref.read(qrValidatorProvider).validate(
+          payload,
+          requireServerVerification:
+              qrTypeRequiresServerVerification(payload.type),
+        );
     if (!context.mounted) return;
 
     if (!validation.isOk) {
@@ -408,6 +412,14 @@ class QrRouterService {
         onOutcome?.call(const QrRouteOutcome.denied('QR révoqué'));
         await Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => QrRevokedScreen(details: validation.reason)));
+        return;
+      case QrValidationStatus.pending:
+        onOutcome?.call(
+            const QrRouteOutcome.unknown('En attente de vérification serveur'));
+        await _openUnknown(
+            context: context,
+            payload: payload,
+            reason: validation.reason ?? 'En attente de vérification serveur');
         return;
       case QrValidationStatus.invalid:
         onOutcome?.call(const QrRouteOutcome.unknown('QR invalide'));

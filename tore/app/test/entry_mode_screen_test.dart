@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tore/core/perf/perf_tracer.dart';
+import 'package:tore/core/network/network_state_provider.dart';
 import 'package:tore/features/entry/data/entry_service.dart';
+import 'package:tore/features/entry/data/entry_offline_queue.dart';
 import 'package:tore/features/entry/presentation/entry_mode_screen.dart';
 import 'package:tore/features/health/presentation/health_providers.dart';
 
@@ -39,6 +41,51 @@ class FailingEntryService extends FakeEntryService {
 }
 
 void main() {
+  testWidgets('Entry mode opened offline shows server verification pending',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.offline),
+        entryServiceProvider.overrideWithValue(FakeEntryService()),
+        healthRepositoryProvider.overrideWithValue(FakeHealthRepository()),
+      ],
+      child: const MaterialApp(home: EntryModeScreen(eventId: 1)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('SCAN'), findsOneWidget);
+    expect(find.text('QR en attente de vérification serveur'), findsOneWidget);
+    expect(find.text('Compteurs indisponibles hors ligne'), findsOneWidget);
+  });
+
+  testWidgets('failed QR remains visible with a staff retry action',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await EntryOfflineQueueStore().save([
+      EntryQueueItem(
+        id: 'failed-1',
+        eventId: 1,
+        rawQr: 'private-qr',
+        scannedAt: DateTime.now(),
+        idempotencyKey: 'same-key',
+        status: 'failed',
+        lastError: 'invalid_qr',
+      )
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.offline),
+        entryServiceProvider.overrideWithValue(FakeEntryService()),
+        healthRepositoryProvider.overrideWithValue(FakeHealthRepository()),
+      ],
+      child: const MaterialApp(home: EntryModeScreen(eventId: 1)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('invalid_qr'), findsOneWidget);
+    expect(find.text('Réessayer'), findsOneWidget);
+    expect(find.textContaining('private-qr'), findsNothing);
+  });
+
   testWidgets('EntryModeScreen shows scanner and manual mode controls',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -69,7 +116,8 @@ void main() {
     expect(find.text('-1'), findsOneWidget);
   });
 
-  testWidgets('EntryModeScreen keeps the last counters and reports refresh errors',
+  testWidgets(
+      'EntryModeScreen keeps the last counters and reports refresh errors',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
 

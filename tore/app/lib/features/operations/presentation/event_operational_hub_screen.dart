@@ -84,14 +84,12 @@ class EventOperationalHubScreen extends ConsumerWidget {
               mode: OperationalMode.orga,
               scopeId: eventId))
             FilledButton.icon(
-              onPressed: network == NetworkState.online
-                  ? () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => EntryModeScreen(eventId: eventId)))
-                  : null,
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => EntryModeScreen(eventId: eventId))),
               icon: const Icon(Icons.qr_code_scanner),
               label: Text(network == NetworkState.online
                   ? 'Contrôle des entrées'
-                  : 'Entrées bloquées hors ligne'),
+                  : 'Contrôle des entrées · hors ligne'),
             ),
           if (OperationalGuard.canViewReport(capability, eventId)) ...[
             const SizedBox(height: 24),

@@ -36,6 +36,7 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   late final EntryOfflineQueue _queue;
   int _pendingCount = 0;
   int _failedCount = 0;
+  List<EntryQueueItem> _failedItems = const [];
   bool _syncing = false;
   final ScanSuppression _suppression =
       ScanSuppression(cooldown: const Duration(milliseconds: 800));
@@ -65,21 +66,34 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
   Future<void> _load() async {
     if (widget.eventId == null) return;
     await _refreshQueueCounts();
-    await _refreshStats();
     if (ref.read(networkStatusProvider) == NetworkState.online) {
+      await _refreshStats();
       await _replayQueue();
+    } else if (mounted) {
+      setState(() => _statsError = 'Compteurs indisponibles hors ligne');
     }
     if (!mounted) return;
     setState(() => _loading = false);
   }
 
   Future<void> _refreshQueueCounts() async {
-    final items = await _queue.load();
+    final items = (await _queue.load())
+        .where((item) => item.eventId == widget.eventId)
+        .toList();
     if (!mounted) return;
     setState(() {
       _pendingCount = items.where((item) => item.isPending).length;
       _failedCount = items.where((item) => item.isFailed).length;
+      _failedItems = items.where((item) => item.isFailed).toList();
     });
+  }
+
+  Future<void> _retryFailed(String id) async {
+    await _queue.retry(id);
+    await _refreshQueueCounts();
+    if (ref.read(networkStatusProvider) == NetworkState.online) {
+      await _replayQueue();
+    }
   }
 
   Future<void> _replayQueue() async {
@@ -93,7 +107,8 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
         if (result.sent > 0) '${result.sent} entrée(s) synchronisée(s)',
         if (result.failed > 0) '${result.failed} échec(s) définitif(s)',
       ].join(' · ');
-      _feedback(result.failed > 0 ? 'invalid' : 'accepted', message, type: 'SYNC');
+      _feedback(result.failed > 0 ? 'invalid' : 'accepted', message,
+          type: 'SYNC');
       unawaited(_refreshStats());
     } finally {
       _syncing = false;
@@ -106,9 +121,8 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     int? delta10;
     Object? failure;
     try {
-      final count = await ref
-          .read(entryServiceProvider)
-          .getEntryCount(widget.eventId!);
+      final count =
+          await ref.read(entryServiceProvider).getEntryCount(widget.eventId!);
       total = (count['entryCount'] ?? 0) as int;
     } catch (error) {
       failure = error;
@@ -137,20 +151,30 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     if (_suppression.shouldSuppress(hash: hashQr(raw), now: DateTime.now()))
       return;
     try {
+      if (await _queue.hasQr(widget.eventId!, raw)) {
+        return _feedback('duplicate', 'QR déjà scanné sur cet appareil',
+            type: 'QR');
+      }
       final payload = ref.read(qrParserProvider).parse(raw);
-      final validation = await ref.read(qrValidatorProvider).validate(payload);
-      if (!validation.isOk) {
+      final validation = await ref.read(qrValidatorProvider).validate(
+            payload,
+            tryBackend:
+                ref.read(networkStatusProvider) == NetworkState.online,
+            requireServerVerification: true,
+          );
+      if (!validation.isOk && !validation.isPending) {
         return _feedback('invalid', validation.reason ?? 'QR non reconnu',
             type: 'QR');
       }
-      await _performCheckin(raw);
+      await _performCheckin(raw, serverVerified: validation.isOk);
     } catch (error) {
       _feedback('invalid', _operatorError(error, fallback: 'QR refusé'),
           type: 'QR');
     }
   }
 
-  Future<void> _performCheckin(String raw) async {
+  Future<void> _performCheckin(String raw,
+      {required bool serverVerified}) async {
     final eventId = widget.eventId;
     if (eventId == null) return;
     final scannedAt = DateTime.now();
@@ -163,10 +187,16 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       scannedAt: scannedAt,
       idempotencyKey: idempotencyKey,
     );
-    if (ref.read(networkStatusProvider) != NetworkState.online) {
-      await _queue.enqueue(item);
+    if (!serverVerified ||
+        ref.read(networkStatusProvider) != NetworkState.online) {
+      final added = await _queue.enqueue(item);
       await _refreshQueueCounts();
-      return _feedback('pending', 'QR accepté localement — synchronisation en attente', type: 'QR');
+      return _feedback(
+          added ? 'pending' : 'duplicate',
+          added
+              ? 'En attente de vérification serveur'
+              : 'QR déjà en attente sur cet appareil',
+          type: 'QR');
     }
     try {
       final res = await ref.read(entryServiceProvider).checkin(
@@ -176,17 +206,27 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
           idempotencyKey: idempotencyKey,
           scannedAt: scannedAt);
       _feedback((res['status'] ?? 'accepted').toString(),
-          'QR ${(res['status'] ?? 'accepted').toString()}',
+          'Réponse serveur : ${(res['status'] ?? 'accepted').toString()}',
           type: 'QR');
+      _queue.recordCheckedQr(eventId, raw);
       unawaited(_refreshStats());
     } catch (error) {
       if (!EntryService.isPermanentWriteFailure(error)) {
-        await _queue.enqueue(item);
+        final added = await _queue.enqueue(item);
         await _refreshQueueCounts();
-        return _feedback('pending', 'Connexion perdue — QR mis en attente', type: 'QR');
+        return _feedback(
+            added ? 'pending' : 'duplicate',
+            added
+                ? 'En attente de vérification serveur'
+                : 'QR déjà en attente sur cet appareil',
+            type: 'QR');
       }
-      _feedback('invalid',
-          _operatorError(error, fallback: 'Entrée non validée'),
+      await _queue.enqueue(item.copyWith(
+          status: 'failed',
+          lastError: EntryService.describeWriteFailure(error)));
+      await _refreshQueueCounts();
+      _feedback(
+          'invalid', _operatorError(error, fallback: 'Entrée non validée'),
           type: 'QR');
     }
   }
@@ -233,7 +273,9 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
     if (ref.read(networkStatusProvider) != NetworkState.online) {
       await _queue.enqueue(item);
       await _refreshQueueCounts();
-      return _feedback('pending', 'Correction acceptée localement — synchronisation en attente', type: 'MANUAL');
+      return _feedback('pending',
+          'Correction acceptée localement — synchronisation en attente',
+          type: 'MANUAL');
     }
     try {
       await ref.read(entryServiceProvider).manualIncrement(
@@ -249,8 +291,14 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       if (!EntryService.isPermanentWriteFailure(error)) {
         await _queue.enqueue(item);
         await _refreshQueueCounts();
-        return _feedback('pending', 'Connexion perdue — correction mise en attente', type: 'MANUAL');
+        return _feedback(
+            'pending', 'Connexion perdue — correction mise en attente',
+            type: 'MANUAL');
       }
+      await _queue.enqueue(item.copyWith(
+          status: 'failed',
+          lastError: EntryService.describeWriteFailure(error)));
+      await _refreshQueueCounts();
       _feedback('invalid',
           _operatorError(error, fallback: 'Correction non enregistrée'),
           type: 'MANUAL');
@@ -285,7 +333,8 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('CSV copié (inclut MANUAL)')));
     } catch (error) {
-      _feedback('invalid', _operatorError(error, fallback: 'Export indisponible'),
+      _feedback(
+          'invalid', _operatorError(error, fallback: 'Export indisponible'),
           type: 'EXPORT');
     }
   }
@@ -296,9 +345,8 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
       final body = error.response?.data;
       if (body is Map) {
         final detail = body['detail'];
-        final reason = detail is Map
-            ? (detail['message'] ?? detail['reason'])
-            : detail;
+        final reason =
+            detail is Map ? (detail['message'] ?? detail['reason']) : detail;
         if (reason != null && reason.toString().trim().isNotEmpty) {
           return '$fallback — ${reason.toString()}';
         }
@@ -445,13 +493,38 @@ class _EntryModeScreenState extends ConsumerState<EntryModeScreen> {
                   Text('Status: ${net.name.toUpperCase()}'),
                   Text(net == NetworkState.online
                       ? 'Validation serveur requise'
-                      : 'Validation locale — synchronisation automatique'),
+                      : 'QR en attente de vérification serveur'),
                   if (_pendingCount > 0) Text('$_pendingCount en attente'),
+                  if (net == NetworkState.online && _pendingCount > 0)
+                    TextButton(
+                        onPressed: _replayQueue,
+                        child: const Text('Vérifier maintenant')),
                   if (_failedCount > 0)
                     Text('$_failedCount échec(s) — intervention staff requise',
                         style: const TextStyle(color: Colors.orange)),
                 ],
               ),
+              if (_failedItems.isNotEmpty)
+                SizedBox(
+                  height: 120,
+                  child: ListView.builder(
+                    itemCount: _failedItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _failedItems[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                            '${item.type == 'MANUAL' ? 'Correction' : 'QR'} '
+                            '${_fmt(item.scannedAt)} — intervention staff'),
+                        subtitle: Text(item.lastError ?? 'Refus serveur'),
+                        trailing: TextButton(
+                          onPressed: () => _retryFailed(item.id),
+                          child: const Text('Réessayer'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               Container(
                 color: const Color(0xFF111827),
                 padding: const EdgeInsets.all(8),
