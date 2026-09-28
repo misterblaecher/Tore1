@@ -12,6 +12,8 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.deps.db import get_db
+
 from app.routers.wallet import get_current_user
 from app.schemas.hunt import (
     HuntCreateIn,
@@ -91,11 +93,6 @@ class HuntCloseOut(BaseModel):
     huntId: int
     isActive: bool
 
-
-def get_db() -> Iterator[Session]:
-    from app.legacy.monolith import get_db as _get_db
-
-    yield from _get_db()
 
 
 def _require_orga_manager_identity(identity=Depends(current_partner_identity)):
