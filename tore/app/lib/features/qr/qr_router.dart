@@ -37,7 +37,11 @@ class QrRouterService {
     void Function(QrRouteOutcome outcome)? onOutcome,
   }) async {
     final payload = _ref.read(qrParserProvider).parse(raw);
-    final validation = await _ref.read(qrValidatorProvider).validate(payload);
+    final validation = await _ref.read(qrValidatorProvider).validate(
+          payload,
+          requireServerVerification:
+              qrTypeRequiresServerVerification(payload.type),
+        );
     if (!context.mounted) return;
 
     if (!validation.isOk) {
