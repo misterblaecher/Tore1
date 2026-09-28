@@ -11,26 +11,6 @@ import 'package:tore/features/events/presentation/event_config_providers.dart';
 import 'package:tore/features/navigation/presentation/ticker_screen.dart';
 import 'package:tore/shared/models/event_config.dart';
 
-class _TickerHarness extends ConsumerStatefulWidget {
-  const _TickerHarness();
-
-  @override
-  ConsumerState<_TickerHarness> createState() => _TickerHarnessState();
-}
-
-class _TickerHarnessState extends ConsumerState<_TickerHarness> {
-  @override
-  void initState() {
-    super.initState();
-    ref
-        .read(appContextProvider.notifier)
-        .enterEvent(eventId: 42, eventName: 'Ticker test');
-  }
-
-  @override
-  Widget build(BuildContext context) => const TickerScreen();
-}
-
 EventConfig _config({required bool tickerEnabled}) => EventConfig.fromJson({
       'event_id': 42,
       'ticker_enabled': tickerEnabled,
@@ -44,9 +24,14 @@ Future<void> _pumpTicker(
     ProviderScope(
       overrides: [
         networkStatusProvider.overrideWithValue(NetworkState.offline),
+        appContextProvider.overrideWith((ref) {
+          final controller = AppContextController();
+          controller.enterEvent(eventId: 42, eventName: 'Ticker test');
+          return controller;
+        }),
         eventConfigProvider(42).overrideWith((ref) => config()),
       ],
-      child: const MaterialApp(home: _TickerHarness()),
+      child: const MaterialApp(home: TickerScreen()),
     ),
   );
 }
