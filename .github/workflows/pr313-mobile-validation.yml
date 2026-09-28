@@ -1,0 +1,22 @@
+name: PR313 Mobile Validation
+
+on:
+  push:
+    branches:
+      - fix/mobile-ticker-module-gate
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tore/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
