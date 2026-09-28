@@ -61,12 +61,12 @@ class TickerScreen extends ConsumerWidget {
             reasonCode: 'module_off',
           );
         }
-        return _buildTicker(context, ref, eventId);
+        return _buildTicker(ref, eventId);
       },
     );
   }
 
-  Widget _buildTicker(BuildContext context, WidgetRef ref, int eventId) {
+  Widget _buildTicker(WidgetRef ref, int eventId) {
     final state = ref.watch(tickerControllerProvider(eventId));
     final selectedFilter = ref.watch(tickerFilterProvider(eventId));
     final network = ref.watch(networkStatusProvider);
