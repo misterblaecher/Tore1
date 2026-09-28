@@ -5,8 +5,8 @@ cd "$(dirname "$0")/../tore/app"
 
 echo "[RC verify] Flutter/Dart toolchain checks"
 if ! command -v flutter >/dev/null 2>&1; then
-  echo "flutter not found. Install Flutter SDK, ensure \`flutter\` is in PATH, then rerun."
-  exit 0
+  echo "ERROR: Flutter is required for mobile RC verification but was not found in PATH. Install the Flutter SDK and rerun." >&2
+  exit 1
 fi
 
 echo "[1/4] dart format --set-exit-if-changed lib test"
@@ -15,12 +15,8 @@ dart format --set-exit-if-changed lib test || {
   exit 1
 }
 
-echo "[2/4] flutter analyze (or dart analyze fallback)"
-if command -v flutter >/dev/null 2>&1; then
-  flutter analyze --no-fatal-warnings --no-fatal-infos
-else
-  dart analyze
-fi
+echo "[2/4] flutter analyze"
+flutter analyze
 
 echo "[3/4] flutter test"
 flutter test
