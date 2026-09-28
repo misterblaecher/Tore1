@@ -43,7 +43,7 @@ from app.deps.db import get_db
 from app.services.audit_service import write_audit_log
 from app.services.idempotency_service import ensure_idempotency_key
 from app.models.wiki import StructurePageRevision
-from app.services.structure_lifecycle import structure_is_published
+from app.services.structure_lifecycle import lifecycle_status, structure_is_published
 from app.services.structure_rbac import capabilities_for_membership, require_capability
 import difflib
 
@@ -175,23 +175,22 @@ class PagePatchIn(BaseModel):
 
 
 class VisibilityPatchIn(BaseModel):
-    about: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    history: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    partners: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    services: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    announcement: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    team: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    page: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    description: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    contact: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    events: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    members: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
-    albums: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    documents: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    folklore: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
-    stats: Optional[str] = Field(default=None, pattern="^(PUBLIC|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS)$")
+    about: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    history: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    partners: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    services: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    announcement: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    team: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    page: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    description: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    contact: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    events: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    members: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    albums: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    documents: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    folklore: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
+    stats: Optional[str] = Field(default=None, pattern="^(PUBLIC|PRIVATE|TORE_USERS|STRUCTURE_MEMBERS|STAFF|OFFICE|TREASURY|ADMINS|HIDDEN)$")
     confirm_public_finance: bool = False
-
 
 class EventCreateIn(BaseModel):
     name: str = Field(min_length=2, max_length=180)
@@ -633,21 +632,14 @@ def list_my_forum_structures(user: AppUser = Depends(get_current_user), db: Sess
 def list_structures(
     q: Optional[str] = Query(default=None, max_length=120),
     type: Optional[str] = Query(default=None, max_length=64),
+    city: Optional[str] = Query(default=None, max_length=120),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=12, ge=1, le=48),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Organization).filter(func.upper(Organization.visibility) == "PUBLIC")
-    if q and q.strip():
-        needle = f"%{q.strip().lower()}%"
-        query = query.filter(or_(func.lower(Organization.name).like(needle), func.lower(func.coalesce(Organization.city, "")).like(needle)))
-    if type and type.strip().upper() in STRUCTURE_TYPES:
-        query = query.filter(func.upper(Organization.org_type) == type.strip().upper())
-    rows = query.order_by(Organization.name.asc()).all()
-    items = []
-    for org in rows:
-        members = int(db.scalar(select(func.count()).select_from(OrganizationMembership).where(OrganizationMembership.organization_id == org.id, OrganizationMembership.status == "ACTIVE", OrganizationMembership.revoked_at.is_(None))) or 0)
-        items.append({**_structure_payload(org), "memberCount": members if _visibility_settings(org)["stats"] == "PUBLIC" else None})
-    return {"items": items}
+    from app.routers.forum_directory import list_structures as list_structures_current
 
+    return list_structures_current(q=q, type=type, city=city, page=page, page_size=page_size, db=db)
 
 @router.get("/structures/{slug}")
 def get_public_structure(slug: str, db: Session = Depends(get_db)):
@@ -810,20 +802,9 @@ def revoke_structure_member(slug: str, member_user_id: str, reason: str = Query(
 
 @router.get("/structures/{slug}/discussions")
 def list_discussions(slug: str, search: Optional[str] = Query(default=None, max_length=120), channel_id: Optional[int] = None, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug)
-    membership = require_capability(db, org.id, user, "discussion.read")
-    categories = db.query(StructureDiscussionCategory).filter(StructureDiscussionCategory.organization_id == org.id, StructureDiscussionCategory.is_archived.is_(False)).order_by(StructureDiscussionCategory.order_index.asc()).all()
-    channels = db.query(StructureDiscussionChannel).filter(StructureDiscussionChannel.organization_id == org.id, StructureDiscussionChannel.is_archived.is_(False)).order_by(StructureDiscussionChannel.name.asc()).all()
-    channels = [c for c in channels if _can_view(c.visibility, membership)]
-    query = db.query(StructureDiscussionPost).filter(StructureDiscussionPost.organization_id == org.id, StructureDiscussionPost.channel_id.in_([c.id for c in channels]), StructureDiscussionPost.is_archived.is_(False))
-    if channel_id is not None:
-        query = query.filter(StructureDiscussionPost.channel_id == channel_id)
-    if search and search.strip():
-        needle = f"%{search.strip().lower()}%"
-        query = query.filter(or_(func.lower(StructureDiscussionPost.title).like(needle), func.lower(StructureDiscussionPost.body).like(needle)))
-    posts = query.order_by(StructureDiscussionPost.created_at.desc(), StructureDiscussionPost.id.desc()).limit(300).all()
-    return {"categories": [{"id": c.id, "name": c.name, "slug": c.slug} for c in categories if any(ch.category_id == c.id for ch in channels)], "channels": [{"id": c.id, "categoryId": c.category_id, "name": c.name, "slug": c.slug, "visibility": c.visibility} for c in channels], "posts": [_discussion_payload(db, item, membership) for item in posts], "limited": len(posts) == 300}
+    from app.routers.forum_channel_acl_current import list_discussions as list_discussions_current
 
+    return list_discussions_current(slug=slug, search=search, channel_id=channel_id, user=user, db=db)
 
 @router.post("/structures/{slug}/channels")
 def create_channel(slug: str, payload: ChannelCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
@@ -857,74 +838,15 @@ def create_channel(slug: str, payload: ChannelCreateIn, user: AppUser = Depends(
 
 @router.patch("/structures/{slug}/discussions/{post_id}")
 def update_discussion(slug: str, post_id: int, payload: DiscussionActionIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
-    org = _structure_or_404(db, slug)
-    actor = require_capability(db, org.id, user, "discussion.write")
-    row = _accessible_post(db, org.id, post_id, actor)
-    key, previous = _write_idem(db, user, f"forum_discussion_action:{post_id}", idempotency_key)
-    if previous is not None:
-        return previous
-    if payload.pinned is not None:
-        require_capability(db, org.id, user, "discussion.manage")
-        if row.parent_id is not None:
-            raise HTTPException(400, detail="Seules les discussions peuvent être épinglées")
-        row.is_pinned = payload.pinned
-    if payload.emoji:
-        reaction = db.query(StructureDiscussionReaction).filter_by(post_id=row.id, user_id=user.id, emoji=payload.emoji).first()
-        if payload.active and not reaction:
-            db.add(StructureDiscussionReaction(post_id=row.id, user_id=user.id, emoji=payload.emoji))
-        elif not payload.active and reaction:
-            db.delete(reaction)
-    db.flush()
-    response = _discussion_payload(db, row, actor)
-    _save_idem(db, user, f"forum_discussion_action:{post_id}", key, response)
-    db.commit()
-    return response
+    from app.routers.forum_channel_acl_current import update_discussion as update_discussion_current
 
+    return update_discussion_current(slug=slug, post_id=post_id, payload=payload, user=user, db=db, idempotency_key=idempotency_key)
 
 @router.post("/structures/{slug}/discussions")
 def create_discussion(slug: str, payload: DiscussionCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
-    org = _structure_or_404(db, slug)
-    actor = require_capability(db, org.id, user, "discussion.write")
-    key, previous = _write_idem(db, user, f"forum_discussion_create:{org.id}", idempotency_key)
-    if previous is not None:
-        return previous
-    channel = db.get(StructureDiscussionChannel, payload.channel_id) if payload.channel_id else None
-    if payload.channel_id is not None and (not channel or channel.is_archived or not _can_view(channel.visibility, actor)):
-        raise HTTPException(404, detail="Salon inaccessible")
-    if channel is not None and channel.organization_id != org.id:
-        raise HTTPException(status_code=400, detail={"reason": "CHANNEL_OUTSIDE_STRUCTURE"})
-    if channel is None:
-        channel = db.query(StructureDiscussionChannel).filter_by(organization_id=org.id, slug="general", is_archived=False).first()
-    if channel is None:
-        category = db.query(StructureDiscussionCategory).filter(StructureDiscussionCategory.organization_id == org.id, StructureDiscussionCategory.slug == "general").first()
-        if category is None:
-            category = StructureDiscussionCategory(organization_id=org.id, name="Général", slug="general", order_index=0, created_at=now_utc())
-            db.add(category)
-            db.flush()
-        channel = StructureDiscussionChannel(organization_id=org.id, category_id=category.id, name="Général", slug="general", visibility="STRUCTURE_MEMBERS", created_at=now_utc())
-        db.add(channel)
-        db.flush()
-    if not _can_view(channel.visibility, actor):
-        raise HTTPException(403, detail="Salon inaccessible")
-    if not payload.body.strip() or len(payload.title.strip()) < 2:
-        raise HTTPException(422, detail="Le titre et le message sont obligatoires")
-    if payload.parent_id is not None:
-        parent = _accessible_post(db, org.id, payload.parent_id, actor)
-        if parent.channel_id != channel.id or parent.parent_id is not None:
-            raise HTTPException(400, detail="Fil de réponse invalide")
-    for doc_id in payload.document_ids:
-        doc = db.get(StructureDocument, doc_id)
-        if not doc or doc.organization_id != org.id or doc.archived_at or not _can_view(doc.visibility, actor):
-            raise HTTPException(404, detail="Document inaccessible")
-    row = StructureDiscussionPost(organization_id=org.id, channel_id=channel.id, parent_id=payload.parent_id, document_ids=list(set(payload.document_ids)), title=payload.title.strip(), body=payload.body.strip(), created_by_user_id=user.id, created_at=now_utc(), updated_at=now_utc())
-    db.add(row)
-    db.flush()
-    response = _discussion_payload(db, row, actor)
-    _save_idem(db, user, f"forum_discussion_create:{org.id}", key, response)
-    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.discussion.create", entity_type="structure_discussion_post", entity_id=str(row.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "channel_id": channel.id})
-    db.commit()
-    return response
+    from app.routers.forum_channel_acl_current import create_discussion as create_discussion_current
 
+    return create_discussion_current(slug=slug, payload=payload, user=user, db=db, idempotency_key=idempotency_key)
 
 @router.get("/structures/{slug}/events")
 def list_structure_events(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -992,15 +914,9 @@ def patch_structure_event(slug: str, event_id: int, payload: EventPatchIn, user:
 
 @router.get("/structures/{slug}/documents")
 def list_documents(slug: str, search: Optional[str] = Query(default=None, max_length=120), user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    org = _structure_or_404(db, slug)
-    membership = require_capability(db, org.id, user, "document.read")
-    query = db.query(StructureDocument).filter(StructureDocument.organization_id == org.id, StructureDocument.archived_at.is_(None))
-    if search and search.strip():
-        needle = f"%{search.strip().lower()}%"
-        query = query.filter(or_(func.lower(StructureDocument.title).like(needle), func.lower(func.coalesce(StructureDocument.folder, "")).like(needle)))
-    rows = query.order_by(StructureDocument.created_at.desc()).all()
-    return {"items": [_document_payload(row) for row in rows if _can_view(row.visibility, membership)]}
+    from app.routers.forum_channel_acl_current import list_documents_acl
 
+    return list_documents_acl(slug=slug, search=search, user=user, db=db)
 
 @router.post("/structures/{slug}/documents")
 def create_document(slug: str, payload: DocumentCreateIn, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
@@ -1223,19 +1139,45 @@ def patch_visibility(slug: str, payload: VisibilityPatchIn, user: AppUser = Depe
     key, previous = _write_idem(db, user, f"forum_visibility_patch:{org.id}", idempotency_key)
     if previous is not None:
         return previous
-    if payload.stats == "PUBLIC" and not payload.confirm_public_finance:
-        raise HTTPException(status_code=400, detail={"reason": "PUBLIC_FINANCE_CONFIRMATION_REQUIRED"})
+
+    if payload.stats == "PUBLIC":
+        require_capability(db, org.id, user, "finance.read")
+        if not payload.confirm_public_finance:
+            raise HTTPException(status_code=400, detail={"reason": "PUBLIC_FINANCE_CONFIRMATION_REQUIRED"})
+
     settings = _visibility_settings(org)
-    for name, value in payload.model_dump(exclude_none=True, exclude={"confirm_public_finance"}).items():
+    changes = payload.model_dump(exclude_none=True, exclude={"confirm_public_finance"})
+    for name, value in changes.items():
         settings[name] = value
     org.visibility_settings_json = settings
-    org.visibility = "PUBLIC" if settings["page"] == "PUBLIC" else "PRIVATE"
-    response = {"settings": settings, "structureVisibility": org.visibility}
+
+    status = lifecycle_status(db, org.id)
+    if status != "ACTIVE" or settings["page"] != "PUBLIC":
+        org.visibility = "PRIVATE"
+
+    response = {
+        "settings": settings,
+        "structureVisibility": (org.visibility or "PRIVATE").upper(),
+        "lifecycle": status,
+        "published": status == "ACTIVE" and (org.visibility or "PRIVATE").upper() == "PUBLIC" and settings["page"] == "PUBLIC",
+    }
     _save_idem(db, user, f"forum_visibility_patch:{org.id}", key, response)
-    write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=actor.role, action="forum.visibility.patch", entity_type="organization", entity_id=str(org.id), event_id=None, committee_id=None, bar_id=None, idempotency_key=key, payload={"structure_id": org.id, "settings": settings})
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=user.id,
+        actor_role=actor.role,
+        action="forum.visibility.patch",
+        entity_type="organization",
+        entity_id=str(org.id),
+        event_id=None,
+        committee_id=None,
+        bar_id=None,
+        idempotency_key=key,
+        payload={"structure_id": org.id, "settings": settings, "changes": changes, "lifecycle": status, "published": response["published"]},
+    )
     db.commit()
     return response
-
 
 @router.get("/structures/{slug}/stats")
 def get_stats(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
