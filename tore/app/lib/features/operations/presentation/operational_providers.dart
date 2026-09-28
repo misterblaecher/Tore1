@@ -12,6 +12,28 @@ final operationalRepositoryProvider = Provider<OperationalRepository>((ref) {
       ref.watch(apiClientProvider), ref.watch(cacheStoreProvider));
 });
 
+typedef EventRuntimeStateUpdate = Future<Map<String, dynamic>> Function({
+  required int eventId,
+  required String state,
+  required String reason,
+  required String idempotencyKey,
+});
+
+final eventRuntimeStateUpdateProvider = Provider<EventRuntimeStateUpdate>((ref) {
+  return ({
+    required int eventId,
+    required String state,
+    required String reason,
+    required String idempotencyKey,
+  }) =>
+      ref.read(operationalRepositoryProvider).updateEventRuntimeState(
+            eventId: eventId,
+            state: state,
+            reason: reason,
+            idempotencyKey: idempotencyKey,
+          );
+});
+
 final operationalCapabilitiesProvider =
     FutureProvider<OperationalCapabilities>((ref) async {
   final session = ref.watch(authSessionProvider);

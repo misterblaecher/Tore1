@@ -112,6 +112,20 @@ class OperationalRepository {
         data: {'reason': reason});
   }
 
+  Future<Map<String, dynamic>> updateEventRuntimeState({
+    required int eventId,
+    required String state,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final response = await api.dio.post(
+      '/ops/events/$eventId/state',
+      data: {'state': state, 'reason': reason.trim()},
+      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   Future<Map<String, dynamic>> transitionOrder({
     required int barId,
     required int orderId,

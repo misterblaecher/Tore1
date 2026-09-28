@@ -12,17 +12,24 @@ from models import (
     AppUser,
     Bar,
     Event,
+    EventAppWriteIdempotency,
+    EventRuntimeState,
     EventStaff,
     OrganizationMembership,
     PartnerBarAccess,
     PartnerMembership,
     PartnerUser,
 )
+from app.services.audit_service import write_audit_log
 
+
+EVENT_RUNTIME_STATES = frozenset(
+    {"LIVE", "PAUSE", "MENU_ONLY", "DEGRADED", "FROZEN", "CLOSED"}
+)
 
 EVENT_ROLE_ACTIONS: dict[str, set[str]] = {
-    "ADMIN": {"event.view_ops", "event.manage_entry", "event.manage_staff", "event.broadcast"},
-    "MANAGER": {"event.view_ops", "event.manage_entry", "event.manage_staff", "event.broadcast"},
+    "ADMIN": {"event.view_ops", "event.manage_entry", "event.manage_staff", "event.broadcast", "event.manage_state"},
+    "MANAGER": {"event.view_ops", "event.manage_entry", "event.manage_staff", "event.broadcast", "event.manage_state"},
     "ENTRY": {"event.view_ops", "event.manage_entry"},
     "BAR": {"event.view_ops"},
     "HELPER": {"event.view_ops"},
@@ -141,6 +148,131 @@ def event_capabilities(db: Session, user: AppUser, *, at: Optional[datetime] = N
                 "event": {"id": event.id, "name": event.name, "state": (event.event_state or "LIVE").upper(), "starts_at": _iso(event.starts_at), "ends_at": _iso(event.ends_at)},
             })
     return sorted(merged.values(), key=lambda item: item["event_id"])
+
+
+def event_runtime_state_payload(db: Session, event_id: int) -> dict[str, Any]:
+    runtime = (
+        db.query(EventRuntimeState)
+        .filter(EventRuntimeState.event_id == event_id)
+        .first()
+    )
+    return {
+        "state": ((runtime.state if runtime else "LIVE") or "LIVE").upper(),
+        "reason": runtime.reason if runtime else None,
+        "updated_at": _iso(runtime.updated_at) if runtime else None,
+    }
+
+
+def update_event_runtime_state(
+    db: Session,
+    *,
+    event_id: int,
+    state: str,
+    reason: Optional[str],
+    actor_user_id: str,
+    actor_role: str,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    normalized_state = (state or "").upper()
+    if normalized_state not in EVENT_RUNTIME_STATES:
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": "invalid_state", "state": normalized_state},
+        )
+    if len(idempotency_key) > 120:
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": "idempotency_key_too_long"},
+        )
+
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail={"reason": "event_not_found"})
+
+    action = f"event_state:{event_id}"
+    replay = (
+        db.query(EventAppWriteIdempotency)
+        .filter(
+            EventAppWriteIdempotency.actor_user_id == actor_user_id,
+            EventAppWriteIdempotency.action == action,
+            EventAppWriteIdempotency.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+    if replay is not None:
+        response = dict(replay.response_json or {})
+        response["idempotent"] = True
+        return response
+
+    runtime = (
+        db.query(EventRuntimeState)
+        .filter(EventRuntimeState.event_id == event_id)
+        .first()
+    )
+    if runtime is None:
+        runtime = EventRuntimeState(event_id=event_id, state="LIVE")
+        db.add(runtime)
+
+    before = {
+        "state": ((runtime.state or "LIVE")).upper(),
+        "reason": runtime.reason,
+        "updated_at": _iso(runtime.updated_at),
+        "updated_by_partner_id": runtime.updated_by_user_id,
+    }
+    normalized_reason = (reason or "").strip()[:180]
+    if before["state"] != normalized_state and not normalized_reason:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "reason": "reason_required",
+                "message": "Reason is required for runtime state change",
+            },
+        )
+
+    runtime.state = normalized_state
+    runtime.reason = normalized_reason or None
+    # EventRuntimeState.updated_by_user_id is a legacy PartnerUser FK.
+    # App-authenticated writes are attributed through AuditLog.actor_user_id.
+    runtime.updated_by_user_id = None
+    runtime.updated_at = now_utc()
+    after = {
+        "state": runtime.state,
+        "reason": runtime.reason,
+        "updated_at": _iso(runtime.updated_at),
+        "updated_by_partner_id": runtime.updated_by_user_id,
+    }
+    response = {
+        "ok": True,
+        "event_id": event_id,
+        "state": runtime.state,
+        "reason": runtime.reason,
+        "updated_at": _iso(runtime.updated_at),
+        "idempotent": False,
+    }
+    db.add(
+        EventAppWriteIdempotency(
+            actor_user_id=actor_user_id,
+            action=action,
+            idempotency_key=idempotency_key,
+            event_id=event_id,
+            response_json=response,
+        )
+    )
+    write_audit_log(
+        db,
+        actor_partner_id=None,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        action="event_state.update",
+        entity_type="event",
+        entity_id=str(event_id),
+        event_id=event_id,
+        bar_id=event.bar_id,
+        idempotency_key=idempotency_key,
+        payload={"before": before, "after": after},
+    )
+    db.commit()
+    return response
 
 
 def bar_capabilities(db: Session, user: AppUser, *, at: Optional[datetime] = None) -> list[dict[str, Any]]:

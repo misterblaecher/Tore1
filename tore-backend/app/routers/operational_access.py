@@ -16,7 +16,12 @@ from app.services.event_staff_invitation_service import (
     revoke_secure_event_invitation,
 )
 from app.services.idempotency_service import ensure_idempotency_key
-from app.services.operational_access_service import require_bar_action, require_event_action
+from app.services.operational_access_service import (
+    event_runtime_state_payload,
+    require_bar_action,
+    require_event_action,
+    update_event_runtime_state,
+)
 from app.services.orders_service import transition_order_status_idempotent
 from app.services.p3_common import ensure_event_action_allowed
 
@@ -67,6 +72,13 @@ class OrderTransitionIn(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=280)
 
 
+class EventRuntimeStateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    state: Literal["LIVE", "PAUSE", "MENU_ONLY", "DEGRADED", "FROZEN", "CLOSED"]
+    reason: Optional[str] = Field(default=None, max_length=180)
+
+
 class BarMenuAvailabilityIn(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -111,8 +123,12 @@ def event_ops_hub(event_id: int, user: AppUser = Depends(current_app_user), db: 
         raise HTTPException(404, "Event not found")
     from app.legacy.monolith import entry_count
 
+    event_payload = dict(capability["event"])
+    runtime = event_runtime_state_payload(db, event_id)
+    event_payload["state"] = runtime["state"]
+    event_payload["runtime_reason"] = runtime["reason"]
     result = {
-        "event": capability["event"],
+        "event": event_payload,
         "role": capability["role"],
         "actions": capability["actions"],
         "source": capability["source"],
@@ -122,6 +138,26 @@ def event_ops_hub(event_id: int, user: AppUser = Depends(current_app_user), db: 
     if "event.manage_entry" in capability["actions"]:
         result["entry_count"] = entry_count(db, event_id)
     return result
+
+
+@router.post("/ops/events/{event_id}/state")
+def event_ops_set_runtime_state(
+    event_id: int,
+    payload: EventRuntimeStateIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    user: AppUser = Depends(current_app_user),
+    db: Session = Depends(get_db),
+):
+    capability = require_event_action(db, user, event_id, "event.manage_state")
+    return update_event_runtime_state(
+        db,
+        event_id=event_id,
+        state=payload.state,
+        reason=payload.reason,
+        actor_user_id=user.id,
+        actor_role=capability["role"],
+        idempotency_key=ensure_idempotency_key(idempotency_key),
+    )
 
 
 @router.get("/ops/events/{event_id}/staff")

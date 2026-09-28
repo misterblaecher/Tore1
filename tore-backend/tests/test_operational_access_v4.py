@@ -13,6 +13,8 @@ from models import (
     AuditLog,
     Bar,
     Event,
+    EventAppWriteIdempotency,
+    EventRuntimeState,
     EventStaff,
     EventStaffInviteCode,
     MenuCategory,
@@ -366,3 +368,144 @@ def test_bar_order_scope_valid_transitions_invalid_transition_and_idempotence():
     assert retry.json()["idempotent"] is True
     assert invalid.status_code == 409
 
+
+
+def test_event_manage_state_capability_is_limited_to_admin_and_manager():
+    host_token, host_id = _user("Runtime Host")
+    manager_token, manager_id = _user("Runtime Manager")
+    admin_token, admin_id = _user("Runtime Admin")
+    entry_token, entry_id = _user("Runtime Entry")
+    event_id = _event(host_id=host_id, name="Runtime capability")
+    with get_session() as db:
+        db.add_all([
+            EventStaff(event_id=event_id, user_id=manager_id, role="manager", is_active=True),
+            EventStaff(event_id=event_id, user_id=admin_id, role="admin", is_active=True),
+            EventStaff(event_id=event_id, user_id=entry_id, role="entry", is_active=True),
+        ])
+        db.commit()
+
+    host_actions = client.get("/me/capabilities", headers=_headers(host_token)).json()["events"][0]["actions"]
+    manager_actions = client.get("/me/capabilities", headers=_headers(manager_token)).json()["events"][0]["actions"]
+    admin_actions = client.get("/me/capabilities", headers=_headers(admin_token)).json()["events"][0]["actions"]
+    entry_actions = client.get("/me/capabilities", headers=_headers(entry_token)).json()["events"][0]["actions"]
+
+    assert "event.manage_state" in host_actions
+    assert "event.manage_state" in manager_actions
+    assert "event.manage_state" in admin_actions
+    assert "event.manage_state" not in entry_actions
+
+
+def test_event_runtime_state_requires_capability_reason_and_idempotency():
+    _, owner_id = _user("Runtime Owner")
+    manager_token, manager_id = _user("Runtime Manager")
+    entry_token, entry_id = _user("Runtime Entry")
+    event_id = _event(host_id=owner_id, name="Runtime command")
+    with get_session() as db:
+        db.add_all([
+            EventStaff(event_id=event_id, user_id=manager_id, role="manager", is_active=True),
+            EventStaff(event_id=event_id, user_id=entry_id, role="entry", is_active=True),
+        ])
+        db.commit()
+
+    denied = client.post(
+        f"/ops/events/{event_id}/state",
+        headers=_headers(entry_token, "runtime-entry"),
+        json={"state": "PAUSE", "reason": "Pause demandée"},
+    )
+    assert denied.status_code == 403
+
+    missing_key = client.post(
+        f"/ops/events/{event_id}/state",
+        headers=_headers(manager_token),
+        json={"state": "PAUSE", "reason": "Pause demandée"},
+    )
+    assert missing_key.status_code == 400
+    assert missing_key.json()["detail"]["reason"] == "IDEMPOTENCY_REQUIRED"
+
+    missing_reason = client.post(
+        f"/ops/events/{event_id}/state",
+        headers=_headers(manager_token, "runtime-no-reason"),
+        json={"state": "PAUSE"},
+    )
+    assert missing_reason.status_code == 400
+    assert missing_reason.json()["detail"]["reason"] == "reason_required"
+
+
+def test_event_runtime_state_replay_audit_and_hub_use_server_runtime_state():
+    token, user_id = _user("Runtime Manager")
+    event_id = _event(host_id=user_id, name="Runtime replay")
+    headers = _headers(token, "runtime-pause-1")
+    payload = {"state": "PAUSE", "reason": "Incident temporaire"}
+
+    first = client.post(f"/ops/events/{event_id}/state", headers=headers, json=payload)
+    replay = client.post(f"/ops/events/{event_id}/state", headers=headers, json=payload)
+
+    assert first.status_code == replay.status_code == 200
+    assert first.json()["state"] == "PAUSE"
+    assert first.json()["reason"] == "Incident temporaire"
+    assert first.json()["idempotent"] is False
+    assert replay.json()["state"] == "PAUSE"
+    assert replay.json()["idempotent"] is True
+
+    hub = client.get(f"/ops/events/{event_id}", headers=_headers(token))
+    assert hub.status_code == 200
+    assert hub.json()["event"]["state"] == "PAUSE"
+    assert hub.json()["event"]["runtime_reason"] == "Incident temporaire"
+
+    with get_session() as db:
+        runtime = db.query(EventRuntimeState).filter(EventRuntimeState.event_id == event_id).one()
+        assert runtime.state == "PAUSE"
+        assert runtime.reason == "Incident temporaire"
+        assert db.query(EventAppWriteIdempotency).filter(
+            EventAppWriteIdempotency.actor_user_id == user_id,
+            EventAppWriteIdempotency.action == f"event_state:{event_id}",
+            EventAppWriteIdempotency.idempotency_key == "runtime-pause-1",
+        ).count() == 1
+        audits = db.query(AuditLog).filter(
+            AuditLog.event_id == event_id,
+            AuditLog.action == "event_state.update",
+        ).all()
+        assert len(audits) == 1
+        before = audits[0].payload_json["before"]
+        after = audits[0].payload_json["after"]
+        assert before["state"] == "LIVE"
+        assert before["reason"] is None
+        assert "updated_at" in before
+        assert "updated_by_partner_id" in before
+        assert after["state"] == "PAUSE"
+        assert after["reason"] == "Incident temporaire"
+        assert after["updated_at"] is not None
+        assert after["updated_by_partner_id"] is None
+
+
+def test_event_runtime_state_cross_event_scope_is_forbidden():
+    _, owner_id = _user("Runtime Scope Owner")
+    manager_token, manager_id = _user("Runtime Scoped Manager")
+    event_a = _event(host_id=owner_id, name="Runtime A")
+    event_b = _event(host_id=owner_id, name="Runtime B")
+    with get_session() as db:
+        db.add(EventStaff(
+            event_id=event_a,
+            user_id=manager_id,
+            role="manager",
+            is_active=True,
+        ))
+        db.commit()
+
+    own = client.post(
+        f"/ops/events/{event_a}/state",
+        headers=_headers(manager_token, "runtime-a"),
+        json={"state": "DEGRADED", "reason": "Réseau instable"},
+    )
+    cross = client.post(
+        f"/ops/events/{event_b}/state",
+        headers=_headers(manager_token, "runtime-b"),
+        json={"state": "PAUSE", "reason": "Tentative hors scope"},
+    )
+
+    assert own.status_code == 200
+    assert cross.status_code == 403
+    with get_session() as db:
+        assert db.query(EventRuntimeState).filter(
+            EventRuntimeState.event_id == event_b
+        ).count() == 0

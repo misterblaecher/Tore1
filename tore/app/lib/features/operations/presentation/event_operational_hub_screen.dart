@@ -60,20 +60,40 @@ class EventOperationalHubScreen extends ConsumerWidget {
               final event = result.data['event'] is Map
                   ? (result.data['event'] as Map).cast<String, dynamic>()
                   : const <String, dynamic>{};
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('État : ${event['state'] ?? '—'}'),
-                      Text('Entrées : ${result.data['entry_count'] ?? '—'}'),
-                      Text(result.isFromCache
-                          ? 'Dernière donnée locale : ${result.cachedAt ?? '—'}'
-                          : 'Synchronisé : ${result.cachedAt ?? 'maintenant'}'),
-                    ],
+              final currentState =
+                  (event['state'] ?? 'LIVE').toString().toUpperCase();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('État : ${event['state'] ?? '—'}'),
+                          Text('Entrées : ${result.data['entry_count'] ?? '—'}'),
+                          Text(result.isFromCache
+                              ? 'Dernière donnée locale : ${result.cachedAt ?? '—'}'
+                              : 'Synchronisé : ${result.cachedAt ?? 'maintenant'}'),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  if (OperationalGuard.canPerform(
+                    capability: capability,
+                    action: 'event.manage_state',
+                    mode: OperationalMode.orga,
+                    scopeId: eventId,
+                  )) ...[
+                    const SizedBox(height: 8),
+                    _EventRuntimeStateControl(
+                      eventId: eventId,
+                      currentState: currentState,
+                      network: network,
+                    ),
+                  ],
+                ],
               );
             },
           ),
@@ -118,6 +138,198 @@ class EventOperationalHubScreen extends ConsumerWidget {
             _StaffSection(eventId: eventId),
           ],
         ],
+      ),
+    );
+  }
+}
+
+const _eventRuntimeStateLabels = <String, String>{
+  'LIVE': 'En cours',
+  'PAUSE': 'En pause',
+  'MENU_ONLY': 'Menu uniquement',
+  'DEGRADED': 'Mode dégradé',
+  'FROZEN': 'Gelé',
+  'CLOSED': 'Terminé',
+};
+
+String _eventRuntimeStateLabel(String state) =>
+    _eventRuntimeStateLabels[state.toUpperCase()] ?? state;
+
+class _EventStateRequest {
+  const _EventStateRequest({required this.state, required this.reason});
+
+  final String state;
+  final String reason;
+}
+
+class _EventRuntimeStateControl extends ConsumerStatefulWidget {
+  const _EventRuntimeStateControl({
+    required this.eventId,
+    required this.currentState,
+    required this.network,
+  });
+
+  final int eventId;
+  final String currentState;
+  final NetworkState network;
+
+  @override
+  ConsumerState<_EventRuntimeStateControl> createState() =>
+      _EventRuntimeStateControlState();
+}
+
+class _EventRuntimeStateControlState
+    extends ConsumerState<_EventRuntimeStateControl> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      onPressed: widget.network == NetworkState.online && !_busy
+          ? _changeState
+          : null,
+      icon: _busy
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.tune),
+      label: const Text("Changer l'état"),
+    );
+  }
+
+  Future<void> _changeState() async {
+    if (_busy || widget.network != NetworkState.online) return;
+    var selected = _eventRuntimeStateLabels.containsKey(widget.currentState)
+        ? widget.currentState
+        : 'LIVE';
+    var reason = '';
+    final request = await showDialog<_EventStateRequest>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text("Changer l'état de l'event"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selected,
+                decoration: const InputDecoration(labelText: 'Nouvel état'),
+                items: _eventRuntimeStateLabels.entries
+                    .map(
+                      (entry) => DropdownMenuItem(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) => setDialogState(() {
+                  selected = value ?? selected;
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                decoration:
+                    const InputDecoration(labelText: 'Motif obligatoire'),
+                maxLength: 180,
+                onChanged: (value) => setDialogState(() {
+                  reason = value;
+                }),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: reason.trim().length >= 3
+                  ? () => Navigator.pop(
+                        dialogContext,
+                        _EventStateRequest(
+                          state: selected,
+                          reason: reason.trim(),
+                        ),
+                      )
+                  : null,
+              child: const Text('Continuer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (request == null || !mounted) return;
+
+    if (request.state == 'FROZEN' || request.state == 'CLOSED') {
+      final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text("Confirmer le changement d'état"),
+              content: Text(
+                'Passer l’event à « ${_eventRuntimeStateLabel(request.state)} » ?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Retour'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Confirmer'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed || !mounted) return;
+    }
+
+    setState(() => _busy = true);
+    Map<String, dynamic> response;
+    try {
+      response = await ref.read(eventRuntimeStateUpdateProvider)(
+        eventId: widget.eventId,
+        state: request.state,
+        reason: request.reason,
+        idempotencyKey:
+            'mobile-event-state-${widget.eventId}-${DateTime.now().microsecondsSinceEpoch}',
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Changement d'état refusé par le serveur"),
+          ),
+        );
+        setState(() => _busy = false);
+      }
+      return;
+    }
+
+    try {
+      ref.invalidate(eventOperationalHubProvider(widget.eventId));
+      await ref.read(eventOperationalHubProvider(widget.eventId).future);
+    } catch (_) {
+      // The command already succeeded; keep the visible state server-driven.
+    }
+    try {
+      ref.invalidate(operationalCapabilitiesProvider);
+      await ref.read(operationalCapabilitiesProvider.future);
+    } catch (_) {
+      // Capabilities are refreshed independently from the hub.
+    }
+
+    if (!mounted) return;
+    setState(() => _busy = false);
+    final serverState = response['state']?.toString();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          serverState == null || serverState.isEmpty
+              ? 'État serveur rechargé'
+              : 'État serveur : ${_eventRuntimeStateLabel(serverState)}',
+        ),
       ),
     );
   }

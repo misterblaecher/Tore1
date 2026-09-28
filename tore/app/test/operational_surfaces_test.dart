@@ -32,9 +32,24 @@ void main() {
             ? const {
                 'event.view_ops',
                 'event.manage_entry',
-                'event.manage_staff'
+                'event.manage_staff',
+                'event.manage_state'
               }
             : const {'event.view_ops', 'event.manage_entry'},
+        source: 'EVENT_STAFF',
+        event: {'id': id, 'name': 'Event $id'},
+      );
+
+  ScopedCapability stateCap(int id, {bool allowed = true}) =>
+      ScopedCapability(
+        id: 'event:$id:state',
+        type: 'EVENT',
+        scope: 'event:$id',
+        eventId: id,
+        role: 'MANAGER',
+        actions: allowed
+            ? const {'event.manage_state'}
+            : const {'event.manage_entry'},
         source: 'EVENT_STAFF',
         event: {'id': id, 'name': 'Event $id'},
       );
@@ -288,6 +303,238 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('opaque-token-123'), findsOneWidget);
     expect(find.text('Accepter'), findsOneWidget);
+  });
+
+  testWidgets('event state button follows server capability',
+      (tester) async {
+    final hubOverride = eventOperationalHubProvider.overrideWith(
+      (ref, id) async => OperationalLoadResult({
+        'event': {'id': id, 'name': 'Event $id', 'state': 'LIVE'},
+      }),
+    );
+
+    await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.online),
+        hubOverride,
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventOperationalHubScreen(capability: stateCap(10, allowed: false)),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text("Changer l'état"), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.online),
+        eventOperationalHubProvider.overrideWith(
+          (ref, id) async => OperationalLoadResult({
+            'event': {'id': id, 'name': 'Event $id', 'state': 'LIVE'},
+          }),
+        ),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventOperationalHubScreen(capability: stateCap(10)),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text("Changer l'état"), findsOneWidget);
+  });
+
+  testWidgets('event state control is disabled offline', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.offline),
+        eventOperationalHubProvider.overrideWith(
+          (ref, id) async => OperationalLoadResult({
+            'event': {'id': id, 'name': 'Event $id', 'state': 'LIVE'},
+          }),
+        ),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventOperationalHubScreen(capability: stateCap(10)),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final button =
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, "Changer l'état"));
+    expect(button.onPressed, isNull);
+  });
+
+  testWidgets('frozen event state requires explicit confirmation',
+      (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.online),
+        eventOperationalHubProvider.overrideWith(
+          (ref, id) async => OperationalLoadResult({
+            'event': {'id': id, 'name': 'Event $id', 'state': 'LIVE'},
+          }),
+        ),
+        eventRuntimeStateUpdateProvider.overrideWithValue(({
+          required int eventId,
+          required String state,
+          required String reason,
+          required String idempotencyKey,
+        }) async {
+          calls += 1;
+          return {'event_id': eventId, 'state': state, 'reason': reason};
+        }),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventOperationalHubScreen(capability: stateCap(10)),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Changer l'état"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gelé').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Incident de sécurité');
+    await tester.pump();
+    await tester.tap(find.text('Continuer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Confirmer le changement d'état"), findsOneWidget);
+    expect(find.textContaining('Gelé'), findsOneWidget);
+    expect(calls, 0);
+
+    await tester.tap(find.text('Retour'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('event state success refreshes hub and capabilities',
+      (tester) async {
+    var hubLoads = 0;
+    var capabilityLoads = 0;
+    String? sentState;
+    String? sentReason;
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.online),
+        eventOperationalHubProvider.overrideWith((ref, id) async {
+          hubLoads += 1;
+          return OperationalLoadResult({
+            'event': {
+              'id': id,
+              'name': 'Event $id',
+              'state': hubLoads == 1 ? 'LIVE' : 'PAUSE',
+            },
+          });
+        }),
+        operationalCapabilitiesProvider.overrideWith((ref) async {
+          capabilityLoads += 1;
+          return OperationalCapabilities(
+            userId: 'u',
+            events: [stateCap(10)],
+          );
+        }),
+        eventRuntimeStateUpdateProvider.overrideWithValue(({
+          required int eventId,
+          required String state,
+          required String reason,
+          required String idempotencyKey,
+        }) async {
+          sentState = state;
+          sentReason = reason;
+          return {
+            'ok': true,
+            'event_id': eventId,
+            'state': state,
+            'reason': reason,
+          };
+        }),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventOperationalHubScreen(capability: stateCap(10)),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('État : LIVE'), findsOneWidget);
+
+    await tester.tap(find.text("Changer l'état"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('En pause').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Pause opérationnelle');
+    await tester.pump();
+    await tester.tap(find.text('Continuer'));
+    await tester.pumpAndSettle();
+
+    expect(sentState, 'PAUSE');
+    expect(sentReason, 'Pause opérationnelle');
+    expect(hubLoads, greaterThanOrEqualTo(2));
+    expect(capabilityLoads, greaterThanOrEqualTo(1));
+    expect(find.text('État : PAUSE'), findsOneWidget);
+  });
+
+  testWidgets('server refusal keeps the current event state',
+      (tester) async {
+    var hubLoads = 0;
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        networkStatusProvider.overrideWithValue(NetworkState.online),
+        eventOperationalHubProvider.overrideWith((ref, id) async {
+          hubLoads += 1;
+          return OperationalLoadResult({
+            'event': {'id': id, 'name': 'Event $id', 'state': 'LIVE'},
+          });
+        }),
+        eventRuntimeStateUpdateProvider.overrideWithValue(({
+          required int eventId,
+          required String state,
+          required String reason,
+          required String idempotencyKey,
+        }) async {
+          throw StateError('403');
+        }),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventOperationalHubScreen(capability: stateCap(10)),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Changer l'état"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('En pause').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Pause refusée');
+    await tester.pump();
+    await tester.tap(find.text('Continuer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text("Changement d'état refusé par le serveur"), findsOneWidget);
+    expect(find.text('État : LIVE'), findsOneWidget);
+    expect(hubLoads, 1);
   });
 
   test('revocation or expiry refresh closes the selected context', () async {
