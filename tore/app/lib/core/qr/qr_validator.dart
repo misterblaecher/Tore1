@@ -15,6 +15,29 @@ class QrValidationResult {
   bool get isPending => status == QrValidationStatus.pending;
 }
 
+bool qrTypeRequiresServerVerification(QrType type) {
+  switch (type) {
+    case QrType.staffEntry:
+    case QrType.staffBar:
+    case QrType.staffInvite:
+    case QrType.staffBackup:
+    case QrType.orgaInvite:
+    case QrType.order:
+    case QrType.hunt:
+      return true;
+    case QrType.joinEvent:
+    case QrType.menu:
+    case QrType.wifi:
+    case QrType.battle:
+    case QrType.polymarket:
+    case QrType.orga:
+    case QrType.barProfile:
+    case QrType.userProfile:
+    case QrType.unknown:
+      return false;
+  }
+}
+
 class QrValidator {
   QrValidator(
       {QrResolveService? resolver,
@@ -25,8 +48,11 @@ class QrValidator {
   final QrResolveService? _resolver;
   final Future<QrResolveResult> Function(String raw)? _resolveRaw;
 
-  Future<QrValidationResult> validate(QrPayload payload,
-      {bool tryBackend = true}) async {
+  Future<QrValidationResult> validate(
+    QrPayload payload, {
+    bool tryBackend = true,
+    bool requireServerVerification = false,
+  }) async {
     if (payload.type == QrType.unknown) {
       return const QrValidationResult(
           status: QrValidationStatus.unknownType, reason: 'Type inconnu');
@@ -39,10 +65,13 @@ class QrValidator {
     }
 
     final backend = tryBackend ? await _validateWithBackend(payload.raw) : null;
-    return backend ??
-        const QrValidationResult(
-            status: QrValidationStatus.pending,
-            reason: 'En attente de vérification serveur');
+    if (backend != null) return backend;
+    if (requireServerVerification) {
+      return const QrValidationResult(
+          status: QrValidationStatus.pending,
+          reason: 'En attente de vérification serveur');
+    }
+    return const QrValidationResult(status: QrValidationStatus.ok);
   }
 
   Future<QrValidationResult?> _validateWithBackend(String raw) async {
