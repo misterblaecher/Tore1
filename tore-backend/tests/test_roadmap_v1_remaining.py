@@ -176,6 +176,50 @@ def test_event_module_toggles_defaults_and_guard():
         s.close()
 
 
+def test_event_config_exposes_ticker_enabled_from_market_enabled():
+    Base.metadata.create_all(engine)
+    bar_id, _ = _seed_partner("manager")
+    event_id = _seed_event(bar_id)
+    client = TestClient(app)
+
+    guest = client.post("/auth/guest", json={"display_name": "Ticker Config"})
+    assert guest.status_code == 200
+    token = guest.json()["token"]
+
+    s = get_session()
+    try:
+        cfg = EventModuleConfig(event_id=event_id, market_enabled=True)
+        s.add(cfg)
+        s.commit()
+    finally:
+        s.close()
+
+    enabled = client.get(
+        f"/events/{event_id}/config",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["ticker_enabled"] is True
+
+    s = get_session()
+    try:
+        cfg = s.query(EventModuleConfig).filter(
+            EventModuleConfig.event_id == event_id
+        ).first()
+        assert cfg is not None
+        cfg.market_enabled = False
+        s.commit()
+    finally:
+        s.close()
+
+    disabled = client.get(
+        f"/events/{event_id}/config",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["ticker_enabled"] is False
+
+
 def test_wallet_admin_topup_idempotent_and_balance_delta():
     Base.metadata.create_all(engine)
     bar_id, manager_token = _seed_partner("manager")
