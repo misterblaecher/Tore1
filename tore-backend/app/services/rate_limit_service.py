@@ -43,6 +43,9 @@ _RATE_LIMIT_WINDOW_S = int(os.getenv("TORE_RATE_LIMIT_WINDOW_S", "5"))
 _SCOPE_LIMITS: dict[str, tuple[int, int]] = {
     "partner_pin_login": (5, 300),
     "partner_pin_login_ip": (30, 300),
+    "partner_manager_signup_ip": (5, 3600),
+    "partner_staff_join_ip": (15, 300),
+    "partner_staff_join_code": (15, 300),
     # Keep /orders throttling deterministic in CI/tests even if global env knobs change.
     "orders_create": (
         int(os.getenv("TORE_ORDERS_CREATE_RATE_LIMIT_MAX", "29")),

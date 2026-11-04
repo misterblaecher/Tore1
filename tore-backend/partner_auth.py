@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -192,70 +193,45 @@ def require_role(required: str):
 # -----------------------
 
 @router.post("/manager/signup", response_model=AuthOut)
-def manager_signup(data: ManagerSignupIn, db: Session = Depends(get_db)):
-    """
-    Important: partner_code est unique.
-    En cas de signups concurrents, on peut avoir une collision malgré un check pre-insert.
-    On rend donc l'opération robuste en retryant si le commit échoue sur IntegrityError.
-    """
+def manager_signup(data: ManagerSignupIn, request: Request, db: Session = Depends(get_db)):
+    """Create bar + manager + membership atomically (no orphan records)."""
+    from app.services.rate_limit_service import enforce_rate_limit
+
+    enforce_rate_limit("partner_manager_signup_ip", request.client.host if request.client else "unknown")
     try:
-        # 1) Crée le bar avec retry si collision sur partner_code (unique)
-        bar = None
-        max_attempts = 10
-        for _ in range(max_attempts):
-            try:
-                bar = Bar(
-                    name=data.bar_name,
-                    city=data.city,
-                    partner_code=_generate_partner_code(db),
-                )
-                db.add(bar)
-                db.commit()
-                db.refresh(bar)
-                break
-            except IntegrityError:
-                # collision (ex: unique constraint sur partner_code)
-                db.rollback()
-                continue
+        pin_hash = _hash_pin(data.pin)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"reason": "invalid_pin"}) from exc
 
-        if bar is None or getattr(bar, "id", None) is None:
-            raise HTTPException(
-                status_code=500,
-                detail="Impossible de générer un partner_code unique, réessaie.",
-            )
+    for attempt in range(10):
+        try:
+            bar = Bar(name=data.bar_name, city=data.city, partner_code=_generate_partner_code(db))
+            db.add(bar)
+            db.flush()
+            user = PartnerUser(display_name=data.manager_name, pin_hash=pin_hash)
+            db.add(user)
+            db.flush()
+            db.add(PartnerMembership(
+                user_id=user.id, bar_id=bar.id,
+                role="manager", display_name=data.manager_name,
+            ))
+            token = _make_token(user.id, bar.id, "manager", data.manager_name)
+            db.commit()
+            return AuthOut(token=token, bar_id=bar.id, role="manager", display_name=data.manager_name)
+        except IntegrityError as exc:
+            db.rollback()
+            if attempt == 9:
+                raise HTTPException(status_code=409, detail={"reason": "signup_conflict"}) from exc
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logging.exception("partner.signup.db_error")
+            raise HTTPException(status_code=503, detail={"reason": "partner_signup_unavailable"}) from exc
+        except Exception as exc:
+            db.rollback()
+            logging.exception("partner.signup.internal_error")
+            raise HTTPException(status_code=500, detail={"reason": "partner_signup_failed"}) from exc
 
-        # 2) Crée l'utilisateur manager
-        user = PartnerUser(display_name=data.manager_name, pin_hash=_hash_pin(data.pin))
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        # 3) Membership manager
-        m = PartnerMembership(
-            user_id=user.id,
-            bar_id=bar.id,
-            role="manager",
-            display_name=data.manager_name,
-        )
-        db.add(m)
-        db.commit()
-
-        token = _make_token(user.id, bar.id, "manager", data.manager_name)
-        return AuthOut(token=token, bar_id=bar.id, role="manager", display_name=data.manager_name)
-
-    except HTTPException:
-        db.rollback()
-        raise
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(status_code=422, detail=str(e))
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"DB error: {repr(e)}")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Staff join error: {repr(e)}")
-
+    raise HTTPException(status_code=409, detail={"reason": "signup_conflict"})
 
 @router.post("/login", response_model=AuthOut)
 def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
@@ -326,63 +302,60 @@ def create_invite(
 
 
 @router.post("/staff/join", response_model=AuthOut)
-def staff_join(data: StaffJoinIn, db: Session = Depends(get_db)):
+def staff_join(data: StaffJoinIn, request: Request, db: Session = Depends(get_db)):
+    from app.services.rate_limit_service import enforce_rate_limit
+
+    enforce_rate_limit("partner_staff_join_ip", request.client.host if request.client else "unknown")
+    enforce_rate_limit("partner_staff_join_code", data.invite_code.strip().upper())
+
     try:
-        inv = db.query(PartnerInvite).filter(PartnerInvite.code == data.invite_code).first()
+        # Serialize last available invite slot on PostgreSQL.
+        inv = db.query(PartnerInvite).filter(
+            PartnerInvite.code == data.invite_code
+        ).with_for_update().first()
         if not inv:
             raise HTTPException(status_code=400, detail="Code invalide")
-
         if inv.expires_at and datetime.utcnow() > inv.expires_at:
             raise HTTPException(status_code=400, detail="Code expiré")
-
         if inv.uses_count >= inv.max_uses:
             raise HTTPException(status_code=400, detail="Code épuisé")
 
-        # Empêche doublon de nom dans le même bar
-        existing = (
-            db.query(PartnerMembership)
-            .filter(
-                PartnerMembership.bar_id == inv.bar_id,
-                PartnerMembership.display_name == data.display_name,
-            )
-            .first()
-        )
+        existing = db.query(PartnerMembership).filter(
+            PartnerMembership.bar_id == inv.bar_id,
+            PartnerMembership.display_name == data.display_name,
+        ).first()
         if existing:
             raise HTTPException(status_code=400, detail="Nom déjà utilisé dans ce bar")
 
         user = PartnerUser(display_name=data.display_name, pin_hash=_hash_pin(data.pin))
         db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        m = PartnerMembership(
-            user_id=user.id,
-            bar_id=inv.bar_id,
-            role=inv.role,
-            display_name=data.display_name,
-        )
-        db.add(m)
-
+        db.flush()
+        db.add(PartnerMembership(
+            user_id=user.id, bar_id=inv.bar_id,
+            role=inv.role, display_name=data.display_name,
+        ))
         inv.uses_count += 1
         db.add(inv)
-        db.commit()
-
         token = _make_token(user.id, inv.bar_id, inv.role, data.display_name)
+        db.commit()
         return AuthOut(token=token, bar_id=inv.bar_id, role=inv.role, display_name=data.display_name)
-
     except HTTPException:
         db.rollback()
         raise
-    except ValueError as e:
+    except ValueError as exc:
         db.rollback()
-        raise HTTPException(status_code=422, detail=str(e))
-    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail={"reason": "invalid_pin"}) from exc
+    except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"DB error: {repr(e)}")
-    except Exception as e:
+        raise HTTPException(status_code=409, detail={"reason": "staff_join_conflict"}) from exc
+    except SQLAlchemyError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Signup error: {repr(e)}")
-
+        logging.exception("partner.staff_join.db_error")
+        raise HTTPException(status_code=503, detail={"reason": "staff_join_unavailable"}) from exc
+    except Exception as exc:
+        db.rollback()
+        logging.exception("partner.staff_join.internal_error")
+        raise HTTPException(status_code=500, detail={"reason": "staff_join_failed"}) from exc
 
 @router.get("/me", response_model=MeOut)
 def me(identity=Depends(current_identity)):

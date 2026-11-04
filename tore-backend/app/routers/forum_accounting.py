@@ -7,6 +7,9 @@ boundary: UI visibility never substitutes for ``finance.read``.
 
 from __future__ import annotations
 
+import csv
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -131,6 +134,10 @@ def create_entry(slug: str, payload: EntryIn, user: AppUser = Depends(get_curren
     org = _structure_or_404(db, slug); require_capability(db, org.id, user, "finance.write")
     budget = _budget(db, org.id, payload.budget_id) if payload.budget_id else None
     if budget: _assert_mutable(budget)
+    if payload.event_id is not None:
+        event = db.get(Event, payload.event_id)
+        if event is None or event.host_type != "orga" or event.host_id != str(org.id):
+            raise HTTPException(status_code=404, detail="Event not found")
     row = AccountingEntry(organization_id=org.id, created_by_user_id=user.id, entry_date=payload.entry_date or datetime.utcnow(), **payload.model_dump(exclude={"entry_date"}))
     db.add(row); db.flush(); write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=None, action="forum.accounting.entry.create", entity_type="accounting_entry", entity_id=str(row.id), event_id=payload.event_id, committee_id=None, bar_id=None, payload={"organization_id": org.id, "entry_type": row.entry_type, "amount_cents": row.amount_cents}); db.commit(); return _entry_payload(row)
 
@@ -153,9 +160,22 @@ def transition_budget(slug: str, budget_id: int, status: str, reason: str, user:
     write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=None, action="forum.accounting.lifecycle", entity_type="structure_budget", entity_id=str(budget.id), event_id=None, committee_id=None, bar_id=None, payload={"from": current, "to": target, "reason": reason})
     db.commit(); return {"id": budget.id, "status": budget.status}
 
+def _safe_csv_text(value: str) -> str:
+    """Prevent spreadsheet formula execution after CSV parsing."""
+    return "'" + value if value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")) else value
+
+
 @router.get("/structures/{slug}/accounting/export.csv")
 def export_accounting(slug: str, user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)):
     org = _structure_or_404(db, slug); require_capability(db, org.id, user, "finance.export")
     rows = db.query(AccountingEntry).filter_by(organization_id=org.id).order_by(AccountingEntry.entry_date.asc()).all()
-    body = "date,type,category,amount_cents,notes\n" + "\n".join(f"{r.entry_date.isoformat()},{r.entry_type},{r.category},{r.amount_cents},{(r.notes or '').replace(',', ' ')}" for r in rows) + "\n"
-    return Response(content=body, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=accounting.csv"})
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow(["date", "type", "category", "amount_cents", "notes"])
+    for row in rows:
+        writer.writerow([
+            row.entry_date.isoformat(), row.entry_type,
+            _safe_csv_text(row.category), row.amount_cents,
+            _safe_csv_text(row.notes or ""),
+        ])
+    return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=accounting.csv"})
