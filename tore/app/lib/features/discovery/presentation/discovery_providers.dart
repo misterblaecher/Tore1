@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/providers.dart';
@@ -22,6 +24,8 @@ final discoveryQueryProvider = StateProvider<DiscoveryQuery>(
 );
 
 final discoveryEventsProvider =
-    FutureProvider.family<DiscoveryResult, DiscoveryQuery>((ref, query) {
+    FutureProvider.autoDispose.family<DiscoveryResult, DiscoveryQuery>((ref, query) {
+  final refresh = Timer(const Duration(seconds: 30), ref.invalidateSelf);
+  ref.onDispose(refresh.cancel);
   return ref.watch(discoveryRepositoryProvider).fetchEvents(query);
 });

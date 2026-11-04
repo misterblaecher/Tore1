@@ -5488,7 +5488,16 @@ def list_all_events(
             func.lower(func.replace(Bar.city, "è", "e"))
             == normalized_city.lower().replace("è", "e")
         )
-        request = request.filter(Event.bar_id.in_(matching_city_bar_ids))
+        # Structure-hosted events may have no bar: their own venue city is
+        # authoritative, with the bar city used only when it is absent.
+        event_city = func.lower(func.replace(func.trim(Event.city), "è", "e"))
+        request = request.filter(or_(
+            event_city == normalized_city.lower().replace("è", "e"),
+            and_(
+                or_(Event.city.is_(None), func.trim(Event.city) == ""),
+                Event.bar_id.in_(matching_city_bar_ids),
+            ),
+        ))
     if structure_id is not None:
         request = request.filter(
             func.lower(Event.host_type) == "orga",

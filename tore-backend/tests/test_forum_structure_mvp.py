@@ -41,6 +41,53 @@ def _publish(token: str, slug: str, key: str) -> None:
     assert response.status_code == 200
 
 
+def test_forum_and_mobile_share_published_structures_and_events():
+    token, _ = _guest("shared-owner")
+    created = client.post("/orgas", json={
+        "name": "Comité synchronisé", "city": "Liège", "org_type": "COMMITTEE",
+    }, headers=_headers(token, "shared-structure"))
+    assert created.status_code == 200
+    org = created.json()["orga"]
+    slug = org["slug"]
+    _publish(token, slug, "shared-structure-publish")
+    visible_events = client.patch(f"/forum/structures/{slug}/visibility",
+        json={"events": "PUBLIC"}, headers=_headers(token, "shared-events-visible"))
+    assert visible_events.status_code == 200
+    mobile_structures = client.get("/orgas", params={"q": "Comité synchronisé"})
+    assert mobile_structures.status_code == 200
+    assert any(item["id"] == org["id"] for item in mobile_structures.json()["items"])
+    public_structure = client.get(f"/forum/structures/{slug}").json()
+    assert public_structure["structure"]["id"] == org["id"]
+
+    created_event = client.post(f"/forum/structures/{slug}/events", json={
+        "name": "Soirée synchronisée", "city": "Liège",
+        "starts_at": "2030-01-01T18:00:00Z", "ends_at": "2030-01-01T22:00:00Z",
+    }, headers=_headers(token, "shared-event"))
+    assert created_event.status_code == 200
+    event_id = created_event.json()["id"]
+    params = {"city": "Liège", "structure_id": org["id"]}
+    assert client.get("/events", params=params).json() == []
+    published = client.patch(f"/forum/structures/{slug}/events/{event_id}",
+        json={"publication_status": "PUBLISHED", "visibility": "PUBLIC"},
+        headers=_headers(token, "shared-event-publish"))
+    assert published.status_code == 200
+    mobile_events = client.get("/events", params=params)
+    assert mobile_events.status_code == 200
+    assert [event["id"] for event in mobile_events.json()] == [event_id]
+    assert client.get("/events", params={**params, "city": "Namur"}).json() == []
+    edited = client.patch(f"/forum/structures/{slug}/events/{event_id}",
+        json={"name": "Soirée mise à jour"}, headers=_headers(token, "shared-edit"))
+    assert edited.status_code == 200
+    assert client.get("/events", params=params).json()[0]["name"] == "Soirée mise à jour"
+    forum_events = client.get(f"/forum/structures/{slug}").json()["events"]
+    assert any(event["id"] == event_id and event["name"] == "Soirée mise à jour" for event in forum_events)
+    unpublished = client.patch(f"/forum/structures/{slug}/events/{event_id}",
+        json={"publication_status": "DRAFT"}, headers=_headers(token, "shared-unpublish"))
+    assert unpublished.status_code == 200
+    assert client.get("/events", params=params).json() == []
+    assert not any(event["id"] == event_id for event in client.get(f"/forum/structures/{slug}").json()["events"])
+
+
 def test_forum_public_structure_and_private_scope_persist():
     owner_token, owner_id = _guest("forum-owner")
     outsider_token, _ = _guest("forum-outsider")

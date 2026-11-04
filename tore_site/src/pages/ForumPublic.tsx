@@ -54,10 +54,30 @@ function PublicStructure({ slug }: { slug: string }) {
 
   useEffect(() => {
     let active = true;
-    void apiFetch<PublicPayload>(`/forum/structures/${encodeURIComponent(slug)}`)
-      .then((payload) => { if (active) setData(payload); })
-      .catch((reason: unknown) => { if (active) setError(reason instanceof ApiError ? reason.message : "Cette page publique est indisponible."); });
-    return () => { active = false; };
+    let pending = false;
+    const refresh = async () => {
+      if (pending || document.visibilityState === "hidden") return;
+      pending = true;
+      try {
+        const payload = await apiFetch<PublicPayload>(`/forum/structures/${encodeURIComponent(slug)}`);
+        if (active) { setData(payload); setError(null); }
+      } catch (reason: unknown) {
+        if (active) {
+          setError(reason instanceof ApiError ? reason.message : "Cette page publique est indisponible.");
+          setData(null);
+        }
+      } finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [slug]);
 
   if (error) {
