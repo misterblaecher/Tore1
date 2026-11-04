@@ -16,7 +16,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import AppUser, Event, EventCost, Order
+from models import AppUser, Event, EventCost, EventStructure, Order
 from app.legacy.monolith import get_current_user
 from app.deps.db import get_db
 from app.routers.forum import _structure_or_404
@@ -136,7 +136,24 @@ def create_entry(slug: str, payload: EntryIn, user: AppUser = Depends(get_curren
     if budget: _assert_mutable(budget)
     if payload.event_id is not None:
         event = db.get(Event, payload.event_id)
-        if event is None or event.host_type != "orga" or event.host_id != str(org.id):
+        is_owner = (
+            event is not None
+            and event.host_type == "orga"
+            and event.host_id == str(org.id)
+        )
+        # An explicitly authorized cohost can also account for its event.
+        # Merely being listed as cohost must not grant financial access.
+        is_finance_cohost = (
+            event is not None
+            and event.host_type == "orga"
+            and db.query(EventStructure.id).filter(
+                EventStructure.event_id == event.id,
+                EventStructure.organization_id == org.id,
+                EventStructure.role == "COHOST",
+                EventStructure.can_finance.is_(True),
+            ).first() is not None
+        )
+        if not (is_owner or is_finance_cohost):
             raise HTTPException(status_code=404, detail="Event not found")
     row = AccountingEntry(organization_id=org.id, created_by_user_id=user.id, entry_date=payload.entry_date or datetime.utcnow(), **payload.model_dump(exclude={"entry_date"}))
     db.add(row); db.flush(); write_audit_log(db, actor_partner_id=None, actor_user_id=user.id, actor_role=None, action="forum.accounting.entry.create", entity_type="accounting_entry", entity_id=str(row.id), event_id=payload.event_id, committee_id=None, bar_id=None, payload={"organization_id": org.id, "entry_type": row.entry_type, "amount_cents": row.amount_cents}); db.commit(); return _entry_payload(row)
