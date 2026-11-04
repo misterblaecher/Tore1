@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: tore
       POSTGRES_PASSWORD: tore
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tore -d tore"]
       interval: 5s
@@ -21,7 +21,7 @@ services:
       context: ./tore-backend
 
     env_file:
-    - ./tore-backend/.env
+      - ./.env
 
     environment:
       DATABASE_URL: postgresql://tore:tore@postgres:5432/tore
@@ -42,10 +42,14 @@ services:
     profiles: ["prod-like"]
     build:
       context: ./tore-backend
+    # Requires real secrets and strict PROD settings in the root .env.
+    env_file:
+      - ./.env
     environment:
+      TORE_ENV: "PROD"
       DATABASE_URL: postgresql://tore:tore@postgres:5432/tore
       TORE_AUTO_DB_BOOTSTRAP: "0"
-      TORE_CORS_ORIGINS: "https://portal.example"
+      TORE_RATE_LIMIT_BACKEND: "database"
     depends_on:
       postgres:
         condition: service_healthy

@@ -24,23 +24,24 @@
    ```bash
    cp .env.example .env
    ```
-2. Démarrer Postgres + backend en profil prod-like:
+2. Pour le profil `prod-like`, renseigner dans `.env` de vrais secrets (`TORE_JWT_SECRET`, `ADMIN_API_KEY`, `TORE_QR_SIGNING_KEYS`), des origines HTTPS exactes (`TORE_CORS_ORIGINS`), SMTP et `TORE_EMAIL_OTP_DEV_MODE=false`. Ce profil force `TORE_ENV=PROD` et refuse les valeurs de développement. Il reste destiné au **test local** : ni les identifiants PostgreSQL Docker ni le seed ci-dessous ne conviennent à une production publique.
+3. Démarrer Postgres + backend en profil prod-like:
    ```bash
    docker compose --profile prod-like up -d --build
    ```
-3. Appliquer les migrations Alembic:
+4. Appliquer les migrations Alembic:
    ```bash
    docker compose --profile prod-like exec backend-prodlike alembic upgrade head
    ```
-4. Seed minimal (bar/event/zone/item/user/staff):
+5. Seed minimal (uniquement en test/démo, jamais sur une vraie production) :
    ```bash
    ./scripts/dev_bootstrap.sh
    ```
-5. Lancer le portal (local):
+6. Lancer le portal (local):
    ```bash
    cd tore-portal && npm ci && npm run dev
    ```
-6. Vérifier les flux santé + e2e smoke:
+7. Vérifier les flux santé + e2e smoke:
    ```bash
    ./scripts/sanity_check.sh
    ```

@@ -414,6 +414,9 @@ def _cors_origins() -> list[str]:
         values = [v.strip() for v in raw.split(",") if v.strip()]
         return _normalize(values)
 
+    if _resolved_env_name() == "PROD":
+        return []
+
     site_url = (os.getenv("TORE_SITE_URL") or os.getenv("PUBLIC_URL") or "").strip()
     defaults = [
         "https://tore-site.onrender.com",
@@ -2594,7 +2597,6 @@ app.include_router(forum_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_origin_regex=r"^https://.*\.onrender\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -2603,8 +2605,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
-    run_migrations_on_startup()
+    # Fail closed before touching the database schema.
     validate_env_or_warn()
+    run_migrations_on_startup()
     _startup_sanity_checks()
     if _should_bootstrap_on_startup():
         ensure_seed()
