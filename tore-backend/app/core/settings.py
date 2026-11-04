@@ -59,6 +59,10 @@ def _cors_origins() -> list[str]:
     if raw:
         return _normalize([value.strip() for value in raw.split(",") if value.strip()])
 
+    # No development or hosting defaults in production.
+    if _resolved_env_name() == "PROD":
+        return []
+
     site_url = (os.getenv("TORE_SITE_URL") or os.getenv("PUBLIC_URL") or "").strip()
     defaults = [
         "https://tore-site.onrender.com",
